@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.db import DatabaseError
 from fastkml import kml
 import requests
-from tqdm import tqdm
 
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
@@ -66,45 +65,6 @@ class GoogleMapsGateway(Gateway):
         response = self.session.get(directions_url, params=params)
         response.raise_for_status()
         return response.json()
-
-    def find_place(self, input_text: str, input_type: str = "textquery"):
-        """
-        Find a place using the Google Maps Places API.
-        """
-        place_url = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-        params = {
-            "input": input_text,
-            "inputtype": input_type,
-            "key": self.api_key,
-        }
-        response = self.session.get(place_url, params=params)
-        response.raise_for_status()
-        return response.json()
-
-    def get_satellite_view(self, latitude, longitude, zoom=17, size="600x300", maptype="satellite"):
-        """
-        Get a satellite view image for the given latitude and longitude.
-        """
-        from django.core.cache import cache
-
-        THIRTY_DAYS = 30 * 24 * 3600
-        cache_key = f"satellite_view_{float(latitude):.6f}_{float(longitude):.6f}_{zoom}_{size}_{maptype}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        static_map_url = "https://maps.googleapis.com/maps/api/staticmap"
-        params = {
-            "center": f"{latitude},{longitude}",
-            "zoom": zoom,
-            "size": size,
-            "maptype": maptype,
-            "key": self.api_key,
-        }
-        response = self.session.get(static_map_url, params=params)
-        response.raise_for_status()
-        cache.set(cache_key, response.content, THIRTY_DAYS)
-        return response.content
 
     def get_street_view(
         self,
@@ -176,58 +136,6 @@ class GoogleMapsGateway(Gateway):
         y = math.sin(diff_lng) * math.cos(lat2)
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
-
-    def import_pins_from_file(self, file, user_profile: Profile) -> list[Pin]:
-        """
-        Imports pins from a file and bulk creates Pin objects.
-        """
-        parts = file.name.split(".")
-        if not parts or len(parts) < 2:
-            raise ValueError("No file extension provided.")
-
-        extension: str = parts[-1]
-        file_contents = file.read().decode("utf-8")
-
-        match extension.lower():
-            case "kml":
-                data = self.takeout_kml_to_dict(file_contents, user_profile)
-            case "json":
-                data = self.takeout_json_to_dict(file_contents, user_profile)
-            case "csv":
-                data = self.takeout_csv_to_dict(file_contents, user_profile)
-            case _:
-                raise ValueError("Unsupported file format. Supported formats are KML, JSON, and CSV.")
-
-        # Parse every location in data
-        pins: list[Pin] = []
-        total = len(data)
-        created_pins = 0
-        exists = 0
-        skipped = 0
-        with tqdm(total=total, desc="Importing pins") as pbar:
-            for pin_data in data:
-                try:
-                    pin, created = Pin.objects.get_nearby_or_create(
-                        latitude=pin_data["latitude"],
-                        longitude=pin_data["longitude"],
-                        profile=user_profile,
-                        defaults=pin_data,
-                    )
-                    if pin:
-                        pins.append(pin)
-                        if created:
-                            created_pins += 1
-                        else:
-                            exists += 1
-                    else:
-                        skipped += 1
-                finally:
-                    pbar.update(1)
-                    pbar.set_description(
-                        f"Importing pins: {created_pins} created, {skipped} skipped, {exists} already existed. Last: {pin_data.get('name', '')}",
-                    )
-
-        return pins
 
     def _csv_row_iter(self, file_contents: str, user_profile: Profile):
         """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.

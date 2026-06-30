@@ -1,20 +1,20 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import Any, Self
 
-from pydantic import Field, model_validator
-from pydantic_core import Url
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic._internal._model_construction import ModelMetaclass
 from django import conf
 from django.conf import LazySettings
+from pydantic import Field, model_validator
+from pydantic._internal._model_construction import ModelMetaclass
+from pydantic_core import Url
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
-from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
+from urbanlens.UrbanLens.environments.factory import select_environment
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 # DEFAULT_ROOT is src/, but .env lives one level up at the project root.
 # List both so either location works; later entry wins if both exist.
 _ENV_FILE_PATHS = [
-    Path(DEFAULT_ROOT, '.env'),
-    Path(DEFAULT_ROOT.parent, '.env'),
+    Path(DEFAULT_ROOT, ".env"),
+    Path(DEFAULT_ROOT.parent, ".env"),
 ]
+
 
 class AppSettingsMeta(ModelMetaclass):
     """
@@ -38,93 +39,94 @@ class AppSettingsMeta(ModelMetaclass):
             cls._instances[cls] = instance
         return cls._instances[cls]
 
+
 class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     """
     Class to hold settings for the application.
     """
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
-    project_name: str = Field(default='URBANLENS', description="The name of the project")
+    project_name: str = Field(default="URBANLENS", description="The name of the project")
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
-    debug_override: bool | None = Field(description="Whether or not to enable debugging", alias='DEBUG', default=None)
-    secret_key : str = Field(default = '1t5v24s98-fcbas23-vfsd238vc-asfdioj322', description = "The secret key")
-    root_urlconf : str = Field(default = 'urbanlens.UrbanLens.urls', description = "The root urlconf")
-    admin_username : str = Field(default = 'Admin', description = "The username to use for the admin user")
-    admin_email : str = Field(default = 'admin@yourdomain.com', description = "The email to use for the admin user")
+    debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
+    secret_key: str = Field(default="1t5v24s98-fcbas23-vfsd238vc-asfdioj322", description="The secret key")
+    root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
+    admin_username: str = Field(default="Admin", description="The username to use for the admin user")
+    admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
     # TODO: Change default
-    allowed_hosts : list[str] = Field(default = ['urbanlens.org'], description = "The allowed hosts")
-    language_code : str = Field(default = 'en-us', description = "The language code")
-    time_zone : str = Field(default = 'EST', description = "The time zone")
-    use_i18n : bool = Field(default = True, description = "Whether or not to use i18n")
-    use_tz : bool = Field(default = True, description = "Whether or not to use tz")
-    email_backend : str = Field(default = 'django.core.mail.backends.console.EmailBackend', description = "Django email backend class path")
-    email_from : str = Field(default = 'noreply@yourdomain.com', description = "The from email")
-    email_host : str = Field(default = 'smtp.gmail.com', description = "The email host")
-    email_port : int = Field(default = 587, description = "The email port")
-    email_user : str | None = Field(default = None, description = "SMTP username / sending address")
-    email_password : str | None = Field(default = None, description = "SMTP password or app password")
-    email_tls : bool = Field(default = True, description = "Use STARTTLS (port 587)")
-    email_use_ssl : bool = Field(default = False, description = "Use SSL instead of STARTTLS (port 465)")
-    backup_enabled : bool = Field(default = True, description = "Whether scheduled database backups are enabled")
-    backup_frequency_hours : int = Field(default = 24, description = "How often scheduled database backups should run, in hours")
-    backup_retention : int = Field(default = 30, description = "The number of backup files to retain")
+    allowed_hosts: list[str] = Field(default=["urbanlens.org"], description="The allowed hosts")
+    language_code: str = Field(default="en-us", description="The language code")
+    time_zone: str = Field(default="EST", description="The time zone")
+    use_i18n: bool = Field(default=True, description="Whether or not to use i18n")
+    use_tz: bool = Field(default=True, description="Whether or not to use tz")
+    email_backend: str = Field(default="django.core.mail.backends.console.EmailBackend", description="Django email backend class path")
+    email_from: str = Field(default="noreply@yourdomain.com", description="The from email")
+    email_host: str = Field(default="smtp.gmail.com", description="The email host")
+    email_port: int = Field(default=587, description="The email port")
+    email_user: str | None = Field(default=None, description="SMTP username / sending address")
+    email_password: str | None = Field(default=None, description="SMTP password or app password")
+    email_tls: bool = Field(default=True, description="Use STARTTLS (port 587)")
+    email_use_ssl: bool = Field(default=False, description="Use SSL instead of STARTTLS (port 465)")
+    backup_enabled: bool = Field(default=True, description="Whether scheduled database backups are enabled")
+    backup_frequency_hours: int = Field(default=24, description="How often scheduled database backups should run, in hours")
+    backup_retention: int = Field(default=30, description="The number of backup files to retain")
 
     # Classes
-    default_auto_field : str = Field(default = 'django.db.models.BigAutoField', description = "The default auto field")
-    wsgi_application : str = Field(default = 'urbanlens.UrbanLens.wsgi.application', description = "The wsgi application")
-    asgi_application : str = Field(default = 'urbanlens.UrbanLens.asgi.application', description = "The asgi application")
-    test_runner : str = Field(default = 'urbanlens.core.tests.runner.TestRunner', description = "The test runner")
+    default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")
+    wsgi_application: str = Field(default="urbanlens.UrbanLens.wsgi.application", description="The wsgi application")
+    asgi_application: str = Field(default="urbanlens.UrbanLens.asgi.application", description="The asgi application")
+    test_runner: str = Field(default="urbanlens.core.tests.runner.TestRunner", description="The test runner")
 
     # Urls
-    login_url : str = Field(default = 'login', description = "The login url")
-    static_url : str = Field(default = 'static/', description = "The static url")
+    login_url: str = Field(default="login", description="The login url")
+    static_url: str = Field(default="static/", description="The static url")
 
     # Directory settings
-    base_dir: Path = Field(default=Path('urbanlens'), description="The name of the base directory")
-    media_root: Path = Field(default=Path('downloads'), description="The name of the media directory")
-    downloads_dir: Path = Field(default=Path('downloads'), description="The name of the downloads directory")
-    backups_dir: Path = Field(default=Path('backups'), description="The name of the backups directory")
-    log_root: Path = Field(default=Path('logs'), description="The name of the log directory")
-    exports_dir: Path = Field(default=Path('exports'), description="The name of the exports directory")
-    static_root: Path = Field(default=Path('frontend/static'), description="The name of the static directory")
+    base_dir: Path = Field(default=Path("urbanlens"), description="The name of the base directory")
+    media_root: Path = Field(default=Path("downloads"), description="The name of the media directory")
+    downloads_dir: Path = Field(default=Path("downloads"), description="The name of the downloads directory")
+    backups_dir: Path = Field(default=Path("backups"), description="The name of the backups directory")
+    log_root: Path = Field(default=Path("logs"), description="The name of the log directory")
+    exports_dir: Path = Field(default=Path("exports"), description="The name of the exports directory")
+    static_root: Path = Field(default=Path("frontend/static"), description="The name of the static directory")
 
     # APIs
-    cloudflare_ai_endpoint : Url | None = Field(default=None, description = "The cloudflare ai endpoint")
-    cloudflare_worker_ai_endpoint : Url | None = Field(default=None, description = "The cloudflare worker ai endpoint")
-    cloudflare_ai_api_key : str | None = Field(default=None, description = "The cloudflare ai key")
-    huggingface_ai_endpoint : Url | None = Field(default=None, description = "The huggingface ai endpoint")
-    huggingface_ai_api_key : str | None = Field(default=None, description = "The huggingface ai key")
-    openai_api_key : str | None = Field(default=None, description = "The openai key")
-    google_places_api_key : str | None = Field(default=None, description = "The google places key")
-    google_maps_api_key : str | None = Field(default=None, description = "The google maps key")
-    google_street_view_api_key : str | None = Field(default=None, description = "The google street view api key")
-    google_search_api_key : str | None = Field(default=None, description = "The google search key")
-    google_search_tenant : str | None = Field(default=None, description = "The google search tenant")
-    brave_search_api_key : str | None = Field(default=None, description = "The Brave Search API key")
-    smithsonian_api_key : str | None = Field(default=None, description = "The smithsonian key")
-    google_client_id : str | None = Field(default=None, description = "The google client id")
-    google_client_secret : str | None = Field(default=None, description = "The google client secret")
-    openweathermap_api_key : str | None = Field(default=None, description = "The openweathermap key")
-    nps_api_key : str | None = Field(default=None, description = "The national park service api key")
-    discord_client_secret : str | None = Field(default=None, description = "The discord client secret")
-    discord_client_id : str | None = Field(default=None, description = "The discord client ID")
+    cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
+    cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
+    cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")
+    huggingface_ai_endpoint: Url | None = Field(default=None, description="The huggingface ai endpoint")
+    huggingface_ai_api_key: str | None = Field(default=None, description="The huggingface ai key")
+    openai_api_key: str | None = Field(default=None, description="The openai key")
+    google_places_api_key: str | None = Field(default=None, description="The google places key")
+    google_maps_api_key: str | None = Field(default=None, description="The google maps key")
+    google_street_view_api_key: str | None = Field(default=None, description="The google street view api key")
+    google_search_api_key: str | None = Field(default=None, description="The google search key")
+    google_search_tenant: str | None = Field(default=None, description="The google search tenant")
+    brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
+    smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
+    google_client_id: str | None = Field(default=None, description="The google client id")
+    google_client_secret: str | None = Field(default=None, description="The google client secret")
+    openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
+    nps_api_key: str | None = Field(default=None, description="The national park service api key")
+    discord_client_secret: str | None = Field(default=None, description="The discord client secret")
+    discord_client_id: str | None = Field(default=None, description="The discord client ID")
 
     # DB
-    database_engine : str = Field(default = 'psqlextra.backend', description = "The database engine")
-    database_host : str = Field(default = 'localhost', description = "The database host")
-    database_port : str = Field(default = '5432', description = "The database port")
-    database_name : str = Field(default = 'urbanlens', description = "The database name")
-    database_user : str = Field(default = 'urbanlens', description = "The database user")
-    database_pass : str = Field(default = 'urbanlens', description = "The database password")
+    database_engine: str = Field(default="psqlextra.backend", description="The database engine")
+    database_host: str = Field(default="localhost", description="The database host")
+    database_port: str = Field(default="5432", description="The database port")
+    database_name: str = Field(default="urbanlens", description="The database name")
+    database_user: str = Field(default="urbanlens", description="The database user")
+    database_pass: str = Field(default="urbanlens", description="The database password")
 
-    _secrets : dict | None = None
-    _environment : BaseEnvironment | None = None
+    _secrets: dict | None = None
+    _environment: BaseEnvironment | None = None
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE_PATHS,
-        env_prefix='UL_',
+        env_prefix="UL_",
         str_strip_whitespace=True,
-        extra='ignore',
+        extra="ignore",
     )
 
     @property
@@ -139,7 +141,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         return self.debug_override or False
 
     @debug.setter
-    def debug(self, value : bool) -> None:
+    def debug(self, value: bool) -> None:
         """
         Set the debug value
         """
@@ -168,14 +170,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         Returns a dictionary of directories
         """
         return {
-            'project_root': self.project_root,
-            'base_dir': self.base_dir,
-            'media_root': self.media_root,
-            'downloads_dir': self.downloads_dir,
-            'backups_dir': self.backups_dir,
-            'log_root': self.log_root,
-            'exports_dir': self.exports_dir,
-            'static_root': self.static_root,
+            "project_root": self.project_root,
+            "base_dir": self.base_dir,
+            "media_root": self.media_root,
+            "downloads_dir": self.downloads_dir,
+            "backups_dir": self.backups_dir,
+            "log_root": self.log_root,
+            "exports_dir": self.exports_dir,
+            "static_root": self.static_root,
         }
 
     @property
@@ -189,20 +191,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @property
     def django(self) -> LazySettings:
         return conf.settings
-
-    @property
-    def MEDIA_ROOT(self) -> Path:
-        return self.media_root
-
-    @property
-    def BASE_DIR(self) -> Path:
-        return self.base_dir
-
-    @property
-    def ENVIRONMENT(self) -> BaseEnvironment:
-        if self.environment is None:
-            raise RuntimeError("Environment has not been initialized.")
-        return self.environment
 
     @model_validator(mode="after")
     def _resolve_version_metadata(self) -> Self:
@@ -229,30 +217,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             ", ".join(str(p) for p in _ENV_FILE_PATHS),
         )
 
-    def get_secret(self, key : str, default : Any | None = None) -> Any:
-        """
-        Get the secret from the secrets dictionary
-
-        Args:
-            key (str): The key to retrieve
-            default (Any, optional): The default value to return if the key is not found. Defaults to None.
-
-        Returns:
-            Any: The value of the secret
-        """
-        if not self.secrets:
-            return default
-
-        # Break key into parts based on '.' Each part is a key in the previous key's value
-        parts = key.split('.')
-        value = self._secrets
-        for part in parts:
-            if value is None or part not in value:
-                return default
-            value = value[part]
-
-        return value or default
-
     def ensure_paths(self) -> None:
         """
         Ensure the directories are absolute and exist.
@@ -270,7 +234,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
 
                 if not value.exists():
                     # If the path contains a period, infer it is a file, and don't create it
-                    if '.' not in value.name:
+                    if "." not in value.name:
                         value.parent.mkdir(parents=True, exist_ok=True)
                     else:
                         value.mkdir(parents=True, exist_ok=True)
@@ -278,13 +242,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 logger.error("Error ensuring path: %s - %s", key, value)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
-        for filename in ['app.log', 'debugging.log', 'test.log']:
+        for filename in ["app.log", "debugging.log", "test.log"]:
             if not self.log_root.exists():
                 self.log_root.mkdir(parents=True, exist_ok=True)
             filepath = Path(self.log_root, filename)
             if not filepath.exists():
-                with open(filepath, 'w') as file:
-                    file.write('')
+                Path(filepath).write_text("")
 
     def refresh_django(self):
         """
@@ -292,7 +255,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """
         for key, value in self.__dict__.items():
             # Filter out settings we don't want to propogate back to django
-            if key.startswith('_') or key in ['model_config', 'paths', 'secrets', 'databases', 'logging', 'django']:
+            if key.startswith("_") or key in ["model_config", "paths", "secrets", "databases", "logging", "django"]:
                 continue
 
             const_name = key.upper()
@@ -303,13 +266,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         conf.settings.ENVIRONMENT = self.environment
 
         # Refresh django.conf
-        '''
+        """
         conf.settings.configure(
             default_settings = self
         )
-        '''
+        """
 
-    def select_environment(self, new_environment_name : EnvironmentTypes | None = None) -> BaseEnvironment:
+    def select_environment(self, new_environment_name: EnvironmentTypes | None = None) -> BaseEnvironment:
         """
         Select the environment
 
@@ -335,7 +298,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         self.refresh_django()
         return self._environment
 
-    def __getattr__(self, name : str):
+    def __getattr__(self, name: str):
         """
         Get an attribute that is fully uppercase (from django settings) as a parameter here (as lowercase)
         """
@@ -344,5 +307,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             return self.__dict__[key]
 
         return super().__getattr__(name)
+
 
 settings = AppSettings()

@@ -483,11 +483,3 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
             _apply_pending_invitation(invitation, profile)
     except (AttributeError, DatabaseError):
         logger.exception("Error processing pending invitations for %s", user.email)
-
-
-# ── Legacy social_auth helper (kept for compatibility but not in URL routing) ──
-
-
-def social_auth(request: HttpRequest, backend: str) -> HttpResponseRedirect:
-    """Fallback used if the social pipeline doesn't handle redirect itself."""
-    return redirect("map.view")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from django.conf import settings
+from django.conf import settings as django_settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
@@ -41,7 +41,7 @@ urlpatterns = [
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
-    *static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT),
+    *static(django_settings.MEDIA_URL, document_root=django_settings.MEDIA_ROOT),
     # 404 catch-all - must be last
     re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

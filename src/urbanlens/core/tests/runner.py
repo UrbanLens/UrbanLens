@@ -1,58 +1,21 @@
-
 from __future__ import annotations
 
 import logging
 import os
-from secrets import randbelow
-from typing import TYPE_CHECKING, Any, List, Tuple
+from typing import Any
 import unittest
 from unittest.mock import patch
 
 from django import conf
 from django.db import connections
-
-# Django imports
-from django.db.models import (
-    BigIntegerField,
-    BinaryField,
-    BooleanField,
-    CharField,
-    DateField,
-    DateTimeField,
-    DecimalField,
-    DurationField,
-    EmailField,
-    FileField,
-    FloatField,
-    ForeignKey,
-    GenericIPAddressField,
-    ImageField,
-    IntegerField,
-    IPAddressField,
-    ManyToManyField,
-    OneToOneField,
-    PositiveIntegerField,
-    PositiveSmallIntegerField,
-    SlugField,
-    SmallIntegerField,
-    TextField,
-    TimeField,
-    URLField,
-    UUIDField,
-)
 from django.test.runner import DiscoverRunner
-from faker import Faker
 
-# 3rd Party imports
-from model_bakery import baker, seq
-from model_bakery.generators import default_mapping
-
-from urbanlens.core.tests.result import MessageResult
 from urbanlens.core.testing_network import (
     ExternalNetworkGuardVerificationError,
     LocalhostOnlyNetwork,
     verify_external_network_blocked,
 )
+from urbanlens.core.tests.result import MessageResult
 
 
 class BufferingLogHandler(logging.Handler):
@@ -166,34 +129,3 @@ class TestRunner(DiscoverRunner):
         super().teardown_databases(old_config, **kwargs)
 
 
-fake = Faker()
-
-
-def generate_guid():
-    prefix = 10000000 + randbelow(89999999)
-    return seq(f"{prefix}-0000-0000-0000-", start=int(1e12))
-
-
-def generate_onechar():
-    return chr(65 + randbelow(26))
-
-
-def generate_uniquechar():
-    return seq("A", "Z")
-
-
-def generate_dict():
-    total_elements = 1 + randbelow(9)
-    result = {fake.word(): fake.word() for _ in range(total_elements)}
-    return result
-
-
-def generate_list():
-    total_elements = 1 + randbelow(9)
-    return [fake.word() for _ in range(total_elements)]
-
-
-def generate_pickledobject():
-    options = [generate_dict, generate_list]
-    index = randbelow(len(options))
-    return options[index]()

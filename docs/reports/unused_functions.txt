@@ -4,7 +4,6 @@ HOW TO READ THIS REPORT
 Each result has a Confidence score: High, Medium, or Low. This reflects how
 likely the result is a *genuine* unused/rarely-used function, vs. a false
 positive caused by a known blind spot of static analysis - things like:
-
   - Methods on Django/DRF-style view, form, admin, or command classes, which
     are often dispatched by name/string convention (e.g. routing, list_display)
     in ways that can't always be fully traced.
@@ -12,7 +11,6 @@ positive caused by a known blind spot of static analysis - things like:
   - Names defined more than once across the codebase, where the reference
     count is shared across all definitions sharing that name - a use of any
     one of them can mask the others.
-
 Start with High confidence results - they're the most likely to be real dead
 code. Treat Medium and Low results as leads to manually check, not verdicts;
 each one lists the specific reason(s) its confidence was reduced. Counts come
@@ -20,7 +18,6 @@ from real AST analysis (calls, attribute access, parameter names, and string
 literals that exactly match a name) - see the script's --help and source
 comments for the full list of detection methods and their trade-offs.
 ================================================================================
-
 Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low: 2)
 ----------------------------------------------------------------------
     [High  ] ./urbanlens/UrbanLens/celery.py:22  log_task_failure  (refs: 0)
@@ -52,52 +49,26 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
     [High  ] ./urbanlens/dashboard/models/abstract/addressable.py:85  AddressableModel.address_extended  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/abstract/choices.py:22  TextChoices.invalid  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/abstract/choices.py:30  TextChoices.get_name  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/abstract/slug.py:103  HasSlug.regenerate_slug  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/api_call_log/model.py:62  ApiCallLog.prune_older_than_days  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/api_call_log/queryset.py:29  ApiCallLogQuerySet.this_week  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/api_call_log/queryset.py:37  ApiCallLogQuerySet.successful  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/api_call_log/queryset.py:41  ApiCallLogQuerySet.rate_limited  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/api_call_log/queryset.py:45  ApiCallLogQuerySet.geo_filtered  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/badges/model.py:114  Badge.is_customized  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/badges/queryset.py:24  BadgeQuerySet.global_only  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/badges/queryset.py:34  BadgeQuerySet.with_icon  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/badges/queryset.py:58  BadgeQuerySet.location_badges  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/campus/model.py:70  Campus.is_default  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/campus/model.py:75  Campus.effective_polygon  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/campus/queryset.py:32  CampusQuerySet.with_location  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:42  FriendInvitation.is_expired  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:46  FriendInvitation.is_accepted  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/meta.py:21  FriendshipStatus.rejected  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/model.py:96  Friendship.block  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/model.py:122  Friendship.mute  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/friendship/queryset.py:83  QuerySet.not_friend  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/friendship/queryset.py:95  QuerySet.has_permission  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/google_place/queryset.py:11  GooglePlaceQuerySet.by_coordinates  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/location/queryset.py:50  LocationQuerySet.nearby_locations  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/notifications/model.py:48  NotificationLog.is_unread  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:41  PinQuerySet.never_visited  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:44  PinQuerySet.not_visited_this_year  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:62  PinQuerySet.by_profile  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:65  PinQuerySet.by_user  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:88  PinQuerySet.by_tag  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:218  Profile.show_onboarding_tips  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:223  Profile.show_hover_tooltips  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:244  Profile.full_name  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:90  UserSubscription.is_indefinite  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/trips/model.py:117  Trip.timeline_status  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/trips/model.py:131  Trip.duration_days  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/visits/queryset.py:31  VisitQuerySet.from_takeout  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/ai/gateway.py:122  LLMGateway.cost  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/ai/gateway.py:350  LLMGateway.send_prompt  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/ai/keywords.py:263  categorize_by_keywords  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/ai/scanner.py:139  sanitize  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/datagov/realestate.py:22  RealEstateSalesGateway.get_sales_data  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/datagov/realestate.py:31  RealEstateSalesGateway.get_data_dictionary  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/digitalcommonwealth.py:15  DigitalCommonwealthGateway.get_oai_metadata  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/digitalcommonwealth.py:26  DigitalCommonwealthGateway.search_items_json  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/digitalcommonwealth.py:32  DigitalCommonwealthGateway.get_item_details_json  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/digitalcommonwealth.py:38  DigitalCommonwealthGateway.get_iiif_image_info  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/digitalcommonwealth.py:44  DigitalCommonwealthGateway.get_iiif_manifest  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:55  GoogleMapsGateway.get_directions  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:70  GoogleMapsGateway.find_place  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:84  GoogleMapsGateway.get_satellite_view  (refs: 0)
@@ -105,17 +76,10 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
     [High  ] ./urbanlens/dashboard/services/google/places.py:94  GooglePlacesGateway.get_place_photos  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/places.py:107  GooglePlacesGateway.get_recent_search_results  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/import_data.py:21  import_dir  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/loc.py:19  LOCJsonGateway.search_collections  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:91  MapPinCache.is_enabled  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:212  MapPinCache.upsert_pin  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/mentions.py:133  filter_visible_comments  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/news.py:20  NewsGateway.get_news  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/nps/map.py:21  NPSMapGateway.check_coordinates_within_park  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/nps/parks.py:40  NPSGateway.get_park_images  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/nps/parks.py:91  NPSGateway.get_parks_near_location  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/routexl.py:34  RouteXLGateway.optimize_route  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/site_admin.py:57  promote_first_user_if_needed  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/smithsonian.py:42  SmithsonianGateway.get_images_by_coordinates  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:36  generate_sso_username  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:73  suppress_last_name_for_new_users  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:105  fetch_and_save_avatar  (refs: 0)
@@ -139,7 +103,6 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
     [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:112  tooltip_attrs  (refs: 0)
     [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:145  tooltip_help  (refs: 0)
     [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:160  tooltip_label  (refs: 0)
-    [High  ] ./urbanlens/dashboard/tests/hypothesis/strategies.py:64  two_distant_coord_pairs  (refs: 0)
     [Medium] ./urbanlens/core/tests/runner.py:67  BufferingLogHandler.emit  (refs: 0)
                - method on 'BufferingLogHandler', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/account.py:346  CustomLoginView.get_success_url  (refs: 0)
@@ -150,33 +113,14 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
                - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/maps.py:435  MapController.get_advanced_search  (refs: 0)
                - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-
-
-
-
-    [Medium] ./urbanlens/dashboard/models/campus/queryset.py:28  CampusQuerySet.for_location  (refs: 0)
-               - 'for_location' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-
-
-
-
-    [Medium] ./urbanlens/dashboard/models/comments/queryset.py:22  CommentQuerySet.for_location  (refs: 0)
-               - 'for_location' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-
-
-
-
     [Medium] ./urbanlens/dashboard/models/location/model.py:80  Location.effective_date_last_active  (refs: 0)
                - 'effective_date_last_active' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/models/location/model.py:90  Location.add_category  (refs: 0)
                - 'add_category' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-    [Medium] ./urbanlens/dashboard/models/location_edit/queryset.py:13  LocationEditQuerySet.for_location  (refs: 0)
-               - 'for_location' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/models/pin/model.py:228  Pin.effective_date_last_active  (refs: 0)
                - 'effective_date_last_active' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/models/pin/model.py:262  Pin.add_category  (refs: 0)
                - 'add_category' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-
 Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
 ----------------------------------------------------------------------
     [High  ] ./urbanlens/UrbanLens/settings/app.py:221  AppSettings._check_env_file  (refs: 1)
@@ -233,22 +177,10 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
     [High  ] ./urbanlens/dashboard/controllers/visits.py:40  _add_visited_status  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/abstract/slug.py:35  HasSlug._slug_max_length  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/account/model.py:41  EmailVerification.mark_verified  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/api_call_log/queryset.py:33  ApiCallLogQuerySet.this_month  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/badges/model.py:126  Badge.initial_order_for_parents  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/cache/location_cache.py:48  LocationCache.is_stale  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/campus/queryset.py:40  CampusManager.effective_for  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:50  FriendInvitation.mark_accepted  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:48  ImageQuerySet._allowed_uploader_ids  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:84  ImageQuerySet._get_friend_ids  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:92  ImageQuerySet._get_location_ids  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:96  ImageQuerySet._get_trip_ids  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:100  ImageQuerySet._uploader_allows  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/images/queryset.py:128  ImageQuerySet._viewer_allows  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/location/queryset.py:67  LocationQuerySet.within_bounding_box  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/notifications/queryset.py:21  NotificationQuerySet.mark_read  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/pin/model.py:161  Pin.display_label  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:37  PinQuerySet.location_detail_pins  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/pin/queryset.py:95  PinQuerySet.apply_badge_groups  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:308  Profile.get_map_center  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:359  Profile.can_view_photos_from  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/profile/model.py:433  Profile.can_view_contact_info  (refs: 1)
@@ -258,7 +190,6 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
     [High  ] ./urbanlens/dashboard/models/site_settings/model.py:227  SiteSettings.get_effective_environment_label  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:99  UserSubscription.revoke  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:118  PendingSubscriptionGrant.duration_as_int  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/trips/queryset.py:22  QuerySet.for_list_page  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/ai/factory.py:19  get_gateway  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/ai/functions.py:40  estimate_combined_tokens  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/ai/gateway.py:83  LLMGateway.sent_tokens  (refs: 1)
@@ -522,14 +453,9 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
                - method on 'EditProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/userprofile.py:609  SocialLinkVerifyView._check_url  (refs: 1)
                - method on 'SocialLinkVerifyView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-    [Medium] ./urbanlens/dashboard/models/comments/queryset.py:19  CommentQuerySet.for_pin  (refs: 1)
                - 'for_pin' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/models/location/model.py:125  Location._slugify_base  (refs: 1)
                - '_slugify_base' is defined 4 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-    [Medium] ./urbanlens/dashboard/models/markup/queryset.py:16  PinMarkupQuerySet.for_pin  (refs: 1)
-               - 'for_pin' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
-    [Medium] ./urbanlens/dashboard/models/visits/queryset.py:12  VisitQuerySet.for_pin  (refs: 1)
-               - 'for_pin' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:31  _SyncPipeline.hdel  (refs: 1)
                - 'hdel' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:33  _SyncPipeline.zrem  (refs: 1)
@@ -540,7 +466,5 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
                - 'zrem' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Low   ] ./urbanlens/dashboard/controllers/maps.py:804  MapController.init_map  (refs: 1)
                - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-               - 'init_map' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
     [Low   ] ./urbanlens/dashboard/controllers/pin.py:134  PinController.init_map  (refs: 1)
                - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-

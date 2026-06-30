@@ -70,11 +70,6 @@ def _app_uptime() -> str:
     return _format_duration(max(0, time.monotonic() - _APP_STARTED_MONOTONIC))
 
 
-def _server_uptime() -> str:
-    """Backward-compatible alias for the app uptime metric."""
-    return _app_uptime()
-
-
 def _dir_size_mb(path: str) -> float:
     """Return disk usage of ``path`` in megabytes."""
     total = 0

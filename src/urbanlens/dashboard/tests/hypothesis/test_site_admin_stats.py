@@ -2,7 +2,7 @@
 
 Covers:
 - _monthly_series() label count, ordering, and accuracy
-- _server_uptime() monotonic uptime formatting
+- _app_uptime() monotonic uptime formatting
 - _dir_size_mb() size computation and error handling
 - SiteAdminStatsView access control and context completeness
 """
@@ -22,9 +22,9 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.site_admin import (
+    _app_uptime,
     _dir_size_mb,
     _monthly_series,
-    _server_uptime,
 )
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
@@ -87,15 +87,15 @@ class MonthlySeriesLabelTests(TestCase):
 
 
 class ServerUptimeTests(TestCase):
-    """_server_uptime reports app process uptime via the monotonic clock."""
+    """_app_uptime reports app process uptime via the monotonic clock."""
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
-        """Return _server_uptime() when monotonic has advanced by ``elapsed_seconds``."""
+        """Return _app_uptime() when monotonic has advanced by ``elapsed_seconds``."""
         with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0), mock.patch(
             "urbanlens.dashboard.controllers.site_admin.time.monotonic",
             return_value=elapsed_seconds,
         ):
-            return _server_uptime()
+            return _app_uptime()
 
     def test_parses_days_hours_minutes_correctly(self) -> None:
         # 1 day + 2 hours + 3 minutes = 86400 + 7200 + 180 = 93780 seconds
@@ -113,7 +113,7 @@ class ServerUptimeTests(TestCase):
             "urbanlens.dashboard.controllers.site_admin.time.monotonic",
             return_value=50.0,
         ):
-            result = _server_uptime()
+            result = _app_uptime()
         self.assertEqual(result, "0d 0h 0m")
 
 

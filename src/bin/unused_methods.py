@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import defaultdict
-from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from fnmatch import fnmatch
@@ -26,6 +25,10 @@ import json
 import os
 import re
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 try:
     from tqdm import tqdm  # type: ignore
@@ -164,6 +167,24 @@ def _iter_python_files(
 
 
 _FALLBACK_ENCODINGS = ("utf-8-sig", "utf-16", "cp1252", "latin-1")
+
+# Used to separate "production" references from "test" references when
+# counting usages (see analyze()'s exclude_test_references). Deliberately
+# broader than DEFAULT_IGNORE_FILENAME_PATTERNS/DIR_NAMES, since those only
+# need to catch the files that should never even be scanned, whereas this
+# needs to catch test *code* wherever it lives - including test helper/
+# factory modules inside a tests/ package that don't match a test_*.py-style
+# glob, and singular/plural variants like *_tests.py.
+_TEST_FILENAME_PATTERNS = ("test_*.py", "*_test.py", "*_tests.py", "tests.py", "conftest.py")
+_TEST_DIR_NAMES = {"test", "tests", "testing"}
+
+
+def _is_test_file(path: str) -> bool:
+    filename = os.path.basename(path)
+    if any(fnmatch(filename, pattern) for pattern in _TEST_FILENAME_PATTERNS):
+        return True
+    parts = os.path.normpath(path).split(os.sep)
+    return any(part.lower() in _TEST_DIR_NAMES for part in parts)
 
 
 def _read_source(path: str) -> str:
@@ -334,20 +355,27 @@ def _make_progress_bar(total: int, desc: str, enabled: bool):
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class AnalysisResult:
+    definitions: list[FunctionDef]
+    production_counts: dict[str, int]  # usage counts from non-test files only
+    test_counts: dict[str, int]  # usage counts from test files only
+    errors: list[str]
+
+
 def analyze(
     root: str,
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,
     use_default_ignores: bool = True,
     match_string_literals: bool = True,
+    exclude_test_references: bool = True,
     workers: int = 1,
     show_progress: bool = True,
-) -> tuple[list[FunctionDef], dict[str, int], list[str]]:
+) -> AnalysisResult:
     """
-    Walk `root` once, parse every .py file once, and return:
-      - all function/method definitions found
-      - a usage count per *simple* name (summed across the whole codebase)
-      - a list of "path: error" strings for files that failed to parse
+    Walk `root` once, parse every .py file once, and return all function/
+    method definitions found plus usage counts and parse errors.
 
     Each file is read and parsed exactly once and reused for both definition
     collection and usage counting (the original implementation read/parsed
@@ -367,6 +395,14 @@ def analyze(
     generically-named function (save, list, create) could coincidentally
     match an unrelated string elsewhere and be wrongly counted as used. Set
     to False for a stricter, reference-only count.
+
+    `exclude_test_references` (on by default) counts references found in
+    test files (see _is_test_file) into a separate `test_counts` bucket
+    instead of mixing them into `production_counts`. Without this, a
+    production function that's never called anywhere except by its own
+    leftover unit test reads as "used" when it's really dead in the actual
+    application. Set to False to merge test references back into
+    production_counts (the old, undifferentiated behavior).
     """
     exclude_d = set(DEFAULT_EXCLUDE_DIRS) | (exclude_dirs or set())
     exclude_f = set(exclude_files or set())
@@ -376,7 +412,7 @@ def analyze(
 
     files = list(_iter_python_files(root, exclude_d, exclude_f))
     if not files:
-        return [], {}, []
+        return AnalysisResult([], {}, {}, [])
 
     analyses: list[FileAnalysis] = []
     progress = _make_progress_bar(len(files), "Parsing files", show_progress)
@@ -402,7 +438,8 @@ def analyze(
         definitions.extend(collector.definitions)
 
     simple_names = {d.simple_name for d in definitions}
-    total_counts: defaultdict[str, int] = defaultdict(int)
+    production_counts: defaultdict[str, int] = defaultdict(int)
+    test_counts: defaultdict[str, int] = defaultdict(int)
 
     progress = _make_progress_bar(len(analyses), "Scanning usages", show_progress)
     for fa in analyses:
@@ -411,11 +448,12 @@ def analyze(
             continue
         counter = ReferenceCounter(simple_names, match_string_literals=match_string_literals)
         counter.visit(fa.tree)
+        target = test_counts if (exclude_test_references and _is_test_file(fa.path)) else production_counts
         for name, count in counter.counts.items():
-            total_counts[name] += count
+            target[name] += count
     progress.close()
 
-    return definitions, dict(total_counts), errors
+    return AnalysisResult(definitions, dict(production_counts), dict(test_counts), errors)
 
 
 # ---------------------------------------------------------------------------
@@ -507,11 +545,18 @@ def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) ->
 
 
 def _build_findings(
-    defs: list[FunctionDef], usage_counts: dict[str, int], name_definition_counts: dict[str, int],
+    defs: list[FunctionDef],
+    usage_counts: dict[str, int],
+    name_definition_counts: dict[str, int],
+    extra_reason_fn: Callable[[FunctionDef], str | None] | None = None,
 ) -> list[Finding]:
     findings = []
     for d in defs:
         confidence, reasons = _score_confidence(d, name_definition_counts)
+        if extra_reason_fn:
+            extra = extra_reason_fn(d)
+            if extra:
+                reasons = [extra, *reasons]
         findings.append(
             Finding(
                 definition=d,
@@ -533,14 +578,21 @@ def find_unused_functions(
     ignore_patterns: list[str] | None = None,
     use_default_ignores: bool = True,
     match_string_literals: bool = True,
+    exclude_test_references: bool = True,
     workers: int = 1,
     show_progress: bool = True,
 ) -> dict[str, list[Finding]]:
     """
-    Returns a dict with two keys:
-      "unused" - definitions whose simple name is never referenced elsewhere (count 0)
-      "rare"   - definitions referenced exactly once (often just self-recursion,
-                 or a single remaining caller worth double-checking)
+    Returns a dict with three keys:
+      "unused"    - definitions with zero references anywhere, production or test
+      "test_only" - definitions with zero references in production code, but at
+                     least one reference from a test file (only meaningful when
+                     exclude_test_references=True - otherwise always empty).
+                     This is often the more interesting bucket: code that looks
+                     "covered" because a test still calls it, but that nothing
+                     in the actual application uses any more.
+      "rare"      - definitions with 1-2 production references (often just
+                     self-recursion, or a single remaining caller worth a look)
 
     Note: because references are counted from real AST nodes (not grep'd text),
     the definition line itself is never counted as a "use" - so a genuinely
@@ -556,18 +608,21 @@ def find_unused_functions(
     that are invoked via reflection rather than a normal reference - see the
     comments above those constants for specifics. Set to False to see the raw,
     unfiltered results (e.g. to audit what the defaults are hiding).
+
+    `exclude_test_references` (on by default) - see analyze().
     """
-    definitions, usage_counts, errors = analyze(
+    result = analyze(
         root,
         exclude_dirs=exclude_dirs,
         exclude_files=exclude_files,
         use_default_ignores=use_default_ignores,
         match_string_literals=match_string_literals,
+        exclude_test_references=exclude_test_references,
         workers=workers,
         show_progress=show_progress,
     )
 
-    for err in errors:
+    for err in result.errors:
         print(f"Warning - could not parse {err}", file=sys.stderr)
 
     pattern_list = list(ignore_patterns or [])
@@ -579,25 +634,42 @@ def find_unused_functions(
         return any(p.search(d.qualified_name) or p.search(d.simple_name) for p in compiled_ignores)
 
     unused: list[FunctionDef] = []
+    test_only: list[FunctionDef] = []
     rare: list[FunctionDef] = []
-    for d in definitions:
+    for d in result.definitions:
         if d.is_dunder and not include_dunder:
             continue
         if _ignored(d):
             continue
-        count = usage_counts.get(d.simple_name, 0)
-        if count == 0:
+        prod_count = result.production_counts.get(d.simple_name, 0)
+        test_count = result.test_counts.get(d.simple_name, 0)
+        if prod_count == 0 and test_count == 0:
             unused.append(d)
-        elif count <= min_uses:
+        elif prod_count == 0 and test_count > 0:
+            test_only.append(d)
+        elif prod_count <= min_uses:
             rare.append(d)
 
     name_definition_counts: defaultdict[str, int] = defaultdict(int)
-    for d in definitions:
+    for d in result.definitions:
         name_definition_counts[d.simple_name] += 1
 
+    def _rare_test_note(d: FunctionDef) -> str | None:
+        n = result.test_counts.get(d.simple_name, 0)
+        return f"also referenced {n} time(s) in test files" if n else None
+
     return {
-        "unused": _build_findings(unused, usage_counts, name_definition_counts),
-        "rare": _build_findings(rare, usage_counts, name_definition_counts),
+        "unused": _build_findings(unused, result.production_counts, name_definition_counts),
+        "test_only": _build_findings(
+            test_only,
+            result.test_counts,
+            name_definition_counts,
+            extra_reason_fn=lambda d: (
+                f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) "
+                "- not referenced anywhere in production code"
+            ),
+        ),
+        "rare": _build_findings(rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note),
     }
 
 
@@ -612,9 +684,25 @@ _SUMMARY_TEXT = """\
 ================================================================================
 HOW TO READ THIS REPORT
 ================================================================================
-Each result has a Confidence score: High, Medium, or Low. This reflects how
-likely the result is a *genuine* unused/rarely-used function, vs. a false
-positive caused by a known blind spot of static analysis - things like:
+This report has three sections:
+
+  - Unused: zero references anywhere in the codebase, production or test.
+  - Test-only: zero references in production code, but referenced from a
+    test file. This usually means a test is still calling code that nothing
+    in the actual application uses any more - often the most actionable
+    section, since it's "covered" but dead.
+  - Rarely-used: 1+ production references at or under the --min-uses
+    threshold (often just self-recursion, or a single remaining caller).
+
+References found inside test files (test_*.py, *_test.py, *_tests.py,
+tests.py, conftest.py, or anything under a test/tests/testing directory) are
+counted separately from production references by default, specifically so a
+function only kept alive by its own leftover unit test doesn't get a free
+pass into hiding (see --include-test-references to turn this off).
+
+Each result also has a Confidence score: High, Medium, or Low. This reflects
+how likely the result is a *genuine* finding, vs. a false positive caused by
+a known blind spot of static analysis - things like:
 
   - Methods on Django/DRF-style view, form, admin, or command classes, which
     are often dispatched by name/string convention (e.g. routing, list_display)
@@ -643,13 +731,20 @@ def _format_finding_line(f: Finding) -> str:
     return line
 
 
+_REPORT_SECTIONS = (
+    ("unused", "Unused (0 references anywhere)"),
+    ("test_only", "Test-only (referenced in tests, but not in production code)"),
+    ("rare", "Rarely-used (production references at or under threshold)"),
+)
+
+
 def write_text_report(results: dict[str, list[Finding]], output_path: str) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(_SUMMARY_TEXT)
         f.write("\n")
 
-        for key, label in (("unused", "Unused functions/methods (0 references found)"), ("rare", "Rarely-used functions/methods")):
-            findings = sorted(results[key], key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno))
+        for key, label in _REPORT_SECTIONS:
+            findings = sorted(results.get(key, []), key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno))
             counts_by_level = defaultdict(int)
             for fi in findings:
                 counts_by_level[fi.confidence] += 1
@@ -724,6 +819,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "generically-named function).",
     )
     parser.add_argument(
+        "--include-test-references",
+        action="store_true",
+        help="Count references found inside test files (test_*.py, *_test.py, conftest.py, "
+        "anything under a test/tests/testing directory, etc.) toward the same production "
+        "usage count, instead of tracking them separately. By default they're tracked "
+        "separately so a function only called by its own leftover unit test shows up in "
+        "the 'test_only' report section instead of falsely reading as actively used.",
+    )
+    parser.add_argument(
         "--min-confidence",
         choices=["low", "medium", "high"],
         default="low",
@@ -747,6 +851,7 @@ def main(argv: list[str] | None = None) -> int:
         ignore_patterns=args.ignore_pattern,
         use_default_ignores=not args.no_default_ignores,
         match_string_literals=not args.no_string_literal_refs,
+        exclude_test_references=not args.include_test_references,
         workers=args.workers,
         show_progress=not args.no_progress,
     )
@@ -762,8 +867,8 @@ def main(argv: list[str] | None = None) -> int:
         write_text_report(results, args.output)
 
     print(
-        f"Done. {len(results['unused'])} unused, {len(results['rare'])} rarely-used. "
-        f"Report written to {args.output}",
+        f"Done. {len(results['unused'])} unused, {len(results['test_only'])} test-only, "
+        f"{len(results['rare'])} rarely-used. Report written to {args.output}",
     )
     return 0
 

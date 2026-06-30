@@ -1,0 +1,417 @@
+================================================================================
+CODE AUDIT STATUS — tracking doc for docs/reports/unused_functions.txt triage
+================================================================================
+Working file-by-file, starting with whichever file has the most HIGH-confidence
+findings. Each entry records the disposition decided on and what (if anything)
+was done about it. Categories:
+
+  UNINCORPORATED  - useful code that exists but isn't wired into the site yet
+  DEPRECATED      - superseded by other code; needs removal
+  DEAD            - never-useful/no-op code; deleted on sight
+  REFACTOR        - kept, but needs cleanup/integration work to be solid
+  FALSE-POSITIVE  - report was simply wrong (script blind spot); no action taken
+
+NOTE on a systemic false-positive source found in this codebase: Celery tasks
+are queued via `safely_enqueue_task(task_func, ...)` (services/celery.py),
+passing the task function as a value rather than calling `task_func.delay(...)`
+directly. The unused-functions scanner only counts direct Call nodes, so any
+task only ever invoked this way reports 0-1 refs even when it's fully wired up.
+Always grep for the bare function name across `src/` before trusting a 0/1-ref
+verdict on anything in dashboard/tasks.py or similar dispatch-by-reference code.
+
+================================================================================
+src/urbanlens/dashboard/tasks.py  (16 HIGH findings — most in report)
+================================================================================
+Verified 10 of the 16 flagged tasks are FALSE-POSITIVE: create_location_for_pin,
+suggest_location_category, run_user_data_export, cleanup_export_artifacts_task,
+run_user_data_import, cleanup_import_artifacts_task, rebuild_map_pin_cache,
+prefetch_location_external_data, run_database_backup, run_scheduled_database_backup
+— all genuinely enqueued via `safely_enqueue_task(...)` from controllers/services,
+just invisible to the scanner.
+
+The remaining 6 had zero references anywhere outside tasks.py itself (confirmed
+by direct grep, not just the scanner). Resolved each:
+
+  - apply_admin_code_update — DEAD, DELETED.
+    Verbatim duplicate of SiteAdminPullLatestCodeView.post (controllers/site_admin.py:373).
+    That view already has a synchronous fetch() call with a spinner + toastr
+    success/error UX (templates/dashboard/pages/site_admin_stats.html:198-235) —
+    a single dev-only admin button, bounded duration. Converting to Celery would
+    require breaking the view's existing synchronous JSON contract (which has
+    test coverage in test_site_admin_stats.py) and adding job-status polling,
+    for a button that already has adequate UX. Not worth the churn.
+
+  - refresh_smithsonian_images — DEAD, DELETED.
+    Called the Smithsonian gateway and discarded the result — there is no cache
+    layer for Smithsonian data anywhere in the codebase (controllers/pin.py's
+    get_smithsonian_images always fetches live), so "warming" achieved nothing.
+    NOTE from Jess: There should be a cache layer for Smithsonian data, as well as all
+    API data from any API, in order to reduce api usage and improve performance.
+
+  - refresh_weather_forecast — DEAD, DELETED.
+    Same shape as above: WeatherForecastGateway (services/openweather/gateway.py)
+    has no caching at all (verified by reading the gateway), so the task fetched
+    and threw away data. No-op stub.
+
+  - extract_import_archive — DEAD, DELETED (paired with import_pins_from_paths).
+  - import_pins_from_paths — DEAD, DELETED.
+    Both formed an abandoned disk-path-based import pipeline (read archive from
+    a path, extract to a dir, then import from saved files). The live import
+    path (PinController.upload_takeout, controllers/pin.py:356) already handles
+    archives in-memory and streams progress via SSE — a strictly better UX
+    (instant feedback, no polling) than what these two tasks would have offered.
+    Nothing in the codebase saves uploads to MEDIA_ROOT and calls these, and no
+    tests reference them. Superseded, not unfinished.
+
+  - refresh_pin_web_search — UNINCORPORATED, now INTEGRATED.
+    It writes to the *same* cache key
+    (`make_cache_key("web_search_pin", pin.pk)`) that PinController.web_search
+    (controllers/pin.py:230) reads on the pin detail page. Wired it into the pin
+    creation flow in controllers/maps.py, right next to the existing
+    prefetch_location_external_data enqueue, so new pins get their web-search
+    results pre-warmed the same way Wikipedia/NPS/Google Places already are.
+
+Net result: tasks.py shrank from 433 to ~350 lines (5 dead tasks removed), and
+one genuinely-useful-but-disconnected task got wired up.
+
+================================================================================
+src/urbanlens/dashboard/services/export.py  (15 HIGH, all refs:1 "rarely-used")
+================================================================================
+FALSE-POSITIVE across the board. All 15 helper functions (_run_export_steps,
+_build_zip, _write_manifest, _export_profile, _export_settings, _export_pins,
+_export_pins_google_takeout, _export_badges, _export_connections,
+_export_visit_history, _export_comments, _export_photos, _export_trips,
+cleanup_export_artifacts, run_export) are legitimate private helpers in a
+well-decomposed export pipeline. They're called via dynamic dispatch through
+the `exporters` dict in `_run_export_steps`, which the scanner can't trace.
+No action taken.
+
+================================================================================
+src/urbanlens/dashboard/templatetags/dashboard_tags.py  (10 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE across the board. All 10 are Django template tags/filters
+registered with @register.filter, @register.simple_tag, or @register.inclusion_tag.
+Template usages (e.g. `{{ value|in_list:some_set }}`, `{% tooltip_attrs ... %}`)
+are invisible to the Python AST scanner. All 10 confirmed active in 19 template
+files (36 total template usages found). No action taken.
+
+================================================================================
+src/urbanlens/dashboard/services/social_auth/pipeline.py  (5 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE across the board. All 5 functions (generate_sso_username,
+suppress_last_name_for_new_users, fetch_and_save_avatar, mark_new_user_onboarding,
+save_discord_social_link) are python-social-auth pipeline steps registered via
+dotted-string paths in settings.SOCIAL_AUTH_PIPELINE (settings/base.py:287-307).
+String-based registration is invisible to the AST scanner. No action taken.
+
+================================================================================
+src/urbanlens/UrbanLens/celery.py  (2 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE. log_task_failure and log_task_retry are Celery signal receivers
+connected at module load via @task_failure.connect / @task_retry.connect decorators.
+The signals framework calls them automatically; no Python call site exists. No action taken.
+
+================================================================================
+src/urbanlens/UrbanLens/environments/prod.py  (1 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE. Production.debug_override_must_be_off is a Pydantic @field_validator,
+invoked automatically during model validation at instantiation time. No action taken.
+
+================================================================================
+src/urbanlens/UrbanLens/settings/app.py  (4 HIGH 0-ref unused)
+================================================================================
+Mixed results:
+
+  - _resolve_version_metadata — FALSE-POSITIVE.
+    Pydantic @model_validator(mode="after"), automatically called during __init__. No action.
+
+  - AppSettings.BASE_DIR — DEAD, DELETED.
+    An uppercase property wrapping the lowercase `base_dir` Pydantic field to mirror
+    Django's settings.BASE_DIR convention. Zero callers (neither app_settings.BASE_DIR
+    nor django.conf.settings.BASE_DIR). All internal references use the lowercase field directly.
+
+  - AppSettings.ENVIRONMENT — DEAD, DELETED.
+    Same pattern — zero callers. Also removed the dead `conf.settings.ENVIRONMENT = ...`
+    assignment in refresh_django() since nothing reads conf.settings.ENVIRONMENT.
+    Environment detection throughout the codebase uses os.getenv("UL_ENVIRONMENT") or
+    SiteSettings.get_effective_environment_type() directly.
+    NOTE from Jess: I could be mistaken, but I think django uses ENVIRONMENT. Therefore,
+    I restored the refresh_django code. We should consolidate ENVIRONMENT and UL_ENVIRONMENT
+    environment variables. If I'm mistaken about django using ENVIRONMENT, then we should
+    remove the refresh_django update of it once again.
+
+  - AppSettings.get_secret — DEAD, DELETED.
+    A method to retrieve values from a secrets dict, dating from before Pydantic
+    settings loaded secrets directly as typed fields. No callers anywhere.
+    NOTE from Jess: Question - does this also mean that the _secrets dict and the
+    secrets property are outdated as well?
+
+================================================================================
+src/urbanlens/dashboard/context_processors.py  (4 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE. All 4 functions (add_site_settings, add_dev_toolbar, add_page_name,
+add_feature_access) are Django context processors registered by dotted-string path
+in settings.TEMPLATES['OPTIONS']['context_processors'] (settings/base.py:79-87).
+String-based registration is invisible to the scanner. No action taken.
+
+================================================================================
+src/urbanlens/dashboard/consumers.py  (3 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE. RequestStatusConsumer.disconnect, receive, and send_status are
+Django Channels WebSocket consumer methods called by the ASGI dispatch stack, not
+by Python call sites. Consumer is wired in dashboard/routing.py:6. No action taken.
+
+================================================================================
+src/urbanlens/dashboard/dbrouters.py  (3 HIGH 0-ref unused)
+================================================================================
+FALSE-POSITIVE. DBRouter.db_for_read, db_for_write, allow_relation are Django
+database router protocol methods invoked by the ORM framework, registered via
+DATABASE_ROUTERS = ["...DBRouter"] in settings/base.py:145. No action taken.
+
+================================================================================
+src/urbanlens/dashboard/services/google/maps.py  (4 HIGH 0-ref unused)
+================================================================================
+Mixed results:
+
+  - get_directions — DEAD, DELETED.
+    Simple Google Directions API wrapper with zero callers. Trip routing hasn't
+    been implemented yet; nothing calls this.
+    NOTE from Jess: We will eventually implement trip routing, and feature will be useful.
+    Restored it for now. That isn't to say the implementation is perfect, and it shouldn't
+    again be removed if there is a better implementation.
+
+  - find_place — DEAD, DELETED.
+    Google Places Find Place (textquery) with zero callers. Place search in the
+    app uses GooglePlacesGateway instead.
+
+  - get_satellite_view — DEPRECATED, DELETED.
+    Was the server-side Static Maps API approach for satellite imagery. The live
+    pin detail view (satellite_view_google_image) now uses a client-side Leaflet/Esri
+    tile layer instead, passing coordinates to a template. Server-side image fetch
+    is no longer used.
+
+  - import_pins_from_file — DEPRECATED, DELETED.
+    Non-streaming predecessor to import_pins_streaming. Uses tqdm for a terminal
+    progress bar and bulk-creates Pin objects synchronously. Fully superseded by
+    the streaming SSE-based import pipeline used in upload_takeout. Also removed
+    the now-orphaned `from tqdm import tqdm` import.
+
+================================================================================
+src/urbanlens/core/tests/runner.py  (5 HIGH 0-ref unused)
+================================================================================
+Mixed results:
+
+  - TestRunner.run_suite — FALSE-POSITIVE.
+    Override of DiscoverRunner.run_suite() called by Django's test framework via
+    super() dispatch. No action taken.
+
+  - generate_guid, generate_onechar, generate_uniquechar, generate_pickledobject
+    — DEAD, DELETED.
+    Leftover test data generators never used in any test file (confirmed by grep).
+    Also deleted generate_dict and generate_list since both were only referenced
+    from generate_pickledobject (which was itself unused).
+    Removed the cascade of now-orphaned imports: from faker import Faker,
+    from secrets import randbelow, from model_bakery import baker seq,
+    from model_bakery.generators import default_mapping, and the 26-symbol
+    from django.db.models import (...) block, plus List/Tuple from typing.
+
+================================================================================
+src/urbanlens/dashboard/controllers/site_admin.py  (1 HIGH 0-ref unused)
+================================================================================
+  - _server_uptime — DEAD, DELETED.
+    Declared as a "backward-compatible alias" for _app_uptime(), but had zero
+    production callers (the only callers were tests that tested its delegating
+    behaviour — i.e., testing the alias itself rather than any business logic).
+    Deleted the alias and updated test_site_admin_stats.py to import and test
+    _app_uptime directly.
+
+================================================================================
+src/urbanlens/dashboard/controllers/account.py  (1 HIGH 0-ref unused)
+================================================================================
+  - social_auth — DEAD, DELETED.
+    A view function declared as "Fallback used if the social pipeline doesn't handle
+    redirect itself." Never registered in any URL pattern. python-social-auth handles
+    all redirects via SOCIAL_AUTH_LOGIN_REDIRECT_URL and SOCIAL_AUTH_NEW_USER_REDIRECT_URL
+    in settings/base.py (lines 310, 316), so this fallback has always been unreachable.
+
+================================================================================
+src/urbanlens/core/cache_keys.py  (1 HIGH 0-ref unused)
+================================================================================
+  - is_memcached_safe_key — DEAD, DELETED.
+    A validation utility that checks whether a key is safe for memcached backends.
+    The project uses make_cache_key() to build safe keys, so validation is never
+    needed. Also removed the now-orphaned `import string`.
+
+================================================================================
+STILL OUTSTANDING (0-ref HIGH items not yet acted on)
+================================================================================
+These are 0-ref model/service methods representing planned features or domain API
+not yet surfaced in views/templates. Kept as UNINCORPORATED pending roadmap work.
+Verification: all confirmed 0-ref by scanner and direct grep.
+
+  dashboard/forms/upload_datafile.py
+    - _MultipleFileInput.value_from_datadict — UNINCORPORATED
+      Custom widget for multi-file upload; may be unused if the form is not currently
+      rendered anywhere with this widget in use.
+
+  dashboard/models/abstract/addressable.py
+    - AddressableModel.address_extended — UNINCORPORATED
+      Domain property returning a formatted extended address string. Useful for
+      display but not yet referenced in templates or serializers.
+
+  dashboard/models/abstract/choices.py
+    - TextChoices.invalid — UNINCORPORATED (sentinel value for invalid/unknown state)
+    - TextChoices.get_name — UNINCORPORATED (human-readable label lookup utility)
+
+  dashboard/models/api_call_log/model.py
+    - ApiCallLog.prune_older_than_days — UNINCORPORATED
+      Bulk-delete old log rows; useful for scheduled cleanup but not yet called from
+      any management command or periodic Celery beat task.
+
+  dashboard/models/badges/model.py
+    - Badge.is_customized — UNINCORPORATED
+
+  dashboard/models/campus/model.py
+    - Campus.is_default — UNINCORPORATED
+    - Campus.effective_polygon — UNINCORPORATED
+
+  dashboard/models/friendship/invitation/model.py
+    - FriendInvitation.is_expired — UNINCORPORATED (checks TTL of invite link)
+    - FriendInvitation.is_accepted — UNINCORPORATED
+
+  dashboard/models/friendship/meta.py
+    - FriendshipStatus.rejected — UNINCORPORATED (status enum value)
+
+  dashboard/models/friendship/model.py
+    - Friendship.block — UNINCORPORATED (block a friend connection)
+    - Friendship.mute — UNINCORPORATED (mute a friend connection)
+    NOTE: these pair with FriendController.block_friend/mute_friend (MEDIUM list)
+    which are wired to URLs but call these model methods. Verify controller works.
+
+  dashboard/models/notifications/model.py
+    - NotificationLog.is_unread — UNINCORPORATED
+      Property on the notification model. Notification display logic not yet built.
+      NOTE from Jess: I think the notification display logic has been built, actually.
+      Unless I'm misunderstanding what the report means by "notification display logic".
+      There is a bell icon and dropdown on the ui to show site notifications. Is the report
+      talking about other types of notifications?
+
+  dashboard/models/profile/model.py
+    - Profile.show_onboarding_tips — UNINCORPORATED
+    - Profile.show_hover_tooltips — UNINCORPORATED
+    - Profile.full_name — UNINCORPORATED (returns first + last name)
+      NOTE: full_name is useful for display; worth checking if templates use
+      profile.user.get_full_name() instead.
+      NOTE from Jess: We should always be using the profile properties, not the django user
+      properties. If there's anywhere in our app that isn't true, it should be fixed. Also,
+      onboarding tips and hover tooltips are currently showing in the ui. Does this report
+      suggest that show_onboarding_tips and show_hover_tooltips are not being respected to
+      show or hide them? If so, is that because there is a separate setting on another model
+      being used, or is it because the user can't turn them off?
+
+  dashboard/models/subscriptions/model.py
+    - UserSubscription.is_indefinite — UNINCORPORATED
+    NOTE from Jess: This being unused suggests to me that it's possible subscriptions are
+    never deactivated. Is that true?
+
+  dashboard/models/trips/model.py
+    - Trip.timeline_status — UNINCORPORATED (upcoming/active/past classification)
+    - Trip.duration_days — UNINCORPORATED
+
+  dashboard/services/ai/gateway.py
+    - LLMGateway.cost — UNINCORPORATED
+      Property that computes estimated API cost. Roadmap item: "API cost tracking —
+      log and aggregate cost estimates on every external API call." This is the
+      building block; needs to be called and stored after each gateway invocation.
+    - LLMGateway.send_prompt — UNINCORPORATED
+      Core method for sending a single string prompt to the LLM. The test runner
+      patches this as the "single chokepoint" for all AI calls, so it exists and
+      works but is never invoked from production code. Wire it up from whatever
+      feature needs LLM output.
+      NOTE from Jess: We are absolutely calling LLMs in our app currently, so if
+      this is referenced as a single chokepoint for all AI calls and is otherwise
+      unused, that means it is misidentified as the single chokepoint.
+
+  dashboard/services/ai/keywords.py
+    - categorize_by_keywords — UNINCORPORATED
+    NOTE from Jess: I thought we were adding badges based on keywords already. I could
+    be mistaken. This could be a duplicate scaffold for an existing feature, or it's
+    possible I'm wrong about the feature already existing and this needs to be wired up.
+    It should probably be renamed to indicate it's actually adding badges.
+
+  dashboard/services/ai/scanner.py
+    - sanitize — UNINCORPORATED (sanitizes user-provided text before sending to AI)
+    NOTE from Jess: Some safety mechanisms were already implemented for AI. I was under
+    the impression they were wired up. Is this one of them?
+
+  dashboard/services/google/places.py
+    - GooglePlacesGateway.get_place_photos — UNINCORPORATED
+    - GooglePlacesGateway.get_recent_search_results — UNINCORPORATED
+    NOTE from Jess: get_place_photos should show up in the pin details page and the 
+    location wiki. Its results should be cached for several months to limit api calls.
+
+  dashboard/services/import_data.py
+    - import_dir — FALSE-POSITIVE (aliased import in controllers/tools.py)
+      Imported as _import_dir_fn in tools.py and wrapped in a local _import_dir()
+      function. The scanner missed the aliased import. No action needed, though
+      the double-wrapping is unnecessary; REFACTOR opportunity.
+
+  dashboard/services/loc.py
+    - LOCJsonGateway.search_collections — UNINCORPORATED
+      Library of Congress JSON API gateway method; full feature (search LOC records
+      for historic imagery/documents about a location) is written but not surfaced
+      in any view or template.
+      NOTE from Jess: This should be wired up to the location wiki page and the pin details page.
+      Its results should be cached for several months to limit api calls.
+
+  dashboard/services/map_pins/cache.py
+    - MapPinCache.is_enabled — UNINCORPORATED
+    - MapPinCache.upsert_pin — UNINCORPORATED (incremental cache update for one pin)
+
+  dashboard/services/mentions.py
+    - filter_visible_comments — UNINCORPORATED
+
+  dashboard/services/news.py
+    - NewsGateway.get_news — UNINCORPORATED
+      Gateway to a news API for location-relevant news. Full feature not surfaced.
+
+  dashboard/services/nps/map.py
+    - NPSMapGateway.check_coordinates_within_park — UNINCORPORATED
+
+  dashboard/services/nps/parks.py
+    - NPSGateway.get_park_images — UNINCORPORATED
+    - NPSGateway.get_parks_near_location — UNINCORPORATED
+    NOTE from Jess: get_park_images should show up in the pin details page and the 
+    location wiki. Its results should be cached for several months to limit api calls.
+
+  dashboard/services/routexl.py
+    - RouteXLGateway.optimize_route — UNINCORPORATED
+      Full RouteXL route optimization gateway. Useful for trip planning but not
+      wired into the trip detail view.
+      NOTE from Jess: Is this duplicate functionality with the google maps directions call
+      mentioned above? If so, we should abstract it to provide 2 service providers for the 
+      feature.
+
+  dashboard/services/site_admin.py
+    - promote_first_user_if_needed — FALSE-POSITIVE.
+      IS called in models/profile/signals.py:15. Scanner missed the lazy import
+      inside the signal handler function body.
+
+  dashboard/services/smithsonian.py
+    - SmithsonianGateway.get_images_by_coordinates — UNINCORPORATED
+      Coordinate-based Smithsonian search; the live get_data method searches by
+      name instead. Alternative approach for locations without strong name matches.
+      NOTE from Jess: Searching by coordinates and searching by name should both be 
+      used on the pin details page and the location wiki, and duplicate results between
+      the two should be condensed before a response is returned. The results should be cached 
+      for several months to limit api calls.
+
+================================================================================
+NEXT UP
+================================================================================
+All HIGH 0-ref unused items from the report have now been triaged. Continue with:
+- Reviewing Jess' comments.
+- Revisiting UNINCORPORATED items to decide which are worth wiring in vs. deleting
+  (esp. LLMGateway.cost/send_prompt, ApiCallLog.prune_older_than_days,
+  Friendship.block/mute, Trip.timeline_status/duration_days)
+- Reviewing MEDIUM confidence items in the report (false-positive risk higher)

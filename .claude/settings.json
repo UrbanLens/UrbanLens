@@ -39,7 +39,9 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src\\\\urbanlens\\\\dashboard\\\\controllers\\\\pin_edit.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\python.exe src\\\\urbanlens\\\\manage.py check 2>&1)",
       "Skill(run)",
-      "Skill(run:*)"
+      "Skill(run:*)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\tasks.py src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py; echo \"EXIT:$LASTEXITCODE\")",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src\\\\urbanlens\\\\dashboard\\\\tasks.py src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py)"
     ]
   }
 }

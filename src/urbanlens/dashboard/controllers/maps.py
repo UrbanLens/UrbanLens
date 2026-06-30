@@ -203,13 +203,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 except Exception as gp_exc:
                     logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
 
-            # Pre-warm LocationCache for Wikipedia, NPS, and Google Places so the
-            # pin detail page doesn't need to hit the APIs on first load.
+            # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
+            # web-search results cache, so the pin detail page doesn't need to hit
+            # the APIs on first load.
             if location and not is_private:
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import prefetch_location_external_data
+                from urbanlens.dashboard.tasks import prefetch_location_external_data, refresh_pin_web_search
 
                 safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
+                safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 

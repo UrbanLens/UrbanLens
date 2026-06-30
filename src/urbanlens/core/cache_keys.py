@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import string
 
 
 def make_cache_key(namespace: str, *parts: str | float) -> str:
@@ -24,16 +23,3 @@ def make_cache_key(namespace: str, *parts: str | float) -> str:
     raw = ":".join(str(part) for part in parts)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     return f"{namespace}:{digest}"
-
-
-def is_memcached_safe_key(key: str) -> bool:
-    """Return True if ``key`` contains only memcached-safe characters.
-
-    Args:
-        key: The cache key to validate.
-
-    Returns:
-        True when the key has no spaces or control characters.
-    """
-    safe = set(string.ascii_letters + string.digits + "_-.:")
-    return all(char in safe for char in key)

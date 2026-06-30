@@ -50,9 +50,9 @@ _ORDERED_TYPES = [
 
 def export_dir(job_id: str) -> str:
     """Return the filesystem path for a given export job."""
-    from django.conf import settings
+    from django.conf import settings as django_settings
 
-    return os.path.join(settings.MEDIA_ROOT, "exports", job_id)
+    return os.path.join(django_settings.MEDIA_ROOT, "exports", job_id)
 
 
 class ExportJobStatus:
