@@ -124,7 +124,7 @@ src/urbanlens/
 
 ### Key Configuration Files
 
-- **`src/urbanlens/UrbanLens/settings/local.py`**: Django settings (DEBUG, installed apps, middleware, database)
+- **`src/urbanlens/UrbanLens/settings/base.py`**: Django settings (DEBUG, installed apps, middleware, database)
 - **`src/urbanlens/UrbanLens/settings/app.py`**: Pydantic-based settings (env vars, paths, feature flags)
 - **`docker-compose.yml`**: Service orchestration (app, nginx, PostGIS)
 - **`pyproject.toml`**: Dependencies, Ruff/MyPy/Pylint/Yapf config, dev scripts
@@ -253,4 +253,4 @@ These are planned features - treat any missing implementation as a gap to fill, 
 1. Use `TYPE_CHECKING` guard for imports that would cause circular references in models
 2. Always `prefetch_related` for M2M, `select_related` for FK to avoid N+1 queries
 3. PostGIS geo queries use django-gis operators (`__distance_lte`, `__contains`, etc.)
-4. Settings are split: Django config in `settings/local.py`, app-level env-driven config in `settings/app.py` (Pydantic)
+4. Settings are split: Django config in `settings/base.py`, app-level env-driven config in `settings/app.py` (Pydantic)

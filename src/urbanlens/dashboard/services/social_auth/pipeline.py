@@ -1,6 +1,6 @@
 """Custom python-social-auth pipeline steps.
 
-These are inserted into ``SOCIAL_AUTH_PIPELINE`` in ``settings/local.py`` and
+These are inserted into ``SOCIAL_AUTH_PIPELINE`` in ``settings/base.py`` and
 run for every OAuth login (Google, Discord, ...).
 
 Step contracts

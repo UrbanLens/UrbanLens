@@ -976,12 +976,12 @@ implicit_optional = true
 disable_error_code = ['misc', 'annotation-unchecked', 'override']
 
 [tool.django-stubs]
-django_settings_module = "urbanlens.UrbanLens.settings.local"
+django_settings_module = "urbanlens.UrbanLens.settings.base"
 ignore_missing_model_attributes = true
 #strict_settings = true
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.local"
+DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.test"
 pythonpath = ["src"]
 testpaths = ["src/urbanlens"]
 addopts = "--import-mode=importlib"

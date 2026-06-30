@@ -10,11 +10,34 @@ from pathlib import Path
 PROJECT_SRC = Path(__file__).resolve().parents[1]  # .../src
 sys.path.insert(0, str(PROJECT_SRC))
 
+_ENV_VARS_TO_PRINT = [
+    "DJANGO_SETTINGS_MODULE",
+    "UL_ENVIRONMENT",
+    "DJANGO_DEBUG",
+    "UL_ALLOWED_HOSTS",
+    "UL_VALKEY_URL",
+    "UL_REDIS_URL",
+    "UL_UNSAFE_ALLOW_HTTP",
+]
+
+def _print_startup_env() -> None:
+    """Print key environment variables before Django initialises."""
+    print("--- UrbanLens startup environment ---", flush=True)
+    for var in _ENV_VARS_TO_PRINT:
+        val = os.environ.get(var)
+        if val is None:
+            print(f"  {var}: (not set)", flush=True)
+        elif any(secret in var for secret in ("PASS", "SECRET", "KEY", "TOKEN")):
+            print(f"  {var}: ***", flush=True)
+        else:
+            print(f"  {var}: {val}", flush=True)
+    print("-------------------------------------", flush=True)
+
+
 def main():
     """Run administrative tasks."""
-    #os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'urbanlens.UrbanLens.settings.local')
-    # Temporarily Override the default settings module
-    os.environ['DJANGO_SETTINGS_MODULE'] = 'urbanlens.UrbanLens.settings.local'
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'urbanlens.UrbanLens.settings')
+    _print_startup_env()
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

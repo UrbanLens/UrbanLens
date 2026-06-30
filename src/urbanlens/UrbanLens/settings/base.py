@@ -15,17 +15,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # repo-root .env is found regardless of working directory.
 load_dotenv(find_dotenv())
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Detect the current environment early — other settings branch on it.
+ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
+_is_local = ENVIRONMENT_NAME == "local"
+_is_dev = ENVIRONMENT_NAME in {"local", "development"}
 
-# TODO: Change default, and allow pulling from env vars
-ALLOWED_HOSTS = ["urbanlens.org", "localhost", "localhost:21080", "127.0.0.1"]
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = os.getenv("DJANGO_DEBUG", "True" if _is_dev else "False").lower() in {"true", "1", "yes"}
+
+# ALLOWED_HOSTS: override via UL_ALLOWED_HOSTS (comma-separated list).
+# Local environment defaults to wildcard so developers can access the site
+# immediately without any configuration.
+if _allowed_hosts_env := os.getenv("UL_ALLOWED_HOSTS", ""):
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
+elif _is_local:
+    ALLOWED_HOSTS = ["urbanlens.org", "localhost", "127.0.0.1"]
+else:
+    ALLOWED_HOSTS = ["urbanlens.org"]
 
 # Application definition
 INSTALLED_APPS = [
@@ -217,31 +226,52 @@ TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} o
     arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
 )
 
-# Reject plain HTTP unless UL_UNSAFE_ALLOW_HTTP is enabled (local dev only).
-UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", "False").lower() in {"true", "1", "yes"}
+# Reject plain HTTP in production. Local and development environments allow it
+# by default so developers can access the site without TLS configuration.
+# Override via UL_UNSAFE_ALLOW_HTTP in .env (or set to False to enforce HTTPS locally).
+_http_default = "True" if _is_dev else "False"
+UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", _http_default).lower() in {"true", "1", "yes"}
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
-
-# TODO: Change domains default
-protocols = ["https://"]
-domains = ["urbanlens.org", "localhost", "localhost:21080"]
-subdomains = ["www.", ""]
-if UNSAFE_ALLOW_HTTP:
-    protocols.append("http://")
 
 # Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
 # when sitting behind a reverse proxy that terminates SSL.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+protocols = ["https://"]
+if _is_local:
+    # Local development: cover common ports used by docker-compose and direct runserver.
+    domains = [
+        "urbanlens.org",
+        "localhost",
+        "localhost:8000",
+        "localhost:21080",
+        "localhost:21800",
+        "127.0.0.1",
+        "127.0.0.1:8000",
+        "127.0.0.1:21080",
+        "127.0.0.1:21800",
+        "[::1]",
+        "[::1]:8000",
+    ]
+elif _is_dev:
+    domains = ["urbanlens.org", "localhost", "localhost:21080", "localhost:21800", "127.0.0.1"]
+else:
+    domains = ["urbanlens.org", "localhost", "localhost:21080"]
 
-CORS_ALLOWED_ORIGINS = [
+subdomains = ["www.", ""]
+if UNSAFE_ALLOW_HTTP:
+    protocols.append("http://")
+
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
     f"{protocol}{subdomain}{domain}"
     for protocol in protocols
     for subdomain in subdomains
     for domain in domains
-]
+    if not (subdomain and domain.startswith("["))  # IPv6 literals can't have a subdomain prefix
+))
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")

@@ -2,7 +2,7 @@
 <div class="icon-picker-dropdown" data-picker="{{ picker_id }}">
     <input type="hidden" name="{{ field_name }}" id="icon-value-{{ picker_id }}" value="{{ current_icon|default:'' }}">
 
-    <button type="button" class="icon-picker-trigger" id="icon-trigger-{{ picker_id }}"
+    <button type="button" class="btn btn--trigger icon-picker-trigger" id="icon-trigger-{{ picker_id }}"
             onclick="IconPicker.toggle('{{ picker_id }}')">
         <span class="icon-picker-current" id="icon-current-{{ picker_id }}">
             {% if current_custom_icon_url %}

@@ -355,7 +355,7 @@ class DbInitializer:
     def __init__(self):
         """Read connection parameters from environment variables.
 
-        Defaults match Django settings/local.py so behaviour is consistent
+        Defaults match Django settings/base.py so behaviour is consistent
         whether the caller sets the env vars or not.
         """
         load_dotenv(ROOT_DIR / ".env")

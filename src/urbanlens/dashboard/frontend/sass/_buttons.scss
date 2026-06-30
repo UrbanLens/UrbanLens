@@ -149,55 +149,6 @@
 	}
 }
 
-.btn-togl {
-    display: flex;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
-    overflow: hidden;
-
-	button,
-    .btn {
-        background: var(--ul-grey-0);
-        border: none;
-        padding: 5px 9px;
-        cursor: pointer;
-        color: $text-muted;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background .12s, color .12s;
-        border-right: 1px solid var(--ul-grey-1a);
-
-        &:last-child {
-            border-right: none;
-        }
-
-        i {
-            font-size: 1.1rem;
-        }
-
-        &:hover {
-            background: var(--ul-grey-4);
-            color: var(--ul-grey-8);
-        }
-
-        &.active {
-            background: var(--primary-color);
-            color: var(--ul-grey-9);
-        }
-	}
-	&--trigger {
-	}
-}
-
-.btn-group {	
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    flex-shrink: 0;
-}
-
-
 .social-btn-icon {
     display: flex;
     align-items: center;
@@ -272,6 +223,54 @@ input[type="submit"] {
 		opacity: 0.35;
 		cursor: not-allowed;
 	}
+}
+
+// - Button Containers
+// A container that toggles between several buttons.
+.btn-togl {
+    display: flex;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    overflow: hidden;
+
+	button,
+    .btn {
+        background: var(--ul-grey-0);
+        border: none;
+        padding: 5px 9px;
+        cursor: pointer;
+        color: $text-muted;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s, color .12s;
+        border-right: 1px solid var(--ul-grey-1a);
+
+        &:last-child {
+            border-right: none;
+        }
+
+        i {
+            font-size: 1.1rem;
+        }
+
+        &:hover {
+            background: var(--ul-grey-4);
+            color: var(--ul-grey-8);
+        }
+
+        &.active {
+            background: var(--primary-color);
+            color: var(--ul-grey-9);
+        }
+	}
+}
+
+.btn-group {	
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-shrink: 0;
 }
 
 .dialog {
