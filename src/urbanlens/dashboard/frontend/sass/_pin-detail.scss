@@ -968,68 +968,71 @@ body.page-location-details {
     }
 }
 
-// ── Pin community-wiki card ────────────────────────────────────────────────────
-// Uses the standard .card / .card-header shell (matching every other panel on
-// this page) so the panel reads as a first-class section rather than a stray
-// strip wedged into the details grid.
+// ── Community wiki row ──────────────────────────────────────────────────────────
+// A single compact row appended to the bottom of the Details card (not its own
+// .card) - it's metadata about the pin, not a first-class page section.
 
-.pin-wiki-card {
-    .card-header {
-        .material-icons:first-child {
-            color: $color-indigo-500;
-        }
-    }
-
-    &--private .card-header .material-icons:first-child,
-    &--unlinked .card-header .material-icons:first-child {
-        color: var(--ul-grey-4);
-    }
-}
-
-.pin-wiki-card-body {
-    padding: .85rem 1rem;
+.pin-wiki-row {
     display: flex;
-    flex-direction: column;
-    gap: .35rem;
+    align-items: center;
+    gap: .65rem;
+    padding: .65rem 1rem;
+    border-top: 1px solid var(--ul-grey-1a);
 
-    &--message {
-        flex-direction: row;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: .6rem;
+    > .material-icons {
+        font-size: 1.1rem;
+        color: $color-indigo-500;
+        flex-shrink: 0;
+    }
+
+    &--message,
+    &--unlinked {
         color: var(--ul-grey-6);
         font-size: .84rem;
 
-        .material-icons {
+        > .material-icons {
             font-size: 1.05rem;
             color: var(--ul-grey-3);
-            flex-shrink: 0;
         }
 
-        span {
+        > span {
             flex: 1;
             min-width: 0;
         }
     }
 }
 
-.pin-wiki-card-link {
-    font-size: .95rem;
+.pin-wiki-row-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.pin-wiki-row-label {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-4);
+    flex-shrink: 0;
+}
+
+.pin-wiki-row-link {
+    font-size: .88rem;
     font-weight: 600;
     color: $color-blue-800;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
-    gap: .3rem;
-    width: fit-content;
-    max-width: 100%;
-
-    .pin-wiki-card-name {
-        @include truncate;
-    }
+    gap: .25rem;
+    min-width: 0;
+    @include truncate;
 
     .material-icons {
-        font-size: .85rem;
+        font-size: .8rem;
         opacity: .6;
         flex-shrink: 0;
     }
@@ -1039,11 +1042,11 @@ body.page-location-details {
     }
 }
 
-.pin-wiki-card-hint {
-    margin: 0;
-    font-size: .78rem;
-    color: var(--ul-grey-5);
-    line-height: 1.4;
+.pin-wiki-row-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-shrink: 0;
 }
 
 .pin-loc-change-btn {
@@ -1327,7 +1330,7 @@ body.page-location-details {
         background: rgba(255, 255, 255, .08);
     }
 
-    .pin-wiki-card-link {
+    .pin-wiki-row-link {
         color: $color-blue-300;
     }
 

@@ -174,29 +174,26 @@
             </div>
         </div>
         {% endif %}
-    </div>
 
-    {# ── Community wiki panel ─────────────────────────────────────────────── #}
-    {% if pin.is_private %}
-    {# Private pins are intentionally unlinked from the community wiki. #}
-    <div class="card pin-wiki-card pin-wiki-card--private"
-         data-collapse-scope="pin" data-collapse-section="wiki">
-        <div class="card-header">
+        {# ── Community wiki row - merged into Details, not its own section ── #}
+        {% if pin.is_private %}
+        {# Private pins are intentionally unlinked from the community wiki. #}
+        <div class="pin-wiki-row pin-wiki-row--message">
             <i class="material-icons">lock</i>
-            <span>Community Wiki</span>
+            <span>Private pin — no community wiki entry.</span>
         </div>
-        <div class="pin-wiki-card-body pin-wiki-card-body--message">
-            <i class="material-icons">info_outline</i>
-            <span>This pin is private, so it doesn't have a community wiki entry — only you can see it.</span>
-        </div>
-    </div>
-    {% elif pin.location and pin.location.slug %}
-    <div class="card pin-wiki-card" id="pin-location-section"
-         data-collapse-scope="pin" data-collapse-section="wiki">
-        <div class="card-header">
+        {% elif pin.location and pin.location.slug %}
+        <div class="pin-wiki-row" id="pin-location-section"
+             data-tooltip="Shared with everyone who has this location pinned — details and photos added here are visible to the whole community.">
             <i class="material-icons">public</i>
-            <span>Community Wiki</span>
-            <div class="card-header-actions">
+            <div class="pin-wiki-row-info">
+                <span class="pin-wiki-row-label">Community Wiki</span>
+                <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-row-link">
+                    {{ pin.location.name }}
+                    <i class="material-icons">open_in_new</i>
+                </a>
+            </div>
+            <div class="pin-wiki-row-actions">
                 {% if overlapping_location_count > 1 %}
                 <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
                         hx-get="{% url 'pin.link' pin.slug %}"
@@ -221,25 +218,12 @@
                 </button>
             </div>
         </div>
-        <div class="pin-wiki-card-body">
-            <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-card-link">
-                <span class="pin-wiki-card-name">{{ pin.location.name }}</span>
-                <i class="material-icons">open_in_new</i>
-            </a>
-            <p class="pin-wiki-card-hint">Shared with everyone who has this location pinned — details and photos added here are visible to the whole community.</p>
-        </div>
         {# Picker panel is loaded here when "Change" is clicked #}
         <div id="pin-location-picker"></div>
-    </div>
-    {% elif pin.effective_latitude %}
-    <div class="card pin-wiki-card pin-wiki-card--unlinked"
-         data-collapse-scope="pin" data-collapse-section="wiki">
-        <div class="card-header">
+        {% elif pin.effective_latitude %}
+        <div class="pin-wiki-row pin-wiki-row--unlinked">
             <i class="material-icons">link_off</i>
-            <span>Community Wiki</span>
-        </div>
-        <div class="pin-wiki-card-body pin-wiki-card-body--message">
-            <span>This pin isn't linked to a shared location yet.</span>
+            <span>Not linked to a shared location.</span>
             <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
                     hx-get="{% url 'pin.link' pin.slug %}"
                     hx-target="#pin-location-picker"
@@ -248,6 +232,6 @@
             </button>
         </div>
         <div id="pin-location-picker"></div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
