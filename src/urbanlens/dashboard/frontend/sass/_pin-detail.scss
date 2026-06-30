@@ -1724,8 +1724,8 @@ body.page-location-details .pin-detail-grid {
 
     > #pin-overview { order: 10; }
     > .location-map { order: 20; }
-    > .satellite-view { order: 30; }
-    > .street-view { order: 40; }
+    > .satellite-view { order: 30; min-width: 22rem; }
+    > .street-view { order: 40; min-width: 22rem; }
     > .visit-history { order: 50; }
     > .tag-panel { order: 60; }
     > .aliases-panel { order: 70; }
@@ -1734,16 +1734,6 @@ body.page-location-details .pin-detail-grid {
     > #pin-gallery-panel { order: 90; }
     > .comment-panel,
     > #comment-panel { order: 100; }
-
-    > .card,
-    > #pin-overview > .card,
-    > #pin-overview .card {
-        border: 1px solid rgba(148, 163, 184, .18);
-        border-radius: clamp(14px, 2vw, 22px);
-        overflow: hidden;
-        background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .94));
-        box-shadow: 0 16px 42px rgba(15, 23, 42, .08);
-    }
 
     @include up($breakpoint-sm) {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
