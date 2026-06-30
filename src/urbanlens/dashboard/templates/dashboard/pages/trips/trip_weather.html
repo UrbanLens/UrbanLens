@@ -1,5 +1,6 @@
 {% if not error and not grouped %}<div id="trip-weather-panel" hidden></div>{% else %}
-<div id="trip-weather-panel" class="trip-panel card">
+<div id="trip-weather-panel" class="trip-panel card"
+     data-collapse-scope="trip" data-collapse-section="weather">
 
     <div class="card-header">
         <i class="material-icons">wb_cloudy</i>

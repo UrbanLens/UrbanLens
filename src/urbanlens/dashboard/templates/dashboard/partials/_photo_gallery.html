@@ -8,7 +8,8 @@ Context:
   pin          - Pin instance (when context_type == "pin")
   location     - Location instance (when context_type == "wiki")
 {% endcomment %}
-<div class="photo-gallery card" id="photo-gallery">
+<div class="photo-gallery card" id="photo-gallery"
+     data-collapse-scope="{{ context_type }}" data-collapse-section="gallery">
   <div class="card-header">
     <i class="material-icons">photo_library</i>
     <span>Photos</span>

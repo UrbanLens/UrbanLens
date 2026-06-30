@@ -1,7 +1,8 @@
 <div id="trip-activities-panel" class="trip-panel card"
      data-trip-start="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
      data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}"
-     data-all-completed="{% if all_activities_completed %}true{% else %}false{% endif %}">
+     data-all-completed="{% if all_activities_completed %}true{% else %}false{% endif %}"
+     data-collapse-scope="trip" data-collapse-section="activities">
     <div class="card-header">
         <i class="material-icons">map</i>
         <span>Activities</span>

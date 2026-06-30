@@ -89,41 +89,47 @@
 
         {# ── Description / dates (if any) ───────────────────────────────── #}
         {% if location.description or location.date_abandoned or location.effective_date_last_active %}
-        <div class="wiki-card wiki-meta">
-            {% if location.description %}
-            <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
-            {% endif %}
-            {% if location.date_abandoned or location.effective_date_last_active %}
-            <div class="wiki-meta-dates">
-                {% if location.date_abandoned %}
-                <span class="wiki-meta-date"><i class="material-icons">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
-                {% endif %}
-                {% if location.effective_date_last_active %}
-                <span class="wiki-meta-date"><i class="material-icons">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
-                {% endif %}
+        <div class="wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
+            <div class="wiki-card-header">
+                <i class="material-icons">info_outline</i>
+                <h2>About</h2>
             </div>
-            {% endif %}
-            {# Security indicators - only shown when at least one is non-unknown #}
-            {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
-            <div class="security-indicators">
-                <span class="security-indicators-label">Security</span>
-                <div class="security-chips">
-                    {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
-                    {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
-                    {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
-                    {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
-                    {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
-                    {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
-                    {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
-                    {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+            <div class="wiki-meta-body">
+                {% if location.description %}
+                <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
+                {% endif %}
+                {% if location.date_abandoned or location.effective_date_last_active %}
+                <div class="wiki-meta-dates">
+                    {% if location.date_abandoned %}
+                    <span class="wiki-meta-date"><i class="material-icons">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
+                    {% endif %}
+                    {% if location.effective_date_last_active %}
+                    <span class="wiki-meta-date"><i class="material-icons">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
+                    {% endif %}
                 </div>
+                {% endif %}
+                {# Security indicators - only shown when at least one is non-unknown #}
+                {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
+                <div class="security-indicators">
+                    <span class="security-indicators-label">Security</span>
+                    <div class="security-chips">
+                        {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
+                        {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
+                        {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
+                        {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
+                        {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
+                        {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
+                        {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
+                        {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
         {% endif %}
 
         {# ── Community stats card ────────────────────────────────────────── #}
-        <div class="wiki-card wiki-stats">
+        <div class="wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
             <div class="wiki-card-header">
                 <i class="material-icons">people</i>
                 <h2>Community</h2>
@@ -254,7 +260,7 @@
         </div>
 
         {# ── Tabs: Details / Edit history ────────────────────────────────── #}
-        <div class="wiki-card wiki-tabs-card">
+        <div class="wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
             <div class="wiki-tabs">
                 <button class="wiki-tab wiki-tab--active" data-tab="history"
                         hx-get="{% url 'location.wiki.history' location.slug %}"

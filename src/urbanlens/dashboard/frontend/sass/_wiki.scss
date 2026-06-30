@@ -99,7 +99,10 @@
 
     .wiki-meta {
         grid-column: 1;
-        padding: .9rem 1.1rem;
+
+        .wiki-meta-body {
+            padding: .9rem 1.1rem;
+        }
 
         .wiki-description {
             font-size: .9rem;

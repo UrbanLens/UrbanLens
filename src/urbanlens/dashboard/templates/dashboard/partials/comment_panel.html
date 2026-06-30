@@ -1,5 +1,6 @@
 {% load dashboard_tags %}
-<div class="comment-panel card" id="comment-panel">
+<div class="comment-panel card" id="comment-panel"
+     data-collapse-scope="{{ context_type }}" data-collapse-section="comments">
   <div class="card-header">
     <i class="material-icons">chat</i>
     <span>Comments</span>

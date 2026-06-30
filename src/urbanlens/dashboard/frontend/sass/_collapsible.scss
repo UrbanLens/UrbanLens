@@ -1,0 +1,34 @@
+@use 'variables' as *;
+
+// ── Collapsible sections ────────────────────────────────────────────────────
+// Toggle button injected by the inline script in themes/base.html into the
+// header of any [data-collapse-scope][data-collapse-section] element.
+
+.section-collapse-btn {
+    @include icon-btn(28px);
+    margin-left: auto;
+
+    .material-icons {
+        font-size: 1.2rem;
+        transition: transform .15s;
+    }
+}
+
+[data-collapse-scope] {
+    &.is-collapsed {
+        > .card-header,
+        > .wiki-card-header,
+        > .tag-panel-header,
+        > .wiki-tabs {
+            border-bottom: none;
+        }
+
+        > :not(.card-header):not(.wiki-card-header):not(.tag-panel-header):not(.wiki-tabs) {
+            display: none;
+        }
+
+        .section-collapse-btn .material-icons {
+            transform: rotate(-180deg);
+        }
+    }
+}

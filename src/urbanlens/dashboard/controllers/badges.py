@@ -979,6 +979,7 @@ def _membership_panel_ctx(
     dialog_id_suffix: str,
     membership_route: str,
     obj_uuid: str,
+    collapse_scope: str,
     empty_text: str | None = None,
 ) -> dict:
     """Build template context for badge_membership_panel.html."""
@@ -991,6 +992,7 @@ def _membership_panel_ctx(
         "membership_route": membership_route,
         "badge_url_kind": _MEMBERSHIP_URL_KIND,
         "obj_uuid": obj_uuid,
+        "collapse_scope": collapse_scope,
     }
     if empty_text:
         ctx["empty_text"] = empty_text
@@ -1027,6 +1029,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 dialog_id_suffix=pin_slug,
                 membership_route="pin",
                 obj_uuid=pin_slug,
+                collapse_scope="pin",
             ),
         )
 
@@ -1053,6 +1056,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 dialog_id_suffix=pin_slug,
                 membership_route="pin",
                 obj_uuid=pin_slug,
+                collapse_scope="pin",
             ),
         )
 
@@ -1076,6 +1080,7 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
                 dialog_id_suffix=location_slug,
                 membership_route="location",
                 obj_uuid=location_slug,
+                collapse_scope="wiki",
                 empty_text="No badges. Click + to add one.",
             ),
         )
@@ -1103,6 +1108,7 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
                 dialog_id_suffix=location_slug,
                 membership_route="location",
                 obj_uuid=location_slug,
+                collapse_scope="wiki",
                 empty_text="No badges. Click + to add one.",
             ),
         )

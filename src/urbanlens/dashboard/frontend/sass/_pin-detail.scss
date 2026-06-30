@@ -967,87 +967,82 @@ body.page-location-details {
     }
 }
 
-// ── Pin linked-location panel ─────────────────────────────────────────────────
+// ── Pin community-wiki card ────────────────────────────────────────────────────
+// Uses the standard .card / .card-header shell (matching every other panel on
+// this page) so the panel reads as a first-class section rather than a stray
+// strip wedged into the details grid.
 
-.pin-location-section {
-    margin-top: .5rem;
+.pin-wiki-card {
+    .card-header {
+        .material-icons:first-child {
+            color: $color-indigo-500;
+        }
+    }
+
+    &--private .card-header .material-icons:first-child,
+    &--unlinked .card-header .material-icons:first-child {
+        color: var(--ul-grey-4);
+    }
 }
 
-.pin-location-panel {
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
-    overflow: visible;
-    background: var(--ul-grey-0);
+.pin-wiki-card-body {
+    padding: .85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
 
-    &--unlinked {
-        display: flex;
+    &--message {
+        flex-direction: row;
         align-items: center;
-        gap: .5rem;
-        padding: .6rem .85rem;
+        flex-wrap: wrap;
+        gap: .6rem;
         color: var(--ul-grey-6);
         font-size: .84rem;
 
         .material-icons {
             font-size: 1.05rem;
             color: var(--ul-grey-3);
+            flex-shrink: 0;
+        }
+
+        span {
+            flex: 1;
+            min-width: 0;
         }
     }
 }
 
-.pin-location-panel-main {
-    display: flex;
-    align-items: center;
-    gap: .65rem;
-    padding: .6rem .85rem;
-}
-
-.pin-location-icon {
-    font-size: 1.2rem;
-    color: $color-indigo-500;
-    flex-shrink: 0;
-}
-
-.pin-location-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .05rem;
-}
-
-.pin-location-label {
-    font-size: .68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--ul-grey-4);
-}
-
-.pin-location-name {
-    font-size: .88rem;
+.pin-wiki-card-link {
+    font-size: .95rem;
     font-weight: 600;
     color: $color-blue-800;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
-    gap: .2rem;
-    @include truncate;
+    gap: .3rem;
+    width: fit-content;
+    max-width: 100%;
+
+    .pin-wiki-card-name {
+        @include truncate;
+    }
+
+    .material-icons {
+        font-size: .85rem;
+        opacity: .6;
+        flex-shrink: 0;
+    }
 
     &:hover {
         text-decoration: underline;
     }
 }
 
-.pin-location-name-icon {
-    font-size: .82rem;
-    opacity: .6;
-}
-
-.pin-location-actions {
-    display: flex;
-    align-items: center;
-    gap: .35rem;
-    flex-shrink: 0;
+.pin-wiki-card-hint {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+    line-height: 1.4;
 }
 
 .pin-loc-change-btn {
@@ -1331,24 +1326,7 @@ body.page-location-details {
         background: rgba(255, 255, 255, .08);
     }
 
-    .pin-location-panel {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-1a);
-
-        &--unlinked {
-            color: var(--ul-grey-6);
-
-            .material-icons {
-                color: var(--ul-grey-1a);
-            }
-        }
-    }
-
-    .pin-location-label {
-        color: var(--ul-grey-6);
-    }
-
-    .pin-location-name {
+    .pin-wiki-card-link {
         color: $color-blue-300;
     }
 
@@ -1711,33 +1689,7 @@ body.page-location-details div.section {
     }
 }
 
-// ── Pin detail row wrappers ──────────────────────────────────────────────────
-.pin-info-row {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: 1fr;
-    align-items: start;
-
-    @include up($breakpoint-xs) {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    @include up($breakpoint-md) {
-        grid-template-columns: 1fr 1fr 1fr;
-    }
-
-    > .card {
-
-        .card-header {
-            height: 2.9rem;
-        }
-    }
-
-    .view-map {
-        height: calc(100% - 2.9rem);
-    }
-}
-
+// ── Pin detail layout ─────────────────────────────────────────────────────────
 .page-location-details {
     .section {
         padding-top: 0;
@@ -1745,13 +1697,44 @@ body.page-location-details div.section {
     }
 }
 
-.pin-media-row {
+// A single adaptive grid for every secondary card (visit history, categories,
+// aliases, satellite/street view, archive lookups, external-data lookups).
+// `auto-fit` (not `auto-fill`) collapses any track left empty by a card that
+// never rendered or was removed at runtime, so remaining cards stretch to
+// fill the row instead of leaving a gap - regardless of which subset of
+// cards ends up present for any given pin.
+.pin-aux-grid {
     display: grid;
-    gap: 1rem;
     grid-template-columns: 1fr;
+    gap: 1rem;
     align-items: start;
 
-    @media (min-width: 640px) {
-        grid-template-columns: 1fr 1fr;
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+}
+
+// Gallery + comments sit side by side; comments are capped to roughly half
+// width (and never wider) so the wider gallery doesn't get squeezed.
+.pin-bottom-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: start;
+
+    > .photo-gallery,
+    > #pin-gallery-panel {
+        flex: 2 1 420px;
+        min-width: 0;
+    }
+
+    > .comment-panel,
+    > #comment-panel {
+        flex: 1 1 320px;
+        min-width: 0;
+
+        @include up($breakpoint-md) {
+            max-width: 48%;
+        }
     }
 }

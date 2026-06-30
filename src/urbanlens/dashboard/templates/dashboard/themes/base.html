@@ -1045,6 +1045,81 @@
     }());
     </script>
 
+    <script>
+    // ── Collapsible sections ───────────────────────────────────────────────────
+    // Any element with [data-collapse-scope][data-collapse-section] gets a
+    // chevron button injected into its header that toggles an .is-collapsed
+    // class. State is persisted in localStorage keyed by scope ("pin", "wiki",
+    // "trip") + section name only - deliberately NOT by entity id, so
+    // collapsing "Comments" on one pin collapses it on every pin, independent
+    // of the wiki and trip pages.
+    (function () {
+        function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
+
+        function _isCollapsed(scope, section) {
+            try { return localStorage.getItem(_key(scope, section)) === '1'; }
+            catch (_) { return false; }
+        }
+
+        function _setCollapsed(scope, section, collapsed) {
+            try {
+                if (collapsed) localStorage.setItem(_key(scope, section), '1');
+                else localStorage.removeItem(_key(scope, section));
+            } catch (_) {}
+        }
+
+        function _applyState(container) {
+            var scope = container.dataset.collapseScope;
+            var section = container.dataset.collapseSection;
+            if (!scope || !section) return;
+            var collapsed = _isCollapsed(scope, section);
+            container.classList.toggle('is-collapsed', collapsed);
+            var btn = container.querySelector('.section-collapse-btn');
+            if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
+        }
+
+        function _header(container) {
+            return container.querySelector(':scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs');
+        }
+
+        // Headers can arrive after this container is first seen (HTMX content
+        // still loading), so this is safe to call repeatedly and idempotent.
+        function _ensureToggle(container) {
+            if (container.dataset.collapseInit === '1') { _applyState(container); return; }
+            var header = _header(container);
+            if (!header) return;
+            if (!header.querySelector('.section-collapse-btn')) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'section-collapse-btn';
+                btn.setAttribute('aria-label', 'Collapse section');
+                btn.innerHTML = '<i class="material-icons">expand_less</i>';
+                header.appendChild(btn);
+            }
+            container.dataset.collapseInit = '1';
+            _applyState(container);
+        }
+
+        function _scanAll() {
+            document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
+        }
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.section-collapse-btn');
+            if (!btn) return;
+            var container = btn.closest('[data-collapse-scope][data-collapse-section]');
+            if (!container) return;
+            var collapsed = !container.classList.contains('is-collapsed');
+            container.classList.toggle('is-collapsed', collapsed);
+            btn.setAttribute('aria-expanded', String(!collapsed));
+            _setCollapsed(container.dataset.collapseScope, container.dataset.collapseSection, collapsed);
+        });
+
+        document.addEventListener('DOMContentLoaded', _scanAll);
+        document.addEventListener('htmx:afterSettle', _scanAll);
+    }());
+    </script>
+
     {% include 'dashboard/partials/_tooltips_script.html' %}
     {% include 'dashboard/partials/_page_explainer_script.html' %}
     {% block scripts %}{% endblock %}

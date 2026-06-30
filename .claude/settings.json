@@ -20,7 +20,15 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check src/urbanlens/UrbanLens/settings/base.py 2>&1)",
       "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/models/trips/model.py src/urbanlens/dashboard/controllers/trip.py)",
       "Bash(.venv_windows/Scripts/ruff.exe check *)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\tests\\\\hypothesis\\\\test_site_admin_stats.py)"
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\tests\\\\hypothesis\\\\test_site_admin_stats.py)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\badges.py; echo \"EXIT:$LASTEXITCODE\")",
+      "PowerShell(docker-compose ps 2>&1)",
+      "PowerShell(docker-compose up --build -d 2>&1)",
+      "PowerShell(docker exec urbanlens_app sh -c \"grep -c 'pin-aux-grid\\\\|section-collapse-btn\\\\|page-footer__github' /app/src/urbanlens/dashboard/frontend/static/dashboard/style.css\" 2>&1)",
+      "PowerShell(docker run --rm --entrypoint sh urbanlens-app -c \"sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss /tmp/style.css && grep -c 'pin-aux-grid\\\\|section-collapse-btn\\\\|page-footer' /tmp/style.css && echo SASS_OK\" 2>&1)",
+      "PowerShell(docker run --rm --entrypoint sh urbanlens-app -c \"bun run sass && grep -c 'pin-aux-grid\\\\|section-collapse-btn' src/urbanlens/dashboard/frontend/static/dashboard/style.css && echo SASS_OK\" 2>&1)",
+      "PowerShell(docker-compose down 2>&1)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens 2>&1)"
     ]
   }
 }
