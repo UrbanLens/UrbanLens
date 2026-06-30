@@ -9,6 +9,7 @@ import urllib.request
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
+from django.db.models import Prefetch
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
@@ -406,7 +407,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             for the requested page, plus the total match count.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+        query = (
+            Pin.objects.filter(profile=profile)
+            .root_pins()
+            .select_related("location")
+            .prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        )
 
         search_form = SearchForm(request.GET)
         if search_form.is_valid():

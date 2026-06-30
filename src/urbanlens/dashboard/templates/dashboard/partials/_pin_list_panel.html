@@ -21,15 +21,29 @@ resend the filter-form fields on every page click, so filters stay applied.
                     onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
                 <span class="pin-list-icon material-icons">place</span>
                 <span class="pin-list-info">
-                    <span class="pin-list-name">{{ pin.effective_name }}</span>
-                    {% if pin.location.city or pin.location.state %}
-                    <span class="pin-list-meta">{{ pin.location.city }}{% if pin.location.city and pin.location.state %}, {% endif %}{{ pin.location.state }}</span>
+                    <span class="pin-list-name">{{ pin.display_label }}</span>
+                    {% if pin.location.city or pin.location.state or pin.location.country %}
+                    <span class="pin-list-meta"
+                        >{% if pin.location.city %}{{ pin.location.city }}{% endif %}{% if pin.location.city and pin.location.state %}, {% endif %}{% if pin.location.state %}{{ pin.location.state }}{% endif %}{% if pin.location.country %} · {{ pin.location.country }}{% endif %}</span>
+                    {% endif %}
+                    {% if pin.badges.all %}
+                    <span class="pin-list-badges">
+                        {% for badge in pin.badges.all %}
+                        <span class="popup-tag-chip pin-list-badge"
+                              {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
+                              >{{ badge.name }}</span>
+                        {% endfor %}
+                    </span>
                     {% endif %}
                 </span>
                 {% if pin.last_visited %}
                 <span class="pin-list-visited material-icons" title="Visited">check_circle</span>
                 {% endif %}
             </button>
+            <a href="{% url 'pin.edit' pin.slug %}" hx-boost="false" class="pin-list-edit-btn"
+               title="Edit pin" aria-label="Edit pin" onclick="event.stopPropagation()">
+                <i class="material-icons">edit</i>
+            </a>
         </li>
         {% endfor %}
     </ul>

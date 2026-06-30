@@ -349,6 +349,13 @@
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
+    {# ── Pin list handle (always-visible shortcut, desktop only) ──────────── #}
+    <button id="pin-list-handle" class="pin-list-handle" onclick="_togglePinListPanel()"
+            aria-label="Toggle pin list" aria-expanded="false"
+            data-tooltip="Pin list" data-tooltip-pos="right">
+        <i class="material-icons">chevron_right</i>
+    </button>
+
     <div id="tile-fetch-indicator" aria-hidden="true">
         <span class="tfi-dot"></span>
         <span id="tfi-text">Loading pins…</span>
@@ -2767,10 +2774,17 @@
     function _togglePinListPanel() {
         const panel = document.getElementById('pin-list-panel');
         const btn = document.getElementById('pin-list-button');
+        const handle = document.getElementById('pin-list-handle');
         const mapEl = document.getElementById('map');
         const isOpen = panel.classList.toggle('open');
         btn?.classList.toggle('active', isOpen);
         mapEl.classList.toggle('pin-list-open', isOpen);
+        if (handle) {
+            handle.classList.toggle('open', isOpen);
+            handle.setAttribute('aria-expanded', String(isOpen));
+            const icon = handle.querySelector('.material-icons');
+            if (icon) icon.textContent = isOpen ? 'chevron_left' : 'chevron_right';
+        }
         if (isOpen) _refreshPinList();
     }
 

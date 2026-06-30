@@ -38,7 +38,8 @@
       "Bash(git log *)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py src/urbanlens/dashboard/urls.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py src\\\\urbanlens\\\\dashboard\\\\urls.py; echo \"exit:$LASTEXITCODE\")",
-      "Bash(wsl.exe -l -v)"
+      "Bash(wsl.exe -l -v)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py; .venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py; echo \"exit:$LASTEXITCODE\")"
     ]
   }
 }

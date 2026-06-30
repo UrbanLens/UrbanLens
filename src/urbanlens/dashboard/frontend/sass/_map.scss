@@ -1339,12 +1339,19 @@
     padding: 0;
 }
 
+.pin-list-item {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+}
+
 .pin-list-item-btn {
     display: flex;
     align-items: center;
     gap: .6rem;
-    width: 100%;
-    padding: .55rem 15px;
+    flex: 1;
+    min-width: 0;
+    padding: .55rem 8px .55rem 15px;
     background: transparent;
     border: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -1357,6 +1364,33 @@
         background: rgba(255, 255, 255, 0.06);
         outline: none;
     }
+}
+
+.pin-list-edit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.4);
+    opacity: 0;
+    transition: opacity .12s, background .12s, color .12s;
+
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover, &:focus-visible {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+        outline: none;
+    }
+}
+
+.pin-list-item:hover .pin-list-edit-btn,
+.pin-list-item:focus-within .pin-list-edit-btn {
+    opacity: 1;
 }
 
 .pin-list-icon {
@@ -1390,6 +1424,18 @@
     text-overflow: ellipsis;
 }
 
+.pin-list-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 1px;
+}
+
+.pin-list-badge.popup-tag-chip {
+    font-size: .62rem;
+    padding: 1px 6px;
+}
+
 .pin-list-visited {
     flex-shrink: 0;
     font-size: 1rem;
@@ -1418,6 +1464,46 @@
 
 #pin-list-panel .pagination-label {
     color: rgba(255, 255, 255, 0.45);
+}
+
+/* Always-visible shortcut handle (desktop only - the layers-menu entry covers mobile) */
+.pin-list-handle {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    z-index: 1002;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 56px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    padding: 0;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-9);
+    }
+
+    &.open {
+        left: 300px;
+    }
+
+    @include up($breakpoint-sm) {
+        display: flex;
+    }
 }
 
 .fp-header {
@@ -3691,6 +3777,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .addr-search-history,
 .addr-search-clear,
 .pin-list-item-btn,
+.pin-list-edit-btn,
+.pin-list-handle,
 .pagination-btn,
 .leaflet-control-zoom a,
 .leaflet-control-attribution a,
