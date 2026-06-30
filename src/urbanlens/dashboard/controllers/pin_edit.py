@@ -32,6 +32,50 @@ def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
     return pin
 
 
+def _pin_version(pin: Pin) -> str:
+    """Return an opaque version token for the pin's last-saved state.
+
+    Clients echo this back on quick-edit requests (star clicks) so the server can tell
+    whether anything else changed since that client last rendered the pin - see
+    PinEditView.post for how this drives the minimal vs. full-resync response.
+    """
+    return str(int(pin.updated.timestamp())) if pin.updated else ""
+
+
+# Metadata for the four single-field 1-5 star-rating widgets, shared between the full
+# overview render and the minimal single-field response in PinEditView.post.
+STAT_FIELD_META = {
+    "danger": {
+        "label": "Danger",
+        "help": "How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme).",
+        "modifier": "danger",
+        "wide": True,
+    },
+    "priority": {
+        "label": "Priority",
+        "help": "How urgently you want to visit this pin (1 = low, 5 = must visit soon).",
+        "modifier": "priority",
+        "wide": False,
+    },
+    "rating": {
+        "label": "Rating",
+        "help": "Your quality rating for this location.",
+        "modifier": "",
+        "wide": False,
+    },
+    "vulnerability": {
+        "label": "Vulnerability",
+        "help": "How at-risk or fragile this site feels - useful for planning and sharing responsibly.",
+        "modifier": "vulnerability",
+        "wide": True,
+    },
+}
+
+
+def _stat_item_context(pin: Pin, field: str) -> dict:
+    return {"pin": pin, "field": field, "client_version": _pin_version(pin), **STAT_FIELD_META[field]}
+
+
 def _overview_context(pin: Pin) -> dict:
     from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
     from urbanlens.dashboard.models.location.model import Location
@@ -58,6 +102,7 @@ def _overview_context(pin: Pin) -> dict:
 
     return {
         "pin": pin,
+        "client_version": _pin_version(pin),
         "pin_type_choices": PinType.choices,
         "all_categories": Badge.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
@@ -164,11 +209,19 @@ class PinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
+        # Snapshot of what the client believed the pin's state was when it sent this
+        # request, captured before any of this request's own changes are applied. Used
+        # below to detect whether another tab/session changed the pin in the meantime.
+        client_version = body.get("client_version")
+        pre_save_version = _pin_version(pin)
+
         from datetime import date, datetime
 
-        # Scalar fields
-        name = (body.get("name") or "").strip() or None
-        description = (body.get("description") or "").strip() or None
+        # Scalar fields. Star-rating widgets and other quick-edit controls submit
+        # only the one field they changed, so any field absent from the body must
+        # fall back to the pin's current value - never silently clear it.
+        name = (body.get("name") or "").strip() or None if "name" in body else pin.name
+        description = (body.get("description") or "").strip() or None if "description" in body else pin.description
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
         rating_raw = body.get("rating")
@@ -179,7 +232,7 @@ class PinEditView(LoginRequiredMixin, View):
         try:
             if priority_raw is not None and str(priority_raw).strip():
                 p = int(priority_raw)
-                priority = None if p == 0 else p
+                priority = p if 0 <= p <= 5 else pin.priority
             else:
                 priority = pin.priority
         except (TypeError, ValueError):
@@ -200,7 +253,7 @@ class PinEditView(LoginRequiredMixin, View):
         try:
             if vulnerability_raw is not None and str(vulnerability_raw).strip():
                 v = int(vulnerability_raw)
-                vulnerability = None if v == 0 else (v if 1 <= v <= 5 else pin.vulnerability)
+                vulnerability = v if 0 <= v <= 5 else pin.vulnerability
             else:
                 vulnerability = pin.vulnerability
         except (TypeError, ValueError):
@@ -209,7 +262,7 @@ class PinEditView(LoginRequiredMixin, View):
         try:
             if danger_raw is not None and str(danger_raw).strip():
                 d = int(danger_raw)
-                danger = None if d == 0 else (d if 1 <= d <= 5 else pin.danger)
+                danger = d if 0 <= d <= 5 else pin.danger
             else:
                 danger = pin.danger
         except (TypeError, ValueError):
@@ -306,6 +359,23 @@ class PinEditView(LoginRequiredMixin, View):
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
         pin.badges.filter(kind="category")  # prime M2M cache
+
+        # Quick-edit widgets (star ratings) submit exactly one field at a time. When the
+        # client's last-known version still matches what was in the DB before this save,
+        # nothing else has drifted, so we only need to send back the one fragment that
+        # changed - this is the common case and keeps these frequent requests tiny.
+        # If something else changed (e.g. a different tab edited the name), fall back to
+        # a full resync: the small fragment still satisfies the primary hx-target swap,
+        # and an out-of-band re-render of the whole card brings everything else current.
+        submitted_fields = set(body.keys()) - {"client_version"}
+        if len(submitted_fields) == 1 and submitted_fields <= set(STAT_FIELD_META):
+            field = next(iter(submitted_fields))
+            fragment = render(request, "dashboard/partials/_pin_stat_rating_item.html", _stat_item_context(pin, field))
+            if client_version is not None and client_version == pre_save_version:
+                return fragment
+            oob_context = {**_overview_context(pin), "oob": True}
+            oob = render(request, "dashboard/partials/pin_overview_partial.html", oob_context)
+            return HttpResponse(fragment.content + oob.content)
 
         return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
 

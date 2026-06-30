@@ -1399,6 +1399,20 @@
     color: rgba(255, 255, 255, 0.45);
 }
 
+.pin-list-icon-img {
+    flex-shrink: 0;
+    width: 1.15rem;
+    height: 1.15rem;
+    object-fit: contain;
+    border-radius: 50%;
+}
+
+.pin-list-icon-emoji {
+    flex-shrink: 0;
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
 .pin-list-info {
     flex: 1;
     min-width: 0;

@@ -94,7 +94,12 @@
             }
             document.body.addEventListener('htmx:responseError', function (evt) {
                 var xhr = evt.detail && evt.detail.xhr;
-                _toastError('Request failed' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '') + '.');
+                var fallback = 'Request failed' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '') + '.';
+                var text = xhr && xhr.responseText ? xhr.responseText.trim() : '';
+                // Short, plain-text error bodies (e.g. validation messages) are shown verbatim;
+                // anything that looks like an HTML error page falls back to the generic message.
+                var isPlainText = text && text.length <= 300 && text.indexOf('<') === -1;
+                _toastError(isPlainText ? text : fallback);
             });
             document.body.addEventListener('htmx:sendError', function () { _toastError('Network error sending request.'); });
             document.body.addEventListener('htmx:timeout', function () { _toastError('Request timed out.'); });

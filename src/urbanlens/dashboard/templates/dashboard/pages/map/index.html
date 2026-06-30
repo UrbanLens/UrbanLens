@@ -969,11 +969,17 @@
         if (!pinData || !pinData.uuid) return;
         const uuid = pinData.uuid;
         _pinStore.set(uuid, pinData);
-        if (_markerMap.has(uuid)) {
-            clusterGroup.removeLayer(_markerMap.get(uuid));
-            _markerMap.delete(uuid);
-        }
-        if (!_filterMode) {
+        if (_filterMode) {
+            // The visible marker set in filter mode comes from server-side filter
+            // criteria, not _pinStore - re-run the active filter so the map reflects
+            // whether the edited pin still matches it, instead of just removing the
+            // marker and leaving it gone until filters are cleared or the page reloads.
+            htmx.trigger(document.getElementById('filter-form'), 'change');
+        } else {
+            if (_markerMap.has(uuid)) {
+                clusterGroup.removeLayer(_markerMap.get(uuid));
+                _markerMap.delete(uuid);
+            }
             const m = _buildMarker(pinData);
             if (m) { _markerMap.set(uuid, m); clusterGroup.addLayer(m); }
         }
@@ -2979,6 +2985,20 @@
         e.stopPropagation();
     });
     document.getElementById('filter-panel').addEventListener('contextmenu', function (e) {
+        e.stopPropagation();
+    });
+
+    // ── Prevent pin list panel pointer events from reaching the Leaflet map ──
+    document.getElementById('pin-list-panel').addEventListener('wheel', function (e) {
+        e.stopPropagation();
+    }, { passive: true });
+    document.getElementById('pin-list-panel').addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('pin-list-panel').addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('pin-list-panel').addEventListener('contextmenu', function (e) {
         e.stopPropagation();
     });
 

@@ -442,7 +442,8 @@
 {# ── Pin edit dialog ────────────────────────────────────────────────────── #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/_dialog_header.html" with title="Edit Pin" %}
-    <form hx-post="{% url 'pin.edit' pin.slug %}"
+    <form id="pin-edit-form"
+          hx-post="{% url 'pin.edit' pin.slug %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
@@ -474,39 +475,12 @@
 
         <div class="form-row form-row--two-col">
             <div>
-                <label for="pe-priority">Priority</label>
-                <input type="number" name="priority" id="pe-priority" min="0" max="100"
-                       value="{{ pin.priority }}">
-            </div>
-            <div>
-                <label for="pe-last-visited">Last Visited</label>
-                <input type="date" name="last_visited" id="pe-last-visited"
-                       value="{{ pin.last_visited|date:'Y-m-d'|default:'' }}"
-                       max="{{ today }}" min="{{ min_date }}">
-            </div>
-        </div>
-
-        <div class="form-row">
-            <label for="pe-categories">Categories <span class="form-optional">(comma-separated)</span></label>
-            <input type="text" name="categories" id="pe-categories"
-                   value="{% for cat in pin.categories.all %}{{ cat.name }}{% if not forloop.last %}, {% endif %}{% endfor %}"
-                   placeholder="e.g. factory, hospital"
-                   list="pe-categories-list">
-            <datalist id="pe-categories-list">
-                {% for cat in all_categories %}
-                <option value="{{ cat.name }}">
-                {% endfor %}
-            </datalist>
-        </div>
-
-        <div class="form-row form-row--two-col">
-            <div>
                 <label for="pe-date-abandoned">Date Abandoned</label>
                 <input type="date" name="date_abandoned" id="pe-date-abandoned"
                        value="{{ pin.date_abandoned|date:'Y-m-d'|default:'' }}">
             </div>
             <div>
-                <label for="pe-date-last-active">Date Last Active <span class="form-optional">(defaults to day before abandoned)</span></label>
+                <label for="pe-date-last-active">Date Last Active </label>
                 <input type="date" name="date_last_active" id="pe-date-last-active"
                        value="{{ pin.date_last_active|date:'Y-m-d'|default:'' }}">
             </div>
@@ -714,6 +688,31 @@
 
 {% block scripts %}
 <script>
+    // ── Pin edit dialog: submit only the fields the user actually changed ──────
+    // Snapshots the form's values when the dialog opens. On submit, any field whose
+    // value still matches its snapshot is dropped from the request - so a field another
+    // tab changed in the meantime isn't silently overwritten with stale displayed data.
+    function urbanlensCapturePinEditOriginals() {
+        const form = document.getElementById('pin-edit-form');
+        if (!form) return;
+        const originals = {};
+        Array.from(form.elements).forEach((el) => {
+            if (!el.name) return;
+            originals[el.name] = el.value;
+        });
+        form.dataset.originals = JSON.stringify(originals);
+    }
+    document.body.addEventListener('htmx:configRequest', (evt) => {
+        const form = evt.target;
+        if (!form || form.id !== 'pin-edit-form' || !form.dataset.originals) return;
+        const originals = JSON.parse(form.dataset.originals);
+        const params = evt.detail.parameters;
+        Object.keys(originals).forEach((key) => {
+            if (key === 'csrfmiddlewaretoken') return;
+            if (params[key] === originals[key]) delete params[key];
+        });
+    });
+
     // ── Map setup ─────────────────────────────────────────────────────────────
     const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
     const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};

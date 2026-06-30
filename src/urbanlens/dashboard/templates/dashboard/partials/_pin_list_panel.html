@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 {% comment %}
 Pin-list sidebar contents, rendered by MapController.pin_list_panel.
 
@@ -19,7 +20,17 @@ resend the filter-form fields on every page click, so filters stay applied.
         <li class="pin-list-item">
             <button type="button" class="pin-list-item-btn"
                     onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
+                {% if pin.effective_icon %}
+                    {% if pin.effective_icon|is_material_icon %}
+                    <i class="material-icons pin-list-icon" {% if pin.effective_color %}style="color:{{ pin.effective_color }}"{% endif %}>{{ pin.effective_icon }}</i>
+                    {% elif pin.effective_icon|is_icon_url %}
+                    <img src="{{ pin.effective_icon }}" class="pin-list-icon-img" alt="">
+                    {% else %}
+                    <span class="pin-list-icon-emoji">{{ pin.effective_icon }}</span>
+                    {% endif %}
+                {% else %}
                 <span class="pin-list-icon material-icons">place</span>
+                {% endif %}
                 <span class="pin-list-info">
                     <span class="pin-list-name">{{ pin.display_label }}</span>
                     {% if pin.location.city or pin.location.state or pin.location.country %}

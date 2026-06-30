@@ -82,6 +82,19 @@ def is_material_icon(value: str | None) -> bool:
 
 
 @register.filter
+def is_icon_url(value: str | None) -> bool:
+    """Return True if value is a URL pointing at an uploaded custom icon image.
+
+    Mirrors the client-side classification in the map marker builder: a custom
+    icon's ``effective_icon`` resolves to its file URL (absolute or media-relative),
+    which must be rendered as an ``<img>`` rather than a Material Icons glyph or emoji.
+
+    Usage: {% if pin.effective_icon|is_icon_url %}
+    """
+    return bool(value and re.match(r"^(https?://|/)", str(value)))
+
+
+@register.filter
 def icon_keywords(value: str | None) -> str:
     """Return space-separated search keywords for an emoji icon character.
 
