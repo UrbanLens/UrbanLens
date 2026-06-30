@@ -472,6 +472,123 @@
     }
 }
 
+// ── Satellite imagery carousel ─────────────────────────────────────────────────
+.sat-carousel {
+    display: flex;
+    flex-direction: column;
+
+    .sat-slides-wrapper {
+        position: relative;
+        background: var(--ul-grey-0);
+        overflow: hidden;
+    }
+
+    .sat-slide {
+        display: none;
+
+        &.is-active {
+            display: block;
+        }
+    }
+
+    .sat-img {
+        width: 100%;
+        height: 300px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .sat-controls {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .45rem .6rem;
+        border-top: 1px solid var(--ul-border);
+    }
+
+    .sat-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-surface-1);
+        cursor: pointer;
+        color: var(--ul-grey-7);
+        transition: background .12s;
+
+        .material-icons {
+            font-size: 1.15rem;
+        }
+
+        &:hover {
+            background: var(--ul-grey-1a);
+        }
+    }
+
+    .sat-meta {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        overflow: hidden;
+    }
+
+    .sat-source {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sat-date {
+        font-size: .73rem;
+        color: var(--ul-grey-6);
+    }
+
+    .sat-detail {
+        font-size: .67rem;
+        color: var(--ul-grey-5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sat-dots {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: .3rem;
+        padding: .35rem .5rem;
+    }
+
+    .sat-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        border: none;
+        padding: 0;
+        background: var(--ul-grey-3);
+        cursor: pointer;
+        transition: background .12s, transform .12s;
+
+        &.is-active {
+            background: var(--ul-grey-7);
+            transform: scale(1.25);
+        }
+
+        &:hover {
+            background: var(--ul-grey-5);
+        }
+    }
+}
+
 // ── Pin detail supplements ──────────────────
 // ── Wiki link banner (pin details page) ───────────────────────────────────────
 .wiki-link-banner {
@@ -1772,5 +1889,9 @@ body.page-location-details .pin-detail-grid {
 
     @include up($breakpoint-xs) {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    }
+
+    > .card {
+        align-self: stretch;
     }
 }

@@ -1,10 +1,13 @@
+import base64
 from datetime import datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
+import requests as _requests
 from requests.exceptions import HTTPError
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -272,8 +275,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     def satellite_view_google_image(self, request: HttpRequest, **kwargs):
         """
-        Returns an HTML fragment with an Esri satellite map for a pin.
+        Returns an HTML fragment with a multi-source satellite imagery carousel.
+
+        Sources included (where available):
+        - Google Maps Static API (current, high-res) - fetched server-side
+        - Esri World Imagery Export (current, high-res) - URL-based
+        - USGS National Map Imagery (current, US only) - URL-based
+        - Esri Wayback historical releases - URL-based export
+        - NASA GIBS / Landsat Annual (2011-2019) - WMS URL-based
         """
+
         try:
             pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
@@ -288,13 +299,104 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 {"error": "No coordinates available."},
             )
 
-        return render(request, "dashboard/pages/location/satellite_view.html", {"lat": lat, "lng": lng, "pin": pin})
+        lat_f = float(lat)
+        lng_f = float(lng)
+        delta = 0.005  # ~550 m each side
+        bbox = f"{lng_f - delta},{lat_f - delta},{lng_f + delta},{lat_f + delta}"
+
+        slides: list[dict] = []
+
+        # ── 1. Google Maps Static (current, high-res) ─────────────────────────────
+        gw = GoogleMapsGateway(api_key=settings.google_maps_api_key)
+        if result := gw.get_satellite_view(lat_f, lng_f):
+            slides.append(result)
+
+        # ── 2 & 3. Free tile-based current imagery ────────────────────────────────
+        slides.extend([
+            {
+                "img_src": (
+                    "https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export"
+                    f"?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size=640,400&format=jpg"
+                ),
+                "source": "Esri World Imagery",
+                "date": "Current",
+                "detail": "High resolution · current imagery",
+            },
+            {
+                "img_src": (
+                    "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
+                    f"?bbox={bbox}&bboxSR=4326&imageSR=4326&size=640,400&f=image"
+                ),
+                "source": "USGS National Map",
+                "date": "Current",
+                "detail": "High resolution · US coverage only",
+            },
+        ])
+
+        # ── 4. Esri Wayback (historical high-res releases) ────────────────────────
+        wayback_releases_key = "satellite_esri_wayback_releases_v2"
+        releases: list[dict] = cache.get(wayback_releases_key) or []
+        if not releases:
+            try:
+                resp = _requests.get(
+                    "https://wayback.maptiles.esri.com/arcgis/rest/services/World_Imagery_Wayback/MapServer/releases",
+                    params={"f": "json"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                releases = resp.json().get("releases", [])
+                cache.set(wayback_releases_key, releases, 24 * 3600)
+            except Exception as exc:
+                logger.warning("Could not fetch Esri Wayback releases: %s", exc)
+
+        if releases:
+            # Sort newest-first; releaseName is e.g. "Feb 12, 2024"
+            sorted_releases = sorted(releases, key=lambda r: r.get("releaseName", ""), reverse=True)
+            # Pick up to 5 evenly-spaced across the timeline
+            step = max(1, len(sorted_releases) // 5)
+            selected = sorted_releases[::step][:5]
+            for rel in selected:
+                rid = rel.get("id")
+                if not rid:
+                    continue
+                slides.append({
+                    "img_src": (
+                        "https://wayback.maptiles.esri.com/arcgis/rest/services"
+                        f"/World_Imagery_Wayback/MapServer/export"
+                        f"?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size=640,400&layers=show:{rid}"
+                    ),
+                    "source": "Esri Wayback",
+                    "date": rel.get("releaseName", f"Release {rid}"),
+                    "detail": "High resolution · historical snapshot",
+                })
+
+        # ── 5. NASA GIBS / Landsat Annual (historical, ~30 m resolution) ──────────
+        gibs_base = (
+            "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
+            "?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
+            "&LAYERS=Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual"
+            f"&CRS=CRS:84&BBOX={bbox}&WIDTH=640&HEIGHT=400&FORMAT=image/jpeg"
+        )
+        slides.extend(
+            {
+                "img_src": f"{gibs_base}&TIME={year}",
+                "source": "NASA GIBS / Landsat",
+                "date": str(year),
+                "detail": "30 m resolution · annual composite",
+            }
+            for year in [2019, 2016, 2013, 2011]
+        )
+
+        return render(
+            request,
+            "dashboard/pages/location/satellite_view.html",
+            {"slides": slides, "lat": lat_f, "lng": lng_f, "pin": pin},
+        )
 
     def street_view(self, request: HttpRequest, **kwargs):
         """
         Returns an HTML fragment containing the street view image for a pin.
         """
-        import base64
 
         from django.core.cache import cache
 

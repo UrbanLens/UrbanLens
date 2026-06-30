@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import csv
 from dataclasses import dataclass, field
 import json
@@ -8,10 +9,12 @@ import math
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
 import requests
 
+from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
@@ -65,6 +68,44 @@ class GoogleMapsGateway(Gateway):
         response = self.session.get(directions_url, params=params)
         response.raise_for_status()
         return response.json()
+    
+    def get_satellite_view(self, latitude, longitude) -> dict | None:
+        """
+        Get the satellite view image for the given latitude and longitude.
+        TODO: Improve return type & cleanup
+        """
+        cache_key = make_cache_key("satellite_google", f"{latitude:.5f}", f"{longitude:.5f}")
+        google_b64 = cache.get(cache_key)
+        if google_b64 is None:
+            try:
+                resp = self.session.get(
+                    "https://maps.googleapis.com/maps/api/staticmap",
+                    params={
+                        "center": f"{latitude},{longitude}",
+                        "zoom": 18,
+                        "size": "640x400",
+                        "maptype": "satellite",
+                        "key": self.api_key,
+                    },
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                google_b64 = base64.b64encode(resp.content).decode("ascii")
+                cache.set(cache_key, google_b64, 30 * 24 * 3600)
+            except Exception as exc:
+                # TODO: Catch specific exception
+                logger.warning("Google satellite image unavailable for %s, %s -> %s", latitude, longitude, exc)
+                return None
+
+        if not google_b64:
+            return None
+        
+        return {
+            "img_src": f"data:image/jpeg;base64,{google_b64}",
+            "source": "Google Maps",
+            "date": "Current",
+            "detail": "High resolution · current imagery",
+        }
 
     def get_street_view(
         self,

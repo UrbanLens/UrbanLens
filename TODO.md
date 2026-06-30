@@ -226,6 +226,8 @@ Features planned for future releases.
 * Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.)
 * Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city.
 * pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.
+* Move inline JS into separate TS files for performance, maintainability, typescript.
+* Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -275,6 +277,24 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
 * Allow users to create and import pins without creating a community wiki entry. e.g. "My Girlfriend's House". [UL-106]
 * Prevent users from "testing" if a location is abandoned by creating a test pin for it, then deleting said pin if no community wiki entry exists. Perhaps provide a delay before the community wiki entry is available to the user? Or cap pin creations? [UL-107]
+
+## APIs to consider
+* Wayback
+* Apple Maps
+* OpenHistoricalMap
+* Tools listed by geohack: https://geohack.toolforge.org/geohack.php?pagename=White_House&params=38_53_52_N_77_02_11_W_type:landmark_region:US-DC
+* USGS M2M / EarthExplorer
+* USGS TNM API / topoView / HTMC
+* Esri World Imagery Wayback
+* OpenAerialMap
+
+### More difficult
+* ProQuest Digital Sanborn Maps
+* Sanborn Maps on AWS / public datasets
+* Map Warper / georeferenced map platforms
+* State/county GIS portals
+* LLM suggestion: build a provider abstraction like: coordinates → bbox → provider search → normalize result as {title, year, source, bounds, thumbnail, tile_url/download_url}
+
 
 ## Code Quality
 ### Fix Generics

@@ -1,65 +1,112 @@
 <div id="satellite-view-section" class="satellite-view card card--primary"
      data-collapse-scope="pin" data-collapse-section="satellite">
     <div class="card-header">
-        <i class="material-icons">globe</i>
-        <h3>Satellite View</h3>
+        <i class="material-icons">satellite_alt</i>
+        <h3>Satellite Imagery</h3>
     </div>
-    {% if lat and lng %}
-    <div id="pin-satellite-map" class="view-map"></div>
-    <div class="view-date-label" id="satellite-date-label" style="visibility:hidden">
-        <i class="material-icons">event</i>
-        <span id="satellite-date-text">Imagery date unavailable</span>
+
+    {% if slides %}
+    <div class="sat-carousel" id="sat-carousel">
+        <div class="sat-slides-wrapper">
+            {% for slide in slides %}
+            <div class="sat-slide{% if forloop.first %} is-active{% endif %}"
+                 data-source="{{ slide.source }}"
+                 data-date="{{ slide.date }}"
+                 data-detail="{{ slide.detail }}">
+                <img src="{{ slide.img_src }}"
+                     class="sat-img"
+                     alt="{{ slide.source }} – {{ slide.date }}"
+                     onerror="_satRemoveSlide(this)">
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="sat-controls">
+            <button class="sat-btn sat-prev" onclick="_satPrev()" aria-label="Previous image"
+                    title="Previous image">
+                <i class="material-icons">chevron_left</i>
+            </button>
+            <div class="sat-meta">
+                <span class="sat-source"></span>
+                <span class="sat-date"></span>
+                <span class="sat-detail"></span>
+            </div>
+            <button class="sat-btn sat-next" onclick="_satNext()" aria-label="Next image"
+                    title="Next image">
+                <i class="material-icons">chevron_right</i>
+            </button>
+        </div>
+
+        <div class="sat-dots" id="sat-dots"></div>
     </div>
+
     <script>
     (function () {
-        var el = document.getElementById('pin-satellite-map');
-        if (!el || !window.L) return;
-        var map = L.map(el, { zoomControl: false, attributionControl: true }).setView([{{ lat }}, {{ lng }}], 17);
-        L.tileLayer(
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
-        ).addTo(map);
-        L.marker([{{ lat }}, {{ lng }}]).addTo(map);
-        L.control.zoom({ position: 'topright' }).addTo(map);
+        var _satIdx = 0;
 
-        // Fetch imagery capture date from Esri Identify endpoint
-        var lat = {{ lat }}, lng = {{ lng }};
-        var delta = 0.001;
-        var url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/identify'
-            + '?f=json&returnGeometry=false&layers=all%3A0&tolerance=5&geometryType=esriGeometryPoint'
-            + '&geometry=' + lng + '%2C' + lat
-            + '&sr=4326'
-            + '&mapExtent=' + (lng-delta) + '%2C' + (lat-delta) + '%2C' + (lng+delta) + '%2C' + (lat+delta)
-            + '&imageDisplay=800%2C600%2C96';
-        fetch(url)
-            .then(function(r){ return r.json(); })
-            .then(function(data){
-                var results = data.results || [];
-                for (var i = 0; i < results.length; i++) {
-                    var src = (results[i].attributes || {}).SRC_DATE2;
-                    if (src) {
-                        var s = String(src);
-                        if (s.length === 8) {
-                            var d = new Date(s.slice(0,4) + '-' + s.slice(4,6) + '-' + s.slice(6,8));
-                            if (!isNaN(d)) {
-                                document.getElementById('satellite-date-text').textContent =
-                                    'Imagery ' + d.toLocaleDateString('en-US', {year:'numeric', month:'short'});
-                            }
-                        }
-                        break;
-                    }
+        function _satSlides() {
+            var c = document.getElementById('sat-carousel');
+            return c ? Array.from(c.querySelectorAll('.sat-slide')) : [];
+        }
+
+        function _satShow(idx) {
+            var slides = _satSlides();
+            if (!slides.length) return;
+            _satIdx = ((idx % slides.length) + slides.length) % slides.length;
+            slides.forEach(function (s, i) { s.classList.toggle('is-active', i === _satIdx); });
+            var active = slides[_satIdx];
+            if (!active) return;
+            document.querySelector('#sat-carousel .sat-source').textContent = active.dataset.source || '';
+            document.querySelector('#sat-carousel .sat-date').textContent   = active.dataset.date   || '';
+            document.querySelector('#sat-carousel .sat-detail').textContent = active.dataset.detail || '';
+            _satRebuildDots(slides.length);
+        }
+
+        function _satRebuildDots(count) {
+            var el = document.getElementById('sat-dots');
+            if (!el) return;
+            el.innerHTML = '';
+            for (var i = 0; i < count; i++) {
+                var dot = document.createElement('button');
+                dot.type = 'button';
+                dot.className = 'sat-dot' + (i === _satIdx ? ' is-active' : '');
+                dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+                (function (idx) { dot.addEventListener('click', function () { _satShow(idx); }); }(i));
+                el.appendChild(dot);
+            }
+        }
+
+        window._satRemoveSlide = function (img) {
+            var slide = img.closest('.sat-slide');
+            if (!slide) return;
+            var wasActive = slide.classList.contains('is-active');
+            slide.remove();
+            var slides = _satSlides();
+            if (!slides.length) {
+                var c = document.getElementById('sat-carousel');
+                if (c) {
+                    c.innerHTML = '<div class="view-unavailable"><i class="material-icons">broken_image</i>'
+                        + '<span>No satellite imagery available for this location.</span></div>';
                 }
-                document.getElementById('satellite-date-label').style.visibility = '';
-            })
-            .catch(function(){
-                document.getElementById('satellite-date-label').style.visibility = '';
-            });
+                return;
+            }
+            if (wasActive) {
+                _satIdx = Math.max(0, Math.min(_satIdx, slides.length - 1));
+            }
+            _satShow(_satIdx);
+        };
+
+        window._satPrev = function () { _satShow(_satIdx - 1); };
+        window._satNext = function () { _satShow(_satIdx + 1); };
+
+        _satShow(0);
     }());
     </script>
+
     {% else %}
     <div class="view-unavailable">
         <i class="material-icons">broken_image</i>
-        <span>{{ error|default:"No coordinates available." }}</span>
+        <span>{{ error|default:"No satellite imagery available." }}</span>
     </div>
     {% endif %}
 </div>
