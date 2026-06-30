@@ -269,6 +269,20 @@
         </div>
     </div>
 
+    {# ── Gallery: alongside satellite / street view in the detail grid ──── #}
+    <div id="pin-gallery-panel"
+     hx-get="{% url 'pin.gallery' pin.slug %}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+        <div class="card card--secondary">
+            <div class="card-header">
+                <i class="material-icons">photo_library</i>
+                <span>Photos</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+        </div>
+    </div>
+
     {# ── Visits / categories / aliases: always present ─────────────────── #}
     <div hx-get="{% url 'pin.visits' pin.slug %}"
         hx-trigger="load"
@@ -407,20 +421,7 @@
         </div>
     </div>{# end .pin-aux-grid #}
 
-    {# ── Gallery + comments: always present ─────────────────────────────── #}
-    <div id="pin-gallery-panel"
-     hx-get="{% url 'pin.gallery' pin.slug %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-        <div class="card card--secondary">
-            <div class="card-header">
-                <i class="material-icons">photo_library</i>
-                <span>Photos</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-        </div>
-    </div>
-
+    {# ── Comments: always present ───────────────────────────────────────── #}
     <div id="comment-panel"
      hx-get="{% url 'pin.comments' pin.slug %}"
      hx-trigger="load"

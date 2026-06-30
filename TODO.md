@@ -225,6 +225,7 @@ Features planned for future releases.
 * Max zoom out on the map still isn't quite right. Try clamping?
 * Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.)
 * Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city.
+* pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

@@ -1666,12 +1666,27 @@ body.page-location-details .pin-detail-grid {
 // brittle fixed spans: every card starts as a full-width section, then available
 // space is divided with auto-fit tracks so visible cards naturally expand,
 // collapse, and wrap without leaving holes when optional sections are hidden.
+// Named grid areas for the primary pin-detail cards. Optional / external-data
+// cards live inside .pin-aux-grid (area: aux) and reflow with auto-fit when
+// sections are removed at runtime (HTMX 204).
 .pin-detail-grid {
     --pin-detail-gap: clamp(.85rem, 2vw, 1.35rem);
     --pin-detail-pad: clamp(.75rem, 2.4vw, 1.5rem);
 
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+        'onboarding'
+        'overview'
+        'map'
+        'satellite'
+        'street'
+        'gallery'
+        'visits'
+        'categories'
+        'aliases'
+        'aux'
+        'comments';
     gap: var(--pin-detail-gap);
     padding: 0 var(--pin-detail-pad) clamp(1.5rem, 4vw, 3rem);
     align-items: start;
@@ -1681,95 +1696,81 @@ body.page-location-details .pin-detail-grid {
     }
 
     > .page-onboarding,
-    > #pin-overview,
+    > #pin-detail-onboarding { grid-area: onboarding; }
+
+    > #pin-overview { grid-area: overview; }
+
     > .location-map,
-    > .pin-aux-grid,
+    > .pin-map { grid-area: map; }
+
+    > .satellite-view,
+    > #satellite-view-section { grid-area: satellite; min-width: 0; }
+
+    > .street-view,
+    > #street-view-section { grid-area: street; min-width: 0; }
+
+    > .visit-history,
+    > #visit-history-panel { grid-area: visits; }
+
+    > .tag-panel { grid-area: categories; }
+
+    > .aliases-panel,
+    > #pin-aliases-panel { grid-area: aliases; }
+
+    > .pin-aux-grid { grid-area: aux; }
+
     > .photo-gallery,
     > #pin-gallery-panel,
-    > .comment-panel,
-    > #comment-panel {
-        grid-column: 1 / -1;
-    }
+    > #photo-gallery { grid-area: gallery; min-width: 0; }
 
-    > #pin-overview { order: 10; }
-    > .location-map { order: 20; }
-    > .satellite-view { order: 30; min-width: 22rem; }
-    > .street-view { order: 40; min-width: 22rem; }
-    > .visit-history { order: 50; }
-    > .tag-panel { order: 60; }
-    > .aliases-panel { order: 70; }
-    > .pin-aux-grid { order: 80; }
-    > .photo-gallery,
-    > #pin-gallery-panel { order: 90; }
     > .comment-panel,
-    > #comment-panel { order: 100; }
+    > #comment-panel { grid-area: comments; }
 
     @include up($breakpoint-sm) {
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-
-        > .satellite-view,
-        > .street-view,
-        > .visit-history,
-        > .tag-panel,
-        > .aliases-panel {
-            grid-column: span 1;
-        }
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            'onboarding onboarding'
+            'overview   overview'
+            'map        map'
+            'satellite  street'
+            'gallery    gallery'
+            'visits     categories'
+            'aliases    aliases'
+            'aux        aux'
+            'comments   comments';
     }
 
     @include up($breakpoint-lg) {
-        grid-template-columns: repeat(12, minmax(0, 1fr));
-
-        > .satellite-view,
-        > .street-view {
-            grid-column: span 6;
-        }
-
-        > .visit-history,
-        > .tag-panel,
-        > .aliases-panel {
-            grid-column: span 4;
-        }
-
-        > .photo-gallery,
-        > #pin-gallery-panel,
-        > .comment-panel,
-        > #comment-panel {
-            grid-column: span 6;
-        }
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-areas:
+            'overview   overview   overview'
+            'map        map        map'
+            'satellite  street     gallery'
+            'visits     categories aliases'
+            'aux        aux        aux'
+            'comments   comments   comments';
     }
 
     @include up($breakpoint-xl) {
-        > .satellite-view,
-        > .street-view,
-        > .photo-gallery,
-        > #pin-gallery-panel {
-            grid-column: span 4;
-        }
-
-        > .photo-gallery,
-        > #pin-gallery-panel {
-            order: 45;
-        }
-
-        > .comment-panel,
-        > #comment-panel {
-            grid-column: span 8;
-        }
+        grid-template-areas:
+            'overview   overview   overview'
+            'map        map        map'
+            'satellite  street     gallery'
+            'visits     categories aliases'
+            'aux        aux        aux'
+            'comments   comments   .';
     }
 }
 
-// A single adaptive grid for the cards that may or may not render at all.
-// `auto-fit` (not `auto-fill`) collapses any track left empty by a card that
-// never rendered or was removed at runtime, so remaining cards stretch to
-// fill the row instead of leaving a gap - regardless of which subset of
-// cards ends up present for any given pin.
+// Optional cards that may not render for every pin. `auto-fit` collapses empty
+// tracks when HTMX removes a section (204), so survivors expand to fill aux.
 .pin-aux-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: var(--pin-detail-gap, 1rem);
     align-items: start;
 
     @include up($breakpoint-xs) {
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     }
 }
