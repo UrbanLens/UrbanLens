@@ -289,6 +289,24 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     padding: 0;
 }
 
+.nav-dropdown-item--devtools {
+    &.is-active {
+        opacity: 0.38;
+        pointer-events: none;
+        cursor: default;
+    }
+}
+
+.nav-devtools-shortcut {
+    margin-left: auto;
+    padding-left: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
+}
+
 div.container {
     width: 100%;
     max-width: 100%;
@@ -298,6 +316,10 @@ div.container {
     flex-direction: column;
     position: relative;
     z-index: 1; // creates stacking context, confining Leaflet z-indexes within it
+}
+
+body > div.container {
+    max-width: 98vw;
 }
 
 div.section {

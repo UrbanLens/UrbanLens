@@ -1395,6 +1395,13 @@ body.page-location-details {
     // Elevate all cards on this page
     .card {
         box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
+
+        &--primary {
+
+        }
+
+        &--secondary {
+        }
     }
 
     .pin-detail-grid {

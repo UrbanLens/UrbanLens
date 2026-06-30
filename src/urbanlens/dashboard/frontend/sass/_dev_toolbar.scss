@@ -38,23 +38,6 @@
         }
     
         &[data-collapsed='true'] {
-            bottom: 1rem;
-            left: 8rem;
-            min-width: 0;
-            opacity: 0.5;
-    
-            .dev-toolbar__chevron {
-                transform: rotate(-90deg);
-            }
-    
-            .dev-toolbar__header {
-                border-bottom: 0;
-            }
-    
-            .dev-toolbar__reset-position {
-                display: none;
-            }
-    
             .dev-toolbar__body {
                 max-height: 0;
                 opacity: 0;
@@ -62,6 +45,10 @@
                 padding-bottom: 0;
                 pointer-events: none;
             }
+        }
+
+        &.dev-toolbar--hidden {
+            display: none;
         }
     
         &.dev-toolbar--dragging {
@@ -276,9 +263,6 @@ html[data-theme='dark'] {
         color: var(--ul-grey-8);
         box-shadow: var(--ul-shadow-lg);
 
-        &[data-collapsed='true'] {
-            opacity: 0.72;
-        }
     }
 
     .dev-toolbar__header {

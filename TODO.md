@@ -18,6 +18,8 @@ Features planned for this release.
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
 * Consider: handle temporary markers when a user pin exists on that exact point.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
+* Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc)
+* Main map > Edit pin dialog should have link to view full pin details.
 
 ## Medium Features
 
@@ -222,6 +224,7 @@ Features planned for future releases.
 * Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA.
 * Max zoom out on the map still isn't quite right. Try clamping?
 * Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.)
+* Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

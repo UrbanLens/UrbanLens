@@ -169,16 +169,121 @@
         });
     }
 
+    function updateNavButton(collapsed) {
+        var btn = document.getElementById('nav-devtools-btn');
+        if (!btn) return;
+        if (collapsed) {
+            btn.disabled = false;
+            btn.classList.remove('is-active');
+            btn.title = 'Open Dev Tools (Ctrl+Shift+.)';
+        } else {
+            btn.disabled = true;
+            btn.classList.add('is-active');
+            btn.title = 'Dev Tools is open';
+        }
+    }
+
+    function navCollapseTarget() {
+        var navBtn = document.getElementById('nav-user-btn');
+        if (!navBtn) return null;
+        var rect = navBtn.getBoundingClientRect();
+        var w = toolbar.offsetWidth || 160;
+        var h = toolbar.offsetHeight || 40;
+        return clampPosition(
+            rect.left + rect.width / 2 - w / 2,
+            rect.top + rect.height / 2 - h / 2
+        );
+    }
+
+    function _collapseToNav(instant) {
+        if (instant || !positionAnimationsEnabled()) {
+            toolbar.style.opacity = '';
+            toolbar.classList.add('dev-toolbar--hidden');
+            applyDefaultPosition();
+            return;
+        }
+
+        ensurePixelPosition();
+        positionAnimating = true;
+        toolbar.classList.remove('dev-toolbar--no-transition');
+        toolbar.classList.add('dev-toolbar--position-animating');
+
+        var done = false;
+        function onDone() {
+            if (done) return;
+            done = true;
+            toolbar.removeEventListener('transitionend', onTransitionEnd);
+            clearTimeout(fallback);
+            finishPositionAnimation();
+            toolbar.classList.add('dev-toolbar--hidden');
+            applyDefaultPosition();
+            toolbar.style.opacity = '';
+        }
+        function onTransitionEnd(e) {
+            if (e.target !== toolbar) return;
+            if (e.propertyName === 'opacity') onDone();
+        }
+        toolbar.addEventListener('transitionend', onTransitionEnd);
+        var fallback = setTimeout(onDone, POSITION_TRANSITION_MS + 100);
+
+        var dest = navCollapseTarget();
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                if (dest) {
+                    toolbar.style.left = dest.left + 'px';
+                    toolbar.style.top = dest.top + 'px';
+                }
+                toolbar.style.opacity = '0';
+            });
+        });
+    }
+
+    function _expandFromNav(instant) {
+        var dest = navCollapseTarget();
+        var saved = getSavedPosition();
+        var animate = !instant && positionAnimationsEnabled() && dest !== null;
+
+        toolbar.classList.add('dev-toolbar--no-transition');
+        if (animate) {
+            toolbar.style.bottom = 'auto';
+            toolbar.style.right = 'auto';
+            toolbar.style.left = dest.left + 'px';
+            toolbar.style.top = dest.top + 'px';
+            toolbar.style.opacity = '0';
+        }
+        toolbar.classList.remove('dev-toolbar--hidden');
+
+        if (animate) {
+            requestAnimationFrame(function () {
+                toolbar.classList.remove('dev-toolbar--no-transition');
+                requestAnimationFrame(function () {
+                    if (saved) {
+                        toolbar.style.left = saved.left + 'px';
+                        toolbar.style.top = saved.top + 'px';
+                    } else {
+                        var defPos = getDefaultPosition();
+                        toolbar.style.left = defPos.left + 'px';
+                        toolbar.style.top = defPos.top + 'px';
+                    }
+                    toolbar.style.opacity = '';
+                });
+            });
+        } else {
+            if (saved) {
+                applyPosition(saved.left, saved.top, false);
+            } else {
+                applyDefaultPosition();
+            }
+            toolbar.style.opacity = '';
+            requestAnimationFrame(function () {
+                toolbar.classList.remove('dev-toolbar--no-transition');
+            });
+        }
+    }
+
     function setCollapsed(collapsed, instant) {
         var wasCollapsed = toolbar.dataset.collapsed === 'true';
         if (wasCollapsed === collapsed) return;
-
-        var animate = instant !== true && positionAnimationsEnabled() && hasCustomPosition();
-        var expandTarget = null;
-        if (!collapsed && animate) {
-            ensurePixelPosition();
-            expandTarget = getSavedPosition();
-        }
 
         toolbar.dataset.collapsed = collapsed ? 'true' : 'false';
         if (body) {
@@ -196,21 +301,11 @@
         try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (_) {}
 
         if (collapsed) {
-            if (animate) {
-                requestAnimationFrame(function () {
-                    var target = getDefaultPosition();
-                    animateToPosition(target.left, target.top, applyDefaultPosition);
-                });
-            } else {
-                applyDefaultPosition();
-            }
-        } else if (expandTarget) {
-            requestAnimationFrame(function () {
-                animateToPosition(expandTarget.left, expandTarget.top);
-            });
+            _collapseToNav(instant);
         } else {
-            restorePosition();
+            _expandFromNav(instant);
         }
+        updateNavButton(collapsed);
     }
 
     try {
@@ -218,9 +313,11 @@
             setCollapsed(true, true);
         } else {
             restorePosition();
+            updateNavButton(false);
         }
     } catch (_) {
         restorePosition();
+        updateNavButton(false);
     }
 
     requestAnimationFrame(function () {
@@ -481,6 +578,24 @@
                     pinCacheBtn.disabled = false;
                     pinCacheBtn.classList.remove('is-busy');
                 });
+        });
+    }
+
+    // Keyboard shortcut: Ctrl+Shift+.
+    document.addEventListener('keydown', function (e) {
+        if (e.ctrlKey && e.shiftKey && e.code === 'Period') {
+            e.preventDefault();
+            if (positionAnimating) return;
+            setCollapsed(toolbar.dataset.collapsed !== 'true');
+        }
+    });
+
+    // Nav dropdown "Dev Tools" button
+    var navDevtoolsBtn = document.getElementById('nav-devtools-btn');
+    if (navDevtoolsBtn) {
+        navDevtoolsBtn.addEventListener('click', function () {
+            if (window.closeNavDropdown) window.closeNavDropdown();
+            if (!positionAnimating) setCollapsed(false);
         });
     }
 

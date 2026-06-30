@@ -6,6 +6,7 @@ minimal response to a single star click (see PinEditView.post).
 Usage:
   {% include "dashboard/partials/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="..." modifier="priority" wide=False client_version=client_version %}
 {% endcomment %}
+{% load dashboard_tags %}
 <div class="pin-stat-item" id="pin-stat-{{ field }}">
     <span class="field-label">
         {% include "dashboard/partials/_tooltip_label.html" with label=label help=help wide=wide %}

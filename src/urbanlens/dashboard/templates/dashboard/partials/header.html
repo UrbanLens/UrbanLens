@@ -99,6 +99,13 @@
                         <span>Site Admin</span>
                     </a>
                     {% endif %}
+                    {% if show_dev_toolbar %}
+                    <button type="button" class="nav-dropdown-item nav-dropdown-item--devtools" id="nav-devtools-btn" role="menuitem" title="Toggle Dev Tools (Ctrl+Shift+.)">
+                        <i class="material-icons">terminal</i>
+                        <span>Dev Tools</span>
+                        <span class="nav-devtools-shortcut">Ctrl+⇧+.</span>
+                    </button>
+                    {% endif %}
 
                     <div class="nav-dropdown-sep" role="separator"></div>
 
@@ -150,6 +157,7 @@
         menu.classList.remove('is-open');
         btn.setAttribute('aria-expanded', 'false');
     }
+    window.closeNavDropdown = closeMenu;
     function openNotif() {
         if (!notifWrap) return;
         closeMenu();

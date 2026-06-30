@@ -241,35 +241,31 @@
     </div>{# end .location-map #}
 
     {# ── Satellite / street view: always present, directly below the map ──── #}
-    <div class="section">
-        <div id="satellite-view-section" class="satellite-view card"
-            hx-get="{% url 'pin.satellite_view' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">globe</i>
-                <h3>Satellite View</h3>
-            </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
-            </div>
+    <div id="satellite-view-section" class="satellite-view card card--primary"
+        hx-get="{% url 'pin.satellite_view' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">globe</i>
+            <h3>Satellite View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
         </div>
     </div>
 
-    <div class="section">
-        <div id="street-view-section" class="street-view card"
-            hx-get="{% url 'pin.street_view' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">streetview</i>
-                <h3>Street View</h3>
-            </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
-            </div>
+    <div id="street-view-section" class="street-view card card--primary"
+        hx-get="{% url 'pin.street_view' pin.slug %}"
+        hx-trigger="load"
+        hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-icons">streetview</i>
+            <h3>Street View</h3>
+        </div>
+        <div class="view-loading">
+            <i class="material-icons spin">autorenew</i>
+            Loading…
         </div>
     </div>
 
@@ -277,7 +273,7 @@
     <div hx-get="{% url 'pin.visits' pin.slug %}"
         hx-trigger="load"
         hx-swap="outerHTML"
-        class="visit-history card">
+        class="visit-history card card--secondary">
         <div class="card-header">
             <i class="material-icons">history</i>
             <span>Visit History</span>
@@ -288,7 +284,7 @@
     <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
         hx-trigger="load"
         hx-swap="outerHTML"
-        class="tag-panel">
+        class="tag-panel card card--secondary">
         <div class="tag-panel-header">
             <i class="material-icons">category</i>
             <span>Categories</span>
@@ -300,7 +296,7 @@
         hx-trigger="load"
         hx-swap="outerHTML"
         id="pin-aliases-panel"
-        class="aliases-panel card">
+        class="aliases-panel card card--secondary">
         <div class="card-header">
             <i class="material-icons">label_important</i>
             <span>Aliases</span>
@@ -313,7 +309,7 @@
     {# removed at runtime when their HTMX request returns 204 - see the ────── #}
     {# htmx:afterOnLoad handler near the bottom of this file). ──────────────── #}
     <div class="pin-aux-grid">
-        <div id="smithsonian-section" class="smithsonian-images card"
+        <div id="smithsonian-section" class="smithsonian-images card card--secondary"
             hx-get="{% url 'smithsonian_images' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
@@ -328,7 +324,7 @@
         </div>
 
         {% if pin.meaningful_name %}
-        <div id="web-search-section" class="web-search card"
+        <div id="web-search-section" class="web-search card card--secondary"
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
@@ -347,7 +343,7 @@
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
-            <div class="card">
+            <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">menu_book</i>
                     <h3>Wikipedia</h3>
@@ -360,7 +356,7 @@
             hx-get="{% url 'pin.nominatim' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
-            <div class="card">
+            <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">map</i>
                     <h3>OpenStreetMap</h3>
@@ -373,7 +369,7 @@
             hx-get="{% url 'pin.nps' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
-            <div class="card">
+            <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">park</i>
                     <h3>National Park Service</h3>
@@ -387,7 +383,7 @@
             hx-get="{% url 'pin.wikimedia' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
-            <div class="card">
+            <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">collections</i>
                     <h3>Wikimedia Commons</h3>
@@ -401,7 +397,7 @@
             hx-get="{% url 'pin.loopnet' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML">
-            <div class="card">
+            <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">business_center</i>
                     <h3>LoopNet Listings</h3>
@@ -416,7 +412,7 @@
      hx-get="{% url 'pin.gallery' pin.slug %}"
      hx-trigger="load"
      hx-swap="outerHTML">
-        <div class="card">
+        <div class="card card--secondary">
             <div class="card-header">
                 <i class="material-icons">photo_library</i>
                 <span>Photos</span>
@@ -429,7 +425,7 @@
      hx-get="{% url 'pin.comments' pin.slug %}"
      hx-trigger="load"
      hx-swap="outerHTML">
-        <div class="card">
+        <div class="card card--secondary">
             <div class="card-header">
                 <i class="material-icons">chat</i>
                 <span>Comments</span>
