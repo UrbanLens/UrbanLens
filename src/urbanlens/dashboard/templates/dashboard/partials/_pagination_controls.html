@@ -8,10 +8,6 @@ Conventions relied on:
   - The card this is included into has the .card class.
   - The view that rendered this card is reachable at request.path and reads
     a `page` GET/POST parameter (see urbanlens.dashboard.services.pagination).
-
-Note: page_obj.previous_page_number / next_page_number raise EmptyPage when
-there is no such page, so they must only ever be evaluated inside the
-matching {% if page_obj.has_previous/has_next %} branch below.
 {% endcomment %}
 {% if page_obj.paginator.num_pages > 1 %}
 <div class="pagination-bar">
