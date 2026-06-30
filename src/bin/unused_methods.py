@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from fnmatch import fnmatch
@@ -25,10 +26,6 @@ import json
 import os
 import re
 import sys
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 try:
     from tqdm import tqdm  # type: ignore
@@ -137,6 +134,8 @@ class FunctionDef:
     lineno: int
     is_method: bool
     is_dunder: bool
+    class_name: str | None = None  # immediate enclosing class, if any
+    base_classes: tuple[str, ...] = ()  # textual base-class names of that class, e.g. ("ModelAdmin",)
 
 
 @dataclass
@@ -207,6 +206,15 @@ class DefinitionCollector(ast.NodeVisitor):
         self.filename = filename
         self.definitions: list[FunctionDef] = []
         self._class_stack: list[str] = []
+        self._bases_stack: list[tuple[str, ...]] = []
+
+    @staticmethod
+    def _base_name(node: ast.expr) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        return None
 
     def _record(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         is_method = bool(self._class_stack)
@@ -219,6 +227,8 @@ class DefinitionCollector(ast.NodeVisitor):
                 lineno=node.lineno,
                 is_method=is_method,
                 is_dunder=node.name.startswith("__") and node.name.endswith("__"),
+                class_name=self._class_stack[-1] if self._class_stack else None,
+                base_classes=self._bases_stack[-1] if self._bases_stack else (),
             ),
         )
         self.generic_visit(node)
@@ -231,7 +241,10 @@ class DefinitionCollector(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._class_stack.append(node.name)
+        bases = tuple(filter(None, (self._base_name(b) for b in node.bases)))
+        self._bases_stack.append(bases)
         self.generic_visit(node)
+        self._bases_stack.pop()
         self._class_stack.pop()
 
 
@@ -239,13 +252,22 @@ class ReferenceCounter(ast.NodeVisitor):
     """
     Counts references to a known set of simple names anywhere they're loaded:
     direct calls, bare references, decorators, attribute access, callbacks
-    passed as arguments, etc. This is far more complete than only matching
-    ast.Call/Assign/Lambda, and (unlike grep) understands scoping enough to
-    skip the definition itself.
+    passed as arguments, parameter names (pytest fixture injection), and
+    string literals that exactly match a name. This is far more complete than
+    only matching ast.Call/Assign/Lambda, and (unlike grep) understands
+    scoping enough to skip the definition itself.
+
+    String-literal matching specifically covers dispatch-by-name patterns
+    that are otherwise invisible to AST reference tracking, e.g. DRF/Django
+    ViewSet routing - `SomeViewSet.as_view({"get": "list_campuses"})` - where
+    the method name is a dict value, not a Name/Attribute node; the same
+    applies to getattr(obj, "method_name"), signal.connect("handler_name"),
+    and ModelAdmin's list_display = ("custom_column",).
     """
 
-    def __init__(self, simple_names: set[str]):
+    def __init__(self, simple_names: set[str], match_string_literals: bool = True):
         self.simple_names = simple_names
+        self.match_string_literals = match_string_literals
         self.counts: defaultdict[str, int] = defaultdict(int)
 
     def visit_Name(self, node: ast.Name) -> None:
@@ -265,6 +287,11 @@ class ReferenceCounter(ast.NodeVisitor):
         # only used by other test functions reads as unused.
         if node.arg in self.simple_names:
             self.counts[node.arg] += 1
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if self.match_string_literals and isinstance(node.value, str) and node.value in self.simple_names:
+            self.counts[node.value] += 1
         self.generic_visit(node)
 
 
@@ -312,6 +339,7 @@ def analyze(
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,
     use_default_ignores: bool = True,
+    match_string_literals: bool = True,
     workers: int = 1,
     show_progress: bool = True,
 ) -> tuple[list[FunctionDef], dict[str, int], list[str]]:
@@ -330,6 +358,15 @@ def analyze(
     DEFAULT_IGNORE_FILENAME_PATTERNS on top of the always-on
     DEFAULT_EXCLUDE_DIRS (cache/vendor dirs). Set to False to scan everything
     and rely solely on exclude_dirs/exclude_files.
+
+    `match_string_literals` (on by default) treats a string literal that
+    exactly matches a known function/method name as a use - this is what
+    catches Django/DRF dispatch-by-string patterns like
+    `SomeViewSet.as_view({"get": "list_campuses"})`, getattr(obj, "name"),
+    and ModelAdmin's list_display = ("custom_column",). The trade-off: a
+    generically-named function (save, list, create) could coincidentally
+    match an unrelated string elsewhere and be wrongly counted as used. Set
+    to False for a stricter, reference-only count.
     """
     exclude_d = set(DEFAULT_EXCLUDE_DIRS) | (exclude_dirs or set())
     exclude_f = set(exclude_files or set())
@@ -372,13 +409,119 @@ def analyze(
         progress.update(1)
         if fa.tree is None:
             continue
-        counter = ReferenceCounter(simple_names)
+        counter = ReferenceCounter(simple_names, match_string_literals=match_string_literals)
         counter.visit(fa.tree)
         for name, count in counter.counts.items():
             total_counts[name] += count
     progress.close()
 
     return definitions, dict(total_counts), errors
+
+
+# ---------------------------------------------------------------------------
+# Confidence scoring
+#
+# A result being "0 references found" doesn't mean equally certain in every
+# case - some patterns are well-known to slip past static analysis even with
+# all the detection above. Rather than silently hiding those (like the
+# default ignores do for fully-known conventions), borderline cases are kept
+# in the report but scored lower so they can be triaged instead of trusted
+# or dismissed outright.
+# ---------------------------------------------------------------------------
+
+# Class name suffixes that are commonly base/mixin classes for Django, DRF,
+# and similar frameworks that dispatch methods by name/string convention
+# (URLconf as_view() dicts, admin list_display, form/serializer machinery,
+# management command runners, etc.) beyond what DEFAULT_IGNORE_* already
+# special-cases by exact name.
+FRAMEWORK_CLASS_HINTS = re.compile(
+    r"(View|ViewSet|Controller|Serializer|Form|Admin|Command|Backend|"
+    r"Middleware|TestCase|AppConfig|Listener|Handler|Resource|Endpoint|Mixin)$",
+)
+
+# Method names that read as generic framework actions/lifecycle hooks even
+# outside the exact conventions DEFAULT_IGNORE_NAME_PATTERNS hard-codes -
+# e.g. a custom DRF @action method or a CBV-style entry point with a name
+# this script hasn't specifically special-cased.
+DISPATCH_PRONE_NAMES = {
+    "save", "run", "execute", "process", "render", "dispatch", "perform",
+    "perform_create", "perform_update", "perform_destroy", "get_object",
+    "get_queryset", "get_context_data", "get_serializer_class",
+    "form_valid", "form_invalid", "pre_save", "post_save", "pre_delete",
+    "post_delete",
+}
+
+
+@dataclass
+class Finding:
+    definition: FunctionDef
+    usage_count: int
+    confidence: str  # "High" | "Medium" | "Low"
+    reasons: list[str]
+
+
+def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) -> tuple[str, list[str]]:
+    """
+    Starts at 100 and deducts points for each known blind spot that applies,
+    then buckets into High (>=80) / Medium (>=50) / Low (<50). This is a
+    heuristic, not a guarantee - it flags *why* a result is less trustworthy
+    so it can be triaged, not a claim that Low-confidence results are safe
+    to ignore or that High-confidence ones are definitely dead.
+    """
+    score = 100
+    reasons: list[str] = []
+
+    if d.is_method:
+        score -= 10
+        hint_source = d.class_name if (d.class_name and FRAMEWORK_CLASS_HINTS.search(d.class_name)) else None
+        if not hint_source:
+            hint_source = next((b for b in d.base_classes if FRAMEWORK_CLASS_HINTS.search(b)), None)
+        if hint_source:
+            score -= 40
+            reasons.append(
+                f"method on '{d.class_name}', which looks like a Django/DRF view, form, admin, "
+                "or similar framework class - these are often dispatched by name/string convention "
+                "in ways this script can't fully trace",
+            )
+
+    if d.simple_name in DISPATCH_PRONE_NAMES:
+        score -= 25
+        reasons.append(f"name '{d.simple_name}' is a common framework action/lifecycle name")
+
+    dupes = name_definition_counts.get(d.simple_name, 1)
+    if dupes > 1:
+        score -= 20
+        reasons.append(
+            f"'{d.simple_name}' is defined {dupes} times across the codebase, so this reference "
+            "count is shared across all of them - a use of any one of them hides this one too",
+        )
+
+    score = max(score, 0)
+    if score >= 80:
+        level = "High"
+    elif score >= 50:
+        level = "Medium"
+    else:
+        level = "Low"
+    return level, reasons
+
+
+def _build_findings(
+    defs: list[FunctionDef], usage_counts: dict[str, int], name_definition_counts: dict[str, int],
+) -> list[Finding]:
+    findings = []
+    for d in defs:
+        confidence, reasons = _score_confidence(d, name_definition_counts)
+        findings.append(
+            Finding(
+                definition=d,
+                usage_count=usage_counts.get(d.simple_name, 0),
+                confidence=confidence,
+                reasons=reasons,
+            ),
+        )
+    findings.sort(key=lambda f: (f.definition.filename, f.definition.lineno))
+    return findings
 
 
 def find_unused_functions(
@@ -389,9 +532,10 @@ def find_unused_functions(
     min_uses: int = 1,
     ignore_patterns: list[str] | None = None,
     use_default_ignores: bool = True,
+    match_string_literals: bool = True,
     workers: int = 1,
     show_progress: bool = True,
-) -> dict[str, list[FunctionDef]]:
+) -> dict[str, list[Finding]]:
     """
     Returns a dict with two keys:
       "unused" - definitions whose simple name is never referenced elsewhere (count 0)
@@ -418,6 +562,7 @@ def find_unused_functions(
         exclude_dirs=exclude_dirs,
         exclude_files=exclude_files,
         use_default_ignores=use_default_ignores,
+        match_string_literals=match_string_literals,
         workers=workers,
         show_progress=show_progress,
     )
@@ -446,9 +591,14 @@ def find_unused_functions(
         elif count <= min_uses:
             rare.append(d)
 
-    unused.sort(key=lambda d: (d.filename, d.lineno))
-    rare.sort(key=lambda d: (d.filename, d.lineno))
-    return {"unused": unused, "rare": rare}
+    name_definition_counts: defaultdict[str, int] = defaultdict(int)
+    for d in definitions:
+        name_definition_counts[d.simple_name] += 1
+
+    return {
+        "unused": _build_findings(unused, usage_counts, name_definition_counts),
+        "rare": _build_findings(rare, usage_counts, name_definition_counts),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -456,29 +606,77 @@ def find_unused_functions(
 # ---------------------------------------------------------------------------
 
 
-def write_text_report(results: dict[str, list[FunctionDef]], output_path: str) -> None:
+_CONFIDENCE_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+
+_SUMMARY_TEXT = """\
+================================================================================
+HOW TO READ THIS REPORT
+================================================================================
+Each result has a Confidence score: High, Medium, or Low. This reflects how
+likely the result is a *genuine* unused/rarely-used function, vs. a false
+positive caused by a known blind spot of static analysis - things like:
+
+  - Methods on Django/DRF-style view, form, admin, or command classes, which
+    are often dispatched by name/string convention (e.g. routing, list_display)
+    in ways that can't always be fully traced.
+  - Generic framework action/lifecycle names (save, run, dispatch, etc.).
+  - Names defined more than once across the codebase, where the reference
+    count is shared across all definitions sharing that name - a use of any
+    one of them can mask the others.
+
+Start with High confidence results - they're the most likely to be real dead
+code. Treat Medium and Low results as leads to manually check, not verdicts;
+each one lists the specific reason(s) its confidence was reduced. Counts come
+from real AST analysis (calls, attribute access, parameter names, and string
+literals that exactly match a name) - see the script's --help and source
+comments for the full list of detection methods and their trade-offs.
+================================================================================
+"""
+
+
+def _format_finding_line(f: Finding) -> str:
+    d = f.definition
+    line = f"    [{f.confidence:<6}] {d.filename}:{d.lineno}  {d.qualified_name}  (refs: {f.usage_count})"
+    if f.reasons:
+        for reason in f.reasons:
+            line += f"\n               - {reason}"
+    return line
+
+
+def write_text_report(results: dict[str, list[Finding]], output_path: str) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(f"Unused functions/methods (0 references found): {len(results['unused'])}\n")
-        f.write("-" * 70 + "\n")
-        f.writelines(f"    {d.filename}:{d.lineno}  {d.qualified_name}\n" for d in results["unused"])
+        f.write(_SUMMARY_TEXT)
+        f.write("\n")
 
-        f.write(f"\nRarely-used functions/methods (1 reference found): {len(results['rare'])}\n")
-        f.write("-" * 70 + "\n")
-        f.writelines(f"    {d.filename}:{d.lineno}  {d.qualified_name}\n" for d in results["rare"])
+        for key, label in (("unused", "Unused functions/methods (0 references found)"), ("rare", "Rarely-used functions/methods")):
+            findings = sorted(results[key], key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno))
+            counts_by_level = defaultdict(int)
+            for fi in findings:
+                counts_by_level[fi.confidence] += 1
+            breakdown = ", ".join(f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl])
+
+            f.write(f"{label}: {len(findings)}" + (f"  ({breakdown})" if breakdown else "") + "\n")
+            f.write("-" * 70 + "\n")
+            for fi in findings:
+                f.write(_format_finding_line(fi) + "\n")
+            f.write("\n")
 
 
-def write_json_report(results: dict[str, list[FunctionDef]], output_path: str) -> None:
+def write_json_report(results: dict[str, list[Finding]], output_path: str) -> None:
     payload = {
         key: [
             {
-                "qualified_name": d.qualified_name,
-                "file": d.filename,
-                "line": d.lineno,
-                "is_method": d.is_method,
+                "qualified_name": fi.definition.qualified_name,
+                "file": fi.definition.filename,
+                "line": fi.definition.lineno,
+                "is_method": fi.definition.is_method,
+                "usage_count": fi.usage_count,
+                "confidence": fi.confidence,
+                "reasons": fi.reasons,
             }
-            for d in defs
+            for fi in findings
         ]
-        for key, defs in results.items()
+        for key, findings in results.items()
     }
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
@@ -515,6 +713,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "method names like test_*, clean_*, get/post/.../ready/handle that are invoked "
         "via framework reflection rather than a normal reference). On by default.",
     )
+    parser.add_argument(
+        "--no-string-literal-refs",
+        action="store_true",
+        help="Don't treat a string literal that exactly matches a function/method name "
+        "as a use. By default these count, to catch dispatch-by-string patterns like "
+        "Django/DRF's as_view({\"get\": \"method_name\"}) and getattr(obj, \"name\"). "
+        "Disable for a stricter, reference-only count (risk: more false positives for "
+        "those patterns, but no risk of an unrelated string coincidentally matching a "
+        "generically-named function).",
+    )
+    parser.add_argument(
+        "--min-confidence",
+        choices=["low", "medium", "high"],
+        default="low",
+        help="Only include results at or above this confidence level (default: low = include everything)",
+    )
     parser.add_argument("--min-uses", type=int, default=1, help="Reference count at/under which a def is reported as 'rare' (default: 1)")
     parser.add_argument("--workers", type=int, default=1, help="Parallel worker processes for parsing (default: 1)")
     parser.add_argument("--no-progress", action="store_true", help="Disable the progress bar")
@@ -532,9 +746,15 @@ def main(argv: list[str] | None = None) -> int:
         min_uses=args.min_uses,
         ignore_patterns=args.ignore_pattern,
         use_default_ignores=not args.no_default_ignores,
+        match_string_literals=not args.no_string_literal_refs,
         workers=args.workers,
         show_progress=not args.no_progress,
     )
+
+    if args.min_confidence != "low":
+        rank = {"Low": 0, "Medium": 1, "High": 2}
+        threshold = {"low": 0, "medium": 1, "high": 2}[args.min_confidence]
+        results = {key: [f for f in findings if rank[f.confidence] >= threshold] for key, findings in results.items()}
 
     if args.json:
         write_json_report(results, args.output)
