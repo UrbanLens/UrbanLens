@@ -12,7 +12,7 @@ Conventions relied on:
 {% if page_obj.paginator.num_pages > 1 %}
 <div class="pagination-bar">
     <button type="button" class="pagination-btn"
-            hx-get="{{ request.path }}?page={{ page_obj.previous_page_number|default:1 }}"
+            hx-get="{{ request.path }}?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             {% if not page_obj.has_previous %}disabled{% endif %}
             aria-label="Previous page">
@@ -20,7 +20,7 @@ Conventions relied on:
     </button>
     <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
     <button type="button" class="pagination-btn"
-            hx-get="{{ request.path }}?page={{ page_obj.next_page_number|default:page_obj.paginator.num_pages }}"
+            hx-get="{{ request.path }}?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             {% if not page_obj.has_next %}disabled{% endif %}
             aria-label="Next page">
