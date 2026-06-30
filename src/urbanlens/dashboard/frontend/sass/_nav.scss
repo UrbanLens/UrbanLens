@@ -294,7 +294,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;
-    z-index: 15; // above div.container (z-index: 1)
+    z-index: 9999;
 
     a {
         color: var(--ul-grey-3);

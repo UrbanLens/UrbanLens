@@ -19,7 +19,8 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/UrbanLens/settings/base.py 2>&1)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check src/urbanlens/UrbanLens/settings/base.py 2>&1)",
       "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/models/trips/model.py src/urbanlens/dashboard/controllers/trip.py)",
-      "Bash(.venv_windows/Scripts/ruff.exe check *)"
+      "Bash(.venv_windows/Scripts/ruff.exe check *)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\tests\\\\hypothesis\\\\test_site_admin_stats.py)"
     ]
   }
 }

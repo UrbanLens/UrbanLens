@@ -203,25 +203,37 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return response.context
 
+    def _get_kpi_context(self) -> dict:
+        """KPI totals (users, locations, pins, photos, ...) load via an HTMX partial."""
+        response = self.client.get(reverse("site_admin_stats_kpi"))
+        self.assertEqual(response.status_code, 200)
+        return response.context
+
+    def _get_system_context(self) -> dict:
+        """App/server/infrastructure info loads via an HTMX partial."""
+        response = self.client.get(reverse("site_admin_stats_system"))
+        self.assertEqual(response.status_code, 200)
+        return response.context
+
     def test_context_has_total_users(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertIn("total_users", ctx)
         self.assertIsInstance(ctx["total_users"], int)
 
     def test_context_has_total_locations(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertIn("total_locations", ctx)
 
     def test_context_has_total_pins(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertIn("total_pins", ctx)
 
     def test_context_has_total_photos(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertIn("total_photos", ctx)
 
     def test_context_has_total_friendships(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertIn("total_friendships", ctx)
 
     def test_context_has_chart_data(self) -> None:
@@ -233,12 +245,13 @@ class SiteAdminStatsViewContextTests(TestCase):
 
     def test_context_has_server_info(self) -> None:
         ctx = self._get_context()
-        self.assertIn("python_version", ctx)
-        self.assertIn("django_version", ctx)
         self.assertIn("server_time", ctx)
+        system_ctx = self._get_system_context()
+        self.assertIn("python_version", system_ctx)
+        self.assertIn("django_version", system_ctx)
 
     def test_context_has_infrastructure_services(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_system_context()
         self.assertIn("infrastructure_services", ctx)
         services = ctx["infrastructure_services"]
         self.assertEqual(len(services), 4)
@@ -246,7 +259,7 @@ class SiteAdminStatsViewContextTests(TestCase):
         self.assertEqual(services[0].status, "healthy")
 
     def test_context_has_app_software_info(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_system_context()
         self.assertIn("app_version", ctx)
         self.assertIn("deployed_commit_short", ctx)
         self.assertIn("git_branch", ctx)
@@ -258,16 +271,16 @@ class SiteAdminStatsViewContextTests(TestCase):
     def test_total_users_count_is_accurate(self) -> None:
         baker.make(User)
         baker.make(User)
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         # At least our setUp user + the two we just created.
         self.assertGreaterEqual(ctx["total_users"], 3)
 
     def test_new_users_30d_is_non_negative(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertGreaterEqual(ctx["new_users_30d"], 0)
 
     def test_avg_pins_per_user_is_non_negative(self) -> None:
-        ctx = self._get_context()
+        ctx = self._get_kpi_context()
         self.assertGreaterEqual(ctx["avg_pins_per_user"], 0)
 
 

@@ -284,34 +284,34 @@
     <div class="section">
         <div class="pin-media-row">
 
-        <div id="satellite-view-section" class="satellite-view card"
-             hx-get="{% url 'pin.satellite_view' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">globe</i>
-                <h3>Satellite View</h3>
+            <div id="satellite-view-section" class="satellite-view card"
+                hx-get="{% url 'pin.satellite_view' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card-header">
+                    <i class="material-icons">globe</i>
+                    <h3>Satellite View</h3>
+                </div>
+                <div class="view-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading…
+                </div>
             </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
+
+            <div id="street-view-section" class="street-view card"
+                hx-get="{% url 'pin.street_view' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card-header">
+                    <i class="material-icons">streetview</i>
+                    <h3>Street View</h3>
+                </div>
+                <div class="view-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading…
+                </div>
             </div>
         </div>
-
-        <div id="street-view-section" class="street-view card"
-             hx-get="{% url 'pin.street_view' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">streetview</i>
-                <h3>Street View</h3>
-            </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
-            </div>
-        </div>
-
     </div>{# end .section for .pin-media-row (satellite / street) #}
 
     {# ── Archive row: Smithsonian | web search ────────────────────────── #}
@@ -435,12 +435,13 @@
          hx-get="{% url 'pin.gallery' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
-        <div class="card">
-            <div class="card-header">
-                <i class="material-icons">photo_library</i>
-                <span>Photos</span>
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">photo_library</i>
+                    <span>Photos</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
     </div>{# end .section for #pin-gallery-panel #}
 
