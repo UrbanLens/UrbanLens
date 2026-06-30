@@ -93,6 +93,13 @@
                 </span>
                 <span>Pins</span>
             </button>
+            <button id="pin-list-button" class="map-layer-btn"
+                    onclick="_togglePinListPanel();" aria-label="Show pin list">
+                <span class="map-layer-thumb map-layer-thumb--icon">
+                    <i class="material-icons">format_list_bulleted</i>
+                </span>
+                <span>List</span>
+            </button>
             <button id="dark-mode-button" class="map-layer-btn"
                     onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode">
                 <span class="map-layer-thumb">
@@ -330,6 +337,16 @@
                 <i class="material-icons">refresh</i> Clear all filters
             </button>
         </form>
+    </div>
+
+    {# ── Pin list panel (left-docked) ──────────────────────────────────── #}
+    <div id="pin-list-panel">
+        <div class="pl-header">
+            <span class="pl-title">Pin List</span>
+            {% include "dashboard/partials/_tooltip_help.html" with text="Lists every pin that matches your current filters. Click a pin to jump to it on the map." wide=True %}
+            <button class="pl-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
+        </div>
+        <div class="pl-body" id="pin-list-body"></div>
     </div>
 
     <div id="tile-fetch-indicator" aria-hidden="true">
@@ -2727,6 +2744,8 @@
             case 'escape':
                 if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
+                } else if (document.getElementById('pin-list-panel')?.classList.contains('open')) {
+                    _togglePinListPanel();
                 } else if (_isLayersPanelOpen()) {
                     _closeLayersPanel();
                 }
@@ -2743,6 +2762,46 @@
         btn.classList.toggle('active', isOpen);
         mapEl.classList.toggle('filter-open', isOpen);
     }
+
+    // ── Pin list panel ──────────────────────────────────────────────────────
+    function _togglePinListPanel() {
+        const panel = document.getElementById('pin-list-panel');
+        const btn = document.getElementById('pin-list-button');
+        const mapEl = document.getElementById('map');
+        const isOpen = panel.classList.toggle('open');
+        btn?.classList.toggle('active', isOpen);
+        mapEl.classList.toggle('pin-list-open', isOpen);
+        if (isOpen) _refreshPinList();
+    }
+
+    function _refreshPinList() {
+        const panel = document.getElementById('pin-list-panel');
+        if (!panel || !panel.classList.contains('open')) return;
+        const form = document.getElementById('filter-form');
+        const params = new URLSearchParams(new FormData(form));
+        htmx.ajax('GET', `{% url 'map.pins.list' %}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
+    }
+
+    function _flyToPinFromList(slug, lat, lng) {
+        if (lat == null || lng == null) return;
+        _programmaticMove = true;
+        map.setView([lat, lng], Math.max(map.getZoom(), 16));
+        for (const [uuid, pin] of _pinStore) {
+            if (pin.slug === slug) {
+                setTimeout(() => { const m = _markerMap.get(uuid); if (m) m.openPopup(); }, 350);
+                break;
+            }
+        }
+        if (window.matchMedia('(max-width: 768px)').matches) _togglePinListPanel();
+    }
+
+    document.getElementById('filter-form').addEventListener('change', () => _refreshPinList());
+    let _pinListInputTimer;
+    document.getElementById('filter-form').addEventListener('input', (e) => {
+        if (e.target.name !== 'name') return;
+        clearTimeout(_pinListInputTimer);
+        _pinListInputTimer = setTimeout(_refreshPinList, 600);
+    });
 
     function resetFilters() {
         const form = document.getElementById('filter-form');

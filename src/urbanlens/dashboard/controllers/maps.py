@@ -9,6 +9,7 @@ import urllib.request
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
+from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -25,9 +26,12 @@ from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
+from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+_PIN_LIST_PAGE_SIZE = 25
 
 _US_STATE_CODES: dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
@@ -382,6 +386,47 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
+
+    def pin_list_panel(self, request, *args, **kwargs):
+        """Render the paginated pin-list sidebar for the current filter criteria.
+
+        Reads the same fields as ``SearchForm`` from the query string (sent via
+        ``hx-include="#filter-form"`` on the client) so the list panel always
+        mirrors whatever the filter panel currently shows on the map. Invalid
+        or absent filter criteria fall back to the full unfiltered pin list
+        rather than erroring out, since this is a convenience view rather than
+        a form submission.
+
+        Args:
+            request: GET request, optionally carrying ``SearchForm`` fields and
+                a ``page`` parameter for pagination.
+
+        Returns:
+            Rendered ``_pin_list_panel.html`` partial with the matching pins
+            for the requested page, plus the total match count.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+
+        search_form = SearchForm(request.GET)
+        if search_form.is_valid():
+            criteria = dict(search_form.cleaned_data)
+            parsed_groups = search_form.parse_badge_groups()
+            if parsed_groups is not None:
+                criteria["badge_groups"] = parsed_groups
+            query = query.filter_by_criteria(criteria)
+
+        query = query.order_by(Lower(Coalesce("name", "location__name")))
+        page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
+        return render(
+            request,
+            "dashboard/partials/_pin_list_panel.html",
+            {
+                "page_obj": page_obj,
+                "pins": page_obj.object_list,
+                "total_count": page_obj.paginator.count,
+            },
+        )
 
     def upload_image(self, request, pin_slug, *args, **kwargs):
         image = request.FILES.get("image")

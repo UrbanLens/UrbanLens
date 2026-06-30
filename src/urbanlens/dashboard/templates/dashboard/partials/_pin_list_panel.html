@@ -1,0 +1,40 @@
+{% comment %}
+Pin-list sidebar contents, rendered by MapController.pin_list_panel.
+
+Context:
+  page_obj - a django.core.paginator.Page of matching Pin objects
+  pins - page_obj.object_list (convenience alias)
+  total_count - total number of pins matching the current filter criteria
+
+hx-include lets the pagination buttons (inherited from _pagination_controls.html)
+resend the filter-form fields on every page click, so filters stay applied.
+{% endcomment %}
+<div id="pin-list-results" class="card pin-list-results" hx-include="#filter-form">
+    <div class="pin-list-count">
+        <strong>{{ total_count }}</strong> location{{ total_count|pluralize }}
+    </div>
+    {% if pins %}
+    <ul class="pin-list">
+        {% for pin in pins %}
+        <li class="pin-list-item">
+            <button type="button" class="pin-list-item-btn"
+                    onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
+                <span class="pin-list-icon material-icons">place</span>
+                <span class="pin-list-info">
+                    <span class="pin-list-name">{{ pin.effective_name }}</span>
+                    {% if pin.location.city or pin.location.state %}
+                    <span class="pin-list-meta">{{ pin.location.city }}{% if pin.location.city and pin.location.state %}, {% endif %}{{ pin.location.state }}</span>
+                    {% endif %}
+                </span>
+                {% if pin.last_visited %}
+                <span class="pin-list-visited material-icons" title="Visited">check_circle</span>
+                {% endif %}
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% include "dashboard/partials/_pagination_controls.html" %}
+    {% else %}
+    <p class="pin-list-empty">No pins match the current filters.</p>
+    {% endif %}
+</div>

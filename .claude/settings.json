@@ -34,7 +34,11 @@
       "PowerShell(docker run --rm --entrypoint sh urbanlens-app -c \"bun run sass && grep -c 'pin-detail-grid\\\\|pagination-bar\\\\|breakpoint-xl' src/urbanlens/dashboard/frontend/static/dashboard/style.css && echo SASS_OK\" 2>&1)",
       "Bash(docker run *)",
       "PowerShell(docker run --rm -v \"${PWD}:/app\" --entrypoint sh urbanlens-app -c \"bun run sass && grep -c 'pin-detail-grid\\\\|pagination-bar' src/urbanlens/dashboard/frontend/static/dashboard/style.css && echo SASS_OK\" 2>&1)",
-      "PowerShell(docker run --rm -v \"${PWD}:/app\" --entrypoint sh urbanlens-app -c \"bun run build && echo BUILD_OK\" 2>&1)"
+      "PowerShell(docker run --rm -v \"${PWD}:/app\" --entrypoint sh urbanlens-app -c \"bun run build && echo BUILD_OK\" 2>&1)",
+      "Bash(git log *)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/maps.py src/urbanlens/dashboard/urls.py)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py src\\\\urbanlens\\\\dashboard\\\\urls.py; echo \"exit:$LASTEXITCODE\")",
+      "Bash(wsl.exe -l -v)"
     ]
   }
 }
