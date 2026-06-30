@@ -1693,32 +1693,39 @@ body.page-location-details .pin-detail-grid {
 
 // ── Pin detail layout ─────────────────────────────────────────────────────────
 //
-// .pin-detail-grid holds every "always present" section as a direct child
-// (overview, map, satellite/street view, visit history, categories, aliases,
-// the .pin-aux-grid block of optional cards, gallery, comments) and lays
-// them out with explicit `grid-column: span N` + `order` per breakpoint -
-// a deliberately designed layout, not an auto-fit reflow. `.pin-aux-grid`
-// (the cards that may or may not render at all - Smithsonian, Web Results,
-// Wikipedia, Nominatim, NPS, Wikimedia, LoopNet) is itself one such child,
-// and keeps its own nested auto-fit grid so it can "fit in however it can"
-// regardless of which of those optional cards end up present.
+// Mobile-first, content-aware layout for the pin details page. The grid avoids
+// brittle fixed spans: every card starts as a full-width section, then available
+// space is divided with auto-fit tracks so visible cards naturally expand,
+// collapse, and wrap without leaving holes when optional sections are hidden.
 .pin-detail-grid {
+    --pin-detail-gap: clamp(.85rem, 2vw, 1.35rem);
+    --pin-detail-pad: clamp(.75rem, 2.4vw, 1.5rem);
+
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-    padding: 0 1rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--pin-detail-gap);
+    padding: 0 var(--pin-detail-pad) clamp(1.5rem, 4vw, 3rem);
     align-items: start;
 
-    // Onboarding tips banner isn't part of the designed layout - just let it
-    // span full width wherever it lands.
-    > .page-onboarding {
+    > * {
+        min-width: 0;
+    }
+
+    > .page-onboarding,
+    > #pin-overview,
+    > .location-map,
+    > .pin-aux-grid,
+    > .photo-gallery,
+    > #pin-gallery-panel,
+    > .comment-panel,
+    > #comment-panel {
         grid-column: 1 / -1;
     }
 
     > #pin-overview { order: 10; }
     > .location-map { order: 20; }
-    > .satellite-view { order: 30; min-width: 260px; }
-    > .street-view { order: 40; min-width: 260px; }
+    > .satellite-view { order: 30; }
+    > .street-view { order: 40; }
     > .visit-history { order: 50; }
     > .tag-panel { order: 60; }
     > .aliases-panel { order: 70; }
@@ -1728,20 +1735,30 @@ body.page-location-details .pin-detail-grid {
     > .comment-panel,
     > #comment-panel { order: 100; }
 
-    // min-width: 0 is required on grid items - without it, image/text content
-    // can force a track wider than its assigned span and break the layout.
-    > * {
-        min-width: 0;
+    > .card,
+    > #pin-overview > .card,
+    > #pin-overview .card {
+        border: 1px solid rgba(148, 163, 184, .18);
+        border-radius: clamp(14px, 2vw, 22px);
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .94));
+        box-shadow: 0 16px 42px rgba(15, 23, 42, .08);
     }
 
     @include up($breakpoint-sm) {
-        grid-template-columns: repeat(12, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
 
-        > #pin-overview,
-        > .location-map,
-        > .pin-aux-grid {
-            grid-column: span 12;
+        > .satellite-view,
+        > .street-view,
+        > .visit-history,
+        > .tag-panel,
+        > .aliases-panel {
+            grid-column: span 1;
         }
+    }
+
+    @include up($breakpoint-lg) {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
 
         > .satellite-view,
         > .street-view {
@@ -1754,21 +1771,14 @@ body.page-location-details .pin-detail-grid {
             grid-column: span 4;
         }
 
-        // Gallery gets the wider share; comments stay at a third of the row
-        // width (well within "half width or less").
         > .photo-gallery,
-        > #pin-gallery-panel {
-            grid-column: span 8;
-        }
-
+        > #pin-gallery-panel,
         > .comment-panel,
         > #comment-panel {
-            grid-column: span 4;
+            grid-column: span 6;
         }
     }
 
-    // Ultra-wide: the gallery moves up to join satellite + street view below
-    // the map, freeing comments to take the full row on its own.
     @include up($breakpoint-xl) {
         > .satellite-view,
         > .street-view,
@@ -1784,7 +1794,7 @@ body.page-location-details .pin-detail-grid {
 
         > .comment-panel,
         > #comment-panel {
-            grid-column: span 12;
+            grid-column: span 8;
         }
     }
 }

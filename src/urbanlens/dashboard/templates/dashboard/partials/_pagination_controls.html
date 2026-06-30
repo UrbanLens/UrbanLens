@@ -17,7 +17,7 @@ matching {% if page_obj.has_previous/has_next %} branch below.
 <div class="pagination-bar">
     {% if page_obj.has_previous %}
     <button type="button" class="pagination-btn"
-            hx-get="{{ request.path }}?page={{ page_obj.previous_page_number }}"
+            hx-get="{{ request.path }}?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             aria-label="Previous page">
         <i class="material-icons">chevron_left</i>
@@ -30,7 +30,7 @@ matching {% if page_obj.has_previous/has_next %} branch below.
     <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
     {% if page_obj.has_next %}
     <button type="button" class="pagination-btn"
-            hx-get="{{ request.path }}?page={{ page_obj.next_page_number }}"
+            hx-get="{{ request.path }}?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             aria-label="Next page">
         <i class="material-icons">chevron_right</i>
