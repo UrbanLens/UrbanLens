@@ -2,12 +2,6 @@
 
 // ── Detail Pins ────────────────────────────────────────────────────────────────
 .detail-pins-panel {
-    .card-header {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-    }
-
     .detail-pin-empty {
         padding: 1rem 1.25rem;
         color: var(--ul-grey-6);

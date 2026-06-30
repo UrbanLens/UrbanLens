@@ -1087,19 +1087,37 @@
             return container.querySelector(':scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs');
         }
 
+        function _actionsGroup(header) {
+            var group = header.querySelector(':scope > .card-header-actions');
+            if (group) return group;
+            group = document.createElement('div');
+            group.className = 'card-header-actions';
+            var toMove = [];
+            Array.prototype.forEach.call(header.children, function (el) {
+                if (el.matches('.btn--icon-sm, .gallery-upload-compact-btn, .card-header-link, .btn, .section-collapse-btn')
+                    && !el.classList.contains('view-toggle-btn')) {
+                    toMove.push(el);
+                }
+            });
+            toMove.forEach(function (el) { group.appendChild(el); });
+            header.appendChild(group);
+            return group;
+        }
+
         // Headers can arrive after this container is first seen (HTMX content
         // still loading), so this is safe to call repeatedly and idempotent.
         function _ensureToggle(container) {
             if (container.dataset.collapseInit === '1') { _applyState(container); return; }
             var header = _header(container);
             if (!header) return;
-            if (!header.querySelector('.section-collapse-btn')) {
+            var actions = _actionsGroup(header);
+            if (!actions.querySelector('.section-collapse-btn')) {
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'section-collapse-btn';
                 btn.setAttribute('aria-label', 'Collapse section');
                 btn.innerHTML = '<i class="material-icons">expand_less</i>';
-                header.appendChild(btn);
+                actions.appendChild(btn);
             }
             container.dataset.collapseInit = '1';
             _applyState(container);

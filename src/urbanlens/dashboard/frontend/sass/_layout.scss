@@ -326,18 +326,25 @@
     box-shadow: 3px 3px 10px rgba(0,0,0,.08);
 
     .card-header {
-        @include panel-header;
+        @include panel-header-grid;
         border-radius: $radius-sm $radius-sm 0 0;
 
-        .material-icons {
-            font-size: 1.1rem;
-            opacity: .7;
-        }
-
-        h3 {
+        > span:not(.badge):not(.visit-count) {
+            grid-area: header-title;
             margin: 0;
             font-size: .95rem;
             font-weight: 600;
+            min-width: 0;
+        }
+
+        > .badge,
+        > .visit-count {
+            grid-area: header-meta;
+        }
+
+        > .gallery-upload-compact-btn {
+            grid-area: header-actions;
+            justify-self: end;
         }
     }
 

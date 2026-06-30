@@ -523,9 +523,6 @@
     }
 
     .card-header {
-        display: flex;
-        align-items: center;
-        gap: .4rem;
         padding: .75rem 1rem;
         border-bottom: 1px solid var(--ul-grey-4);
         font-weight: 600;
@@ -540,13 +537,6 @@
             padding: 1px 7px;
         }
     }
-}
-
-.card-header-actions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: .4rem;
 }
 
 // ── Activities view toggle ─────────────────────────────────────────────────

@@ -248,6 +248,53 @@
 	}
 }
 
+// Header bar shared by cards, panels, and dialogs.
+// Pass $spread: true when actions should pin to opposite edges.
+@mixin panel-header-grid($areas: 'header-icon header-title header-meta header-actions', $columns: 'auto minmax(0, 1fr) auto auto') {
+	display: grid;
+	grid-template-columns: $columns;
+	grid-template-areas: $areas;
+	align-items: center;
+	gap: $space-sm;
+	padding: $bar-padding-y $bar-padding-x;
+	border-bottom: 1px solid var(--ul-grey-1a);
+	font-weight: 600;
+	font-size: 1rem;
+	flex-shrink: 0;
+	background-color: var(--ul-grey-1a);
+	color: var(--ul-grey-8);
+	
+	i.material-icons {
+		grid-area: header-icon;
+		font-size: 1.1rem;
+		opacity: .7;
+	}
+	
+	> h3 {
+		grid-area: header-title;
+		margin: 0;
+		font-size: .95rem;
+		font-weight: 600;
+		min-width: 0;
+	}
+
+	> .card-header-actions {
+		grid-area: header-actions;
+		display: flex;
+		align-items: center;
+		gap: .4rem;
+		justify-self: end;
+	}
+
+	> .btn--icon-sm,
+	> .card-header-link,
+	> .section-collapse-btn,
+	> .btn:not(.section-collapse-btn):not(.view-toggle-btn) {
+		grid-area: header-actions;
+		justify-self: end;
+	}
+}
+
 @mixin panel-base {
 	@include surface;
 	overflow: hidden;
