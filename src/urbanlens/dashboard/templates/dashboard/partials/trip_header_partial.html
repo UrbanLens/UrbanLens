@@ -7,10 +7,10 @@
         {% if trip.description %}
         <p class="trip-detail-description">{{ trip.description }}</p>
         {% endif %}
-        {% if trip.start_date %}
+        {% if trip.effective_start_date %}
         <div class="trip-detail-dates">
             <i class="material-icons">event</i>
-            {{ trip.start_date|date:"M j, Y" }}{% if trip.end_date %} - {{ trip.end_date|date:"M j, Y" }}{% endif %}
+            {{ trip.effective_start_date|date:"M j, Y" }}{% if trip.effective_end_date %} - {{ trip.effective_end_date|date:"M j, Y" }}{% endif %}
         </div>
         {% endif %}
     </div>

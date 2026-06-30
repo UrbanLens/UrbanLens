@@ -569,7 +569,10 @@
 
     // ── Browser-side user location cache (never sent to server) ──────────────
     const _USER_LOC_KEY     = 'ul_user_location_v1';
-    const _USER_LOC_MAX_AGE = 5 * 60 * 1000;  // 5 min: used for initial map centre
+    // Kept long so a stale-but-plausible last-known position beats the generic
+    // fallback center on the very common case of returning >5 min after the last visit.
+    // A fresh fix is still requested on every load and silently replaces this center.
+    const _USER_LOC_MAX_AGE = 7 * 24 * 60 * 60 * 1000;  // 7 days: used for initial map centre
 
     function _getCachedUserLocation() {
         try {
@@ -696,14 +699,32 @@
 
     // GPS mode: refine the initial centre with a live geolocation read.
     // If we already used a cached position, the map won't visibly jump; we just
-    // silently refresh the cache so the next load is accurate.
+    // silently refresh the cache so the next load is accurate. If we had no cached
+    // position to seed the initial centre with, _needsGeoFix below holds the
+    // cold-start overlay open (briefly) so the fallback centre is never shown.
     // Skip when the URL already specifies a viewport (shareable / back-button link).
+    const _needsGeoFix = _MAP_CENTER_MODE === 'gps' && !_cachedUserLoc && !_urlMapView && !!navigator.geolocation;
+
+    // Resolves once we have a fresh GPS fix (or fail) or 1s has elapsed, whichever is
+    // first - the cold-start overlay (see _suppressPinOverlay/hideLoadingMessage below)
+    // is held open until this fires, so a cache-less first load never flashes the map
+    // at the wrong place; it shows the loading indicator for at most 1s instead.
+    let _geoReady = !_needsGeoFix;
+    const _geoReadyWaiters = [];
+    function _markGeoReady() {
+        if (_geoReady) return;
+        _geoReady = true;
+        _geoReadyWaiters.splice(0).forEach(fn => fn());
+    }
+    if (_needsGeoFix) setTimeout(_markGeoReady, 1000);
+
     if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation && !_urlMapView) {
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
                 _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+                _markGeoReady();
             },
             () => {
                 // Only apply the pin-centroid fallback when we had nothing better to show.
@@ -711,6 +732,7 @@
                     _programmaticMove = true;
                     map.setView([_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG], _defaultZoom);
                 }
+                _markGeoReady();
             },
             { timeout: 8000, maximumAge: 300000 },
         );
@@ -759,6 +781,9 @@
     }
 
     function hideLoadingMessage() {
+        // Hold the overlay open until we have a GPS fix (or 1s has passed) so the
+        // map underneath is never revealed centred on the wrong place.
+        if (!_geoReady) { _geoReadyWaiters.push(hideLoadingMessage); return; }
         $('#loading-pins-message').hide();
         // Fade out and then fully hide the cold-start pin load overlay.
         const overlay = document.getElementById('pin-load-overlay');
@@ -767,8 +792,10 @@
         setTimeout(() => overlay.classList.add('hidden'), 460);
     }
 
-    // On cache hit the overlay is unnecessary - suppress it immediately.
+    // On cache hit the overlay is unnecessary - suppress it immediately, unless we're
+    // still waiting (up to 1s) on a GPS fix for the initial centre.
     function _suppressPinOverlay() {
+        if (!_geoReady) { _geoReadyWaiters.push(_suppressPinOverlay); return; }
         const overlay = document.getElementById('pin-load-overlay');
         if (overlay) overlay.classList.add('hidden');
     }

@@ -23,6 +23,8 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.trips.queryset import Manager
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -96,14 +98,31 @@ class Trip(abstract.Model):
         return self.name or f"Trip #{self.id}"
 
     @property
+    def effective_start_date(self) -> date | None:
+        """``start_date`` if set, else the earliest scheduled activity's date."""
+        if self.start_date:
+            return self.start_date
+        first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
+        return first.scheduled_at.date() if first else None
+
+    @property
+    def effective_end_date(self) -> date | None:
+        """``end_date`` if set, else the latest scheduled activity's date."""
+        if self.end_date:
+            return self.end_date
+        last = self.activities.filter(scheduled_at__isnull=False).order_by("-scheduled_at").first()
+        return last.scheduled_at.date() if last else None
+
+    @property
     def timeline_status(self) -> str:
         """Coarse timeline label for list cards (`planning`, `upcoming`, `active`, or `past`)."""
         today = timezone.now().date()
-        if not self.start_date:
+        start = self.effective_start_date
+        if not start:
             return "planning"
-        if self.start_date > today:
+        if start > today:
             return "upcoming"
-        end = self.end_date or self.start_date
+        end = self.effective_end_date or start
         if end < today:
             return "past"
         return "active"
@@ -111,8 +130,9 @@ class Trip(abstract.Model):
     @property
     def duration_days(self) -> int | None:
         """Inclusive day count when both start and end dates are set, else ``None``."""
-        if self.start_date and self.end_date:
-            return (self.end_date - self.start_date).days + 1
+        start, end = self.effective_start_date, self.effective_end_date
+        if start and end:
+            return (end - start).days + 1
         return None
 
     class Meta(abstract.Model.Meta):

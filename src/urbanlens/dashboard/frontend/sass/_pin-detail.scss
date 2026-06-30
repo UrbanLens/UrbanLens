@@ -502,6 +502,12 @@
     pointer-events: none;
 }
 
+// Satellite and Street View
+.page-location-details {
+    .satellite-view {
+        height: 100%;
+    }
+}
 
 // ── Pin detail supplements ──────────────────
 // ── Wiki link banner (pin details page) ───────────────────────────────────────
@@ -959,113 +965,6 @@ body.page-location-details {
         border-color: $color-blue-300;
         color: $color-blue-800;
     }
-}
-
-// ── Personal pin notes ────────────────────────────────────────────────────
-
-.pin-notes-panel {
-    &.card {
-        padding: 0;
-    }
-
-    .card-header {
-        .badge {
-            background: var(--ul-grey-2);
-            color: var(--ul-grey-5);
-            border-radius: 99px;
-            font-size: .72rem;
-            font-weight: 700;
-            padding: 1px 7px;
-        }
-    }
-}
-
-.pin-note-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.pin-note-item {
-    display: flex;
-    align-items: flex-start;
-    gap: .65rem;
-    padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
-    transition: opacity .2s;
-
-    &:last-child {
-        border-bottom: none;
-    }
-
-    &.is-deleting {
-        opacity: .25;
-        pointer-events: none;
-    }
-}
-
-.pin-note-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.pin-note-text {
-    margin: 0 0 .25rem;
-    font-size: .88rem;
-    color: var(--ul-grey-8);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.pin-note-date {
-    font-size: .75rem;
-    color: var(--ul-grey-4);
-}
-
-.pin-notes-empty {
-    padding: 1.25rem 1rem;
-    color: var(--ul-grey-4);
-    font-size: .85rem;
-    font-style: italic;
-    margin: 0;
-}
-
-.pin-note-form {
-    padding: .75rem 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
-
-    .pin-note-input {
-        width: 100%;
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 6px;
-        padding: .5rem .75rem;
-        font-size: .88rem;
-        resize: vertical;
-        font-family: inherit;
-        box-sizing: border-box;
-
-        &:focus {
-            outline: none;
-            border-color: $color-blue-300;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
-        }
-    }
-}
-
-// ── Pin status chips (overview partial) ───────────────────────────────────────
-
-.pin-status-chips {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: .3rem;
-}
-
-.pin-status-chip {
-    font-size: .75rem;
-    font-weight: 600;
-    background: rgba(0, 0, 0, .05);
-    border-radius: 12px;
-    padding: .1rem .5rem;
 }
 
 // ── Pin linked-location panel ─────────────────────────────────────────────────
@@ -1553,6 +1452,16 @@ body.page-location-details {
     .card {
         box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
     }
+
+    .section {
+        margin: 1rem 0;
+
+        > .card {
+            margin-bottom: 0;
+            justify-self: stretch;
+            align-self: stretch;
+        }
+    }
 }
 
 // ── Pin note delete button ────────────────────────────────────────────────
@@ -1818,8 +1727,6 @@ body.page-location-details div.section {
     }
 
     > .card {
-        justify-self: stretch;
-        align-self: stretch;
 
         .card-header {
             height: 2.9rem;

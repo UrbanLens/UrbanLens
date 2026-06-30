@@ -1390,8 +1390,8 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
             {
                 "uuid": str(t.uuid),
                 "name": t.name,
-                "start_date": t.start_date.isoformat() if t.start_date else None,
-                "end_date": t.end_date.isoformat() if t.end_date else None,
+                "start_date": t.effective_start_date.isoformat() if t.effective_start_date else None,
+                "end_date": t.effective_end_date.isoformat() if t.effective_end_date else None,
             }
             for t in trips
         ]

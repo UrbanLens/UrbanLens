@@ -450,12 +450,13 @@
          hx-get="{% url 'pin.comments' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
-        <div class="card">
-            <div class="card-header">
-                <i class="material-icons">chat</i>
-                <span>Comments</span>
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-icons">chat</i>
+                    <span>Comments</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
     </div>{# end .section for #comment-panel #}
 
