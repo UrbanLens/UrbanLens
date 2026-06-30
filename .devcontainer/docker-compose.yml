@@ -6,7 +6,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: .devcontainer/Dockerfile
+      dockerfile: Dockerfile
       args:
         PYTHON_BASE_IMAGE_VERSION: ${PYTHON_BASE_IMAGE_VERSION:-3.12-bookworm}
         POSTGRES_MAJOR: ${POSTGRES_MAJOR:-17}

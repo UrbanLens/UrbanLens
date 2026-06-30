@@ -317,79 +317,79 @@
     {# ── Archive row: Smithsonian | web search ────────────────────────── #}
     <div class="section">
         <div class="pin-media-row">
+            <div id="smithsonian-section" class="smithsonian-images card"
+                hx-get="{% url 'smithsonian_images' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card-header">
+                    <i class="material-icons">collections</i>
+                    <h3>Smithsonian Archives</h3>
+                </div>
+                <div class="view-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading…
+                </div>
+            </div>
 
-        <div id="smithsonian-section" class="smithsonian-images card"
-             hx-get="{% url 'smithsonian_images' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">collections</i>
-                <h3>Smithsonian Archives</h3>
+            {% if pin.meaningful_name %}
+            <div id="web-search-section" class="web-search card"
+                hx-get="{% url 'pin.web_search' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card-header">
+                    <i class="material-icons">search</i>
+                    <h3>Web Results</h3>
+                </div>
+                <div class="view-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading…
+                </div>
             </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
-            </div>
+            {% endif %}
         </div>
-
-        {% if pin.meaningful_name %}
-        <div id="web-search-section" class="web-search card"
-             hx-get="{% url 'pin.web_search' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card-header">
-                <i class="material-icons">search</i>
-                <h3>Web Results</h3>
-            </div>
-            <div class="view-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading…
-            </div>
-        </div>
-        {% endif %}
-
     </div>{# end .section for .pin-media-row (smithsonian / web) #}
 
     {# ── Knowledge row: Wikipedia | Nominatim | NPS ──────────────────────────── #}
     <div class="section">
         <div class="pin-media-row">
 
-        <div id="wikipedia-section"
-             hx-get="{% url 'pin.wikipedia' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
-                <div class="card-header">
-                    <i class="material-icons">menu_book</i>
-                    <h3>Wikipedia</h3>
+            <div id="wikipedia-section"
+                hx-get="{% url 'pin.wikipedia' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-icons">menu_book</i>
+                        <h3>Wikipedia</h3>
+                    </div>
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
-        </div>
 
-        <div id="nominatim-section"
-             hx-get="{% url 'pin.nominatim' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
-                <div class="card-header">
-                    <i class="material-icons">map</i>
-                    <h3>OpenStreetMap</h3>
+            <div id="nominatim-section"
+                hx-get="{% url 'pin.nominatim' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-icons">map</i>
+                        <h3>OpenStreetMap</h3>
+                    </div>
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
-        </div>
 
-        <div id="nps-section"
-             hx-get="{% url 'pin.nps' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
-                <div class="card-header">
-                    <i class="material-icons">park</i>
-                    <h3>National Park Service</h3>
+            <div id="nps-section"
+                hx-get="{% url 'pin.nps' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-icons">park</i>
+                        <h3>National Park Service</h3>
+                    </div>
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
         </div>
 
@@ -399,34 +399,34 @@
     <div class="section">
         <div class="pin-media-row">
 
-        {% if pin.meaningful_name %}
-        <div id="wikimedia-section"
-             hx-get="{% url 'pin.wikimedia' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
-                <div class="card-header">
-                    <i class="material-icons">collections</i>
-                    <h3>Wikimedia Commons</h3>
+            {% if pin.meaningful_name %}
+            <div id="wikimedia-section"
+                hx-get="{% url 'pin.wikimedia' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-icons">collections</i>
+                        <h3>Wikimedia Commons</h3>
+                    </div>
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+            {% endif %}
+
+            <div id="loopnet-section"
+                hx-get="{% url 'pin.loopnet' pin.slug %}"
+                hx-trigger="load"
+                hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-icons">business_center</i>
+                        <h3>LoopNet Listings</h3>
+                    </div>
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                </div>
             </div>
         </div>
-        {% endif %}
-
-        <div id="loopnet-section"
-             hx-get="{% url 'pin.loopnet' pin.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
-                <div class="card-header">
-                    <i class="material-icons">business_center</i>
-                    <h3>LoopNet Listings</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-            </div>
-        </div>
-
     </div>{# end .section for .pin-media-row (wikimedia / loopnet) #}
 
     {# ── Photo gallery (full width) ────────────────────────────────────── #}

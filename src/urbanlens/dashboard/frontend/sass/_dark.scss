@@ -1236,12 +1236,12 @@
         }
     }
 
-    .cat-select-wrap {
+    .ul-checkbox-wrap {
         &:hover {
             background: var(--ul-grey-1);
         }
 
-        .cat-select-check {
+        .ul-checkbox {
             border-color: var(--ul-grey-3b);
         }
     }
@@ -1448,23 +1448,6 @@
         }
     }
 
-    body.page-location-details {
-        .location-map.card .card-header {
-            background: var(--ul-grey-1);
-            color: var(--ul-grey-8);
-            border-bottom-color: var(--ul-grey-1a);
-
-            .material-icons {
-                color: var(--ul-grey-7);
-            }
-
-            span,
-            h3 {
-                color: var(--ul-grey-8);
-            }
-        }
-    }
-
     .ul-radio-button {
         &.active,
         &:has(input:checked) {
@@ -1493,7 +1476,7 @@
         }
     }
 
-    .organize-badge-rows.tag-view--gallery .cat-select-wrap {
+    .organize-badge-rows.tag-view--gallery .ul-checkbox-wrap {
         background: color-mix(in srgb, var(--ul-grey-2) 92%, transparent);
     }
 

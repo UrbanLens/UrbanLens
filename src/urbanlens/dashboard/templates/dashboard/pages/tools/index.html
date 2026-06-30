@@ -38,9 +38,9 @@
 
                             {# ── Select all ── #}
                             <label class="export-select-all">
-                                <span class="cat-select-wrap">
+                                <span class="ul-checkbox-wrap">
                                     <input type="checkbox" id="export-select-all" checked>
-                                    <span class="cat-select-check"></span>
+                                    <span class="ul-checkbox"></span>
                                 </span>
                                 <span class="export-select-all-label">Select all</span>
                             </label>
@@ -48,73 +48,73 @@
                             {# ── Data checkboxes ── #}
                             <div class="export-checkboxes" id="export-data-checkboxes">
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">person</i>
                                     <span>Profile</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="pins" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">place</i>
                                     <span>Pins</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="badges" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">label</i>
                                     <span>Badges</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="visit_history" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">history</i>
                                     <span>Visit History</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="connections" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">people</i>
                                     <span>Connections</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="comments" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">comment</i>
                                     <span>Comments</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="photos" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">photo_library</i>
                                     <span>Photos</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="trips" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">directions_car</i>
                                     <span>Trips</span>
                                 </label>
                                 <label class="export-checkbox-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="settings" class="export-type-cb" checked>
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">settings</i>
                                     <span>Settings</span>
@@ -125,9 +125,9 @@
                             <div class="export-format-section">
                                 <p class="export-format-label">Format options</p>
                                 <label class="export-checkbox-item export-format-item">
-                                    <span class="cat-select-wrap">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="google_takeout" id="export-google-takeout">
-                                        <span class="cat-select-check"></span>
+                                        <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-icons">cloud_download</i>
                                     <span>Google Takeout format
@@ -304,8 +304,8 @@
 
 /* ── Checkbox checkmark override for export/import cards ─────────────────── */
 
-#export-card .cat-select-check::after,
-#import-card .cat-select-check::after {
+#export-card .ul-checkbox::after,
+#import-card .ul-checkbox::after {
     content: 'check';
     font-family: 'Material Icons';
     font-size: 14px;
@@ -321,18 +321,18 @@
     display: block;
 }
 
-#export-card input[type="checkbox"]:checked ~ .cat-select-check::after,
-#import-card input[type="checkbox"]:checked ~ .cat-select-check::after {
+#export-card input[type="checkbox"]:checked ~ .ul-checkbox::after,
+#import-card input[type="checkbox"]:checked ~ .ul-checkbox::after {
     opacity: 1;
 }
 
 /* Indeterminate — show a dash via Material Icons */
-#export-card input[type="checkbox"]:indeterminate ~ .cat-select-check {
+#export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox {
     background: var(--ul-primary, #1976D2);
     border-color: var(--ul-primary, #1976D2);
 }
 
-#export-card input[type="checkbox"]:indeterminate ~ .cat-select-check::after {
+#export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox::after {
     content: 'remove';
     opacity: 1;
     width: auto;
@@ -359,7 +359,7 @@
     user-select: none;
 }
 
-.export-select-all .cat-select-wrap {
+.export-select-all .ul-checkbox-wrap {
     width: 26px;
     height: 26px;
 }
@@ -402,7 +402,7 @@
     border-color: var(--ul-grey-1a);
 }
 
-.export-checkbox-item .cat-select-wrap {
+.export-checkbox-item .ul-checkbox-wrap {
     width: 24px;
     height: 24px;
     flex-shrink: 0;
@@ -441,7 +441,7 @@
     align-items: flex-start;
 }
 
-.export-format-item .cat-select-wrap {
+.export-format-item .ul-checkbox-wrap {
     margin-top: 2px;
 }
 

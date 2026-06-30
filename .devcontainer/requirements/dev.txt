@@ -1,0 +1,17 @@
+-r prod.txt
+coverage
+django-debug-toolbar
+django-stubs>=5.2.9
+model-bakery
+mypy>=1.12.1
+pre-commit
+setuptools
+icecream
+ruff
+sphinx-rtd-theme
+tqdm
+kombu
+prospector
+pytest-django
+sphinx
+uv

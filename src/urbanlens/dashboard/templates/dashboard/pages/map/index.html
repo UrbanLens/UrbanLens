@@ -308,19 +308,20 @@
                         {% for badge in filter_badges %}
                         <button type="button"
                                 class="fp-chip fp-badge-avail"
+                                draggable="true"
                                 data-badge-id="{{ badge.id }}"
                                 data-badge-name="{{ badge.name|lower }}"
                                 data-badge-label="{{ badge.name|escapejs }}"
                                 data-badge-color="{{ badge.color|default:'' }}"
                                 data-badge-icon="{{ badge.icon|default:'' }}"
                                 {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
-                                onclick="_addBadge(this, 'incl')">
+                                onclick="_onBadgeAvailClick(this)">
                             {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
                             {{ badge.name }}
                         </button>
                         {% endfor %}
                     </div>
-                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude &nbsp;·&nbsp; Drag to move or remove</div>
+                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude &nbsp;·&nbsp; Drag into Include/Exclude, or drag selected chips to move/remove</div>
                 </div>
             </details>
             {% endif %}
@@ -3888,6 +3889,7 @@
     let _badgeDragId = null;
     let _badgeDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
     let _badgeChipJustDragged = false;  // suppresses the click that browsers fire after dragend
+    let _badgeAvailJustDragged = false; // same, for badges dragged straight from the suggestion list
     let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -4108,6 +4110,12 @@
     }
 
     // ── Badge state mutations ────────────────────────────────────────────────
+    function _onBadgeAvailClick(btn) {
+        // Suppress the click some browsers fire on the source element right after a drag-drop
+        if (_badgeAvailJustDragged) return;
+        _addBadge(btn, 'incl');
+    }
+
     function _addBadge(btn, mode) {
         _formulaGroups = null;  // chip interactions exit formula mode
         const id = btn.dataset.badgeId;
@@ -4153,12 +4161,17 @@
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
-    // ── Column drop handlers (switch mode) ───────────────────────────────────
+    // ── Column drop handlers (switch mode / add from list) ──────────────────
     function _onBadgeColDrop(e, targetMode) {
         e.currentTarget.classList.remove('fp-drag-over');
         if (!_badgeDragId) return;
         _badgeDropHandled = true;
-        if (_badgeState.get(_badgeDragId) !== targetMode) _toggleBadgeMode(_badgeDragId);
+        if (_badgeState.has(_badgeDragId)) {
+            if (_badgeState.get(_badgeDragId) !== targetMode) _toggleBadgeMode(_badgeDragId);
+        } else {
+            const btn = document.querySelector(`#fp-badge-list [data-badge-id="${_badgeDragId}"]`);
+            if (btn) _addBadge(btn, targetMode);
+        }
     }
 
     // Right-click on list badge → add as exclude
@@ -4167,6 +4180,34 @@
         if (!btn) return;
         e.preventDefault();
         _addBadge(btn, 'excl');
+    });
+
+    // Drag a not-yet-selected badge straight from the suggestion list into Include/Exclude
+    document.getElementById('fp-badge-list')?.addEventListener('dragstart', function (e) {
+        const btn = e.target.closest('.fp-badge-avail');
+        if (!btn) return;
+        _badgeDragId = btn.dataset.badgeId;
+        _badgeDropHandled = false;
+        _badgeAvailJustDragged = true;
+        e.dataTransfer.effectAllowed = 'move';
+        btn.classList.add('fp-drag-active');
+        // Reveal both columns as drop targets even though nothing is selected yet
+        const selectedEl = document.getElementById('fp-badge-selected');
+        if (selectedEl) selectedEl.style.display = '';
+        document.getElementById('fp-badge-col-incl')?.style.removeProperty('display');
+        document.getElementById('fp-badge-col-excl')?.style.removeProperty('display');
+    });
+    document.getElementById('fp-badge-list')?.addEventListener('dragend', function (e) {
+        const btn = e.target.closest('.fp-badge-avail');
+        if (!btn) return;
+        _badgeDragId = null;
+        btn.classList.remove('fp-drag-active');
+        document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
+        // If the badge wasn't dropped into a column, restore the selected area's visibility
+        if (!_badgeDropHandled) _rebuildBadgeSelected();
+        _badgeDropHandled = false;
+        // Clear the drag flag after the click event that browsers fire post-drag has fired
+        setTimeout(() => { _badgeAvailJustDragged = false; }, 0);
     });
 
     // ── Badge formula bar ────────────────────────────────────────────────────

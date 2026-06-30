@@ -1365,6 +1365,14 @@
     color: $ui-fp-chip-txt;
 }
 
+.fp-badge-avail {
+    cursor: grab;
+
+    &.fp-drag-active {
+        opacity: .4;
+    }
+}
+
 .fp-reset {
     width: 100%;
     padding: 7px;

@@ -7,9 +7,9 @@
      {% if kind == 'people' %}data-people-id="{{ badge.id }}" data-people-name="{{ badge.name }}" data-people-color="{{ badge.color|default:'' }}" data-people-icon="{{ badge.icon|default:'' }}" data-people-pin-count="0" data-people-parents="{% for p in badge.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}>
     <div class="tag-card-view ul-section" id="{{ kind }}-view-{{ badge.id }}">
         {% if selectable %}
-        <label class="cat-select-wrap" title="Select">
+        <label class="ul-checkbox-wrap" title="Select">
             <input type="checkbox" class="{{ select_class }}" data-{{ select_data_name }}-id="{{ badge.id }}" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
-            <span class="cat-select-check"></span>
+            <span class="ul-checkbox"></span>
         </label>
         {% endif %}
 

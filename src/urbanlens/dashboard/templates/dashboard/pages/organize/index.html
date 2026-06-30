@@ -122,6 +122,10 @@
                 <label class="priority-sel-cb-wrap" title="Select for multi-drag">
                     <input type="checkbox" class="priority-sel-cb" data-id="{{ item.id }}">
                 </label>
+                <label class="ul-checkbox-wrap" title="Select">
+                    <input type="checkbox" class="priority-sel-cb" data-{{ select_data_name }}-id="{{ badge.id }}" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
+                    <span class="ul-checkbox"></span>
+                </label>
                 <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
                     {% if item.custom_icon %}
                         <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
@@ -1372,9 +1376,9 @@ window._orgBulkSync = function(n, opts) {
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('tag-rows').addEventListener('click', function(e) {
         if (!e.shiftKey) return;
-        var wrap = e.target.closest('.cat-select-wrap'); if (!wrap) return;
+        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
         e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .cat-select-wrap'));
+        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
         var idx = allWraps.indexOf(wrap);
         var cb = wrap.querySelector('.tag-select-cb'); if (!cb) return;
         var newChecked = !cb.checked;
@@ -1396,8 +1400,8 @@ window._orgBulkSync = function(n, opts) {
         var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
         var id = cb.dataset.tagId;
         if (cb.checked) _tagSelected.add(id); else _tagSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .cat-select-wrap'));
-        var wrap = cb.closest('.cat-select-wrap');
+        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
+        var wrap = cb.closest('.ul-checkbox-wrap');
         var idx = wrap ? allWraps.indexOf(wrap) : -1;
         if (idx >= 0) _lastTagClickIdx = idx;
         _syncTagCheckboxes(); _updateTagBar();
@@ -1804,9 +1808,9 @@ window._orgBulkSync = function(n, opts) {
     // ── Selection ─────────────────────────────────────────────────────────────
     document.getElementById('category-rows').addEventListener('click', function(e) {
         if (!e.shiftKey) return;
-        var wrap = e.target.closest('.cat-select-wrap'); if (!wrap) return;
+        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
         e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .cat-select-wrap'));
+        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
         var idx = allWraps.indexOf(wrap);
         var cb = wrap.querySelector('.cat-select-cb'); if (!cb) return;
         var newChecked = !cb.checked;
@@ -1828,8 +1832,8 @@ window._orgBulkSync = function(n, opts) {
         var cb = e.target; if (!cb.classList.contains('cat-select-cb')) return;
         var id = cb.dataset.catId;
         if (cb.checked) _catSelected.add(id); else _catSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .cat-select-wrap'));
-        var wrap = cb.closest('.cat-select-wrap');
+        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
+        var wrap = cb.closest('.ul-checkbox-wrap');
         var idx = wrap ? allWraps.indexOf(wrap) : -1;
         if (idx >= 0) _lastCatClickIdx = idx;
         _syncCatCheckboxes(); _updateCatBar();
