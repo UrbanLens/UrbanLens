@@ -35,9 +35,12 @@ class Gateway(ABC):  # noqa: B024 - Abstract so it cannot be instantiated direct
             is set this is replaced with a ``_RateLimitedSession`` in
             ``__post_init__``.
     """
-
-    service_key: ClassVar[str | None] = None
     paid_service: ClassVar[bool] = False
+    service_key: ClassVar[str | None] = None
+    
+
+@dataclass(slots=True, kw_only=True)
+class ExternalGateway(Gateway, ABC):
 
     session: requests.Session = field(default_factory=requests.Session)
 
@@ -51,3 +54,8 @@ class Gateway(ABC):  # noqa: B024 - Abstract so it cannot be instantiated direct
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.rate_limiter import _RateLimitedSession
             object.__setattr__(self, "session", _RateLimitedSession(key))
+
+
+@dataclass(slots=True, kw_only=True)
+class InternalGateway(Gateway, ABC):
+    pass
