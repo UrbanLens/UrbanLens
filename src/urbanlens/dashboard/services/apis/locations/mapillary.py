@@ -19,7 +19,7 @@ _GRAPH_URL = "https://graph.mapillary.com"
 _DEFAULT_FIELDS = "id,thumb_2048_url,captured_at,compass_angle,geometry"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class MapillaryGateway(StreetViewProvider):
     """Gateway for the Mapillary Graph API (street-level imagery).
 

@@ -17,7 +17,7 @@ _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class WikipediaGateway(Gateway):
     """
     Fetches Wikipedia article summaries for a geographic location.

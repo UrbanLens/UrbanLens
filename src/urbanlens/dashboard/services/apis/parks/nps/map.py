@@ -12,7 +12,7 @@ from urbanlens.dashboard.services.gateway import Gateway
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class NPSMapGateway(Gateway):
     service_key: ClassVar[str] = "nps"
 

@@ -16,7 +16,7 @@ _MAX_RESULTS = 60
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class WikimediaGateway(Gateway):
     """
     Searches Wikimedia Commons for freely licensed images.

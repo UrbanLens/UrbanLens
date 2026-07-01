@@ -20,7 +20,7 @@ _LOOPNET_SITE_SEARCH = 'site:loopnet.com "{address}"'
 _MAX_SEARCH_RESULTS = 5
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class LoopNetGateway(Gateway):
     """
     Retrieves LoopNet commercial real-estate listing data for an address.

@@ -6,7 +6,7 @@ from typing import ClassVar
 from urbanlens.dashboard.services.gateway import Gateway
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class NewsGateway(Gateway):
     """
     Gateway for a News API.
