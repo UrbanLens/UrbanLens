@@ -7,21 +7,22 @@
            class="card-header-link" title="Open Wikipedia article">
             <i class="material-icons">open_in_new</i>
         </a>
-        {% if article.thumbnail %}
-        <div class="wikipedia-thumb-wrap">
-            <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy">
-        </div>
-        {% endif %}
     </div>
 
     <div class="wikipedia-body card__body">
-
         <div class="wikipedia-text">
             <h4 class="wikipedia-title">
                 <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">
                     {{ article.title }}
                 </a>
             </h4>
+            
+            {% if article.thumbnail %}
+            <div class="wikipedia-thumb-wrap">
+                <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy">
+            </div>
+            {% endif %}
+
             {% if article.description %}
             <p class="wikipedia-description">{{ article.description }}</p>
             {% endif %}

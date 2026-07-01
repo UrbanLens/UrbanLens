@@ -1,5 +1,5 @@
 {% load dashboard_tags %}
-<div class="tag-chips-row">
+<div class="tag-chips-row card__body">
     {% for badge in all_badges %}
     {% if badge.id in member_ids %}
     <span class="tag-chip tag-chip--{{ badge.kind }}" {% if badge.color %}style="--tag-color:{{ badge.color }}"{% endif %}>

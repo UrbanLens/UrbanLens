@@ -27,12 +27,14 @@
             {% endif %}
         </a>
         {% endfor %}
+        {% if images %}
+        <p class="wikimedia-attribution">
+            Images from
+            <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>
+            are freely licensed under their respective Creative Commons licenses.
+        </p>
+        {% endif %}
     </div>
     {% include "dashboard/partials/_pagination_controls.html" %}
 
-    <p class="wikimedia-attribution">
-        Images from
-        <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a>
-        are freely licensed under their respective Creative Commons licenses.
-    </p>
 </div>

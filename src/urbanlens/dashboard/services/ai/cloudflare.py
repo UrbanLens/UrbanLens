@@ -58,7 +58,8 @@ class CloudflareGateway(LLMGateway[Response]):
         url = f"{str(self.api_url).rstrip('/')}/{self.model.lstrip('/')}"
 
         try:
-            logger.info("Cloudflare request: %s", message_input)
+            logger.info("Sending cloudflare request")
+            logger.debug("Cloudflare request: %s", message_input)
             response = requests.post(url, headers=headers, json=message_input, timeout=60)
         except requests.RequestException as e:
             logger.exception("Failed to send request to Cloudflare AI: %s", e)
