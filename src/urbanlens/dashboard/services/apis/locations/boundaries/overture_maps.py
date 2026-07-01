@@ -1,0 +1,132 @@
+"""Gateway for Overture Maps' cloud-hosted GeoParquet themes.
+
+Overture doesn't expose a request/response REST API either: each theme
+(buildings, addresses, places, transportation, divisions, land use, ...) is
+published as partitioned GeoParquet directly on S3 and Azure Blob Storage,
+and clients read only the byte ranges they need via HTTP range requests --
+"the storage endpoint is the API."
+
+This gateway wraps Overture's own official Python client
+(https://github.com/OvertureMaps/overturemaps-py), which handles resolving
+the latest release via Overture's STAC catalog, bounding-box pushdown, and
+returning a ready-to-use GeoPandas GeoDataFrame -- this project already
+depends on GeoPandas elsewhere.
+
+Because there's no per-call HTTP endpoint of ours to rate limit (the reads
+happen inside pyarrow/S3 client internals, not through ``self.session``),
+``service_key`` is intentionally left unset here -- this gateway opts out of
+the ``Gateway`` rate limiter/call logging rather than pretending to
+use it.
+
+Install: `pip install overturemaps[geopandas]` (or `pip install geopandas`
+separately, since it's a peer dependency, not a hard one, of overturemaps).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+from urbanlens.dashboard.services.apis.locations.meta import BBox, validate_bbox
+
+# Adjust this import to wherever Gateway/Gateway actually live.
+from urbanlens.dashboard.services.gateway import Gateway
+
+try:
+    from overturemaps import geodataframe as _overture_geodataframe  # pyright: ignore[reportMissingImports]
+except ImportError:  # pragma: no cover
+    _overture_geodataframe = None
+
+
+@dataclass(slots=True, kw_only=True)
+class OvertureMapsGateway(Gateway):
+    """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox.
+
+    Attributes:
+        release: Pin a specific release tag (e.g. "2026-06-17.0"). Leave as
+            None to always resolve the latest release via Overture's STAC
+            catalog.
+        connect_timeout: Optional S3 connection timeout, seconds.
+        request_timeout: Optional S3 request timeout, seconds.
+    """
+
+    service_key: ClassVar[str | None] = None  # no HTTP endpoint of ours to rate-limit
+    paid_service: ClassVar[bool] = False
+
+    release: str | None = None
+    connect_timeout: int | None = None
+    request_timeout: int | None = None
+
+    def __post_init__(self) -> None:
+        # NOTE: zero-arg super() breaks here because @dataclass(slots=True)
+        # rebuilds the class object, invalidating the implicit __class__ cell.
+        # Call the parent explicitly instead.
+        Gateway.__post_init__(self)
+        if _overture_geodataframe is None:
+            raise ImportError(
+                "OvertureMapsGateway requires the 'overturemaps' package: "
+                "`pip install overturemaps[geopandas]`.",
+            )
+
+    def _fetch(self, overture_type: str, bbox: BBox | None):
+        if bbox is not None:
+            validate_bbox(bbox)
+        if _overture_geodataframe is None:
+            raise ImportError(
+                "OvertureMapsGateway requires the 'overturemaps' package: "
+                "`pip install overturemaps[geopandas]`.",
+            )
+        return _overture_geodataframe(
+            overture_type,
+            bbox=bbox,
+            release=self.release,
+            connect_timeout=self.connect_timeout,
+            request_timeout=self.request_timeout,
+        )
+
+    # -- Building / property boundary relevant themes ------------------------
+
+    def get_buildings(self, bbox: BBox):
+        """Building footprint polygons (theme=buildings, type=building)."""
+        return self._fetch("building", bbox)
+
+    def get_building_parts(self, bbox: BBox):
+        """Sub-building parts -- individual wings/sections of a footprint."""
+        return self._fetch("building_part", bbox)
+
+    def get_divisions(self, bbox: BBox):
+        """Administrative division boundaries (country/state/county/etc)."""
+        return self._fetch("division_area", bbox)
+
+    # -- Everything else Overture publishes -----------------------------------
+
+    def get_addresses(self, bbox: BBox):
+        return self._fetch("address", bbox)
+
+    def get_places(self, bbox: BBox):
+        """POIs -- useful for attaching names/categories to building footprints."""
+        return self._fetch("place", bbox)
+
+    def get_land_use(self, bbox: BBox):
+        return self._fetch("land_use", bbox)
+
+    def get_land(self, bbox: BBox):
+        """Natural land cover/physical land features (not administrative)."""
+        return self._fetch("land", bbox)
+
+    def get_land_cover(self, bbox: BBox):
+        return self._fetch("land_cover", bbox)
+
+    def get_water(self, bbox: BBox):
+        return self._fetch("water", bbox)
+
+    def get_segments(self, bbox: BBox):
+        """Transportation network segments (roads, paths, rail, ...)."""
+        return self._fetch("segment", bbox)
+
+    def get_connectors(self, bbox: BBox):
+        """Transportation network topology nodes connecting segments."""
+        return self._fetch("connector", bbox)
+
+    def get_infrastructure(self, bbox: BBox):
+        return self._fetch("infrastructure", bbox)

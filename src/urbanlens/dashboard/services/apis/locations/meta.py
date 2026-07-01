@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
@@ -14,9 +15,7 @@ from urbanlens.dashboard.services.gateway import Gateway
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-
-def create_bbox(latitude: float, longitude: float, delta: float = 0.005) -> str:
-    return f"{longitude - delta},{latitude - delta},{longitude + delta},{latitude + delta}"
+BBox = tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -94,3 +93,87 @@ class StreetViewProvider(Gateway, ABC):
                 break
 
         return slides
+
+
+def create_bbox(latitude: float, longitude: float, delta: float = 0.005) -> str:
+    return f"{longitude - delta},{latitude - delta},{longitude + delta},{latitude + delta}"
+
+
+def validate_bbox(bbox: BBox) -> None:
+    """Raise ``ValueError`` if ``bbox`` isn't a sane, correctly-ordered box."""
+    if len(bbox) != 4:
+        raise ValueError(f"bbox must be (min_lon, min_lat, max_lon, max_lat), got {bbox!r}")
+    min_lon, min_lat, max_lon, max_lat = bbox
+    if not (-180.0 <= min_lon < max_lon <= 180.0):
+        raise ValueError(f"Invalid longitude range in bbox: {bbox!r}")
+    if not (-90.0 <= min_lat < max_lat <= 90.0):
+        raise ValueError(f"Invalid latitude range in bbox: {bbox!r}")
+
+
+def bbox_to_polygon_geojson(bbox: BBox) -> dict:
+    """Convert a bbox into a closed, counter-clockwise GeoJSON Polygon geometry."""
+    min_lon, min_lat, max_lon, max_lat = bbox
+    return {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [min_lon, min_lat],
+                [max_lon, min_lat],
+                [max_lon, max_lat],
+                [min_lon, max_lat],
+                [min_lon, min_lat],
+            ],
+        ],
+    }
+
+
+def bbox_intersects(a: BBox, b: BBox) -> bool:
+    """True if two bboxes overlap (touching edges count as overlap)."""
+    a_min_lon, a_min_lat, a_max_lon, a_max_lat = a
+    b_min_lon, b_min_lat, b_max_lon, b_max_lat = b
+    return (
+        a_min_lon <= b_max_lon
+        and a_max_lon >= b_min_lon
+        and a_min_lat <= b_max_lat
+        and a_max_lat >= b_min_lat
+    )
+
+
+def _iter_positions(coords) -> Iterable[tuple[float, float]]:
+    """Recursively walk a GeoJSON ``coordinates`` array, yielding (lon, lat) pairs."""
+    if not coords:
+        return
+    if isinstance(coords[0], (int, float)):
+        yield coords[0], coords[1]
+        return
+    for item in coords:
+        yield from _iter_positions(item)
+
+
+def geometry_bbox(geometry: dict) -> BBox | None:
+    """Compute the bounding box of a GeoJSON geometry, without a shapely dependency."""
+    lons: list[float] = []
+    lats: list[float] = []
+    for lon, lat in _iter_positions(geometry.get("coordinates", [])):
+        lons.append(lon)
+        lats.append(lat)
+    if not lons:
+        return None
+    return (min(lons), min(lats), max(lons), max(lats))
+
+
+def feature_intersects_bbox(feature: dict, bbox: BBox) -> bool:
+    """True if a GeoJSON Feature's geometry overlaps ``bbox``.
+
+    This is a cheap bounding-box test, not an exact polygon intersection --
+    good enough for filtering large downloaded shards, not for precise
+    spatial joins. Use shapely/GeoPandas downstream if you need exactness.
+    """
+    geometry = feature.get("geometry")
+    if not geometry:
+        return False
+    feature_bbox = geometry_bbox(geometry)
+    if feature_bbox is None:
+        return False
+    return bbox_intersects(feature_bbox, bbox)
+
