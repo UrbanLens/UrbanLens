@@ -635,7 +635,7 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
             return HttpResponse(status=204)
 
         if status_code == 404:
-            message = "That profile page returned 'not found' – double-check your username."
+            message = "That profile page returned 'not found' - double-check your username."
             level = "warning"
         elif 400 <= status_code < 600:
             message = f"That link returned an unexpected response (HTTP {status_code}). It may be incorrect."

@@ -97,6 +97,6 @@ class DiscordHandleForm(forms.Form):
         value = self.cleaned_data.get("discord", "").strip()
         if value and not _DISCORD_HANDLE_RE.match(value):
             raise forms.ValidationError(
-                "2–100 characters: letters, digits, underscores, dots, hyphens, or #.",
+                "2-100 characters: letters, digits, underscores, dots, hyphens, or #.",
             )
         return value

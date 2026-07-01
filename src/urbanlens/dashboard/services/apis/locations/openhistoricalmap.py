@@ -11,7 +11,7 @@ from urbanlens.dashboard.services.gateway import Gateway
 _API_URL = "https://www.openhistoricalmap.org/api/0.6"
 _NOMINATIM_URL = "https://nominatim.openhistoricalmap.org"
 _OVERPASS_URL = "https://overpass-api.openhistoricalmap.org/api/interpreter"
-_TILE_URL = "https://www.openhistoricalmap.org/ohm_tiles"
+_TILE_URL = "https://tile.openhistoricalmap.org"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

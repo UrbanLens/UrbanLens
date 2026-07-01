@@ -142,6 +142,73 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=100,
         notes="Free tier varies by provider.",
     ),
+    "esri": ServiceDefaults(
+        display_name="Esri ArcGIS REST",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Public Esri basemap/wayback services. No key required.",
+    ),
+    "apple_maps": ServiceDefaults(
+        display_name="Apple Maps Server API",
+        calls_per_minute=50,
+        calls_per_day=2500,
+        notes="Requires a JWT generated from Apple Developer credentials. Geocoding/search is billable.",
+    ),
+    "google_earth": ServiceDefaults(
+        display_name="Google Earth Engine",
+        calls_per_minute=10,
+        calls_per_day=200,
+        notes="Requires OAuth2. Free for non-commercial use via Earth Engine sign-up.",
+    ),
+    "open_aerial_map": ServiceDefaults(
+        display_name="OpenAerialMap",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Free, no key required. Open licensed aerial imagery metadata.",
+    ),
+    "openhistoricalmap": ServiceDefaults(
+        display_name="OpenHistoricalMap",
+        calls_per_minute=1,
+        calls_per_day=500,
+        notes="Free, no key required. OSM-based historic map data. Nominatim: 1 req/second hard limit.",
+    ),
+    "usgs": ServiceDefaults(
+        display_name="USGS EarthExplorer / TNM",
+        calls_per_minute=10,
+        calls_per_day=500,
+        usa_only=True,
+        notes="M2M requires an applicationToken from EarthExplorer account settings. TNM is fully public.",
+    ),
+    "wayback_machine": ServiceDefaults(
+        display_name="Internet Archive Wayback Machine",
+        calls_per_minute=10,
+        calls_per_day=500,
+        notes="Free, no key required. Be polite — the Archive is a public resource.",
+    ),
+    "mapbox": ServiceDefaults(
+        display_name="Mapbox",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Requires a Mapbox public access token. Static Images API has a free tier.",
+    ),
+    "bing_maps": ServiceDefaults(
+        display_name="Bing Maps",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Requires a Bing Maps key from Azure portal. Static imagery has a free tier.",
+    ),
+    "mapillary": ServiceDefaults(
+        display_name="Mapillary",
+        calls_per_minute=20,
+        calls_per_day=1000,
+        notes="Requires a client access token from mapillary.com/dashboard/developers. Free tier available.",
+    ),
+    "kartaview": ServiceDefaults(
+        display_name="KartaView",
+        calls_per_minute=20,
+        calls_per_day=500,
+        notes="Free, no key required. Crowdsourced street-level imagery.",
+    ),
 }
 
 

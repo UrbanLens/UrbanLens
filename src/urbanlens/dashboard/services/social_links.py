@@ -88,14 +88,14 @@ class _HandleRule(NamedTuple):
 # Per-platform rules applied *after* extracting the handle from a URL.
 # Platforms not listed here (discord, website) are validated elsewhere or not at all.
 _PLATFORM_HANDLE_RULES: dict[str, _HandleRule] = {
-    "instagram": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 30, "1–30 chars: letters, digits, dots, underscores"),
-    "bluesky": _HandleRule(re.compile(r"^[a-zA-Z0-9._-]+$"), 3, 253, "3–253 chars: letters, digits, dots, hyphens"),
-    "facebook": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 50, "1–50 chars: letters, digits, dots, underscores"),
-    "flickr": _HandleRule(re.compile(r"^[a-zA-Z0-9@._-]+$"), 3, 64, "3–64 chars: letters, digits, @, dots, hyphens"),
-    "youtube": _HandleRule(re.compile(r"^[a-zA-Z0-9_.-]+$"), 1, 100, "1–100 chars: letters, digits, underscores, dots, hyphens"),
-    "tiktok": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 24, "1–24 chars: letters, digits, dots, underscores"),
-    "reddit": _HandleRule(re.compile(r"^[a-zA-Z0-9_-]+$"), 3, 20, "3–20 chars: letters, digits, underscores, hyphens"),
-    "uer": _HandleRule(re.compile(r"^\d+$"), 1, 10, "numeric ID (1–10 digits)"),
+    "instagram": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 30, "1-30 chars: letters, digits, dots, underscores"),
+    "bluesky": _HandleRule(re.compile(r"^[a-zA-Z0-9._-]+$"), 3, 253, "3-253 chars: letters, digits, dots, hyphens"),
+    "facebook": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 50, "1-50 chars: letters, digits, dots, underscores"),
+    "flickr": _HandleRule(re.compile(r"^[a-zA-Z0-9@._-]+$"), 3, 64, "3-64 chars: letters, digits, @, dots, hyphens"),
+    "youtube": _HandleRule(re.compile(r"^[a-zA-Z0-9_.-]+$"), 1, 100, "1-100 chars: letters, digits, underscores, dots, hyphens"),
+    "tiktok": _HandleRule(re.compile(r"^[a-zA-Z0-9._]+$"), 1, 24, "1-24 chars: letters, digits, dots, underscores"),
+    "reddit": _HandleRule(re.compile(r"^[a-zA-Z0-9_-]+$"), 3, 20, "3-20 chars: letters, digits, underscores, hyphens"),
+    "uer": _HandleRule(re.compile(r"^\d+$"), 1, 10, "numeric ID (1-10 digits)"),
 }
 
 # Platforms for which we attempt to verify the URL resolves after saving.

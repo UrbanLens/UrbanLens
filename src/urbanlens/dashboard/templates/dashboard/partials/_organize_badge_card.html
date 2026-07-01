@@ -28,7 +28,7 @@
                 {{ display_name }}
                 {% if kind != 'people' and not badge.profile %}<span class="tag-global-badge" data-tooltip="Shared badge managed site-wide. You can customize how it looks on your pins without changing it for others." data-tooltip-pos="below">global</span>{% endif %}
                 {% if kind != 'people' and badge.is_customized %}<span class="tag-customized-badge" data-tooltip="You changed this badge's icon, color, or name for your own pins only." data-tooltip-pos="below">custom</span>{% endif %}
-                {% if kind == 'status' and badge.is_protected %}<span class="tag-global-badge tag-global-badge--protected" title="This status cannot be deleted or renamed" aria-label="Protected – cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
+                {% if kind == 'status' and badge.is_protected %}<span class="tag-global-badge tag-global-badge--protected" title="This status cannot be deleted or renamed" aria-label="Protected - cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
                 {% if kind == 'people' and badge.is_protected %}<span class="tag-global-badge tag-global-badge--protected"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
                 {% if kind == 'people' and not badge.profile %}<span class="tag-global-badge">global</span>{% endif %}
             </div>
