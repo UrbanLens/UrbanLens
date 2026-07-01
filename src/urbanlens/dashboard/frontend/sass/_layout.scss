@@ -351,6 +351,11 @@
     .card__body {
         padding: $space-md;
         color: var(--ul-grey-9);
+
+        img {
+            max-width: 100%;
+            max-height: 30rem;
+        }
     }
 
     h1,

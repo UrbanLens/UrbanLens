@@ -47,7 +47,8 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/pin.py src/urbanlens/dashboard/services/google/maps.py src/urbanlens/dashboard/services/esri.py src/urbanlens/dashboard/services/nasa_gibs.py src/urbanlens/dashboard/services/satellite_imagery.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/services/apis/locations/ src/urbanlens/dashboard/services/rate_limiter.py src/urbanlens/UrbanLens/settings/app.py 2>&1)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/services/apis/locations/ src/urbanlens/dashboard/services/rate_limiter.py 2>&1)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/services/apis/locations/kartaview.py src/urbanlens/dashboard/services/apis/locations/esri.py)"
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/services/apis/locations/kartaview.py src/urbanlens/dashboard/services/apis/locations/esri.py)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check src/urbanlens/dashboard/services/apis/locations/usgs.py src/urbanlens/dashboard/controllers/pin.py)"
     ]
   }
 }

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 _API_URL = "https://commons.wikimedia.org/w/api.php"
 _THUMB_WIDTH = 400
-_MAX_RESULTS = 12
+_MAX_RESULTS = 60
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 

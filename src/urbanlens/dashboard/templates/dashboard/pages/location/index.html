@@ -422,7 +422,8 @@
         <div id="usgs-topo-section"
             hx-get="{% url 'pin.usgs_topo' pin.slug %}"
             hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-swap="outerHTML"
+            hx-timeout="25000">
             <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">terrain</i>
@@ -2383,7 +2384,7 @@
     (function () {
         var _extSections = new Set([
             'wikipedia-section', 'nominatim-section', 'nps-section',
-            'wikimedia-section', 'loopnet-section',
+            'wikimedia-section', 'loopnet-section', 'usgs-topo-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
@@ -2406,6 +2407,15 @@
 
         // Network failure: just remove the placeholder.
         document.body.addEventListener('htmx:sendError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (el && _extSections.has(el.id)) {
+                evt.stopImmediatePropagation();
+                el.remove();
+            }
+        }, true);
+
+        // Request timeout: remove silently instead of showing the global toast.
+        document.body.addEventListener('htmx:timeout', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (el && _extSections.has(el.id)) {
                 evt.stopImmediatePropagation();

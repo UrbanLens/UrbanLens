@@ -189,7 +189,7 @@ class UsgsGateway(Gateway):
         response = self.session.get(
             f"{_TNM_URL}/products",
             params={"bbox": create_bbox(latitude, longitude, delta), **params},
-            timeout=20,
+            timeout=(5, 15),
         )
         response.raise_for_status()
         return response.json()
