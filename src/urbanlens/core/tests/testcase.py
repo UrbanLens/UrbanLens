@@ -55,11 +55,11 @@ class TestCasesTemplate(TestCases):
                 params = (params,)
             if callable(substitutions):
                 # If substitutions is a function, apply it directly
-                results = cast(Callable[..., Any], substitutions)(params, expected_output, message)
+                results = substitutions(params, expected_output, message)
                 final_entries.extend([TestEntry(*result) for result in results])
             else:
                 # Apply each substitution to a fresh copy of params and expected_output
-                for key, values in cast(dict[str, Any], substitutions).items():
+                for key, values in substitutions.items():
                     for in_value, out_value in values:
                         # Create fresh copies for each substitution
                         substituted_params = [

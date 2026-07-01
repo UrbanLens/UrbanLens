@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.auth.models import AnonymousUser
 
+from urbanlens.dashboard.models.profile.model import Profile
+
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
@@ -28,16 +30,14 @@ class BadgeStyleSuggestion:
     color: str | None = None
 
 
-def suggest_badge_style(name: str, profile: Any) -> BadgeStyleSuggestion:
+def suggest_badge_style(name: str, profile: Profile) -> BadgeStyleSuggestion:
     """Ask AI to choose an emoji and color for a badge when the user may use AI.
 
     The suggestion is best-effort: callers can safely fall back to the default badge
     appearance when subscription, profile preference, site settings, or the AI gateway
     prevents a suggestion.
     """
-    user = getattr(profile, "user", AnonymousUser())
-    user = cast("AbstractBaseUser | AnonymousUser", user)
-    if not user_has_feature(user, SiteFeature.AI) or not getattr(profile, "ai_enabled", True):
+    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled:
         return BadgeStyleSuggestion()
 
     prompt = _build_prompt(name)
