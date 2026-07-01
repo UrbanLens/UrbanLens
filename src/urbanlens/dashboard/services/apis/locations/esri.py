@@ -222,7 +222,7 @@ class EsriGateway(SatelliteViewProvider):
                 release_num = int(raw_release_num)
             except (TypeError, ValueError):
                 try:
-                    release_num = int(item.get("releaseNum"))
+                    release_num = int(item.get("releaseNum"))  # pyright: ignore[reportArgumentType] - caught below
                 except (TypeError, ValueError):
                     continue
 

@@ -66,9 +66,14 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.trips.model import TripActivityVote, TripMembership
 
 
-def _make_profile() -> Profile:
+def _make_profile(**attrs) -> Profile:
     """Create a fresh User and return the Profile auto-created by the post_save signal."""
-    return _baker.make(User).profile
+    user = _baker.make(User)
+    for field, value in attrs.items():
+        setattr(user.profile, field, value)
+    if attrs:
+        user.profile.save()
+    return user.profile
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────

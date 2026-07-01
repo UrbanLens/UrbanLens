@@ -65,10 +65,11 @@ class CleanupVestigialAssetsTaskTests(TestCase):
 
     def test_returns_result_payload(self) -> None:
         fake_result = mock.Mock()
-        fake_result.as_dict.return_value = {"scanned": 1, "deleted": 1, "skipped": 0, "errors": 0}
+        fake_result.as_dict.return_value = {"scanned": 1337, "deleted": 3, "skipped": 1334, "errors": 0}
+        fake_result.total = 1337
 
         with mock.patch("urbanlens.dashboard.services.vestigial_assets.cleanup_vestigial_assets", return_value=fake_result):
-            self.assertEqual(
+            self.assertDictEqual(
                 cleanup_vestigial_assets_task(),
-                {"scanned": 1, "deleted": 1, "skipped": 0, "errors": 0},
+                {"scanned": 1337, "deleted": 3, "skipped": 1334, "errors": 0},
             )

@@ -1,4 +1,8 @@
-"""Site administration panel controller."""
+"""
+Site administration panel controller.
+
+TODO: I could be mistaken, but I believe the override of handle_no_permission is not necessary throughout this file.
+"""
 
 from __future__ import annotations
 
@@ -9,11 +13,13 @@ import logging
 import os
 import sys
 import time
+from urllib.parse import urlencode
 
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
@@ -193,7 +199,7 @@ class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, Vie
     raise_exception = True
     request: HttpRequest
 
-    def handle_no_permission(self) -> HttpResponse:
+    def handle_no_permission(self) -> HttpResponseRedirect:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(
@@ -337,7 +343,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
     request: HttpRequest
 
-    def handle_no_permission(self) -> HttpResponse:
+    def handle_no_permission(self) -> HttpResponseRedirect:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(
@@ -450,12 +456,10 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         )
 
     def post(self, request: HttpRequest):
-        from urllib.parse import urlencode
-
-        from django.contrib.auth.models import User
-        from django.db.models import Q
-
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription, grant_subscription
+
+        if not isinstance(request.user, User):
+            return HttpResponseForbidden()
 
         SubscriptionRole.ensure_defaults()
         action = request.POST.get("action", "grant")
@@ -500,7 +504,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
     request: HttpRequest
 
-    def handle_no_permission(self) -> HttpResponse:
+    def handle_no_permission(self) -> HttpResponseRedirect:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(
@@ -602,7 +606,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
     request: HttpRequest
 
-    def handle_no_permission(self) -> HttpResponse:
+    def handle_no_permission(self) -> HttpResponseRedirect:
         """Send anonymous users to login; return 403 for authenticated non-admins."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(
@@ -685,7 +689,7 @@ class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
     raise_exception = True
     request: HttpRequest
 
-    def handle_no_permission(self) -> HttpResponse:
+    def handle_no_permission(self) -> HttpResponseRedirect:
         """Send anonymous users to login; return 403 for authenticated non-admins."""
         if not self.request.user.is_authenticated:
             return redirect_to_login(

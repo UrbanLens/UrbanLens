@@ -11,19 +11,10 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.baker_recipes import _make_profile
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-
-
-def _make_profile(**attrs) -> Profile:
-    profile = baker.make("auth.User").profile
-    for field, value in attrs.items():
-        setattr(profile, field, value)
-    if attrs:
-        profile.save(update_fields=[*attrs, "updated"])
-    return profile
-
 
 @pytest.mark.django_db
 def test_suggest_badge_style_requires_ai_subscription() -> None:
