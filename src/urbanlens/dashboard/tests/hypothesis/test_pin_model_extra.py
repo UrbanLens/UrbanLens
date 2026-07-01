@@ -104,6 +104,7 @@ class PinEffectiveColorTests(TestCase):
         pin.icon = "star"
         self.assertIsNone(pin.effective_color)
 
+
 class PinHasMeaningfulNameTests(TestCase):
     """meaningful_name is None for Google placeholder names."""
 
@@ -303,6 +304,7 @@ class PinToDetailJsonTests(TestCase):
         self.assertIn("latitude", result)
         self.assertIn("longitude", result)
 
+
 class PinExternalNameRefreshTests(TestCase):
     """External API data never overwrites explicitly user-provided pin names."""
 
@@ -322,3 +324,29 @@ class PinExternalNameRefreshTests(TestCase):
 
         self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
         self.assertEqual(pin.name, "Real Place")
+
+    def test_user_provided_pin_adds_external_alias(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+
+        user = baker.make("auth.User")
+        pin = baker.make(Pin, profile=user.profile, name="My Label", name_is_user_provided=True)
+
+        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")]))
+        self.assertEqual(pin.name, "My Label")
+        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place"])
+
+    def test_promoted_private_pin_name_is_not_duplicated_as_alias(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+
+        user = baker.make("auth.User")
+        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False, location=None)
+
+        self.assertTrue(
+            update_pin_name_from_external_sources(
+                pin,
+                extra_candidates=[("wikipedia", "Real Place"), ("google_places", "Real Place Annex")],
+            ),
+        )
+        pin.refresh_from_db()
+        self.assertEqual(pin.name, "Real Place")
+        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place Annex"])

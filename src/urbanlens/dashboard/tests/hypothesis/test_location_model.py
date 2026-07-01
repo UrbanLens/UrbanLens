@@ -302,7 +302,7 @@ class LocationManagerGetNearbyOrCreateTests(TestCase):
         self.assertNotEqual(loc.pk, self.existing.pk)
 
     def test_created_location_is_persisted(self) -> None:
-        loc, created = Location.objects.get_nearby_or_create(
+        loc, _created = Location.objects.get_nearby_or_create(
             51.5, -0.1, defaults={"name": "London Place"},
         )
         self.assertTrue(Location.objects.filter(pk=loc.pk).exists())
@@ -313,6 +313,7 @@ class LocationManagerGetNearbyOrCreateTests(TestCase):
         )
         self.assertAlmostEqual(float(loc.latitude), 51.5, places=3)
         self.assertAlmostEqual(float(loc.longitude), -0.1, places=3)
+
 
 class LocationExternalNameRefreshTests(TestCase):
     """External API data can replace placeholder location names."""
@@ -345,6 +346,46 @@ class LocationExternalNameRefreshTests(TestCase):
             google_place=google_place,
         )
 
-        self.assertFalse(update_location_name_from_external_sources(loc))
+        self.assertTrue(update_location_name_from_external_sources(loc))
         loc.refresh_from_db()
         self.assertEqual(loc.name, "User Curated Name")
+        self.assertEqual(list(loc.aliases.values_list("name", flat=True)), ["External Name"])
+
+    def test_external_names_are_added_as_location_aliases(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+
+        loc: Location = baker.make(
+            Location,
+            name="Curated Mill",
+            latitude="40.752702",
+            longitude="-73.977202",
+        )
+
+        self.assertTrue(
+            update_location_name_from_external_sources(
+                loc,
+                extra_candidates=[("wikipedia", "Old Mill"), ("nps", "Historic Mill")],
+            ),
+        )
+        self.assertEqual(loc.name, "Curated Mill")
+        self.assertCountEqual(list(loc.aliases.values_list("name", flat=True)), ["Old Mill", "Historic Mill"])
+
+    def test_promoted_external_name_is_not_duplicated_as_location_alias(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+
+        loc: Location = baker.make(
+            Location,
+            name="Unnamed Location",
+            latitude="40.752703",
+            longitude="-73.977203",
+        )
+
+        self.assertTrue(
+            update_location_name_from_external_sources(
+                loc,
+                extra_candidates=[("google_places", "Grand Hall"), ("wikipedia", "Grand Hall Museum")],
+            ),
+        )
+        loc.refresh_from_db()
+        self.assertEqual(loc.name, "Grand Hall")
+        self.assertCountEqual(list(loc.aliases.values_list("name", flat=True)), ["Grand Hall Museum"])
