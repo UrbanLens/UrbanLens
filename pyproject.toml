@@ -748,6 +748,7 @@ ignore = [
     "D401",    # first line should...
     "D415",    # first line should...
     "D420",    # Incorrect doc section order
+    "D421",    # Docstring should not begin with verb
     "CPY001",  # Missing copyright notice at top of file
     "DOC502",  # This discourages reporting raises from ancestors
     "SIM108",  # Use ternary operator insead of if-else

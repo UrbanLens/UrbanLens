@@ -230,6 +230,7 @@ Features planned for future releases.
 * Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it.
 * Reorganize api services
 * Reorganize template partials
+* AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

@@ -33,6 +33,11 @@ class VestigialAssetCleanupResult:
             "skipped": self.skipped,
             "errors": self.errors,
         }
+        
+    @property
+    def total(self) -> int:
+        """Return the total number of artifacts scanned."""
+        return self.scanned + self.deleted + self.skipped + self.errors
 
 
 _MANAGED_ARTIFACT_DIRS = {
@@ -55,6 +60,7 @@ def cleanup_vestigial_assets(*, now: datetime | None = None) -> VestigialAssetCl
     for dirname, ttl_seconds in _MANAGED_ARTIFACT_DIRS.items():
         root = (media_root / dirname).resolve()
         if not _is_within(root, media_root) or not root.is_dir():
+            logger.warning("Vestigial %s artifact directory %s is outside the media root or not a directory", dirname, root)
             continue
 
         cutoff = reference_time - timedelta(seconds=ttl_seconds)

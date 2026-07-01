@@ -84,7 +84,10 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     from urbanlens.dashboard.services.vestigial_assets import cleanup_vestigial_assets
 
     result = cleanup_vestigial_assets()
-    logger.info("Vestigial asset cleanup complete: %s", result.as_dict())
+    if result.total < 1:
+        logger.debug("No vestigial assets found")
+    else:
+        logger.info("Vestigial asset cleanup complete: %s", result.as_dict())
     return result.as_dict()
 
 
@@ -282,7 +285,7 @@ def run_scheduled_database_backup(self) -> bool:
     from urbanlens.dashboard.services.backups import scheduled_backup_due
 
     if not scheduled_backup_due():
-        logger.info("Scheduled database backup skipped; not due or disabled.")
+        logger.debug("Scheduled database backup skipped; not due or disabled.")
         update_task_progress(self, current=1, total=1, message="Scheduled backup skipped")
         return False
     return _run_database_backup(self)
