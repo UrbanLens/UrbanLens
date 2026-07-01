@@ -70,8 +70,8 @@ class MapillaryGateway(StreetViewProvider):
             **self._auth_params(),
             "fields": fields,
             "closeto": f"{longitude},{latitude}",
-            "radius": radius,
-            "limit": limit,
+            "radius": str(radius),
+            "limit": str(limit),
         }
         response = self.session.get(f"{_GRAPH_URL}/images", params=params, timeout=10)
         response.raise_for_status()
@@ -170,8 +170,8 @@ class MapillaryGateway(StreetViewProvider):
         params = {
             **self._auth_params(),
             "closeto": f"{longitude},{latitude}",
-            "radius": radius,
-            "limit": limit,
+            "radius": str(radius),
+            "limit": str(limit),
         }
         response = self.session.get(f"{_GRAPH_URL}/image_ids", params=params, timeout=10)
         response.raise_for_status()

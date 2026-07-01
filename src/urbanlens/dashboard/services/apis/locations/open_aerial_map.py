@@ -128,7 +128,7 @@ class OpenAerialMapGateway(SatelliteViewProvider):
         """
         response = self.session.get(
             f"{_BASE_URL}/tms",
-            params={"bbox": create_bbox(latitude, longitude, delta), "limit": limit},
+            params={"bbox": create_bbox(latitude, longitude, delta), "limit": str(limit)},
             timeout=20,
         )
         response.raise_for_status()

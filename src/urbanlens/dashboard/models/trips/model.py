@@ -103,7 +103,9 @@ class Trip(abstract.Model):
         if self.start_date:
             return self.start_date
         first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
-        return first.scheduled_at.date() if first else None
+        if first is None or first.scheduled_at is None:
+            return None
+        return first.scheduled_at.date()
 
     @property
     def effective_end_date(self) -> date | None:
@@ -111,7 +113,9 @@ class Trip(abstract.Model):
         if self.end_date:
             return self.end_date
         last = self.activities.filter(scheduled_at__isnull=False).order_by("-scheduled_at").first()
-        return last.scheduled_at.date() if last else None
+        if last is None or last.scheduled_at is None:
+            return None
+        return last.scheduled_at.date()
 
     @property
     def timeline_status(self) -> str:

@@ -102,8 +102,9 @@ def external_name_candidates_for_location(
     """Return raw external name candidates for a location in preference order."""
     candidates: list[tuple[str, Any]] = []
     candidates.extend(extra_candidates or [])
-    if getattr(location, "google_place_id", None) and getattr(location, "google_place", None):
-        candidates.append(("google_place", location.google_place.cached_place_name))
+    google_place = location.google_place if getattr(location, "google_place_id", None) else None
+    if google_place is not None:
+        candidates.append(("google_place", google_place.cached_place_name))
 
     try:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -232,8 +233,9 @@ def update_pin_name_from_external_sources(
     """Replace an auto/placeholder pin label unless the user typed a name."""
     name_changed = False
     if not pin.name_is_user_provided and not is_meaningful_name(pin.name):
-        if pin.location_id:
-            name_changed = update_location_name_from_external_sources(pin.location, extra_candidates=extra_candidates, save=save)
+        location = pin.location if pin.location_id else None
+        if location is not None:
+            name_changed = update_location_name_from_external_sources(location, extra_candidates=extra_candidates, save=save)
         elif extra_candidates:
             for _source, value in extra_candidates:
                 if name := _clean_candidate(value):

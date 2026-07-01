@@ -13,7 +13,7 @@ import time
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -93,6 +93,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def get(self, request):
         settings = SiteSettings.get_current()
@@ -184,6 +185,7 @@ class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, Vie
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponse:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
@@ -215,6 +217,7 @@ class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, Vie
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def post(self, request):
         from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
@@ -243,6 +246,7 @@ class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixi
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def post(self, request):
         from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
@@ -274,6 +278,7 @@ class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def post(self, request):
         settings = SiteSettings.get_current()
@@ -298,6 +303,7 @@ class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin,
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def post(self, request):
         from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile
@@ -323,6 +329,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponse:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
@@ -364,6 +371,7 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def post(self, request):
         settings = SiteSettings.get_current()
@@ -416,6 +424,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def get(self, request):
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription
@@ -483,6 +492,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponse:
         """Send anonymous users to login; return 403 for authenticated users without permission."""
@@ -584,6 +594,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponse:
         """Send anonymous users to login; return 403 for authenticated non-admins."""
@@ -666,6 +677,7 @@ class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
 
     permission_required = "dashboard.view_site_admin"
     raise_exception = True
+    request: HttpRequest
 
     def handle_no_permission(self) -> HttpResponse:
         """Send anonymous users to login; return 403 for authenticated non-admins."""
