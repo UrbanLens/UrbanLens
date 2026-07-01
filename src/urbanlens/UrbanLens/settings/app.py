@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -31,6 +30,7 @@ class AppSettingsMeta(ModelMetaclass):
     """
     Metaclass to ensure only one instance of the class is created
     """
+
     _instances: dict[type, Any] = {}
 
     def __call__(cls, *args, **kwargs):
@@ -44,6 +44,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     """
     Class to hold settings for the application.
     """
+
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default="URBANLENS", description="The name of the project")
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
@@ -101,7 +102,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     google_maps_api_key: str | None = Field(default=None, description="The google maps key")
     google_street_view_api_key: str | None = Field(default=None, description="The google street view api key")
     google_search_api_key: str | None = Field(default=None, description="The google search key")
+    google_earth_api_key: str | None = Field(default=None, description="The google earth api key")
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
+    apple_maps_api_key: str | None = Field(default=None, description="The apple maps api key")
+    usgs_api_key: str | None = Field(default=None, description="The USGS M2M api key")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
     google_client_id: str | None = Field(default=None, description="The google client id")
