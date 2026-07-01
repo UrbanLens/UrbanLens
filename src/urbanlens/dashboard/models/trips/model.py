@@ -304,7 +304,7 @@ class TripComment(abstract.Model):
     )
     parent = ForeignKey(
         "self",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         related_name="replies",
         null=True,
         blank=True,
