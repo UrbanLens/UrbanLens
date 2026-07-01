@@ -67,3 +67,61 @@ class PendingFriendInvitationTests(TestCase):
                 source_profile=inviter,
             ).exists(),
         )
+
+
+class InviteSignupEmailVerificationTests(TestCase):
+    """Invite-token signup should skip email verification only for the invited address."""
+
+    def _signup_payload(self, email: str) -> dict[str, str]:
+        return {
+            "username": "newinvitee",
+            "email": email,
+            "password1": "ComplexPass123!",
+            "password2": "ComplexPass123!",
+        }
+
+    def test_signup_with_matching_invite_email_activates_without_verification(self) -> None:
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="invitee@example.com")
+
+        response = self.client.post(
+            f"/signup/?invite={invitation.token}",
+            data=self._signup_payload("INVITEE@example.com"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        invitee = User.objects.get(username="newinvitee")
+        self.assertTrue(invitee.is_active)
+        self.assertFalse(hasattr(invitee, "email_verification"))
+        self.assertTrue(
+            Friendship.objects.filter(
+                from_profile=inviter,
+                to_profile=invitee.profile,
+                status=FriendshipStatus.REQUESTED,
+            ).exists(),
+        )
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
+
+    def test_signup_with_nonmatching_invite_email_still_requires_verification(self) -> None:
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="invitee@example.com")
+
+        response = self.client.post(
+            f"/signup/?invite={invitation.token}",
+            data=self._signup_payload("different@example.com"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        invitee = User.objects.get(username="newinvitee")
+        self.assertFalse(invitee.is_active)
+        self.assertTrue(hasattr(invitee, "email_verification"))
+        self.assertFalse(
+            Friendship.objects.filter(
+                from_profile=inviter,
+                to_profile=invitee.profile,
+                status=FriendshipStatus.REQUESTED,
+            ).exists(),
+        )
+        invitation.refresh_from_db()
+        self.assertIsNone(invitation.accepted_at)

@@ -20,6 +20,7 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
@@ -164,13 +165,25 @@ class SignupView(generic.CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form: RegistrationForm) -> HttpResponse:
-        user = form.save()
+        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
+        user = form.save(commit=False)
+
+        if _get_matching_signup_invitation(user.email, invite_token) is not None:
+            user.is_active = True
+            user.save()
+            profile, created = Profile.objects.get_or_create(user=user)
+            if created:
+                profile.profile_setup_complete = False
+                profile.save(update_fields=["profile_setup_complete"])
+            _process_pending_invitations(user, invite_token=invite_token)
+            return redirect("login")
+
+        user.save()
         verification = EmailVerification.objects.create(user=user)
         self._send_verification_email(user, verification)
         # Store the email in session so the "check email" page can display it
         self.request.session["pending_verification_email"] = user.email
         # Store pending invite token (if the user arrived via an invitation link)
-        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
         if invite_token:
             self.request.session["pending_invite_token"] = invite_token
         return redirect("verify_email_sent")
@@ -422,10 +435,26 @@ class PostLoginRedirectView(View):
 # ── Invitation processing ──────────────────────────────────────────────────
 
 
+def _get_matching_signup_invitation(email: str, invite_token: str | None):
+    """Return a pending invite when the signup token was sent to this email."""
+    if not invite_token:
+        return None
+
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
+    try:
+        return FriendInvitation.objects.filter(
+            token=invite_token,
+            email__iexact=email,
+            accepted_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).first()
+    except (ValidationError, ValueError):
+        return None
+
+
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     """Return open invitations matching the user's email and/or signup invite token."""
-    from django.utils import timezone
-
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
     pending_by_id: dict[int, FriendInvitation] = {}
