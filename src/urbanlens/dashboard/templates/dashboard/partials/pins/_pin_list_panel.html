@@ -1,0 +1,66 @@
+{% load dashboard_tags %}
+{% comment %}
+Pin-list sidebar contents, rendered by MapController.pin_list_panel.
+
+Context:
+  page_obj - a django.core.paginator.Page of matching Pin objects
+  pins - page_obj.object_list (convenience alias)
+  total_count - total number of pins matching the current filter criteria
+
+hx-include lets the pagination buttons (inherited from _pagination_controls.html)
+resend the filter-form fields on every page click, so filters stay applied.
+{% endcomment %}
+<div id="pin-list-results" class="card pin-list-results" hx-include="#filter-form">
+    <div class="pin-list-count">
+        <strong>{{ total_count }}</strong> location{{ total_count|pluralize }}
+    </div>
+    {% if pins %}
+    <ul class="pin-list">
+        {% for pin in pins %}
+        <li class="pin-list-item">
+            <button type="button" class="pin-list-item-btn"
+                    onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
+                {% if pin.effective_icon %}
+                    {% if pin.effective_icon|is_material_icon %}
+                    <i class="material-icons pin-list-icon" {% if pin.effective_color %}style="color:{{ pin.effective_color }}"{% endif %}>{{ pin.effective_icon }}</i>
+                    {% elif pin.effective_icon|is_icon_url %}
+                    <img src="{{ pin.effective_icon }}" class="pin-list-icon-img" alt="">
+                    {% else %}
+                    <span class="pin-list-icon-emoji">{{ pin.effective_icon }}</span>
+                    {% endif %}
+                {% else %}
+                <span class="pin-list-icon material-icons">place</span>
+                {% endif %}
+                <span class="pin-list-info">
+                    <span class="pin-list-name">{{ pin.display_label }}</span>
+                    {% if pin.location.city or pin.location.state or pin.location.country %}
+                    <span class="pin-list-meta"
+                        >{% if pin.location.city %}{{ pin.location.city }}{% endif %}{% if pin.location.city and pin.location.state %}, {% endif %}{% if pin.location.state %}{{ pin.location.state }}{% endif %}{% if pin.location.country %} · {{ pin.location.country }}{% endif %}</span>
+                    {% endif %}
+                    {% if pin.badges.all %}
+                    <span class="pin-list-badges">
+                        {% for badge in pin.badges.all %}
+                        <span class="popup-tag-chip pin-list-badge"
+                              {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
+                              >{{ badge.name }}</span>
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                </span>
+                {% if pin.last_visited %}
+                <span class="pin-list-visited material-icons" title="Visited">check_circle</span>
+                {% endif %}
+            </button>
+            <button type="button" class="pin-list-edit-btn"
+                    title="Edit pin" aria-label="Edit pin"
+                    onclick="event.stopPropagation(); openEditPinDialog('{{ pin.uuid|escapejs }}')">
+                <i class="material-icons">edit</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% include "dashboard/partials/ui/_pagination_controls.html" %}
+    {% else %}
+    <p class="pin-list-empty">No pins match the current filters.</p>
+    {% endif %}
+</div>

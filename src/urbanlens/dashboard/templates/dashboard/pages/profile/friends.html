@@ -14,12 +14,12 @@
             <span class="friends-page-count">{{ friends|length }}</span>
         </h1>
         {% if is_own_profile %}
-        {% include "dashboard/partials/_invite_friend_button.html" %}
+        {% include "dashboard/partials/profile/_invite_friend_button.html" %}
         {% endif %}
     </div>
 
     {% if is_own_profile %}
-    {% include "dashboard/partials/_invite_friend_dialog.html" %}
+    {% include "dashboard/partials/profile/_invite_friend_dialog.html" %}
     {% endif %}
 
     {# ── Incoming requests (own profile only) ────────────────────────────────── #}

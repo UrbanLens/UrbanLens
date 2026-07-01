@@ -28,7 +28,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/detail_pins_panel.html",
+            "dashboard/partials/pins/detail_pins_panel.html",
             {
                 "pin": pin,
                 "detail_pins": detail_pins,
@@ -49,8 +49,10 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
+        detail_name = body.get("name") or None
         detail_pin = Pin.objects.create(
-            name=body.get("name") or None,
+            name=detail_name,
+            name_is_user_provided=bool((detail_name or "").strip()),
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),
@@ -160,7 +162,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/location_detail_pins_panel.html",
+            "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
                 "detail_pins": detail_pins,
@@ -189,6 +191,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         pin_name = body.get("name") or None
         detail_pin = Pin.objects.create(
             name=pin_name,
+            name_is_user_provided=bool((pin_name or "").strip()),
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),
@@ -271,7 +274,7 @@ class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/location_detail_pins_panel.html",
+            "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
                 "detail_pins": detail_pins,

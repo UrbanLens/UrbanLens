@@ -574,7 +574,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_wikipedia.html", {"article": data})
+        return render(request, "dashboard/partials/pins/pin_wikipedia.html", {"article": data})
 
     def wikimedia_assets(self, request: HttpRequest, pin_slug: str):
         """
@@ -619,7 +619,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         page_obj = get_page(request, data, _WIKIMEDIA_PAGE_SIZE)
         return render(
             request,
-            "dashboard/partials/pin_wikimedia.html",
+            "dashboard/partials/pins/pin_wikimedia.html",
             {"images": page_obj.object_list, "page_obj": page_obj, "query": query},
         )
 
@@ -670,7 +670,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("loopnet_info: no listings found for pin %s (address=%r)", pin_slug, address)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_loopnet.html", {"result": data, "address": address})
+        return render(request, "dashboard/partials/pins/pin_loopnet.html", {"result": data, "address": address})
 
     def nps_info(self, request: HttpRequest, pin_slug: str):
         """
@@ -724,7 +724,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_nps.html", {"park": data})
+        return render(request, "dashboard/partials/pins/pin_nps.html", {"park": data})
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
         """
@@ -770,7 +770,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_nominatim.html", {"place": data})
+        return render(request, "dashboard/partials/pins/pin_nominatim.html", {"place": data})
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin.
@@ -812,7 +812,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("usgs_topo_info: no topo maps found for pin %s", pin_slug)
             return HttpResponse(status=204)
 
-        return render(request, "dashboard/partials/pin_usgs_topo.html", {"maps": maps_list[:20]})
+        return render(request, "dashboard/partials/pins/pin_usgs_topo.html", {"maps": maps_list[:20]})
 
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):

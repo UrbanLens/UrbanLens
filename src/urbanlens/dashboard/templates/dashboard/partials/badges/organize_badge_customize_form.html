@@ -1,0 +1,65 @@
+{% load dashboard_tags %}
+{# Per-user display override for a global badge, loaded into #badge-edit-dialog-body. #}
+<form class="organize-badge-customize-form tag-inline-edit"
+      hx-post="{% url 'badge.customize' badge_kind=badge_url_kind badge_id=badge.id %}"
+      hx-target="{{ rows_target }}"
+      hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Customization saved.'); }">
+    {% csrf_token %}
+
+    <p class="form-hint" style="margin-bottom:1rem;">
+        These overrides apply only to your view. Leave a field blank to use the global default.
+    </p>
+
+    <div class="form-field">
+        <label class="form-label">Display name</label>
+        <input name="name" type="text" class="form-input"
+               placeholder="{{ badge.name }}"
+               value="{{ customization.name|default:'' }}">
+        <p class="form-hint">Leave blank to use the global name: <strong>{{ badge.name }}</strong></p>
+    </div>
+
+    <div class="tag-icon-color-row">
+        <div class="form-field">
+            <label class="form-label">Icon override</label>
+            <div class="icon-picker-wrap">
+                {% with badge_id_str=badge.id|stringformat:"d" %}
+                {% with picker_id="cb"|add:badge_id_str current_icon=customization.icon|default:badge.icon|default:"" field_name="icon" %}
+                {% include 'dashboard/partials/ui/_icon_picker.html' %}
+                {% endwith %}{% endwith %}
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Color override</label>
+            <div class="color-picker" id="customize-badge-color-picker-{{ badge.id }}">
+                <input type="hidden" name="color" id="customize-badge-color-value-{{ badge.id }}"
+                       value="{{ customization.color|default:badge.color|default:'' }}">
+                {% for hex, label in color_choices %}
+                <button type="button"
+                        class="color-swatch {% if customization.color == hex or not customization and badge.color == hex %}selected{% endif %}"
+                        data-color="{{ hex }}" title="{{ label }}"
+                        style="background:{{ hex }};"
+                        onclick="pickColor('customize-badge-color-picker-{{ badge.id }}','customize-badge-color-value-{{ badge.id }}','{{ hex }}',this)">
+                </button>
+                {% endfor %}
+                <button type="button"
+                        class="color-swatch color-clear {% if not customization.color and not badge.color %}selected{% endif %}"
+                        title="No color"
+                        onclick="pickColor('customize-badge-color-picker-{{ badge.id }}','customize-badge-color-value-{{ badge.id }}','',this)">
+                    <i class="material-icons" style="font-size:1rem;">block</i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="tag-form-actions">
+        <button type="submit" class="btn btn--primary">Save</button>
+        {% if customization %}
+        <button type="submit" name="action" value="clear" class="btn btn--ghost"
+                style="color:var(--color-danger,#e53);">Reset to global defaults</button>
+        {% endif %}
+        <button type="button" class="btn btn--ghost"
+                onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</form>

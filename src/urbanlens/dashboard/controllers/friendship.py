@@ -193,7 +193,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(requesting, to_profile),
         )
 
@@ -226,7 +226,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         to_profile = Profile.objects.filter(pk=profile_id).first()
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(request.user.profile, to_profile),
         )
 
@@ -244,7 +244,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         to_profile = Profile.objects.filter(pk=profile_id).first()
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(request.user.profile, to_profile),
         )
 
@@ -263,7 +263,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         to_profile = Profile.objects.filter(pk=profile_id).first()
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(request.user.profile, to_profile),
         )
 
@@ -317,7 +317,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         to_profile = Profile.objects.filter(pk=profile_id).first()
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(request.user.profile, to_profile),
         )
 
@@ -329,7 +329,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         viewer = request.user.profile if request.user.is_authenticated else None
         return render(
             request,
-            "dashboard/partials/friend_list_partial.html",
+            "dashboard/partials/profile/friend_list_partial.html",
             _friend_list_ctx(viewer, profile),
         )
 
@@ -405,7 +405,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
         response = render(
             request,
-            "dashboard/partials/notification_dropdown.html",
+            "dashboard/partials/notifications/notification_dropdown.html",
             {
                 "notifications": notifications,
                 "unread_count": unread_count,
@@ -477,7 +477,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
             return render(
                 request,
-                "dashboard/partials/invite_result.html",
+                "dashboard/partials/profile/invite_result.html",
                 {"result": "request_sent", "username": to_profile.username},
             )
 
@@ -527,6 +527,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         return render(
             request,
-            "dashboard/partials/invite_result.html",
+            "dashboard/partials/profile/invite_result.html",
             {"result": "invite_sent", "email": email},
         )

@@ -141,7 +141,7 @@ def tooltip_attrs(
     return format_html_join(" ", "{}", ((part,) for part in parts))
 
 
-@register.inclusion_tag("dashboard/partials/_tooltip_help.html")
+@register.inclusion_tag("dashboard/partials/ui/_tooltip_help.html")
 def tooltip_help(text: str, pos: str = "", wide: bool = False) -> dict[str, object]:
     """Render a standard info-icon tooltip trigger.
 
@@ -156,7 +156,7 @@ def tooltip_help(text: str, pos: str = "", wide: bool = False) -> dict[str, obje
     return {"text": text, "pos": pos, "wide": wide}
 
 
-@register.inclusion_tag("dashboard/partials/_tooltip_label.html")
+@register.inclusion_tag("dashboard/partials/ui/_tooltip_label.html")
 def tooltip_label(
     label: str,
     help_text: str = "",

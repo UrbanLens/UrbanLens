@@ -55,7 +55,7 @@ class PinGalleryView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         ctx = self._get_context(request, pin_slug)
-        return render(request, "dashboard/partials/_photo_gallery.html", ctx)
+        return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
         """Upload an image to a pin."""
@@ -136,7 +136,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)
-        return render(request, "dashboard/partials/_photo_gallery.html", ctx)
+        return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         location = get_object_or_404(Location, slug=location_slug)

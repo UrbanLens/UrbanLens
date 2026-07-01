@@ -309,7 +309,7 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
     members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
     return render(
         request,
-        "dashboard/partials/trip_members_panel.html",
+        "dashboard/partials/trips/trip_members_panel.html",
         {"trip": trip, "members": members, "profile": profile},
     )
 
@@ -373,7 +373,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
     )
     return render(
         request,
-        "dashboard/partials/trip_activities_panel.html",
+        "dashboard/partials/trips/trip_activities_panel.html",
         {
             "trip": trip,
             "activities_with_index": activities_with_index,
@@ -428,7 +428,7 @@ class TripCreateView(LoginRequiredMixin, View):
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
 
         trips = _trips_for_list(profile)
-        return render(request, "dashboard/partials/trip_list_partial.html", {"trips": trips, "profile": profile})
+        return render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
 
 
 class TripDetailView(LoginRequiredMixin, View):
@@ -484,7 +484,7 @@ class TripEditView(LoginRequiredMixin, View):
 
         return render(
             request,
-            "dashboard/partials/trip_header_partial.html",
+            "dashboard/partials/trips/trip_header_partial.html",
             {
                 "trip": trip,
                 "profile": profile,
@@ -773,7 +773,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     comment_count = sum(1 + len(item["replies"]) for item in rendered)
     return render(
         request,
-        "dashboard/partials/trip_comments_panel.html",
+        "dashboard/partials/trips/trip_comments_panel.html",
         {
             "trip": trip,
             "rendered_comments": rendered,
@@ -1307,7 +1307,7 @@ class TripSettingsView(LoginRequiredMixin, View):
 
         return render(
             request,
-            "dashboard/partials/trip_settings_partial.html",
+            "dashboard/partials/trips/trip_settings_partial.html",
             {
                 "trip": trip,
                 "profile": profile,

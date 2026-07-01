@@ -1,0 +1,43 @@
+{% load dashboard_tags %}
+<dialog id="{{ dialog_id_prefix }}{{ dialog_id_suffix }}" class="tag-add-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Badges" %}
+
+    <div class="tad-tabs" role="tablist">
+        <button class="tad-tab tad-tab--active" data-tab="all" role="tab">All</button>
+        <button class="tad-tab" data-tab="tag" role="tab">Tags</button>
+        <button class="tad-tab" data-tab="category" role="tab">Categories</button>
+        <button class="tad-tab" data-tab="status" role="tab">Statuses</button>
+    </div>
+
+    <input type="search" class="dialog-search" placeholder="Search badges…" autocomplete="off">
+
+    <ul class="tag-dialog-list">
+        {% for badge in all_badges %}
+        {% if badge.id not in member_ids %}
+        <li class="tag-dialog-item" data-name="{{ badge.name|lower }}" data-kind="{{ badge.kind }}">
+            <form hx-post="{% if membership_route == 'location' %}{% url 'badge.location' badge_kind=badge_url_kind location_slug=obj_uuid %}{% else %}{% url 'badge.pin' badge_kind=badge_url_kind pin_slug=obj_uuid %}{% endif %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="badge_id" value="{{ badge.id }}">
+                <input type="hidden" name="action" value="add">
+                <button type="submit" class="tag-dialog-btn">
+                    <span class="tag-dialog-icon">
+                        {% if badge.icon %}
+                        {% if badge.icon|is_material_icon %}<i class="material-icons" style="font-size:16px{% if badge.color %};color:{{ badge.color }}{% endif %}">{{ badge.icon }}</i>
+                        {% else %}<span>{{ badge.icon }}</span>{% endif %}
+                        {% else %}<i class="material-icons" style="font-size:16px;opacity:.3">label</i>{% endif %}
+                    </span>
+                    <span class="tag-dialog-name">{{ badge.name }}</span>
+                    <span class="tad-kind-pill tad-kind-pill--{{ badge.kind }}">{{ badge.get_kind_display }}</span>
+                </button>
+            </form>
+        </li>
+        {% endif %}
+        {% endfor %}
+    </ul>
+
+    <div class="dialog-footer">
+        <a href="{% url 'organize.index' %}?tab=tags" class="dialog-manage-link">
+            <i class="material-icons">settings</i> Manage badges
+        </a>
+    </div>
+</dialog>

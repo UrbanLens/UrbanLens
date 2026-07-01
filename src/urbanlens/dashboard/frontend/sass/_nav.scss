@@ -437,6 +437,7 @@ nav {
             font-size: 0.75rem;
         }
 
+        .page-footer__github,
         .page-footer__attribution {
             margin: 0;
             padding: 0;
@@ -452,7 +453,7 @@ nav {
                 white-space: normal;
             }
 
-            &-more {
+            a {
                 margin-left: 0.35rem;
                 font-weight: 600;
                 white-space: nowrap;

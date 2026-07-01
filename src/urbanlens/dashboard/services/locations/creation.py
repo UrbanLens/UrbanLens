@@ -47,7 +47,7 @@ class LocationCreationService:
         service = GooglePlaceService(name_resolver=self.name_resolver)
         if location is None:
             place_name = self.name_resolver.resolve(latitude, longitude)
-            name = place_name or pin.name or "Unnamed Location"
+            name = place_name or "Unnamed Location"
             google_place = service.get_or_create_for_coordinates(
                 latitude,
                 longitude,
