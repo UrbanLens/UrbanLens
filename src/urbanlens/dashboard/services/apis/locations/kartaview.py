@@ -28,7 +28,7 @@ class KartaViewGateway(StreetViewProvider):
     service_key: ClassVar[str] = "kartaview"
     paid_service: ClassVar[bool] = False
 
-    def search_photos_near_coordinates(
+    def search_sequences_near_coordinates(
         self,
         latitude: float,
         longitude: float,
@@ -37,7 +37,7 @@ class KartaViewGateway(StreetViewProvider):
         page: int = 1,
         items_per_page: int = 10,
     ) -> dict[str, Any]:
-        """Return KartaView photos near coordinates.
+        """Return KartaView sequences near coordinates.
 
         Args:
             latitude: WGS-84 latitude.
@@ -47,10 +47,10 @@ class KartaViewGateway(StreetViewProvider):
             items_per_page: Number of results per page.
 
         Returns:
-            Parsed JSON response.  Nearby photos are in ``currentPageItems``.
+            Parsed JSON response.  Nearby sequences are in ``currentPageItems``.
         """
         response = self.session.post(
-            f"{_BASE_URL}/photo/nearby-photos/",
+            f"{_BASE_URL}/sequence/nearby-sequences/",
             data={
                 "lat": latitude,
                 "lng": longitude,
@@ -93,7 +93,7 @@ class KartaViewGateway(StreetViewProvider):
             request fails.
         """
         try:
-            data = self.search_photos_near_coordinates(latitude, longitude, radius=radius, items_per_page=limit)
+            data = self.search_sequences_near_coordinates(latitude, longitude, radius=radius, items_per_page=limit)
         except Exception as exc:
             # TODO: Catch specific exception
             logger.warning("KartaView search failed for %s, %s: %s", latitude, longitude, exc)
@@ -103,30 +103,25 @@ class KartaViewGateway(StreetViewProvider):
         if limit > 0 and len(current_page_items) > limit:
             current_page_items = current_page_items[:limit]
 
-        for photo in current_page_items:
-            file_path = (
-                photo.get("fileurlLTh")
-                or photo.get("fileurlProc")
-                or photo.get("filepathProc")
-                or ""
-            )
+        for sequence in current_page_items:
+            # v2 API returns sequences; use the sequence thumbnail as the slide image
+            file_path = sequence.get("thumbHead") or ""
             if not file_path:
                 continue
             if not file_path.startswith("http"):
                 file_path = f"{_STORAGE_URL}/{file_path.lstrip('/')}"
-            date_str = (photo.get("dateAdded") or "")[:10] or "Unknown"
+            date_str = (sequence.get("dateAdded") or "")[:10] or "Unknown"
             try:
-                heading = float(photo["heading"]) if photo.get("heading") is not None else None
-                img_lat = float(photo["lat"]) if photo.get("lat") is not None else None
-                img_lon = float(photo["lng"]) if photo.get("lng") is not None else None
+                img_lat = float(sequence["lat"]) if sequence.get("lat") is not None else None
+                img_lon = float(sequence["lng"]) if sequence.get("lng") is not None else None
             except (ValueError, TypeError):
-                heading = img_lat = img_lon = None
-                
+                img_lat = img_lon = None
+
             yield StreetViewSlide(
                 img_src=file_path,
                 source="KartaView",
                 date=date_str,
-                heading=heading,
+                heading=None,
                 latitude=img_lat,
                 longitude=img_lon,
             )
