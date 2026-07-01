@@ -1,6 +1,6 @@
 """Backfill the 'search' feature flag into any existing VIP subscription roles."""
 
-from django.db import migrations
+from django.db import migrations, models
 
 
 def _add_search_to_vip(apps, schema_editor):
@@ -21,4 +21,18 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(_add_search_to_vip, migrations.RunPython.noop),
+        migrations.AddField(
+            model_name="location",
+            name="official_name",
+            field=models.CharField(blank=True, max_length=255, null=True),
+        ),
+        migrations.AddField(
+            model_name="pin",
+            name="official_name",
+            field=models.CharField(blank=True, max_length=255, null=True),
+        ),
+        migrations.AddIndex(
+            model_name="location",
+            index=models.Index(fields=["official_name"], name="dashboard_l_offici_1cbd21_idx"),
+        ),
     ]

@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.auth.models import AnonymousUser
 
-from urbanlens.dashboard.models.profile.model import Profile
-
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
+
+    from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.dashboard.models.badges.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
