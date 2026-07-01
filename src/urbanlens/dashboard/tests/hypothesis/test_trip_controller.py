@@ -20,6 +20,7 @@ import datetime
 import json
 from unittest.mock import patch
 
+from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
@@ -34,6 +35,46 @@ def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
     trip = Trip.objects.create(name="Test Trip", creator=creator_profile, **kwargs)
     TripMembership.objects.get_or_create(trip=trip, profile=creator_profile, defaults={"rsvp": "yes"})
     return trip
+
+
+class TripListPartialTests(TestCase):
+    """Trip list partial date rendering."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_one_day_trip_shows_single_date_with_duration(self):
+        trip = _make_trip(
+            self.profile,
+            start_date=datetime.date(2026, 7, 4),
+            end_date=datetime.date(2026, 7, 4),
+        )
+
+        html = render_to_string(
+            "dashboard/partials/trip_list_partial.html",
+            {"trips": [trip], "profile": self.profile},
+        )
+
+        self.assertIn("Jul 4, 2026", html)
+        self.assertNotIn("Jul 4, 2026 - Jul 4, 2026", html)
+        self.assertIn("1 day", html)
+
+    def test_multi_day_trip_shows_date_range(self):
+        trip = _make_trip(
+            self.profile,
+            start_date=datetime.date(2026, 7, 4),
+            end_date=datetime.date(2026, 7, 6),
+        )
+
+        html = render_to_string(
+            "dashboard/partials/trip_list_partial.html",
+            {"trips": [trip], "profile": self.profile},
+        )
+
+        self.assertIn("Jul 4, 2026 - Jul 6, 2026", html)
+        self.assertIn("3 days", html)
 
 
 class TripCreateViewTests(TestCase):
