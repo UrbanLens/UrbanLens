@@ -41,21 +41,28 @@ DEFAULT_CATEGORIES: list[dict] = [
     {"name": "Train Station", "icon": "🚉", "color": "#607D8B"},
     {"name": "Tunnel", "icon": "🕳️", "color": "#9E9E9E"},
 ]
+DEFAULT_TAGS: list[dict] = [
+    {"name": "Notable", "icon": "⭐", "color": "#FFC107", "order": 50},
+    {"name": "Graffiti", "icon": "🎨", "color": "#E91E63", "order": 40},
+    {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 30},
+    {"name": "Dangerous", "icon": "⚠️", "color": "#F44336", "order": 20},
+    {"name": "Popular", "icon": "🔥", "color": "#FF5722", "order": 10},
+]
 
 # Parent → child relationships established after all categories are created.
 # Children are a specialisation or sub-type of the parent, which lets users
 # filter a parent badge and surface pins tagged with any of its descendants.
 CATEGORY_HIERARCHY: list[tuple[str, str]] = [
     # Healthcare
-    ("Hospital", "Asylum"),       # psychiatric hospitals were often called asylums
+    ("Hospital", "Asylum"),  # psychiatric hospitals were often called asylums
     # Residential
-    ("House", "Mansion"),         # a mansion is a grand house
+    ("House", "Mansion"),  # a mansion is a grand house
     # Hospitality
-    ("Hotel", "Resort"),          # resorts typically include hotel accommodation
+    ("Hotel", "Resort"),  # resorts typically include hotel accommodation
     # Industrial
-    ("Factory", "Power Plant"),   # power plants are large industrial facilities
+    ("Factory", "Power Plant"),  # power plants are large industrial facilities
     # Recreation
-    ("Park", "Amusement Park"),   # an amusement park is a specialised park
+    ("Park", "Amusement Park"),  # an amusement park is a specialised park
 ]
 
 
@@ -71,10 +78,14 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         colour, and display order. Parent-child relationships from CATEGORY_HIERARCHY
         are wired up via the ``parents`` M2M after all badges exist. Users may delete
         or rename any category badge after creation.
+
+    Tag badges:
+        A small starter set of ordinary, user-owned tag badges. Users may edit or
+        delete these exactly like tags they create themselves.
     """
     if not created:
         return
-    from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, KIND_USER, Badge
+    from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER, Badge
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -120,6 +131,14 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         child = badge_by_name.get(child_name)
         if parent and child:
             child.parents.add(parent)
+
+    for d in DEFAULT_TAGS:
+        Badge.objects.get_or_create(
+            profile=instance,
+            name=d["name"],
+            kind=KIND_TAG,
+            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
+        )
 
     people_defaults = [
         {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
