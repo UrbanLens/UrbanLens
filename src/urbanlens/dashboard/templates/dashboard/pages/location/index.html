@@ -2380,6 +2380,125 @@
         entry.marker.setIcon(L.divIcon({ html: _photoMarkerHtml(entry.img, sz), className: '', iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
     };
 
+
+    // ── Adaptive client-side pagination for variable-height external panels ───
+    (function () {
+        function getItems(card) {
+            return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]'));
+        }
+
+        function getAvailableListHeight(card, list) {
+            var viewportBottom = window.innerHeight || document.documentElement.clientHeight || 800;
+            var cardTop = card.getBoundingClientRect().top;
+            var availableCardHeight = Math.max(180, viewportBottom - cardTop - 24);
+            var nonListHeight = card.offsetHeight - list.offsetHeight;
+            return Math.max(120, availableCardHeight - nonListHeight);
+        }
+
+        function measureVisiblePageSize(card, list, items) {
+            if (!items.length) return 1;
+
+            var previousMaxHeight = list.style.maxHeight;
+            var previousOverflow = list.style.overflow;
+            var controls = card.querySelector('[data-adaptive-pagination-controls]');
+            var availableListHeight = getAvailableListHeight(card, list);
+
+            // Render the full server-provided batch first, constrain the list to
+            // the available space, then count which actual rendered items remain
+            // fully visible. This avoids guessing about image sizes, captions, or
+            // wrapped text before pagination is applied.
+            items.forEach(function (item) { item.hidden = false; });
+            if (controls) controls.hidden = true;
+            list.style.maxHeight = availableListHeight + 'px';
+            list.style.overflow = 'hidden';
+
+            var listRect = list.getBoundingClientRect();
+            var visibleBottom = Math.min(listRect.bottom, listRect.top + availableListHeight);
+            var shown = 0;
+            for (var i = 0; i < items.length; i += 1) {
+                var itemRect = items[i].getBoundingClientRect();
+                var fullyVisible = itemRect.top >= listRect.top && itemRect.bottom <= visibleBottom;
+                if (!fullyVisible && shown > 0) break;
+                shown += fullyVisible ? 1 : 0;
+                if (!fullyVisible) break;
+            }
+
+            list.style.maxHeight = previousMaxHeight;
+            list.style.overflow = previousOverflow;
+            if (controls) controls.hidden = false;
+            return Math.max(1, shown);
+        }
+
+        function renderControls(card, controls, page, pageSize, totalItems) {
+            var totalClientPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            var serverPage = parseInt(controls.dataset.serverPage || '1', 10) || 1;
+            var serverPages = parseInt(controls.dataset.serverPages || '1', 10) || 1;
+            var nextUrl = controls.dataset.nextUrl || '';
+            var labelSuffix = serverPages > 1 ? ' · batch ' + serverPage + ' of ' + serverPages : '';
+            controls.innerHTML = '';
+            if (totalClientPages <= 1 && !nextUrl) {
+                controls.hidden = true;
+                return;
+            }
+            controls.hidden = false;
+            var prev = document.createElement('button');
+            prev.type = 'button';
+            prev.className = 'pagination-btn';
+            prev.disabled = page <= 1;
+            prev.setAttribute('aria-label', 'Previous page');
+            prev.innerHTML = '<i class="material-icons">chevron_left</i>';
+            prev.addEventListener('click', function () { showPage(card, page - 1, pageSize); });
+
+            var label = document.createElement('span');
+            label.className = 'pagination-label';
+            label.textContent = 'Page ' + page + ' of ' + totalClientPages + labelSuffix;
+
+            var next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'pagination-btn';
+            next.setAttribute('aria-label', 'Next page');
+            next.innerHTML = '<i class="material-icons">chevron_right</i>';
+            if (page < totalClientPages) {
+                next.addEventListener('click', function () { showPage(card, page + 1, pageSize); });
+            } else if (nextUrl && window.htmx) {
+                next.addEventListener('click', function () { window.htmx.ajax('GET', nextUrl, { target: card, swap: 'outerHTML' }); });
+            } else {
+                next.disabled = true;
+            }
+            controls.append(prev, label, next);
+        }
+
+        function showPage(card, page, pageSize) {
+            var items = getItems(card);
+            var controls = card.querySelector('[data-adaptive-pagination-controls]');
+            var start = (page - 1) * pageSize;
+            var end = start + pageSize;
+            items.forEach(function (item, index) { item.hidden = index < start || index >= end; });
+            if (controls) renderControls(card, controls, page, pageSize, items.length);
+        }
+
+        function initAdaptivePagination(root) {
+            (root || document).querySelectorAll('[data-adaptive-pagination-list]').forEach(function (list) {
+                var card = list.closest('.card');
+                if (!card) return;
+                var items = getItems(card);
+                if (!items.length) return;
+                var pageSize = measureVisiblePageSize(card, list, items);
+                card.dataset.adaptivePaginationPageSize = pageSize;
+                showPage(card, 1, pageSize);
+                card.querySelectorAll('img').forEach(function (img) {
+                    if (img.dataset.adaptivePaginationObserved) return;
+                    img.dataset.adaptivePaginationObserved = '1';
+                    img.addEventListener('load', function () { initAdaptivePagination(card); }, { once: true });
+                });
+            });
+        }
+
+        window.addEventListener('resize', function () { initAdaptivePagination(document); });
+        document.body.addEventListener('htmx:afterSwap', function (evt) { initAdaptivePagination(evt.detail && evt.detail.target); });
+        document.addEventListener('DOMContentLoaded', function () { initAdaptivePagination(document); });
+    }());
+
     // ── External-data panels: handle 204 (no data) and request errors ────────
     (function () {
         var _extSections = new Set([

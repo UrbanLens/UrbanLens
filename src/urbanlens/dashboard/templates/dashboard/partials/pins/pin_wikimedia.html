@@ -11,9 +11,9 @@
         </a>
     </div>
 
-    <div class="wikimedia-grid card__body">
+    <div class="wikimedia-grid card__body" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="12">
         {% for img in images %}
-        <a class="wikimedia-item" href="{{ img.description_url }}" target="_blank" rel="noopener noreferrer"
+        <a class="wikimedia-item" data-adaptive-pagination-item href="{{ img.description_url }}" target="_blank" rel="noopener noreferrer"
            title="{{ img.title }}">
             {% if img.thumb %}
             <img class="wikimedia-thumb" src="{{ img.thumb }}" alt="{{ img.title }}" loading="lazy"

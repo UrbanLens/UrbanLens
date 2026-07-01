@@ -42,9 +42,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WIKIMEDIA_PAGE_SIZE = 12
-_WEB_SEARCH_PAGE_SIZE = 5
-_SMITHSONIAN_PAGE_SIZE = 12
+_WIKIMEDIA_CLIENT_PAGE_SIZE = 12
+_WEB_SEARCH_CLIENT_PAGE_SIZE = 5
+_SMITHSONIAN_CLIENT_PAGE_SIZE = 12
+_ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
+_WIKIMEDIA_PAGE_SIZE = _WIKIMEDIA_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_SMITHSONIAN_PAGE_SIZE = _SMITHSONIAN_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -227,6 +231,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {
                 "images": page_obj.object_list,
                 "page_obj": page_obj,
+                "adaptive_pagination": True,
             },
         )
 
@@ -267,7 +272,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"search_results": page_obj.object_list, "page_obj": page_obj},
+                    {"search_results": page_obj.object_list, "page_obj": page_obj, "adaptive_pagination": True},
                 )
 
         try:
@@ -296,7 +301,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/web_search.html",
-            {"search_results": page_obj.object_list, "page_obj": page_obj},
+            {"search_results": page_obj.object_list, "page_obj": page_obj, "adaptive_pagination": True},
         )
 
     def satellite_view_carousell(self, request: HttpRequest, **kwargs):
@@ -632,7 +637,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/partials/pins/pin_wikimedia.html",
-            {"images": page_obj.object_list, "page_obj": page_obj, "query": query},
+            {"images": page_obj.object_list, "page_obj": page_obj, "query": query, "adaptive_pagination": True},
         )
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):

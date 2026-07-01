@@ -6,10 +6,10 @@
         {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     </div>
     {% if search_results %}
-    <ul class="search-results-list">
+    <ul class="search-results-list" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="5">
         {% for result in search_results %}
         {% if result.title or result.link %}
-        <li class="search-result">
+        <li class="search-result" data-adaptive-pagination-item>
             <div class="search-result-inner">
                 {% if result.thumbnail %}
                 <div class="search-result-thumb-wrap">
