@@ -111,7 +111,7 @@
             </div>
         </div>
 
-        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
+        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/ui/_priority_visual.html" %}
 
         <div id="priority-list" class="priority-list">
             {% for item in priority_items %}
