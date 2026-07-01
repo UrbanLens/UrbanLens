@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Maps feature keys to the SiteSettings field that controls them.
 _FEATURE_FIELDS: dict[str, str] = {
     "category_suggestions": "ai_category_suggestions_enabled",
+    "badge_style_suggestions": "ai_category_suggestions_enabled",
 }
 
 
