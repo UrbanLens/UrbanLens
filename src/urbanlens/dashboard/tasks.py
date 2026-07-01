@@ -78,6 +78,16 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
     logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
 
 
+@shared_task
+def purge_expired_data_deletion_archives() -> int:
+    """Permanently purge restore archives for completed data deletion requests."""
+    from urbanlens.dashboard.services.data_deletion import purge_expired_deletion_archives
+
+    purged = purge_expired_deletion_archives()
+    logger.info("Purged %s expired data deletion restore archives", purged)
+    return purged
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def rebuild_map_pin_cache(self, profile_id: int) -> int:
     """Rebuild the full root-pin map cache for a profile."""

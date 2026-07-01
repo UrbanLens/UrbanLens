@@ -231,6 +231,42 @@
         </div>
         {% endif %}
 
+
+
+        {# ── Delete My Data card ─────────────────────────────────────────────── #}
+        <div class="ul-card tools-card tools-card--danger" id="delete-my-data-card">
+            <div class="ul-card-header">
+                <i class="material-icons">delete_forever</i>
+                <h3>Delete My Data</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Fully remove your submitted data from everywhere on the site.
+                    Site admins can restore it for at least 1 month; after that,
+                    the restore copy is permanently deleted.
+                </p>
+                <form method="post" action="{% url 'tools.delete_my_data' %}" class="delete-my-data-form">
+                    {% csrf_token %}
+                    <label for="delete-my-data-confirm" class="delete-confirm-label">Type <strong>DELETE MY DATA</strong> to confirm.</label>
+                    <input
+                        type="text"
+                        id="delete-my-data-confirm"
+                        name="confirm_delete_my_data"
+                        class="delete-confirm-input"
+                        autocomplete="off"
+                        required
+                    >
+                    <div class="tools-card-actions">
+                        <button type="submit" class="btn btn--danger delete-my-data-btn" data-confirm-delete-my-data>
+                            <i class="material-icons">delete_forever</i>
+                            <span>Delete My Data</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         {# ── Invite friend card ──────────────────────────────────────────────── #}
         <div class="ul-card tools-card" id="invite-friend-card">
             <div class="ul-card-header">
@@ -465,6 +501,42 @@
 .tools-invite-btn,
 .tools-admin-btn,
 .export-submit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+
+.tools-card--danger {
+    border: 1px solid rgba(211, 47, 47, .25);
+}
+
+.tools-card--danger .ul-card-header .material-icons {
+    color: #D32F2F;
+}
+
+.delete-confirm-label {
+    display: block;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+    margin-bottom: .4rem;
+}
+
+.delete-confirm-input {
+    width: 100%;
+    border: 1px solid var(--ul-grey-2);
+    border-radius: 6px;
+    padding: .55rem .65rem;
+    font-size: .9rem;
+    box-sizing: border-box;
+}
+
+.btn--danger {
+    background: #D32F2F;
+    color: #fff;
+}
+
+.delete-my-data-btn {
     display: inline-flex;
     align-items: center;
     gap: .4rem;
@@ -804,6 +876,23 @@
             showExportError('Network error while checking export status. Please check your connection and try again.');
         }
     });
+
+
+
+    /* ── Delete My Data confirmation ── */
+    document.addEventListener('submit', function (e) {
+        const form = e.target.closest('.delete-my-data-form');
+        if (!form) return;
+        const input = form.querySelector('[name="confirm_delete_my_data"]');
+        if (!input || input.value !== 'DELETE MY DATA') {
+            e.preventDefault();
+            if (window.toastr) toastr.error('Type DELETE MY DATA exactly to confirm.');
+            else window.alert('Type DELETE MY DATA exactly to confirm.');
+            return;
+        }
+        const message = 'This removes your submitted data from the site and signs you out. It can be restored by an admin for at least 1 month, then it is permanently deleted. Continue?';
+        if (!window.confirm(message)) e.preventDefault();
+    }, true);
 
     /* ── Import: file picker UX ── */
     const fileInput = document.getElementById('import-file-input');

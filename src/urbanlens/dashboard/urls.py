@@ -756,6 +756,7 @@ urlpatterns = [
                 path("export/download/<str:job_id>/", tools.ExportDownloadView.as_view(), name="tools.export.download"),
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
+                path("delete-my-data/", tools.DeleteMyDataView.as_view(), name="tools.delete_my_data"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),
             ],
         ),

@@ -7,6 +7,8 @@ import logging
 import os
 import uuid
 
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -323,6 +325,33 @@ class ImportStatusView(LoginRequiredMixin, View):
             return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
 
         return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
+
+
+class DeleteMyDataView(LoginRequiredMixin, View):
+    """Self-service full data deletion request."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        """Archive the account for temporary restore, delete user data, and sign out."""
+        confirmation = request.POST.get("confirm_delete_my_data", "")
+        if confirmation != "DELETE MY DATA":
+            messages.error(request, "Type DELETE MY DATA exactly to confirm deletion.")
+            return redirect("tools.index")
+
+        from urbanlens.dashboard.services.data_deletion import request_user_data_deletion
+
+        try:
+            result = request_user_data_deletion(request.user.pk)
+        except Exception:
+            logger.exception("Failed to delete data for user %s", request.user.pk)
+            messages.error(request, "We could not delete your data. Please try again or contact support.")
+            return redirect("tools.index")
+
+        logout(request)
+        messages.success(
+            request,
+            f"Your submitted data has been removed. Site admins can restore it until {result.purge_after:%Y-%m-%d}; after that it is permanently deleted.",
+        )
+        return redirect("login")
 
 
 class AdminToolsView(LoginRequiredMixin, PermissionRequiredMixin, View):

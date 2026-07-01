@@ -170,6 +170,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
         "schedule": 60 * 60,
     },
+    "expired-data-deletion-archive-purge": {
+        "task": "urbanlens.dashboard.tasks.purge_expired_data_deletion_archives",
+        "schedule": 60 * 60 * 24,
+    },
 }
 
 

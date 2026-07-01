@@ -11,6 +11,7 @@ from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.campus import Campus
 from urbanlens.dashboard.models.categories import Category
 from urbanlens.dashboard.models.comments import Comment
+from urbanlens.dashboard.models.data_deletion import DataDeletionRequest
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_place import GooglePlace
