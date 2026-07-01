@@ -196,9 +196,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     def _street_view_slide(self, image_bytes: bytes, capture_date: str) -> StreetViewSlide:
         """Return a StreetViewSlide from the given image bytes and capture date."""
-        decoded_image = base64.b64decode(image_bytes)
+        image_b64 = base64.b64encode(image_bytes).decode("ascii")
         return StreetViewSlide(
-            img_src=f"data:image/jpeg;base64,{decoded_image.decode('ascii')}",
+            img_src=f"data:image/jpeg;base64,{image_b64}",
             source="Google Street View",
             date=capture_date or "Unknown",
         )
@@ -206,7 +206,6 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield Street View slides for the given latitude and longitude."""
         image_bytes, capture_date = self.get_street_view_single(latitude, longitude, radius=int(radius))
-        # image_b64 = base64.b64encode(image_bytes).decode("ascii")
         yield self._street_view_slide(image_bytes, capture_date)
 
     def calculate_heading(self, lat1, lng1, lat2, lng2):
