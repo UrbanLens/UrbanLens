@@ -25,6 +25,7 @@ from urbanlens.dashboard.controllers import (
     organize,
     pin,
     pin_edit,
+    pin_sharing,
     settings,
     setup,
     site_admin,
@@ -165,6 +166,8 @@ urlpatterns = [
                     include(
                         [
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
+                            path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
+                            path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
                             path(
                                 "<slug:pin_slug>/campus/",
                                 campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
@@ -715,6 +718,9 @@ urlpatterns = [
             ],
         ),
     ),
+
+    path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
+    path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
     path(
         "notifications/",
         include(
