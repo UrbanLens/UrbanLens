@@ -6,13 +6,14 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
@@ -311,8 +312,12 @@ class PinEditView(LoginRequiredMixin, View):
         if pin_type not in valid_types:
             pin_type = pin.pin_type
 
+        previous_name = (pin.name or "").strip()
+        next_name = (name or "").strip()
+        should_alias_previous_name = "name" in body and bool(previous_name) and previous_name != next_name
+
         pin.name = name
-        pin.name_is_user_provided = bool((name or "").strip())
+        pin.name_is_user_provided = bool(next_name)
         pin.description = description
         pin.pin_type = pin_type
         pin.priority = priority
@@ -329,6 +334,12 @@ class PinEditView(LoginRequiredMixin, View):
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])
+
+        if should_alias_previous_name:
+            try:
+                PinAlias.objects.get_or_create(pin=pin, name=previous_name)
+            except IntegrityError:
+                logger.debug("Pin alias already exists for pin %s and name %s", pin.pk, previous_name)
 
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:

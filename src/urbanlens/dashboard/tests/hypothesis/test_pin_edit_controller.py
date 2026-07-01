@@ -78,3 +78,43 @@ class PinEditCategoryUpdateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
         self.assertEqual(self._categories().count(), 1)
+
+
+class PinEditNameAliasTests(TestCase):
+    """Regression tests for preserving previous user-provided pin names as aliases."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Factory", name_is_user_provided=True)
+
+    def _post(self, body: dict) -> object:
+        req = self.factory.post(
+            f"/map/pin/{self.pin.slug}/edit/",
+            data=json.dumps(body),
+            content_type="application/json",
+        )
+        req.user = self.user
+        with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
+            return PinEditView.as_view()(req, pin_slug=self.pin.slug)
+
+    def test_renaming_pin_adds_previous_name_as_alias(self) -> None:
+        response = self._post({"name": "New Factory"})
+
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.name, "New Factory")
+        self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])
+
+    def test_resubmitting_same_name_does_not_create_alias(self) -> None:
+        response = self._post({"name": "Old Factory"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.pin.aliases.count(), 0)
+
+    def test_partial_update_without_name_does_not_create_alias(self) -> None:
+        response = self._post({"priority": 3})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.pin.aliases.count(), 0)
