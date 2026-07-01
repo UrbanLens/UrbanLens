@@ -21036,6 +21036,7 @@ body.page-index .home-cta-text {
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   display: flex;
+  align-items: center;
   gap: 0.25rem;
   padding: 0.35rem 0.5rem;
   z-index: 500;
@@ -21044,6 +21045,35 @@ body.page-index .home-cta-text {
 
 .reaction-picker-popup[hidden] {
   display: none;
+}
+
+.reaction-picker-recent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.reaction-picker-recent[hidden] {
+  display: none;
+}
+
+.reaction-picker-recent-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.reaction-picker-label {
+  color: var(--ul-grey-5);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.reaction-picker-divider {
+  align-self: stretch;
+  border-left: 1px solid var(--ul-grey-1a);
+  margin: 0 0.2rem;
 }
 
 .reaction-picker-emoji {

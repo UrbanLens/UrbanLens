@@ -161,16 +161,73 @@
         }
     }
 
+    var RECENT_REACTION_EMOJIS_KEY = 'urbanlens.recentReactionEmojis';
+    var RECENT_REACTION_EMOJIS_LIMIT = 5;
+
+    function getRecentReactionEmojis() {
+        try {
+            var parsed = JSON.parse(window.localStorage.getItem(RECENT_REACTION_EMOJIS_KEY) || '[]');
+            return Array.isArray(parsed) ? parsed.filter(function (emoji) {
+                return typeof emoji === 'string' && emoji.length > 0;
+            }).slice(0, RECENT_REACTION_EMOJIS_LIMIT) : [];
+        } catch (err) {
+            return [];
+        }
+    }
+
+    function saveRecentReactionEmoji(emoji) {
+        if (!emoji) return;
+        var recent = getRecentReactionEmojis().filter(function (item) { return item !== emoji; });
+        recent.unshift(emoji);
+        try {
+            window.localStorage.setItem(RECENT_REACTION_EMOJIS_KEY, JSON.stringify(recent.slice(0, RECENT_REACTION_EMOJIS_LIMIT)));
+        } catch (err) {
+            // Browsers can disable localStorage; reactions should still work normally.
+        }
+    }
+
+    function refreshRecentReactionEmojis(popup) {
+        var recent = getRecentReactionEmojis();
+        var section = popup.querySelector('.reaction-picker-recent');
+        if (!section) {
+            section = document.createElement('div');
+            section.className = 'reaction-picker-recent';
+            section.innerHTML = '<div class="reaction-picker-label">Recent</div><div class="reaction-picker-recent-list"></div>' +
+                '<div class="reaction-picker-divider" aria-hidden="true"></div>';
+            popup.insertBefore(section, popup.firstChild);
+        }
+
+        var list = section.querySelector('.reaction-picker-recent-list');
+        list.innerHTML = '';
+        recent.forEach(function (emoji) {
+            var source = Array.prototype.find.call(popup.querySelectorAll('.reaction-picker-emoji:not(.reaction-picker-emoji--recent)'), function (btn) {
+                return (btn.dataset.emoji || btn.textContent.trim()) === emoji;
+            });
+            if (!source) return;
+            var clone = source.cloneNode(true);
+            clone.classList.add('reaction-picker-emoji--recent');
+            clone.setAttribute('title', 'Use recent reaction ' + emoji);
+            list.appendChild(clone);
+            if (window.htmx) window.htmx.process(clone);
+        });
+        section.hidden = !list.children.length;
+    }
+
     function toggleReactionPicker(btn) {
         var popup = btn.parentElement && btn.parentElement.querySelector('.reaction-picker-popup');
         if (!popup) return;
         document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
             if (p !== popup) p.hidden = true;
         });
+        if (popup.hidden) refreshRecentReactionEmojis(popup);
         popup.hidden = !popup.hidden;
     }
 
     document.addEventListener('click', function (e) {
+        var reactionEmojiButton = e.target.closest('.reaction-picker-emoji');
+        if (reactionEmojiButton) {
+            saveRecentReactionEmoji(reactionEmojiButton.dataset.emoji || reactionEmojiButton.textContent.trim());
+        }
         if (!e.target.closest('.reaction-picker')) {
             document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
                 p.hidden = true;
