@@ -55,6 +55,17 @@ class CommentQuerySetTopLevelTests(TestCase):
         qs = Comment.objects.top_level()
         self.assertNotIn(self.reply, qs)
 
+    def test_reply_survives_parent_delete_and_becomes_top_level(self) -> None:
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        reply_pk = self.reply.pk
+        self.top.delete()
+
+        qs = Comment.objects.top_level()
+        reply = Comment.objects.get(pk=reply_pk)
+        self.assertIsNone(reply.parent)
+        self.assertIn(reply, qs)
+
 
 class CommentQuerySetForPinTests(TestCase):
     """for_pin() returns top-level comments for a specific pin."""
@@ -113,6 +124,36 @@ class CommentQuerySetForLocationTests(TestCase):
         qs = Comment.objects.for_location(self.loc1)
         self.assertIn(self.c1, qs)
         self.assertNotIn(self.c2, qs)
+
+
+class TripCommentDeleteTests(TestCase):
+    """Deleting a trip comment parent preserves its replies."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.trip = baker.make("dashboard.Trip", creator=self.user.profile)
+        self.top = baker.make(
+            "dashboard.TripComment",
+            trip=self.trip,
+            author=self.user.profile,
+            parent=None,
+        )
+        self.reply = baker.make(
+            "dashboard.TripComment",
+            trip=self.trip,
+            author=self.user.profile,
+            parent=self.top,
+        )
+
+    def test_reply_survives_parent_delete_and_becomes_top_level(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        reply_pk = self.reply.pk
+        self.top.delete()
+
+        reply = TripComment.objects.get(pk=reply_pk)
+        self.assertIsNone(reply.parent)
+        self.assertIn(reply, self.trip.comments.filter(parent__isnull=True))
 
 
 # ── PinMarkupQuerySet ─────────────────────────────────────────────────────────

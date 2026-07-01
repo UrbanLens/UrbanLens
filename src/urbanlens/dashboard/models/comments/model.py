@@ -39,7 +39,7 @@ class Comment(abstract.Model):
     )
     parent = models.ForeignKey(
         "self",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="replies",
         null=True,
         blank=True,
