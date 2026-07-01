@@ -23,69 +23,92 @@ _MEANINGLESS_NAME_PHRASES: frozenset[str] = frozenset(
     {
         "",
         "abandoned",
-        "abandoned location",
-        "abandoned place",
+        "abandonedlocation",
+        "abandonedplace",
         "coordinate",
         "coordinates",
-        "dropped location",
-        "dropped pin",
-        "gps coordinates",
-        "gps location",
-        "lat lng",
-        "lat/long",
+        "droppedlocation",
+        "droppedpin",
+        "gpscoordinates",
+        "gpslocation",
+        "latlng",
+        "latlong",
         "location",
-        "map marker",
-        "map pin",
+        "mapmarker",
+        "mappin",
         "marker",
-        "n/a",
         "na",
         "nil",
-        "no data",
-        "no details",
-        "no info",
-        "no information available",
-        "no name",
+        "nodata",
+        "nodetails",
+        "noinfo",
+        "noinformationavailable",
+        "noname",
         "none",
-        "not applicable",
-        "not available",
+        "notapplicable",
+        "notavailable",
         "null",
         "pin",
         "place",
         "point",
-        "selected location",
+        "selectedlocation",
         "unknown",
-        "unknown location",
-        "unknown place",
+        "unknownlocation",
+        "unknownplace",
         "unnamed",
-        "unnamed activity",
-        "unnamed location",
-        "unnamed place",
-        "unnamed road",
+        "unnamedactivity",
+        "unnamedlocation",
+        "unnamedplace",
+        "unnamedroad",
         "untitled",
-        "untitled location",
-        "untitled pin",
-        "new location",
-        "new pin",
-        "new place",
+        "untitledlocation",
+        "untitledpin",
+        "newlocation",
+        "newpin",
+        "newplace",
     },
 )
 
-_COORDINATE_NAME_PATTERN = re.compile(
+_STRIP_NAME_PATTERN = re.compile(r"[^a-z0-9]", re.IGNORECASE)
+
+_DECIMAL_COORDINATE_PATTERN = re.compile(
     r"^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*(?:,|\s)\s*"
     r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$",
     re.IGNORECASE,
 )
+
+_DMS_COORDINATE_PATTERN = re.compile(
+    r"""
+    ^\s*
+    \d{1,2}\s*°?\s*
+    \d{1,2}\s*['′]?\s*
+    \d+(?:\.\d+)?\s*(?:"|″)?\s*[NS]
+    \s*,?\s*
+    \d{1,3}\s*°?\s*
+    \d{1,2}\s*['′]?\s*
+    \d+(?:\.\d+)?\s*(?:"|″)?\s*[EW]
+    \s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def is_coordinate_name(name: str) -> bool:
+    return (
+        _DECIMAL_COORDINATE_PATTERN.match(name) is not None
+        or _DMS_COORDINATE_PATTERN.match(name) is not None
+    )
 
 
 def is_meaningful_name(name: str | None) -> bool:
     """Return True when a place or pin name is worth including in external queries."""
     if not name:
         return False
-    if not (stripped := name.strip()):
+    if not (stripped := _STRIP_NAME_PATTERN.sub("", name)):
         return False
-    if stripped.casefold() in _MEANINGLESS_NAME_PHRASES:
+    if is_coordinate_name(name):
         return False
-    return _COORDINATE_NAME_PATTERN.match(stripped) is None
+    return stripped.casefold() not in _MEANINGLESS_NAME_PHRASES
 
 
 def _clean_candidate(value: Any) -> str | None:

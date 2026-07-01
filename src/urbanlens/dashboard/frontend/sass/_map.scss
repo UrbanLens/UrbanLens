@@ -1270,43 +1270,12 @@
     transform: translateX(0);
 }
 
-.pl-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    padding: 13px 15px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    flex-shrink: 0;
-
-    .pl-title {
-        margin-right: auto;
-    }
-}
-
 .pl-title {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(255, 255, 255, 0.45);
-}
-
-.pl-close {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: pointer;
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 1rem;
-    line-height: 1;
-    transition: color 0.15s, background 0.15s;
-}
-
-.pl-close:hover {
-    color: var(--ul-grey-4);
-    background: rgba(255, 255, 255, 0.1);
 }
 
 .pl-body {
@@ -1344,53 +1313,35 @@
     display: flex;
     align-items: stretch;
     border-bottom: 1px solid rgba(255,255,255,.06);
-}
 
-.pin-list-item-btn {
-    display: flex;
-    align-items: center;
-    gap: .6rem;
-    flex: 1;
-    min-width: 0;
-    padding: .55rem 8px .55rem 15px;
-    background: transparent;
-    border: none;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background .12s;
+    &__entry {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        flex: 1;
+        min-width: 0;
+        padding: .55rem 8px .55rem 15px;
+        background: transparent;
+        border: none;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: background .12s;
 
-    &:hover, &:focus-visible {
-        background: rgba(255, 255, 255, 0.06);
-        outline: none;
+        &:hover, &:focus-visible {
+            background: rgba(255, 255, 255, 0.06);
+            outline: none;
+        }
     }
-}
-
-.pin-list-edit-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    flex-shrink: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.4);
-    opacity: 0;
-    transition: opacity .12s, background .12s, color .12s;
-
-    .material-icons {
-        font-size: 1.05rem;
+    
+    &:hover .pin-list-item__edit,
+    &:focus-within .pin-list-item__edit {
+        opacity: 1;
     }
 
-    &:hover, &:focus-visible {
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.9);
-        outline: none;
+    &__edit {
+        align-self: center;
     }
-}
-
-.pin-list-item:hover .pin-list-edit-btn,
-.pin-list-item:focus-within .pin-list-edit-btn {
-    opacity: 1;
 }
 
 .pin-list-icon {
@@ -3790,8 +3741,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .map-layers-toggle,
 .addr-search-history,
 .addr-search-clear,
-.pin-list-item-btn,
-.pin-list-edit-btn,
+.pin-list-item__btn,
+.pin-list-item__edit,
 .pin-list-handle,
 .pagination-btn,
 .leaflet-control-zoom a,

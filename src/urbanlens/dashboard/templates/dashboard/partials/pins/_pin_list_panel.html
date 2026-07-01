@@ -18,7 +18,7 @@ resend the filter-form fields on every page click, so filters stay applied.
     <ul class="pin-list">
         {% for pin in pins %}
         <li class="pin-list-item">
-            <button type="button" class="pin-list-item-btn"
+            <button type="button" class="pin-list-item__entry"
                     onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
                 {% if pin.effective_icon %}
                     {% if pin.effective_icon|is_material_icon %}
@@ -51,7 +51,7 @@ resend the filter-form fields on every page click, so filters stay applied.
                 <span class="pin-list-visited material-icons" title="Visited">check_circle</span>
                 {% endif %}
             </button>
-            <button type="button" class="pin-list-edit-btn"
+            <button type="button" class="btn btn--icon pin-list-item__edit"
                     title="Edit pin" aria-label="Edit pin"
                     onclick="event.stopPropagation(); openEditPinDialog('{{ pin.uuid|escapejs }}')">
                 <i class="material-icons">edit</i>

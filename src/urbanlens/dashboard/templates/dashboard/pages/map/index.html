@@ -334,11 +334,6 @@
 
     {# ── Pin list panel (left-docked) ──────────────────────────────────── #}
     <div id="pin-list-panel">
-        <div class="pl-header">
-            <span class="pl-title">Pin List</span>
-            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Lists every pin that matches your current filters. Click a pin to jump to it on the map." wide=True %}
-            <button class="pl-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
-        </div>
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
