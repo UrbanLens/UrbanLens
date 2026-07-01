@@ -23,7 +23,7 @@
             <div class="trip-card-dates">
                 <i class="material-icons" aria-hidden="true">event</i>
                 <span>
-                    {{ t.effective_start_date|date:"M j, Y" }}{% if t.effective_end_date %} - {{ t.effective_end_date|date:"M j, Y" }}{% endif %}
+                    {{ t.effective_start_date|date:"M j, Y" }}{% if t.effective_end_date and t.effective_end_date != t.effective_start_date %} - {{ t.effective_end_date|date:"M j, Y" }}{% endif %}
                 </span>
                 {% if t.duration_days %}
                 <span class="trip-card-duration">{{ t.duration_days }} day{{ t.duration_days|pluralize }}</span>
