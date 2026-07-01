@@ -6,6 +6,8 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from django.db import IntegrityError
+
 from urbanlens.dashboard.services.google.places import GooglePlacesGateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -93,17 +95,11 @@ def _clean_candidate(value: Any) -> str | None:
     return value if is_meaningful_name(value) else None
 
 
-def best_external_name_for_location(
+def external_name_candidates_for_location(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
-) -> tuple[str, str] | None:
-    """Choose the best externally supplied name for a location.
-
-    Preference order intentionally favours structured place data over broader
-    encyclopedia or park data: explicit candidates (usually freshly loaded
-    Google Places details), cached Google place names, cached Google Places,
-    Wikipedia, then NPS.
-    """
+) -> list[tuple[str, Any]]:
+    """Return raw external name candidates for a location in preference order."""
     candidates: list[tuple[str, Any]] = []
     candidates.extend(extra_candidates or [])
     if getattr(location, "google_place_id", None) and getattr(location, "google_place", None):
@@ -128,11 +124,76 @@ def best_external_name_for_location(
             getattr(location, "pk", None),
             exc_info=True,
         )
+    return candidates
 
-    for source, value in candidates:
+
+def best_external_name_for_location(
+    location: Location,
+    extra_candidates: list[tuple[str, Any]] | None = None,
+) -> tuple[str, str] | None:
+    """Choose the best externally supplied name for a location.
+
+    Preference order intentionally favours structured place data over broader
+    encyclopedia or park data: explicit candidates (usually freshly loaded
+    Google Places details), cached Google place names, cached Google Places,
+    Wikipedia, then NPS.
+    """
+    for source, value in external_name_candidates_for_location(location, extra_candidates=extra_candidates):
         if name := _clean_candidate(value):
             return name, source
     return None
+
+
+def _candidate_names(extra_candidates: list[tuple[str, Any]] | None = None) -> list[tuple[str, str]]:
+    """Return de-duplicated meaningful external names in source order."""
+    candidates: list[tuple[str, Any]] = list(extra_candidates or [])
+    names: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for source, value in candidates:
+        if name := _clean_candidate(value):
+            key = name.casefold()
+            if key not in seen:
+                names.append((source, name))
+                seen.add(key)
+    return names
+
+
+def _add_location_aliases(location: Location, names: list[tuple[str, str]]) -> bool:
+    """Append external names as LocationAlias rows without duplicating the canonical name."""
+    if not getattr(location, "pk", None):
+        return False
+    from urbanlens.dashboard.models.aliases.model import LocationAlias
+
+    canonical = (location.name or "").strip().casefold()
+    changed = False
+    for _source, name in names:
+        if name.casefold() == canonical:
+            continue
+        try:
+            _alias, created = LocationAlias.objects.get_or_create(location=location, name=name)
+        except IntegrityError:
+            created = False
+        changed = changed or created
+    return changed
+
+
+def _add_pin_aliases(pin: Pin, names: list[tuple[str, str]]) -> bool:
+    """Append external names as PinAlias rows without duplicating the pin label."""
+    if not getattr(pin, "pk", None):
+        return False
+    from urbanlens.dashboard.models.aliases.model import PinAlias
+
+    canonical_names = {value.strip().casefold() for value in (pin.name, pin.effective_name) if value}
+    changed = False
+    for _source, name in names:
+        if name.casefold() in canonical_names:
+            continue
+        try:
+            _alias, created = PinAlias.objects.get_or_create(pin=pin, name=name)
+        except IntegrityError:
+            created = False
+        changed = changed or created
+    return changed
 
 
 def update_location_name_from_external_sources(
@@ -142,18 +203,24 @@ def update_location_name_from_external_sources(
     save: bool = True,
 ) -> bool:
     """Replace a meaningless Location.name with the best externally loaded name."""
-    if is_meaningful_name(location.name):
-        return False
     resolved = best_external_name_for_location(location, extra_candidates=extra_candidates)
-    if resolved is None:
-        return False
-    name, _source = resolved
-    if location.name == name:
-        return False
-    location.name = name
-    if save and location.pk:
-        location.save(update_fields=["name", "updated"])
-    return True
+    original_name = location.name
+    name_changed = False
+    if not is_meaningful_name(location.name) and resolved is not None:
+        name, _source = resolved
+        if location.name != name:
+            location.name = name
+            name_changed = True
+            if save and location.pk:
+                location.save(update_fields=["name", "updated"])
+
+    alias_names = _candidate_names(external_name_candidates_for_location(location, extra_candidates=extra_candidates))
+    changed = _add_location_aliases(location, alias_names)
+    if name_changed:
+        return True
+    if original_name == location.name and resolved is None:
+        return changed
+    return changed
 
 
 def update_pin_name_from_external_sources(
@@ -163,17 +230,19 @@ def update_pin_name_from_external_sources(
     save: bool = True,
 ) -> bool:
     """Replace an auto/placeholder pin label unless the user typed a name."""
-    if pin.name_is_user_provided or is_meaningful_name(pin.name):
-        return False
-    if pin.location_id:
-        update_location_name_from_external_sources(pin.location, extra_candidates=extra_candidates, save=save)
-        return False
-    if not extra_candidates:
-        return False
-    for _source, value in extra_candidates:
-        if name := _clean_candidate(value):
-            pin.name = name
-            if save and pin.pk:
-                pin.save(update_fields=["name", "updated"])
-            return True
-    return False
+    name_changed = False
+    if not pin.name_is_user_provided and not is_meaningful_name(pin.name):
+        if pin.location_id:
+            name_changed = update_location_name_from_external_sources(pin.location, extra_candidates=extra_candidates, save=save)
+        elif extra_candidates:
+            for _source, value in extra_candidates:
+                if name := _clean_candidate(value):
+                    pin.name = name
+                    name_changed = True
+                    if save and pin.pk:
+                        pin.save(update_fields=["name", "updated"])
+                    break
+
+    alias_names = _candidate_names(extra_candidates)
+    changed = _add_pin_aliases(pin, alias_names)
+    return name_changed or changed
