@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from requests import HTTPError
 
-from urbanlens.dashboard.services.google.search import GoogleCustomSearchError, GoogleCustomSearchGateway
+from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway
 
 
 def test_search_masks_forbidden_key_from_exception_and_logs(caplog) -> None:

@@ -198,7 +198,7 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
 
     # Try Google Geocoding.
     try:
-        from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
         gateway = GoogleGeocodingGateway()
         result = gateway.geocode_place_name(address)

@@ -1,6 +1,6 @@
 """GitHub API integrations."""
 
-from urbanlens.dashboard.services.github.contributors import (
+from urbanlens.dashboard.services.apis.code_hosting.github.contributors import (
     GITHUB_REPO_SLUG,
     GITHUB_REPO_URL,
     GitHubContributor,

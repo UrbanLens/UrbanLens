@@ -138,7 +138,7 @@ def _ensure_location_address(location) -> None:
         return
 
     try:
-        from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         if not app_settings.google_maps_api_key:

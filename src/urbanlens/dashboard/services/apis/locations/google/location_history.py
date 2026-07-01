@@ -9,7 +9,7 @@ require clustering that is outside the scope of this import.
 
 Typical usage (called from maps.GoogleMapsGateway.import_pins_streaming):
 
-    from urbanlens.dashboard.services.google.location_history import (
+    from urbanlens.dashboard.services.apis.locations.google.location_history import (
         detect_location_history_format,
         import_location_history_streaming,
     )

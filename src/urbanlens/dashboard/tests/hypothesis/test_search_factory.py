@@ -190,7 +190,7 @@ class GetSearchGatewayTests(TestCase):
     """get_search_gateway returns the correct gateway for each provider."""
 
     def test_brave_provider_returns_brave_gateway(self):
-        from urbanlens.dashboard.services.brave.search import BraveSearchGateway
+        from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
         mock_settings = MagicMock()
@@ -203,7 +203,7 @@ class GetSearchGatewayTests(TestCase):
         self.assertIsInstance(gateway, BraveSearchGateway)
 
     def test_google_provider_returns_google_gateway(self):
-        from urbanlens.dashboard.services.google.search import GoogleCustomSearchGateway
+        from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
         mock_settings = MagicMock()
@@ -216,7 +216,7 @@ class GetSearchGatewayTests(TestCase):
         self.assertIsInstance(gateway, GoogleCustomSearchGateway)
 
     def test_db_error_falls_back_to_brave(self):
-        from urbanlens.dashboard.services.brave.search import BraveSearchGateway
+        from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
         with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
@@ -238,7 +238,7 @@ class GetSearchGatewayTests(TestCase):
         self.assertIsInstance(gateway, SearchGateway)
 
     def test_unknown_provider_defaults_to_brave(self):
-        from urbanlens.dashboard.services.brave.search import BraveSearchGateway
+        from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.search import get_search_gateway
 
         mock_settings = MagicMock()

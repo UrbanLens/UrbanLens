@@ -14,7 +14,7 @@ from django.db.models.fields import CharField, DateField, DecimalField, SlugFiel
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.queryset import LocationManager
-from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

@@ -209,7 +209,7 @@ def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
     Returns:
         Up to 6 place suggestions without coordinates.
     """
-    from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
     results: list[AutocompleteResult] = []
     try:
@@ -318,7 +318,7 @@ def resolve_google_place(
     Returns:
         (latitude, longitude, name) — all may be None on failure.
     """
-    from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
     try:
         gw = GooglePlacesGateway(api_key=api_key)

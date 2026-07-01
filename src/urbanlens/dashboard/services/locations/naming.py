@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError
 
-from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

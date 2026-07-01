@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 from requests import HTTPError
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.brave.search import BraveSearchError, BraveSearchGateway, _mask_secret
+from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchError, BraveSearchGateway, _mask_secret
 
 
 _hyp = hyp_settings(max_examples=50, deadline=None)

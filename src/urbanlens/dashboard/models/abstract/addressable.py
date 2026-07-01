@@ -130,7 +130,7 @@ class AddressableModel(Model):
     @cached_place_name.setter
     def cached_place_name(self, value: str | None) -> None:
         """Assign a cached place name by creating or updating the shared GooglePlace row."""
-        from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
         if value is None and not self.google_place_id:
             return
         service = GooglePlaceService()
@@ -155,7 +155,7 @@ class AddressableModel(Model):
     @cid.setter
     def cid(self, value: int | Decimal | None) -> None:
         """Store a Google Maps CID on the shared cache row for these coordinates."""
-        from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
         if value is None:
             return
         GooglePlaceService().set_cid_for_entity(self, value)
@@ -168,7 +168,7 @@ class AddressableModel(Model):
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace."""
-        from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
         if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
             return "No Information Available"
         service = GooglePlaceService()

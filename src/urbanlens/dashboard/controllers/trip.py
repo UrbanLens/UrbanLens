@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
-    from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
+    from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
 
 logger = logging.getLogger(__name__)
 
@@ -1473,7 +1473,7 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
