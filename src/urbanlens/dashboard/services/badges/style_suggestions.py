@@ -76,7 +76,7 @@ def _build_instructions() -> str:
 def _emoji_options() -> list[str]:
     seen: set[str] = set()
     options: list[str] = []
-    for _category, (_label, icons) in ICON_CATEGORIES.items():
+    for (_label, icons) in ICON_CATEGORIES.values():
         for icon, _icon_label in icons:
             if icon not in seen:
                 seen.add(icon)

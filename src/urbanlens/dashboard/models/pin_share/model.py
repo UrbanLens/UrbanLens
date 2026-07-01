@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from django.db import models
-from django.db.models import Index, UniqueConstraint, Q
+from django.db.models import Index, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 

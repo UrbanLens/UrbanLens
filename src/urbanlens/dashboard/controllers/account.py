@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import smtplib
 from typing import TYPE_CHECKING
-from uuid import UUID
 from urllib.parse import quote
+from uuid import UUID
 
 from django import forms
 from django.contrib.auth import REDIRECT_FIELD_NAME
