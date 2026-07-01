@@ -19,10 +19,10 @@ from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.meta import create_bbox
-from urbanlens.dashboard.services.esri import EsriGateway
+from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
 from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
