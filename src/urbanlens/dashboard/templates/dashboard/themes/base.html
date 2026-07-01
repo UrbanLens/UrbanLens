@@ -19,7 +19,7 @@
 
     {% load static %}
     {# ── Shared markup engine - must load before {% block content %} scripts ── #}
-    {% include 'dashboard/partials/_markup_engine.html' %}
+    {% include 'dashboard/partials/layout/_markup_engine.html' %}
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
@@ -32,17 +32,17 @@
 </head>
 
 <body class="{% if page_name %}page-{{ page_name }}{% endif %}">
-    {% include 'dashboard/partials/header.html' %}
+    {% include 'dashboard/partials/layout/header.html' %}
 
     <div class="container">
         {% block content %}{% endblock %}
     </div>
     {% block footer %}
-    {% include 'dashboard/partials/footer.html' %}
+    {% include 'dashboard/partials/layout/footer.html' %}
     {% endblock %}
 
     {% if show_dev_toolbar %}
-    {% include 'dashboard/partials/_dev_toolbar.html' %}
+    {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
     {% endif %}
 
     <!--  Scripts-->
@@ -1143,8 +1143,8 @@
     }());
     </script>
 
-    {% include 'dashboard/partials/_tooltips_script.html' %}
-    {% include 'dashboard/partials/_page_explainer_script.html' %}
+    {% include 'dashboard/partials/ui/_tooltips_script.html' %}
+    {% include 'dashboard/partials/ui/_page_explainer_script.html' %}
     {% block scripts %}{% endblock %}
 
 </body>

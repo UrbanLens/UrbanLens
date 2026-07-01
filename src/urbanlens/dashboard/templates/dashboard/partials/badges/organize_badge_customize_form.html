@@ -25,7 +25,7 @@
             <div class="icon-picker-wrap">
                 {% with badge_id_str=badge.id|stringformat:"d" %}
                 {% with picker_id="cb"|add:badge_id_str current_icon=customization.icon|default:badge.icon|default:"" field_name="icon" %}
-                {% include 'dashboard/partials/_icon_picker.html' %}
+                {% include 'dashboard/partials/ui/_icon_picker.html' %}
                 {% endwith %}{% endwith %}
             </div>
         </div>

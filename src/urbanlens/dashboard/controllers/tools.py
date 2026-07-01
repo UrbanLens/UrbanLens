@@ -55,7 +55,7 @@ def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
     """
     return render(
         request,
-        "dashboard/partials/export_progress.html",
+        "dashboard/partials/tools/export_progress.html",
         {"job_id": job_id, "status": "error", "message": message},
     )
 
@@ -73,7 +73,7 @@ def _import_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
     """
     return render(
         request,
-        "dashboard/partials/import_progress.html",
+        "dashboard/partials/tools/import_progress.html",
         {"job_id": job_id, "status": "error", "message": message},
     )
 
@@ -134,7 +134,7 @@ class ExportStartView(LoginRequiredMixin, View):
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
-                "dashboard/partials/export_progress.html",
+                "dashboard/partials/tools/export_progress.html",
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Export queue is unavailable. Please try again later."},
                 status=503,
             )
@@ -143,7 +143,7 @@ class ExportStartView(LoginRequiredMixin, View):
 
         return render(
             request,
-            "dashboard/partials/export_progress.html",
+            "dashboard/partials/tools/export_progress.html",
             {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing export…"},
         )
 
@@ -181,7 +181,7 @@ class ExportStatusView(LoginRequiredMixin, View):
                 "Could not verify export ownership. Please start a new export.",
             )
 
-        return render(request, "dashboard/partials/export_progress.html", {"job_id": job_id, **data})
+        return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
 
 
 class ExportDownloadView(LoginRequiredMixin, View):
@@ -281,7 +281,7 @@ class ImportStartView(LoginRequiredMixin, View):
             ImportJobStatus(job_id).write("error", 0, "Import queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
-                "dashboard/partials/import_progress.html",
+                "dashboard/partials/tools/import_progress.html",
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Import queue is unavailable. Please try again later."},
                 status=503,
             )
@@ -289,7 +289,7 @@ class ImportStartView(LoginRequiredMixin, View):
         logger.info("Import task %s started for user %s", result.id, request.user.pk)
         return render(
             request,
-            "dashboard/partials/import_progress.html",
+            "dashboard/partials/tools/import_progress.html",
             {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import…"},
         )
 
@@ -322,7 +322,7 @@ class ImportStatusView(LoginRequiredMixin, View):
             logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
             return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
 
-        return render(request, "dashboard/partials/import_progress.html", {"job_id": job_id, **data})
+        return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
 
 
 class AdminToolsView(LoginRequiredMixin, PermissionRequiredMixin, View):

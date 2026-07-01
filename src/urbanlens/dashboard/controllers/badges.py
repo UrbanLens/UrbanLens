@@ -313,7 +313,7 @@ def _render_rows(request: HttpRequest, kind: str, profile: Profile, extra: dict 
     """Render the shared organize badge rows partial."""
     return render(
         request,
-        "dashboard/partials/organize_badge_rows.html",
+        "dashboard/partials/badges/organize_badge_rows.html",
         _rows_ctx(kind, profile, request.user.has_perm(_PERM), extra),
     )
 
@@ -550,7 +550,7 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
 
         return render(
             request,
-            "dashboard/partials/organize_badge_edit_form.html",
+            "dashboard/partials/badges/organize_badge_edit_form.html",
             {
                 **_BASE_CTX,
                 "badge": badge,
@@ -686,7 +686,7 @@ class BadgeMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
         candidates = _queryset_for_kind(self.kind, profile).exclude(id=badge_id)
         return render(
             request,
-            "dashboard/partials/organize_badge_merge_form.html",
+            "dashboard/partials/badges/organize_badge_merge_form.html",
             _merge_form_ctx(cfg, badge, candidates),
         )
 
@@ -894,7 +894,7 @@ class BadgeBulkConvertView(_BadgeKindMixin, LoginRequiredMixin, View):
 class BadgeCustomizeView(_BadgeKindMixin, LoginRequiredMixin, View):
     """Per-user display overrides for global badges."""
 
-    _CUSTOMIZE_FORM = "dashboard/partials/organize_badge_customize_form.html"
+    _CUSTOMIZE_FORM = "dashboard/partials/badges/organize_badge_customize_form.html"
 
     def _customize_ctx(self, badge: Badge, profile: Profile) -> dict:
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization
@@ -966,7 +966,7 @@ def _location_member_ids(location: Location) -> set[int]:
     return set(location.badges.values_list("id", flat=True))
 
 
-_MEMBERSHIP_PANEL = "dashboard/partials/badge_membership_panel.html"
+_MEMBERSHIP_PANEL = "dashboard/partials/badges/badge_membership_panel.html"
 _MEMBERSHIP_URL_KIND = "category"  # URL prefix only; panel accepts all organize badge kinds.
 
 

@@ -8,7 +8,7 @@
             <h1 class="trips-title">
                 <i class="material-icons">flight_takeoff</i>
                 Plan
-                {% include "dashboard/partials/_tooltip_help.html" with text="Create trips, invite friends, attach pins, and track activities along your route." wide=True %}
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Create trips, invite friends, attach pins, and track activities along your route." wide=True %}
             </h1>
             <p class="trips-subtitle">Your trips, routes, and shared plans in one place.</p>
         </div>
@@ -23,14 +23,14 @@
 
     {# ── Trip list ──────────────────────────────────────────────────────── #}
     <div id="trip-list">
-        {% include "dashboard/partials/trip_list_partial.html" %}
+        {% include "dashboard/partials/trips/trip_list_partial.html" %}
     </div>
 
 </div>
 
 {# ── Create trip dialog ─────────────────────────────────────────────────── #}
 <dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
-    {% include "dashboard/partials/_dialog_header.html" with title="New Trip" %}
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
     <form hx-post="{% url 'trips.create' %}"
           hx-target="#trip-list"
           hx-swap="innerHTML"
