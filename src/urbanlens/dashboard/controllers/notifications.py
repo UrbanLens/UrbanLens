@@ -29,6 +29,7 @@ _PREF_FIELDS = [
     ("friend_accepted", "Friend Request Accepted"),
     ("added_to_trip", "Trip Invitation"),
     ("wiki_updated", "Community Wiki Updated"),
+    ("pin_shared", "Pin Shared"),
 ]
 
 

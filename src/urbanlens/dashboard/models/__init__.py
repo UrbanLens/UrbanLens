@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote
+from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust

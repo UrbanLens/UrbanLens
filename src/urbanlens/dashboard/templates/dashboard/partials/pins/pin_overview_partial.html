@@ -9,6 +9,13 @@
         <div class="card-header">
             <i class="material-icons">info_outline</i>
             <span>Details</span>
+            <button type="button" class="btn btn--icon-sm" title="Share pin"
+                    hx-get="{% url 'pin.share.dialog' pin.slug %}"
+                    hx-target="#pin-share-dialog"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-share-dialog').showModal()}">
+                <i class="material-icons">ios_share</i>
+            </button>
             <button type="button" class="btn btn--icon-sm" title="Edit details"
                     onclick="urbanlensCapturePinEditOriginals(); document.getElementById('pin-edit-dialog').showModal()">
                 <i class="material-icons">edit</i>
