@@ -195,7 +195,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # extra Places Details API call.
             if google_place_id and not is_private:
                 try:
-                    from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+                    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
                     from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
                     gp_service = GooglePlaceService()
@@ -657,7 +657,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 logger.info("Google Places skipped: no API key configured.")
             else:
                 try:
-                    from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+                    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
                     gw = GooglePlacesGateway(api_key=api_key)
                     raw_results = gw.search_nearby(lat, lng, radius=radius, included_types=["historical_landmark"])
@@ -700,7 +700,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # ── National Park Service ────────────────────────────────────────────
         if use_nps and settings.nps_api_key:
             try:
-                from urbanlens.dashboard.services.nps.parks import (
+                from urbanlens.dashboard.services.apis.parks.nps.parks import (
                     NPSGateway,
                     _haversine_km as _nps_haversine,
                     _parse_lat_long as _nps_parse_lat_long,
@@ -744,7 +744,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # ── Wikipedia ────────────────────────────────────────────────────────
         if use_wiki:
             try:
-                from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+                from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
 
                 wiki_gw = WikipediaGateway()
                 wiki_places = wiki_gw.get_nearby_articles(lat, lng, radius_m=5000, limit=15)
@@ -788,7 +788,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"place": cached, "cached": True})
 
         try:
-            from urbanlens.dashboard.services.google.places import GooglePlacesGateway
+            from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 
             gateway = GooglePlacesGateway(api_key=api_key)
             detail = gateway.get_place_details(
@@ -888,7 +888,7 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     Returns:
         The newly created Location instance.
     """
-    from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
     # When the caller already knows the canonical name we skip the geocoding

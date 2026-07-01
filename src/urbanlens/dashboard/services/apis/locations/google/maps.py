@@ -20,8 +20,8 @@ from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
-from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
@@ -304,7 +304,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         """
 
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
-        from urbanlens.dashboard.services.google.location_history import (
+        from urbanlens.dashboard.services.apis.locations.google.location_history import (
             import_location_history_streaming,
         )
 

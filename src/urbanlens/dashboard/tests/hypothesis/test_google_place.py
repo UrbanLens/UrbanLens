@@ -10,7 +10,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
 
 class GooglePlaceServiceTests(TestCase):

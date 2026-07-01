@@ -28,10 +28,10 @@ from urbanlens.dashboard.services.apis.locations.meta import create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
-from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
-from urbanlens.dashboard.services.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -534,7 +534,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         htmx:afterOnLoad handler removes the loading placeholder on 204.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -583,7 +583,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Skipped entirely when the pin has no meaningful name.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.wikimedia import WikimediaGateway
+        from urbanlens.dashboard.services.apis.culture.wikimedia import WikimediaGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -631,7 +631,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         when the search/scrape produces no results.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.loopnet import LoopNetGateway
+        from urbanlens.dashboard.services.apis.real_estate.loopnet import LoopNetGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -680,7 +680,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         whose data was retrieved from the NPS API.  Requires an NPS API key.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.nps.parks import NPSGateway
+        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
         if not settings.nps_api_key:
             logger.debug("nps_info: NPS API key not configured, skipping pin %s", pin_slug)
@@ -735,7 +735,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for coordinate-only results with no enrichment.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.nominatim import NominatimGateway
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -856,7 +856,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.latitude or not pin.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
-        from urbanlens.dashboard.services.openweather.gateway import WeatherForecastGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
 
         # Instantiate the WeatherForecastGateway with the API key
         weather_forecast_gateway = WeatherForecastGateway()

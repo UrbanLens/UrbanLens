@@ -10,7 +10,7 @@ from urbanlens.dashboard.models.badges.meta import KIND_TAG
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
-from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -83,7 +83,7 @@ def test_import_filename_badge_uses_ai_style_for_new_badge(monkeypatch: pytest.M
         lambda _filename, _raw_bytes: "csv",
     )
     monkeypatch.setattr(
-        "urbanlens.dashboard.services.google.maps.suggest_badge_style",
+        "urbanlens.dashboard.services.apis.locations.google.maps.suggest_badge_style",
         lambda _name, _user_profile: mock.Mock(icon="🏭", color="#F44336"),
     )
     monkeypatch.setattr(

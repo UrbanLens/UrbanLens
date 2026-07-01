@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.google_place.model import GooglePlace
-from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.UrbanLens.settings.app import settings
