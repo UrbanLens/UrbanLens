@@ -50,15 +50,22 @@ class KartaViewGateway(StreetViewProvider):
         """
         response = self.session.post(
             f"{_BASE_URL}/photo/nearby-photos/",
-            json={
+            data={
                 "lat": latitude,
                 "lng": longitude,
                 "radius": radius,
                 "page": page,
-                "itemsPerPage": items_per_page,
+                "ipp": items_per_page,
             },
             timeout=10,
         )
+        if not response.ok:
+            logger.warning(
+                "KartaView error %s for %s: %s",
+                response.status_code,
+                response.url,
+                response.text,
+            )
         response.raise_for_status()
         return response.json()
 
