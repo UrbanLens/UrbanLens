@@ -89,12 +89,12 @@
 
         {# ── Description / dates (if any) ───────────────────────────────── #}
         {% if location.description or location.date_abandoned or location.effective_date_last_active %}
-        <div class="wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
-            <div class="wiki-card-header">
+        <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
+            <div class="card-header">
                 <i class="material-icons">info_outline</i>
                 <h2>About</h2>
             </div>
-            <div class="wiki-meta-body">
+            <div class="card__body wiki-meta-body">
                 {% if location.description %}
                 <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
                 {% endif %}
@@ -129,12 +129,12 @@
         {% endif %}
 
         {# ── Community stats card ────────────────────────────────────────── #}
-        <div class="wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
-            <div class="wiki-card-header">
+        <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
+            <div class="card-header">
                 <i class="material-icons">people</i>
                 <h2>Community</h2>
             </div>
-            <div class="wiki-stats-grid">
+            <div class="card__body wiki-stats-grid">
                 <div class="wiki-stat">
                     <span class="wiki-stat-value">{{ pin_count }}</span>
                     <span class="wiki-stat-label">{{ pin_count|pluralize:"user has,users have" }} this pinned</span>
@@ -224,12 +224,12 @@
              hx-trigger="load"
              hx-swap="outerHTML"
              id="location-aliases-panel"
-             class="wiki-card aliases-panel">
+             class="card wiki-card aliases-panel">
             <div class="card-header">
                 <i class="material-icons">label_important</i>
                 <span>Aliases</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
 
         {# ── Photo gallery ────────────────────────────────────────────────── #}
@@ -242,7 +242,7 @@
                     <i class="material-icons">photo_library</i>
                     <span>Photos</span>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
         </div>
 
@@ -251,16 +251,16 @@
              hx-get="{% url 'location.wiki.comments' location.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
-             class="wiki-card">
-            <div class="wiki-card-header">
+             class="card wiki-card">
+            <div class="card-header">
                 <i class="material-icons">chat</i>
                 <h2>Discussion</h2>
             </div>
-            <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
         </div>
 
         {# ── Tabs: Details / Edit history ────────────────────────────────── #}
-        <div class="wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+        <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
             <div class="wiki-tabs">
                 <button class="wiki-tab wiki-tab--active" data-tab="history"
                         hx-get="{% url 'location.wiki.history' location.slug %}"
@@ -270,7 +270,7 @@
                     <i class="material-icons">history</i> Edit History
                 </button>
             </div>
-            <div id="wiki-tab-content" class="wiki-tab-content">
+            <div id="wiki-tab-content" class="card__body wiki-tab-content">
                 <div class="wiki-loading">
                     <i class="material-icons spin">autorenew</i> Loading…
                 </div>

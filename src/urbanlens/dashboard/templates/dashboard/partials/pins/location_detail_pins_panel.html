@@ -1,5 +1,5 @@
-<div id="location-detail-pins-panel" class="wiki-card wiki-detail-pins">
-    <div class="wiki-card-header">
+<div id="location-detail-pins-panel" class="card wiki-card wiki-detail-pins">
+    <div class="card-header">
         <i class="material-icons">push_pin</i>
         <h2>Detail Pins</h2>
         <button type="button" class="wiki-action-btn wiki-action-btn--sm"
@@ -7,6 +7,7 @@
             <i class="material-icons">add_location</i> Add
         </button>
     </div>
+    <div class="card__body wiki-detail-pins-body">
     <p class="wiki-card-desc">
         Community sub-markers within this location - buildings, entrances, points of interest, and hazards.
     </p>
@@ -52,4 +53,5 @@
     {% else %}
     <p class="detail-pin-wiki-empty">No community detail pins yet.</p>
     {% endif %}
+    </div>
 </div>
