@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.views.generic import TemplateView
 
-from urbanlens.dashboard.services.github.contributors import (
+from urbanlens.dashboard.services.apis.code_hosting.github.contributors import (
     GITHUB_REPO_URL,
     get_github_contributors,
 )

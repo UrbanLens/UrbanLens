@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.google.place_info import GooglePlaceService, normalize_coordinate
+from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService, normalize_coordinate
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 
 logger = logging.getLogger(__name__)

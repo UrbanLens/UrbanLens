@@ -40,7 +40,7 @@ class SmithsonianGateway(Gateway):
         return self.parse_response(data)
 
     def get_images_by_coordinates(self, latitude: float, longitude: float) -> list[dict]:
-        from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
         google_gateway = GoogleGeocodingGateway(api_key=settings.google_maps_api_key)

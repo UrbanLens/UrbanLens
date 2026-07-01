@@ -171,7 +171,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     # Wikipedia
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
 
             address_components = {
                 "locality": location.locality or "",
@@ -195,7 +195,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     state_code = location.administrative_area_level_1 or ""
     if state_code and app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
         try:
-            from urbanlens.dashboard.services.nps.parks import NPSGateway
+            from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
             park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.name or "")
             LocationCache.set(location, "nps", park or {}, query_key=state_code)

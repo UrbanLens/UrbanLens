@@ -9,7 +9,7 @@ from typing import Protocol
 
 import requests
 
-from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations import naming
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.UrbanLens.settings.app import settings
