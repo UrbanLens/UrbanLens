@@ -316,7 +316,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         slides: list[SatelliteSlide] = []
         gateways: list[SatelliteViewProvider] = [
-            GoogleMapsGateway(),
+            GoogleMapsGateway(api_key=settings.google_places_api_key or ""),
             EsriGateway(),
             NasaGibsGateway(),
             MapboxGateway(),
