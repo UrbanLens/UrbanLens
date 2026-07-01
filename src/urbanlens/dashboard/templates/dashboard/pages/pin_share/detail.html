@@ -1,0 +1,42 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block title %}Shared Pin{% endblock %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="pin-detail-grid">
+  <div class="pin-details location-details card">
+    <div class="card-header"><i class="material-icons">ios_share</i><span>Shared Pin</span></div>
+    <div class="details-grid">
+      <div class="detail-row full-width"><span class="field-label">From</span><span class="field-value">{{ share.from_profile.username }}</span></div>
+      <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ pin.display_label }}</span></div>
+      {% if pin.description %}<div class="detail-row full-width"><span class="field-label">Description</span><span class="field-value">{{ pin.description }}</span></div>{% endif %}
+      {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
+    </div>
+    {% if share.is_actionable %}
+    <form method="post" action="{% url 'pin.share.respond' share.id %}" class="dialog-actions">
+      {% csrf_token %}
+      <button name="action" value="reject" class="btn btn--ghost" type="submit"><i class="material-icons">close</i> Reject</button>
+      <button name="action" value="accept" class="btn btn--primary" type="submit"><i class="material-icons">check</i> Accept and add to my map</button>
+    </form>
+    {% else %}
+    <p>This share is {{ share.get_status_display|lower }}.</p>
+    {% endif %}
+  </div>
+  <div class="location-map pin-map card"><div class="card-header"><i class="material-icons">place</i><h3>Location</h3></div><div id="shared-pin-map" style="height:420px"></div></div>
+</div>
+<script>
+(function(){
+  const lat = {{ pin.effective_latitude|default:'null' }};
+  const lng = {{ pin.effective_longitude|default:'null' }};
+  if (lat === null || lng === null) return;
+  const map = L.map('shared-pin-map').setView([lat, lng], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+  L.marker([lat, lng]).addTo(map).bindPopup('{{ pin.display_label|escapejs }}').openPopup();
+})();
+</script>
+{% endblock %}

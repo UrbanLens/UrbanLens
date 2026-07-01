@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import smtplib
 from typing import TYPE_CHECKING
+from uuid import UUID
 from urllib.parse import quote
 
 from django import forms
@@ -165,13 +166,18 @@ class SignupView(generic.CreateView):
 
     def form_valid(self, form: RegistrationForm) -> HttpResponse:
         user = form.save()
-        verification = EmailVerification.objects.create(user=user)
+        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
+        verification = EmailVerification.objects.create(
+            user=user,
+            pending_invite_token=_coerce_invite_token(invite_token),
+        )
         self._send_verification_email(user, verification)
         # Store the email in session so the "check email" page can display it
         self.request.session["pending_verification_email"] = user.email
         # Store pending invite token (if the user arrived via an invitation link)
-        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
-        if invite_token:
+        # in the session as a fast path and on the verification record so invite
+        # acceptance survives opening the verification email in a different browser.
+        if _coerce_invite_token(invite_token):
             self.request.session["pending_invite_token"] = invite_token
         return redirect("verify_email_sent")
 
@@ -261,8 +267,9 @@ class VerifyEmailView(View):
             profile.save(update_fields=["profile_setup_complete"])
 
         # Auto-send friend request from any pending email invitations
-        invite_token = request.session.pop("pending_invite_token", None)
-        _process_pending_invitations(user, invite_token=invite_token)
+        session_invite_token = request.session.pop("pending_invite_token", None)
+        invite_token = session_invite_token or verification.pending_invite_token
+        _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
 
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 
@@ -278,9 +285,19 @@ class ResendVerificationView(View):
         email = request.POST.get("email", "").strip().lower()
         user = User.objects.filter(email__iexact=email, is_active=False).first()
         if user:
-            # Delete old token and create a fresh one
+            # Delete old token and create a fresh one while preserving any
+            # signup invite token captured before the verification resend.
+            existing_verification = EmailVerification.objects.filter(user=user).first()
+            pending_invite_token = (
+                existing_verification.pending_invite_token
+                if existing_verification
+                else None
+            )
             EmailVerification.objects.filter(user=user).delete()
-            verification = EmailVerification.objects.create(user=user)
+            verification = EmailVerification.objects.create(
+                user=user,
+                pending_invite_token=pending_invite_token,
+            )
             _send_verification_email(request, user, verification)
             request.session["pending_verification_email"] = user.email
         # Always redirect to "sent" page (don't reveal whether email exists)
@@ -417,6 +434,16 @@ class PostLoginRedirectView(View):
             return redirect("profile.edit")
 
         return redirect("map.view")
+
+
+def _coerce_invite_token(invite_token: object) -> UUID | None:
+    """Return a valid invite UUID or None for blank/malformed tokens."""
+    if not invite_token:
+        return None
+    try:
+        return UUID(str(invite_token))
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 
 # ── Invitation processing ──────────────────────────────────────────────────

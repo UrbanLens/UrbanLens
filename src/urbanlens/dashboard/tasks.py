@@ -78,6 +78,16 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
     logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def cleanup_vestigial_assets_task() -> dict[str, int]:
+    """Sweep stale import/export artifacts missed by per-job cleanup tasks."""
+    from urbanlens.dashboard.services.vestigial_assets import cleanup_vestigial_assets
+
+    result = cleanup_vestigial_assets()
+    logger.info("Vestigial asset cleanup complete: %s", result.as_dict())
+    return result.as_dict()
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def rebuild_map_pin_cache(self, profile_id: int) -> int:
     """Rebuild the full root-pin map cache for a profile."""

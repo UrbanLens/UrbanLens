@@ -290,6 +290,7 @@
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     display: flex;
+    align-items: center;
     gap: .25rem;
     padding: .35rem .5rem;
     z-index: 500;
@@ -298,6 +299,36 @@
     &[hidden] {
         display: none;
     }
+}
+
+.reaction-picker-recent {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.reaction-picker-recent-list {
+    display: inline-flex;
+    align-items: center;
+    gap: .15rem;
+}
+
+.reaction-picker-label {
+    color: var(--ul-grey-5);
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+.reaction-picker-divider {
+    align-self: stretch;
+    border-left: 1px solid var(--ul-grey-1a);
+    margin: 0 .2rem;
 }
 
 .reaction-picker-emoji {

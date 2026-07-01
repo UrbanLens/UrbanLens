@@ -6,23 +6,22 @@ This file covers the customization-aware display properties and queryset filters
 Property tests use unsaved Badge instances with _user_customizations injected
 directly - no DB access required.  Queryset tests use baker.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.badges.model import (
-    Badge,
     KIND_CATEGORY,
     KIND_STATUS,
     KIND_TAG,
+    Badge,
 )
-
 
 _hyp = settings(max_examples=50, deadline=None)
 _text = st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=("L", "N")))
@@ -45,6 +44,7 @@ def _custom(name: str | None = None, icon: str | None = None, color: str | None 
 
 # ── _get_customization ────────────────────────────────────────────────────────
 
+
 class BadgeGetCustomizationTests(TestCase):
     """_get_customization() returns the first prefetched item or None."""
 
@@ -60,6 +60,7 @@ class BadgeGetCustomizationTests(TestCase):
 
 
 # ── effective_name ────────────────────────────────────────────────────────────
+
 
 class BadgeEffectiveNameTests(TestCase):
     """effective_name returns the user's override or falls back to the badge name."""
@@ -92,6 +93,7 @@ class BadgeEffectiveNameTests(TestCase):
 
 # ── effective_icon ────────────────────────────────────────────────────────────
 
+
 class BadgeEffectiveIconTests(TestCase):
     """effective_icon returns the user's override or falls back to the badge icon."""
 
@@ -115,6 +117,7 @@ class BadgeEffectiveIconTests(TestCase):
 
 # ── effective_color ───────────────────────────────────────────────────────────
 
+
 class BadgeEffectiveColorTests(TestCase):
     """effective_color returns the user's override or falls back to the badge color."""
 
@@ -137,6 +140,7 @@ class BadgeEffectiveColorTests(TestCase):
 
 
 # ── is_customized ─────────────────────────────────────────────────────────────
+
 
 class BadgeIsCustomizedTests(TestCase):
     """is_customized is True when the prefetched customization has any non-None field."""
@@ -167,6 +171,7 @@ class BadgeIsCustomizedTests(TestCase):
 
 # ── icon_is_overridden ────────────────────────────────────────────────────────
 
+
 class BadgeIconIsOverriddenTests(TestCase):
     """icon_is_overridden is True only when customization.icon is not None."""
 
@@ -186,6 +191,7 @@ class BadgeIconIsOverriddenTests(TestCase):
 
 # ── Badge.__str__ ─────────────────────────────────────────────────────────────
 
+
 class BadgeStrTests(TestCase):
     """__str__ includes [global] for shared badges and (profile) for user-owned ones."""
 
@@ -202,6 +208,7 @@ class BadgeStrTests(TestCase):
 
 
 # ── BadgeQuerySet.tags / categories / statuses ────────────────────────────────
+
 
 class BadgeQuerySetKindTests(TestCase):
     """tags(), categories(), and statuses() filter by the kind field."""
@@ -229,6 +236,7 @@ class BadgeQuerySetKindTests(TestCase):
 
 
 # ── BadgeQuerySet.visible_to / global_only / for_profile ─────────────────────
+
 
 class BadgeQuerySetVisibilityTests(TestCase):
     """visible_to, global_only, and for_profile filter by badge ownership."""
@@ -274,15 +282,26 @@ class BadgeQuerySetVisibilityTests(TestCase):
 
 # ── BadgeQuerySet.with_icon ───────────────────────────────────────────────────
 
+
 class BadgeQuerySetWithIconTests(TestCase):
     """with_icon() returns badges that have a non-empty icon or custom_icon."""
 
     def setUp(self):
         self.with_icon = baker.make(
-            "dashboard.Badge", name="starred", icon="⭐", custom_icon=None, profile=None, kind=KIND_TAG
+            "dashboard.Badge",
+            name="starred",
+            icon="⭐",
+            custom_icon=None,
+            profile=None,
+            kind=KIND_TAG,
         )
         self.no_icon = baker.make(
-            "dashboard.Badge", name="plain", icon=None, custom_icon=None, profile=None, kind=KIND_TAG
+            "dashboard.Badge",
+            name="plain",
+            icon=None,
+            custom_icon=None,
+            profile=None,
+            kind=KIND_TAG,
         )
 
     def test_includes_badge_with_icon(self) -> None:
@@ -295,6 +314,7 @@ class BadgeQuerySetWithIconTests(TestCase):
 
 
 # ── BadgeQuerySet.ordered ─────────────────────────────────────────────────────
+
 
 class BadgeQuerySetOrderedTests(TestCase):
     """ordered() returns a queryset ordered by -order then name."""
@@ -314,11 +334,13 @@ class BadgeQuerySetOrderedTests(TestCase):
 
 # ── BadgeQuerySet.with_customizations_for ────────────────────────────────────
 
+
 class BadgeQuerySetWithCustomizationsForTests(TestCase):
     """with_customizations_for() prefetches BadgeCustomization rows into _user_customizations."""
 
     def setUp(self):
         from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+
         self.BadgeCustomization = BadgeCustomization
         self.user = baker.make("auth.User")
         self.other = baker.make("auth.User")
@@ -365,6 +387,7 @@ class BadgeQuerySetWithCustomizationsForTests(TestCase):
 
 # ── BadgeQuerySet.with_pin_counts ─────────────────────────────────────────────
 
+
 class BadgeQuerySetWithPinCountsTests(TestCase):
     """with_pin_counts() annotates pin_count and location_count on each badge."""
 
@@ -394,6 +417,7 @@ class BadgeQuerySetWithPinCountsTests(TestCase):
 
 
 # ── Badge.get_badge_and_descendants ──────────────────────────────────────────
+
 
 class BadgeGetBadgeAndDescendantsTests(TestCase):
     """get_badge_and_descendants() BFS returns a badge and all its descendants."""
@@ -446,6 +470,7 @@ class BadgeGetBadgeAndDescendantsTests(TestCase):
 
 # ── Badge.initial_order_for_parents ───────────────────────────────────────────
 
+
 class BadgeInitialOrderForParentsTests(TestCase):
     """initial_order_for_parents() derives order from selected parent badges."""
 
@@ -472,3 +497,28 @@ class BadgeInitialOrderForParentsTests(TestCase):
             Badge.initial_order_for_parents(self.profile, [hospital.pk, pennsylvania.pk]),
             19,
         )
+
+
+# ── Profile default badges ───────────────────────────────────────────────────
+
+
+class ProfileDefaultBadgeSignalTests(TestCase):
+    """New user profiles receive ordinary starter tag badges."""
+
+    def test_new_user_gets_editable_default_tag_badges(self) -> None:
+        user = baker.make(User)
+
+        badges = Badge.objects.filter(
+            profile=user.profile,
+            kind=KIND_TAG,
+            name__in=[
+                "Notable",
+                "Graffiti",
+                "Photography",
+                "Dangerous",
+                "Popular",
+            ],
+        )
+
+        self.assertEqual(badges.count(), 5)
+        self.assertFalse(badges.filter(is_protected=True).exists())

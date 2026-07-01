@@ -83,6 +83,7 @@
             <div class="reaction-picker-popup" hidden>
               {% for emoji in allowed_emojis %}
               <button type="button" class="reaction-picker-emoji"
+                      data-emoji="{{ emoji }}"
                       hx-post="{% url 'trips.comment.react' trip.uuid c.id %}"
                       hx-target="#comment-reactions-{{ c.id }}"
                       hx-swap="outerHTML"
@@ -220,6 +221,7 @@
                   <div class="reaction-picker-popup" hidden>
                     {% for emoji in allowed_emojis %}
                     <button type="button" class="reaction-picker-emoji"
+                            data-emoji="{{ emoji }}"
                             hx-post="{% url 'trips.comment.react' trip.uuid r.id %}"
                             hx-target="#comment-reactions-{{ r.id }}"
                             hx-swap="outerHTML"

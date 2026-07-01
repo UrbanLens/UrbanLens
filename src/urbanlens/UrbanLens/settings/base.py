@@ -170,6 +170,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
         "schedule": 60 * 60,
     },
+    "scheduled-vestigial-asset-cleanup": {
+        "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
+        "schedule": 60 * 60,
+    },
 }
 
 

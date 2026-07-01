@@ -1078,6 +1078,14 @@
         box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
     }
 
+    .reaction-picker-label {
+        color: var(--ul-grey-6);
+    }
+
+    .reaction-picker-divider {
+        border-left-color: var(--ul-grey-2);
+    }
+
     .reaction-picker-emoji:hover {
         background: var(--ul-grey-1);
     }

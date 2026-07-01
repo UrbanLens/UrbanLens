@@ -23,6 +23,7 @@ class EmailVerification(models.Model):
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created = models.DateTimeField(auto_now_add=True)
     verified_at = models.DateTimeField(null=True, blank=True)
+    pending_invite_token = models.UUIDField(null=True, blank=True)
 
     objects = EmailVerificationManager()
 
