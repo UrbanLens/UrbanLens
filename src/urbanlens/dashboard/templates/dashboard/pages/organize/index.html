@@ -9,7 +9,7 @@
         <div>
             <h1 class="organize-page-title">{% if standalone_mode %}{{ standalone_title }}{% else %}Organize{% endif %}
                 {% if not standalone_mode %}
-                {% include "dashboard/partials/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
                 {% endif %}
             </h1>
             {% if standalone_mode and standalone_subtitle %}
@@ -78,11 +78,11 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# BADGE PANELS: tags, categories, and statuses share one Badge template.     #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' badge_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' badge_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' badge_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' badge_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' badge_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' badge_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PRIORITY PANEL (full Organize page only)                                  #}
@@ -94,7 +94,7 @@
         <div class="badge-header">
             <div>
                 <h2 class="badge-title">Display Order
-                    {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
+                    {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
                 </h2>
             </div>
             <div class="priority-panel-tools">
@@ -111,7 +111,7 @@
             </div>
         </div>
 
-        {% include "dashboard/partials/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
+        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/explainers/_priority_visual.html" %}
 
         <div id="priority-list" class="priority-list">
             {% for item in priority_items %}
@@ -180,7 +180,7 @@
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# PEOPLE PANEL: people labels are Badge(kind='people') too.                 #}
     {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' badge_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
+    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' badge_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
 
 </div>{# end .organize-page #}
 
@@ -207,23 +207,23 @@
 </div>
 
 {# ── Shared badge edit dialog (tags, categories, statuses) ────────────────── #}
-{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='badge-edit-dialog' title='Edit' title_id='badge-edit-dialog-title' body_id='badge-edit-dialog-body' %}
-{% include 'dashboard/partials/organize_badge_edit_dialog.html' with dialog_id='people-badge-edit-dialog' title='Edit Label' title_id='people-badge-edit-dialog-title' body_id='people-badge-edit-dialog-body' %}
+{% include 'dashboard/partials/badges/organize_badge_edit_dialog.html' with dialog_id='badge-edit-dialog' title='Edit' title_id='badge-edit-dialog-title' body_id='badge-edit-dialog-body' %}
+{% include 'dashboard/partials/badges/organize_badge_edit_dialog.html' with dialog_id='people-badge-edit-dialog' title='Edit Label' title_id='people-badge-edit-dialog-title' body_id='people-badge-edit-dialog-body' %}
 
 {# ── Badge merge dialogs (shared template for tag/category/status) ──────────── #}
-{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='tag' title='Merge Tags' %}
-{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='cat' title='Merge Categories' %}
-{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='status' title='Merge Statuses' %}
-{% include 'dashboard/partials/organize_badge_merge_dialog.html' with ns='people' title='Merge Labels' %}
+{% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='tag' title='Merge Tags' %}
+{% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='cat' title='Merge Categories' %}
+{% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='status' title='Merge Statuses' %}
+{% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='people' title='Merge Labels' %}
 
 {# ── Badge bulk-edit dialogs use the shared edit field structure. ─────────── #}
-{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='tag' title='Edit Tags' picker_id='tag-bulk-edit' %}
+{% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='tag' title='Edit Tags' picker_id='tag-bulk-edit' %}
 
-{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='cat' title='Edit Categories' picker_id='cat-bulk-edit' %}
+{% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='cat' title='Edit Categories' picker_id='cat-bulk-edit' %}
 
-{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
+{% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
 
-{% include 'dashboard/partials/organize_badge_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' parent_items=user_badges %}
+{% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' parent_items=user_badges %}
 
 <script>
 (function initOrganizeOnboarding() {

@@ -152,7 +152,7 @@
     <div id="filter-panel">
         <div class="fp-header">
             <span class="fp-title">Filter (F)</span>
-            {% include "dashboard/partials/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
+            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
             <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
         </div>
 
@@ -176,19 +176,19 @@
                 <div class="fp-accordion-body fp-scores-body">
                     <div class="fp-score-group">
                         <div class="fp-score-label">Rating</div>
-                        {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_rating" max_field="max_rating" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_rating" max_field="max_rating" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                     <div class="fp-score-group">
                         <div class="fp-score-label">Danger</div>
-                        {% include "dashboard/partials/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_danger" max_field="max_danger" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=1 max=5 min_value=1 max_value=5 min_field="min_danger" max_field="max_danger" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                     <div class="fp-score-group">
                         <div class="fp-score-label">Priority</div>
-                        {% include "dashboard/partials/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_priority" max_field="max_priority" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_priority" max_field="max_priority" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                     <div class="fp-score-group">
                         <div class="fp-score-label">Vulnerability</div>
-                        {% include "dashboard/partials/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_vulnerability" max_field="max_vulnerability" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_vulnerability" max_field="max_vulnerability" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                 </div>
             </details>
@@ -336,7 +336,7 @@
     <div id="pin-list-panel">
         <div class="pl-header">
             <span class="pl-title">Pin List</span>
-            {% include "dashboard/partials/_tooltip_help.html" with text="Lists every pin that matches your current filters. Click a pin to jump to it on the map." wide=True %}
+            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Lists every pin that matches your current filters. Click a pin to jump to it on the map." wide=True %}
             <button class="pl-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
         </div>
         <div class="pl-body" id="pin-list-body"></div>
@@ -442,7 +442,7 @@
                 <div class="form-field">
                     <label class="form-label">Icon</label>
                     {% with picker_id='add-pin' current_icon='' field_name='_apdlg_icon_unused' show_upload=True %}
-                    {% include 'dashboard/partials/_icon_picker.html' %}
+                    {% include 'dashboard/partials/ui/_icon_picker.html' %}
                     {% endwith %}
                 </div>
                 <div class="form-field">
@@ -472,7 +472,7 @@
             <span class="apdlg-privacy-label">
                 <i class="material-icons">lock</i>
                 Private pin
-                {% include "dashboard/partials/_tooltip_help.html" with text="Private pins are never linked to a community wiki." wide=True %}
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Private pins are never linked to a community wiki." wide=True %}
             </span>
         </div>
 
@@ -485,7 +485,7 @@
 
 {# Mini dialog: "Create a badge" from the add-pin badge selector #}
 <dialog id="apdlg-create-badge-dialog" class="ul-dialog tag-create-card">
-    {% include "dashboard/partials/_dialog_header.html" with title="Create a badge" %}
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a badge" %}
     <div class="ul-dialog-body">
         <div class="form-field">
             <label class="form-label" for="apdlg-cbname">Name</label>
@@ -5393,7 +5393,7 @@
 
 </script>
 
-{% include "dashboard/partials/_dual_range_slider_script.html" %}
+{% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 
 {# ── Location conflict picker dialog ────────────────────────────────────────── #}
 <dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog">

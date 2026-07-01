@@ -542,7 +542,7 @@ class EditProfileView(LoginRequiredMixin, View):
                 discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
             return render(
                 request,
-                "dashboard/partials/profile_social_links.html",
+                "dashboard/partials/profile/profile_social_links.html",
                 {
                     "social_links": get_profile_links(profile),
                     "discord_form": discord_form,
@@ -792,7 +792,7 @@ def _render_profile_annotation_partial(
 
     return render(
         request,
-        "dashboard/partials/profile_annotation_content.html",
+        "dashboard/partials/profile/profile_annotation_content.html",
         {
             "subject": subject,
             "viewer_notes": viewer_notes,

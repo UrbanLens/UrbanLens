@@ -149,7 +149,7 @@
             <div class="settings-field">
                 <label class="settings-label">
                     Map Dark Mode
-                    {% include "dashboard/partials/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
                 </label>
                 <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
                 <div class="settings-theme-row">
@@ -239,7 +239,7 @@
             <div class="settings-field">
                 <label class="settings-label">
                     Default Map View
-                    {% include "dashboard/partials/_tooltip_help.html" with text="The basemap shown when you open the map. Remember keeps whichever view you used last." %}
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="The basemap shown when you open the map. Remember keeps whichever view you used last." %}
                 </label>
                 <p class="settings-help">{{ map_display_form.default_map_view.help_text }}</p>
                 <div class="settings-map-view-row">
@@ -262,7 +262,7 @@
             <div class="settings-field">
                 <label class="settings-label">
                     Starting Point
-                    {% include "dashboard/partials/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
                 </label>
                 <div class="settings-map-view-row">
                     {% for radio in map_center_form.map_center_mode %}
@@ -307,7 +307,7 @@
             <div class="settings-field">
                 <label class="settings-label">
                     {{ map_display_form.cluster_radius.label }}
-                    {% include "dashboard/partials/_tooltip_help.html" with text="Nearby pins group into a cluster badge at this pixel radius. Auto adjusts with zoom level." wide=True %}
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Nearby pins group into a cluster badge at this pixel radius. Auto adjusts with zoom level." wide=True %}
                 </label>
                 <p class="settings-help">Group pins within this radius. "Auto" adjusts the radius based on zoom level.</p>
 

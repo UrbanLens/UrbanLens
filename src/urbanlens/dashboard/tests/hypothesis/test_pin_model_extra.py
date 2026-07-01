@@ -302,3 +302,23 @@ class PinToDetailJsonTests(TestCase):
         result = self.pin.to_detail_json()
         self.assertIn("latitude", result)
         self.assertIn("longitude", result)
+
+class PinExternalNameRefreshTests(TestCase):
+    """External API data never overwrites explicitly user-provided pin names."""
+
+    def test_user_provided_placeholder_pin_name_is_preserved(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+
+        pin = Pin(name="Unknown", name_is_user_provided=True)
+
+        self.assertFalse(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
+        self.assertEqual(pin.name, "Unknown")
+
+    def test_auto_placeholder_private_pin_name_can_be_replaced(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+
+        pin = Pin(name="Dropped Pin", name_is_user_provided=False)
+        pin._state.fields_cache["location"] = None
+
+        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
+        self.assertEqual(pin.name, "Real Place")

@@ -54,7 +54,7 @@ class NotificationDropdownView(LoginRequiredMixin, View):
         unread_count = NotificationLog.objects.for_profile(profile).unread().count()
         return render(
             request,
-            "dashboard/partials/notification_dropdown.html",
+            "dashboard/partials/notifications/notification_dropdown.html",
             {
                 "notifications": notifications,
                 "unread_count": unread_count,
@@ -77,7 +77,7 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
             notification.save(update_fields=["status", "updated"])
         response = render(
             request,
-            "dashboard/partials/notification_item.html",
+            "dashboard/partials/notifications/notification_item.html",
             {"n": notification},
         )
         return _trigger_badge_refresh(response)
@@ -91,7 +91,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
         NotificationLog.objects.for_profile(profile).unread().mark_read()
         response = render(
             request,
-            "dashboard/partials/notification_dropdown.html",
+            "dashboard/partials/notifications/notification_dropdown.html",
             {
                 "notifications": NotificationLog.objects.for_profile(profile)
                 .select_related("source_profile")
@@ -108,7 +108,7 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
     def _render(self, request, prefs, *, saved: bool = False) -> HttpResponse:
         return render(
             request,
-            "dashboard/partials/notification_preferences.html",
+            "dashboard/partials/notifications/notification_preferences.html",
             {
                 "prefs": prefs,
                 "pref_fields": _PREF_FIELDS,
@@ -146,4 +146,4 @@ class NotificationUnreadCountView(LoginRequiredMixin, View):
     def get(self, request):
         profile = request.user.profile
         count = NotificationLog.objects.for_profile(profile).unread().count()
-        return render(request, "dashboard/partials/notification_badge.html", {"unread_count": count})
+        return render(request, "dashboard/partials/notifications/notification_badge.html", {"unread_count": count})

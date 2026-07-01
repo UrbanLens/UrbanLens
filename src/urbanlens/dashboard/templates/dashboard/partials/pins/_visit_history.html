@@ -48,11 +48,11 @@
     {% else %}
     <p class="visit-empty">No visits recorded yet.</p>
     {% endif %}
-    {% include "dashboard/partials/_pagination_controls.html" %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" %}
 
     {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
     <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
-        {% include "dashboard/partials/_dialog_header.html" with title="Log a Visit" %}
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Log a Visit" %}
         <form hx-post="{% url 'pin.visits' pin.slug %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"

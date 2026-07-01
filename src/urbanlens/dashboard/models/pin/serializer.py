@@ -29,6 +29,7 @@ class PinSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "name_is_user_provided",
             "effective_name",
             "icon",
             "effective_icon",
@@ -48,6 +49,8 @@ class PinSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = validated_data.pop("user")
+        if "name_is_user_provided" not in validated_data:
+            validated_data["name_is_user_provided"] = bool((validated_data.get("name") or "").strip())
         pin = Pin.objects.create(**validated_data)
         pin.user = user
         pin.save()

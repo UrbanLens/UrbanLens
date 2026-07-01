@@ -32,7 +32,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     page_obj = get_page(request, pin.visit_history.all(), _VISITS_PAGE_SIZE)
     return render(
         request,
-        "dashboard/partials/_visit_history.html",
+        "dashboard/partials/pins/_visit_history.html",
         {"pin": pin, "page_obj": page_obj, "visits": page_obj.object_list},
     )
 

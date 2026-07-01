@@ -738,7 +738,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
 
         return render(
             request,
-            "dashboard/partials/admin_stats_kpi.html",
+            "dashboard/partials/admin/admin_stats_kpi.html",
             {
                 "total_users": total_users,
                 "active_users_30d": active_users_30d,
@@ -785,7 +785,7 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
 
         return render(
             request,
-            "dashboard/partials/admin_stats_system.html",
+            "dashboard/partials/admin/admin_stats_system.html",
             {
                 "uptime": uptime,
                 "media_size_mb": media_size_mb,
@@ -845,7 +845,7 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
 
         return render(
             request,
-            "dashboard/partials/admin_stats_api_usage.html",
+            "dashboard/partials/admin/admin_stats_api_usage.html",
             {"api_usage": api_usage},
         )
 

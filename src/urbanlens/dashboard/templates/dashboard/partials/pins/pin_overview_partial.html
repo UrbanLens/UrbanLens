@@ -29,13 +29,13 @@
                 </div>
                 {% endif %}
                 
-                {% include "dashboard/partials/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
 
-                {% include "dashboard/partials/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
 
-                {% include "dashboard/partials/_pin_stat_rating_item.html" with pin=pin field="rating" label="Rating" help="Your quality rating for this location." modifier="" wide=False client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="rating" label="Rating" help="Your quality rating for this location." modifier="" wide=False client_version=client_version %}
 
-                {% include "dashboard/partials/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=True client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=True client_version=client_version %}
             </div>
             {% if pin.address_basic %}
             <div class="detail-row">

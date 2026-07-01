@@ -313,3 +313,38 @@ class LocationManagerGetNearbyOrCreateTests(TestCase):
         )
         self.assertAlmostEqual(float(loc.latitude), 51.5, places=3)
         self.assertAlmostEqual(float(loc.longitude), -0.1, places=3)
+
+class LocationExternalNameRefreshTests(TestCase):
+    """External API data can replace placeholder location names."""
+
+    def test_google_place_name_replaces_unnamed_location(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+
+        google_place = _google_place("Grand Central Terminal")
+        loc: Location = baker.make(
+            Location,
+            name="Unnamed Location",
+            latitude="40.752700",
+            longitude="-73.977200",
+            google_place=google_place,
+        )
+
+        self.assertTrue(update_location_name_from_external_sources(loc))
+        loc.refresh_from_db()
+        self.assertEqual(loc.name, "Grand Central Terminal")
+
+    def test_meaningful_location_name_is_preserved(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+
+        google_place = _google_place("External Name")
+        loc: Location = baker.make(
+            Location,
+            name="User Curated Name",
+            latitude="40.752701",
+            longitude="-73.977201",
+            google_place=google_place,
+        )
+
+        self.assertFalse(update_location_name_from_external_sources(loc))
+        loc.refresh_from_db()
+        self.assertEqual(loc.name, "User Curated Name")
