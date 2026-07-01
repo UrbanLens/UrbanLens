@@ -1,0 +1,32 @@
+<div id="usgs-topo-section" class="usgs-topo card card--secondary">
+    <div class="card-header">
+        <i class="material-icons">terrain</i>
+        <h3>USGS Historical Topo Maps</h3>
+    </div>
+    <div class="usgs-topo-grid">
+        {% for map in maps %}
+        <a href="{{ map.downloadURL }}" target="_blank" rel="noopener noreferrer" class="usgs-topo-card"
+           title="{{ map.title }}">
+            {% if map.previewGraphicURL %}
+            <img src="{{ map.previewGraphicURL }}" alt="{{ map.title }}" class="usgs-topo-thumb" loading="lazy">
+            {% else %}
+            <div class="usgs-topo-thumb-empty">
+                <i class="material-icons">terrain</i>
+            </div>
+            {% endif %}
+            <div class="usgs-topo-meta">
+                <span class="usgs-topo-year">{{ map.publicationDate|slice:":4" }}</span>
+                {% if map.extent %}
+                <span class="usgs-topo-extent">{{ map.extent }}</span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    <p class="usgs-topo-footer">
+        <a href="https://ngmdb.usgs.gov/topoview/" target="_blank" rel="noopener noreferrer">
+            <i class="material-icons">open_in_new</i>
+            View all on USGS TopoView
+        </a>
+    </p>
+</div>

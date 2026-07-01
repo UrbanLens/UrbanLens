@@ -19,9 +19,15 @@ from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
-from urbanlens.dashboard.services.apis.locations.meta import create_bbox
+from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
+from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
+from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, StreetViewSlide, create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
+from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
+from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 from urbanlens.dashboard.services.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
@@ -30,8 +36,6 @@ from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
-
-    from urbanlens.dashboard.services.satellite_imagery import SatelliteSlide
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +294,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - USGS National Map Imagery (current, US only) - URL-based
         - Esri Wayback historical releases - URL-based export
         - NASA GIBS / Landsat Annual (2011-2019) - WMS URL-based
+        - Mapbox Satellite (current, high-res) - fetched server-side
+        - Bing Maps Aerial (current, high-res) - fetched server-side
+        - OpenAerialMap community imagery - browser-loaded thumbnails
         """
         try:
             pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
@@ -320,6 +327,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # 5. NASA GIBS / Landsat Annual composites (global, ~30 m resolution)
         slides.extend(NasaGibsGateway().get_landsat_slides(bbox))
 
+        # 6. Mapbox satellite (current, high-res, server-side fetch)
+        if slide := MapboxGateway().get_satellite_slide(lat, lng):
+            slides.append(slide)
+
+        # 7. Bing Maps aerial (current, high-res, server-side fetch)
+        if slide := BingMapsGateway().get_satellite_slide(lat, lng):
+            slides.append(slide)
+
+        # 8. OpenAerialMap community imagery (browser-loaded thumbnails)
+        slides.extend(OpenAerialMapGateway().get_satellite_slides(lat, lng))
+
         return render(
             request,
             "dashboard/pages/location/satellite_view.html",
@@ -327,10 +345,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     def street_view(self, request: HttpRequest, **kwargs):
-        """
-        Returns an HTML fragment containing the street view image for a pin.
-        """
+        """Returns an HTML fragment with a multi-source street-view carousel.
 
+        Sources included (where available):
+        - Google Street View (fetched server-side, cached 30 days)
+        - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
+        - KartaView open imagery (browser-loaded URLs, cached 24 h)
+        """
         from django.core.cache import cache
 
         try:
@@ -343,31 +364,52 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if lat is None or lng is None:
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
-        thirty_days = 30 * 24 * 3600
-        cache_key = make_cache_key("street_view", f"{float(lat):.6f}", f"{float(lng):.6f}")
-        cached = cache.get(cache_key)
-        if cached is not None:
-            image_b64, capture_date = cached
-            return render(
-                request,
-                "dashboard/pages/location/street_view.html",
-                {"image_b64": image_b64, "pin": pin, "capture_date": capture_date},
-            )
+        slides: list[StreetViewSlide] = []
 
-        try:
-            google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
-            image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
-            image_b64 = base64.b64encode(image_bytes).decode("ascii")
-        except (OSError, ValueError, RuntimeError) as exc:
-            logger.warning("Street view unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
-            return render(request, "dashboard/pages/location/street_view.html", {"error": "Street view unavailable."})
+        # 1. Google Street View - server-side fetch, protected API key, 30-day cache.
+        gsv_cache_key = make_cache_key("street_view", f"{float(lat):.6f}", f"{float(lng):.6f}")
+        gsv_cached = cache.get(gsv_cache_key)
+        if gsv_cached is not None:
+            image_b64, capture_date = gsv_cached
+            slides.append(StreetViewSlide(
+                img_src=f"data:image/jpeg;base64,{image_b64}",
+                source="Google Street View",
+                date=capture_date or "Unknown",
+            ))
+        else:
+            try:
+                google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
+                image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
+                image_b64 = base64.b64encode(image_bytes).decode("ascii")
+                cache.set(gsv_cache_key, (image_b64, capture_date), 30 * 24 * 3600)
+                slides.append(StreetViewSlide(
+                    img_src=f"data:image/jpeg;base64,{image_b64}",
+                    source="Google Street View",
+                    date=capture_date or "Unknown",
+                ))
+            except (OSError, ValueError, RuntimeError) as exc:
+                logger.warning("Google Street View unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
 
-        cache.set(cache_key, (image_b64, capture_date), thirty_days)
+        # 2. Mapillary - crowdsourced, browser-loaded URLs, 24-hour cache.
+        mapillary_cache_key = make_cache_key("sv_mapillary", f"{float(lat):.5f}", f"{float(lng):.5f}")
+        mapillary_slides = cache.get(mapillary_cache_key)
+        if mapillary_slides is None:
+            mapillary_slides = MapillaryGateway().get_street_view_slides(lat, lng)
+            cache.set(mapillary_cache_key, mapillary_slides, 24 * 3600)
+        slides.extend(mapillary_slides)
+
+        # 3. KartaView - open crowdsourced imagery, browser-loaded URLs, 24-hour cache.
+        kartaview_cache_key = make_cache_key("sv_kartaview", f"{float(lat):.5f}", f"{float(lng):.5f}")
+        kartaview_slides = cache.get(kartaview_cache_key)
+        if kartaview_slides is None:
+            kartaview_slides = KartaViewGateway().get_street_view_slides(lat, lng)
+            cache.set(kartaview_cache_key, kartaview_slides, 24 * 3600)
+        slides.extend(kartaview_slides)
 
         return render(
             request,
             "dashboard/pages/location/street_view.html",
-            {"image_b64": image_b64, "pin": pin, "capture_date": capture_date},
+            {"slides": slides, "pin": pin},
         )
 
     @action(detail=True, methods=["get"])
@@ -776,6 +818,48 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pin_nominatim.html", {"place": data})
+
+    def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
+        """HTMX partial: USGS Historical Topographic Map Collection maps near the pin.
+
+        Queries the USGS TNMAccess public API for HTMC products (scanned historical
+        topo maps going back to the late 1800s).  No API key is required.  Returns
+        204 for non-US locations or when no maps are found within the search area.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if not lat or not lng:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "usgs_topo")
+        if cached is None:
+            try:
+                result = UsgsGateway().historical_topo_maps_for_coordinates(float(lat), float(lng), delta=0.01)
+            except Exception:
+                logger.exception("USGS topo lookup failed for pin %s", pin_slug)
+                result = None
+            LocationCache.set(location, "usgs_topo", result or {}, query_key=f"{float(lat):.4f},{float(lng):.4f}")
+            data = result
+        else:
+            data = cached.data or None
+
+        maps_list = (data or {}).get("items") or []
+        if not maps_list:
+            logger.debug("usgs_topo_info: no topo maps found for pin %s", pin_slug)
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pin_usgs_topo.html", {"maps": maps_list[:20]})
 
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
