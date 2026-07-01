@@ -18,8 +18,7 @@ from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.google.place_info import GooglePlaceService
 from urbanlens.UrbanLens.settings.app import settings
@@ -41,6 +40,8 @@ def _filename_stem(filename: str) -> str:
 
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def _google_maps_api_key() -> str:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class GoogleMapsGateway(Gateway):
+class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
     Gateway for the Google Maps API.
     
@@ -85,7 +86,16 @@ class GoogleMapsGateway(Gateway):
         response.raise_for_status()
         return response.json()
     
-    def get_satellite_view(self, latitude: float, longitude: float) -> SatelliteSlide | None:
+    def _generate_satellite_slides(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        zoom: int = 18,
+        width: int = 640,
+        height: int = 400,
+        limit: int = -1,
+    ) -> Generator[SatelliteSlide]:
         """Return a server-fetched Google Maps Static satellite image as a SatelliteSlide.
 
         The image is retrieved server-side (rather than via a browser URL) so that the
@@ -100,41 +110,34 @@ class GoogleMapsGateway(Gateway):
             key is configured or the request fails.
         """
         if not self.api_key:
-            return None
+            return
 
-        cache_key = make_cache_key("satellite_google", f"{latitude:.5f}", f"{longitude:.5f}")
-        google_b64 = cache.get(cache_key)
-        if google_b64 is None:
-            try:
-                resp = self.session.get(
-                    "https://maps.googleapis.com/maps/api/staticmap",
-                    params={
-                        "center": f"{latitude},{longitude}",
-                        "zoom": 18,
-                        "size": "640x400",
-                        "maptype": "satellite",
-                        "key": self.api_key,
-                    },
-                    timeout=15,
-                )
-                resp.raise_for_status()
-                google_b64 = base64.b64encode(resp.content).decode("ascii")
-                cache.set(cache_key, google_b64, 30 * 24 * 3600)
-            except requests.exceptions.RequestException as exc:
-                logger.warning("Google satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
-                return None
+        try:
+            resp = self.session.get(
+                "https://maps.googleapis.com/maps/api/staticmap",
+                params={
+                    "center": f"{latitude},{longitude}",
+                    "zoom": 18,
+                    "size": "640x400",
+                    "maptype": "satellite",
+                    "key": self.api_key,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            google_b64 = base64.b64encode(resp.content).decode("ascii")
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Google satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
+            return
 
-        if not google_b64:
-            return None
-
-        return SatelliteSlide(
+        yield SatelliteSlide(
             img_src=f"data:image/jpeg;base64,{google_b64}",
             source="Google Maps",
             date="Current",
             detail="High resolution - current imagery",
         )
 
-    def get_street_view(
+    def get_street_view_single(
         self,
         latitude,
         longitude,
@@ -191,6 +194,21 @@ class GoogleMapsGateway(Gateway):
 
         raise ValueError("No Street View imagery found within the maximum search radius.")
 
+    def _street_view_slide(self, image_bytes: bytes, capture_date: str) -> StreetViewSlide:
+        """Return a StreetViewSlide from the given image bytes and capture date."""
+        decoded_image = base64.b64decode(image_bytes)
+        return StreetViewSlide(
+            img_src=f"data:image/jpeg;base64,{decoded_image.decode('ascii')}",
+            source="Google Street View",
+            date=capture_date or "Unknown",
+        )
+
+    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
+        """Yield Street View slides for the given latitude and longitude."""
+        image_bytes, capture_date = self.get_street_view_single(latitude, longitude, radius=int(radius))
+        # image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        yield self._street_view_slide(image_bytes, capture_date)
+
     def calculate_heading(self, lat1, lng1, lat2, lng2):
         """
         Calculate the heading from the first coordinate (lat1, lng1) to the second coordinate (lat2, lng2).
@@ -205,7 +223,7 @@ class GoogleMapsGateway(Gateway):
         heading = math.degrees(math.atan2(y, x))
         return (heading + 360) % 360
 
-    def _csv_row_iter(self, file_contents: str, user_profile: Profile):
+    def _csv_row_iter(self, file_contents: str, user_profile: Profile) -> Generator[dict[str, Any] | None, None, None]:
         """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.
 
         Args:

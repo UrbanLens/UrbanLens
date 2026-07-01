@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.cache import cache
 import requests
 
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, create_bbox
 from urbanlens.dashboard.services.gateway import Gateway
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ _WAYBACK_CACHE_TTL = 24 * 3600
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class EsriGateway(Gateway):
+class EsriGateway(SatelliteViewProvider):
     """Gateway for Esri ArcGIS REST imagery services.
 
     Covers three sources:
@@ -45,7 +48,35 @@ class EsriGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "esri"
+        
+    def _generate_satellite_slides(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        zoom: int = 18,
+        width: int = 640,
+        height: int = 400,
+        limit: int = -1,
+    ) -> Generator[SatelliteSlide]:
+        """Return a list of current Esri World Imagery slides for the given bounding box.
 
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            zoom: Zoom level (1-22).
+            width: Image width in pixels (max 1280).
+            height: Image height in pixels (max 1280).
+
+        Returns:
+            List of SatelliteSlide, empty when no imagery is available or the request fails.
+        """
+        bbox = create_bbox(latitude, longitude)
+        
+        yield self.get_world_imagery_slide(bbox)
+        yield self.get_usgs_slide(bbox)
+        yield from self.get_wayback_slides(bbox)
+        
     def get_world_imagery_slide(self, bbox: str) -> SatelliteSlide:
         """Return a current Esri World Imagery slide for the given bounding box.
 
@@ -64,7 +95,7 @@ class EsriGateway(Gateway):
             date="Current",
             detail="High resolution - current imagery",
         )
-
+        
     def get_usgs_slide(self, bbox: str) -> SatelliteSlide:
         """Return a current USGS National Map imagery slide for the given bounding box.
 

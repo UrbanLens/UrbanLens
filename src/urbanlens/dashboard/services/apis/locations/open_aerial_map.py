@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, create_bbox
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, create_bbox
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ _BASE_URL = "https://api.openaerialmap.org"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class OpenAerialMapGateway(Gateway):
+class OpenAerialMapGateway(SatelliteViewProvider):
     """Gateway for OpenAerialMap imagery metadata and tile indexes.
 
     OpenAerialMap (OAM) is a catalog of openly licensed aerial and satellite
@@ -50,6 +52,7 @@ class OpenAerialMapGateway(Gateway):
             Each result includes ``thumbnail``, ``tms`` tile URL, ``title``,
             ``provider``, ``acquisition_start``, and ``acquisition_end`` fields.
         """
+        limit = limit if limit > 0 else 10
         params: dict[str, Any] = {"bbox": create_bbox(latitude, longitude, delta), "limit": limit, "sort": sort}
         if provider:
             params["provider"] = provider
@@ -57,14 +60,16 @@ class OpenAerialMapGateway(Gateway):
         response.raise_for_status()
         return response.json()
 
-    def get_satellite_slides(
+    def _generate_satellite_slides(
         self,
         latitude: float,
         longitude: float,
         *,
-        delta: float = 0.005,
-        limit: int = 5,
-    ) -> list[SatelliteSlide]:
+        zoom: int = 17,
+        width: int = 640,
+        height: int = 400,
+        limit: int = -1,
+    ) -> Generator[SatelliteSlide]:
         """Return OpenAerialMap imagery as SatelliteSlides.
 
         Uses the ``thumbnail`` URL from each result as the image source, so
@@ -73,7 +78,6 @@ class OpenAerialMapGateway(Gateway):
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
-            delta: Half-width of the search bounding box in degrees.
             limit: Maximum number of slides to return.
 
         Returns:
@@ -81,13 +85,13 @@ class OpenAerialMapGateway(Gateway):
             request fails.
         """
         try:
-            data = self.search_imagery_for_coordinates(latitude, longitude, delta=delta, limit=limit)
+            data = self.search_imagery_for_coordinates(latitude, longitude, delta=0.005, limit=limit)
         except Exception as exc:
+            # TODO: Catch specific exception
             logger.warning("OpenAerialMap search failed for %s, %s: %s", latitude, longitude, exc)
-            return []
+            return
 
-        slides = []
-        for item in (data.get("results") or [])[:limit]:
+        for item in (data.get("results") or []):
             thumbnail = item.get("thumbnail")
             if not thumbnail:
                 continue
@@ -96,13 +100,12 @@ class OpenAerialMapGateway(Gateway):
             date_str = acq_end or "Unknown"
             resolution = item.get("gsd")
             detail = f"{resolution:.2f} m/px" if resolution else "Open licensed aerial imagery"
-            slides.append(SatelliteSlide(
+            yield SatelliteSlide(
                 img_src=thumbnail,
                 source=f"OAM / {provider}",
                 date=date_str,
                 detail=detail,
-            ))
-        return slides
+            )
 
     def list_tile_services_for_coordinates(
         self,

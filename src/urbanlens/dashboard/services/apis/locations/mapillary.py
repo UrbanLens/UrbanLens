@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import StreetViewSlide
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.core.cache_keys import make_cache_key
+from urbanlens.dashboard.services.apis.locations.meta import StreetViewProvider, StreetViewSlide
 from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +20,7 @@ _DEFAULT_FIELDS = "id,thumb_2048_url,captured_at,compass_angle,geometry"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class MapillaryGateway(Gateway):
+class MapillaryGateway(StreetViewProvider):
     """Gateway for the Mapillary Graph API (street-level imagery).
 
     Mapillary provides crowdsourced street-level photos with global coverage,
@@ -47,7 +50,7 @@ class MapillaryGateway(Gateway):
         latitude: float,
         longitude: float,
         *,
-        radius: int = 50,
+        radius: float = 50,
         limit: int = 10,
         fields: str = _DEFAULT_FIELDS,
     ) -> dict[str, Any]:
@@ -74,14 +77,14 @@ class MapillaryGateway(Gateway):
         response.raise_for_status()
         return response.json()
 
-    def get_street_view_slides(
+    def _generate_street_view_slides(
         self,
         latitude: float,
         longitude: float,
         *,
-        radius: int = 50,
+        radius: float = 50,
         limit: int = 5,
-    ) -> list[StreetViewSlide]:
+    ) -> Generator[StreetViewSlide]:
         """Return Mapillary street-level images near coordinates as StreetViewSlides.
 
         Images are loaded directly by the browser via the ``thumb_2048_url``
@@ -93,20 +96,20 @@ class MapillaryGateway(Gateway):
             radius: Search radius in metres.
             limit: Maximum number of slides to return.
 
-        Returns:
+        Yields:
             List of ``StreetViewSlide``, empty when no images are found, the
             token is not configured, or the request fails.
         """
         if not self.access_token:
-            return []
+            return
         
         try:
             data = self.search_images_near_coordinates(latitude, longitude, radius=radius, limit=limit)
         except Exception as exc:
+            # TODO: Catch specific exception
             logger.warning("Mapillary search failed for %s, %s: %s", latitude, longitude, exc)
-            return []
+            return
 
-        slides = []
         for item in data.get("data", []):
             img_url = item.get("thumb_2048_url")
             if not img_url:
@@ -117,15 +120,15 @@ class MapillaryGateway(Gateway):
             coords = geom.get("coordinates") or []
             img_lon = coords[0] if len(coords) >= 2 else None
             img_lat = coords[1] if len(coords) >= 2 else None
-            slides.append(StreetViewSlide(
+            
+            yield StreetViewSlide(
                 img_src=img_url,
                 source="Mapillary",
                 date=date_str,
                 heading=item.get("compass_angle"),
                 latitude=img_lat,
                 longitude=img_lon,
-            ))
-        return slides
+            )
 
     def get_image(self, image_id: str, *, fields: str = _DEFAULT_FIELDS) -> dict[str, Any]:
         """Return metadata for a single Mapillary image.

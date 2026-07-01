@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import StreetViewSlide
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.apis.locations.meta import StreetViewProvider, StreetViewSlide
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ _STORAGE_URL = "https://storage.kartaview.com"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class KartaViewGateway(Gateway):
+class KartaViewGateway(StreetViewProvider):
     """Gateway for the KartaView street-level imagery API.
 
     KartaView (formerly OpenStreetCam) provides crowdsourced street-level
@@ -60,14 +62,14 @@ class KartaViewGateway(Gateway):
         response.raise_for_status()
         return response.json()
 
-    def get_street_view_slides(
+    def _generate_street_view_slides(
         self,
         latitude: float,
         longitude: float,
         *,
         radius: float = 50,
         limit: int = 5,
-    ) -> list[StreetViewSlide]:
+    ) -> Generator[StreetViewSlide]:
         """Return KartaView photos near coordinates as StreetViewSlides.
 
         Images are loaded directly by the browser — no server-side fetch.
@@ -78,18 +80,22 @@ class KartaViewGateway(Gateway):
             radius: Search radius in metres.
             limit: Maximum number of slides to return.
 
-        Returns:
+        Yields:
             List of ``StreetViewSlide``, empty when no images are found or the
             request fails.
         """
         try:
             data = self.search_photos_near_coordinates(latitude, longitude, radius=radius, items_per_page=limit)
         except Exception as exc:
+            # TODO: Catch specific exception
             logger.warning("KartaView search failed for %s, %s: %s", latitude, longitude, exc)
-            return []
+            return
 
-        slides = []
-        for photo in (data.get("currentPageItems") or [])[:limit]:
+        current_page_items = data.get("currentPageItems") or []
+        if limit > 0 and len(current_page_items) > limit:
+            current_page_items = current_page_items[:limit]
+
+        for photo in current_page_items:
             file_path = (
                 photo.get("fileurlLTh")
                 or photo.get("fileurlProc")
@@ -107,15 +113,15 @@ class KartaViewGateway(Gateway):
                 img_lon = float(photo["lng"]) if photo.get("lng") is not None else None
             except (ValueError, TypeError):
                 heading = img_lat = img_lon = None
-            slides.append(StreetViewSlide(
+                
+            yield StreetViewSlide(
                 img_src=file_path,
                 source="KartaView",
                 date=date_str,
                 heading=heading,
                 latitude=img_lat,
                 longitude=img_lon,
-            ))
-        return slides
+            )
 
     def get_sequence(self, sequence_id: str) -> dict[str, Any]:
         """Return metadata for a KartaView sequence.

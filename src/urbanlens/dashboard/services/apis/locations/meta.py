@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, ClassVar, Protocol
+
+from django.core.cache import cache
+
+from urbanlens.core.cache_keys import make_cache_key
+from urbanlens.dashboard.services.gateway import Gateway
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 def create_bbox(latitude: float, longitude: float, delta: float = 0.005) -> str:
@@ -45,3 +55,42 @@ class StreetViewSlide:
     heading: float | None = field(default=None)
     latitude: float | None = field(default=None)
     longitude: float | None = field(default=None)
+
+
+class SatelliteViewProvider(Gateway, ABC):
+    @abstractmethod
+    def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]:
+        ...
+    
+    def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> list[SatelliteSlide]:
+        cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        if slides := cache.get(cache_key):
+            return slides
+
+        slides = []
+        for slide in self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height):
+            slides.append(slide)
+            if limit > 0 and len(slides) >= limit:
+                break
+
+        cache.set(cache_key, slides, 24 * 3600)
+        return slides
+
+
+class StreetViewProvider(Gateway, ABC):
+    @abstractmethod
+    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
+        ...
+
+    def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> list[StreetViewSlide]:
+        cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        if slides := cache.get(cache_key):
+            return slides
+
+        slides = []
+        for slide in self._generate_street_view_slides(latitude, longitude, radius=radius):
+            slides.append(slide)
+            if limit > 0 and len(slides) >= limit:
+                break
+
+        return slides

@@ -187,7 +187,7 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/satellite_view/",
-                                pin.PinController.as_view({"get": "satellite_view_google_image"}),
+                                pin.PinController.as_view({"get": "satellite_view_carousell"}),
                                 name="pin.satellite_view",
                             ),
                             path(

@@ -5,15 +5,18 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.cache import cache
 import requests
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ _SATELLITE_CACHE_TTL = 30 * 24 * 3600
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class BingMapsGateway(Gateway):
+class BingMapsGateway(SatelliteViewProvider):
     """Gateway for the Bing Maps REST Imagery API.
 
     Provides current high-resolution aerial (satellite) imagery as
@@ -38,7 +41,7 @@ class BingMapsGateway(Gateway):
 
     api_key: str | None = field(default_factory=lambda: settings.bing_maps_api_key)
 
-    def get_satellite_slide(
+    def _generate_satellite_slides(
         self,
         latitude: float,
         longitude: float,
@@ -46,7 +49,8 @@ class BingMapsGateway(Gateway):
         zoom: int = 18,
         width: int = 640,
         height: int = 400,
-    ) -> SatelliteSlide | None:
+        limit: int = -1,
+    ) -> Generator[SatelliteSlide]:
         """Return a Bing Maps aerial image as a SatelliteSlide.
 
         The image is fetched server-side and cached for 30 days.
@@ -58,34 +62,27 @@ class BingMapsGateway(Gateway):
             width: Image width in pixels.
             height: Image height in pixels.
 
-        Returns:
-            ``SatelliteSlide`` with a ``data:`` URI image source, or ``None``
+        Yields:
+            List of ``SatelliteSlide`` with a ``data:`` URI image source, or ``None``
             when no API key is configured or the request fails.
         """
         if not self.api_key:
-            return None
+            return
 
-        cache_key = make_cache_key("satellite_bing", f"{latitude:.5f}", f"{longitude:.5f}", str(zoom))
-        b64: str | None = cache.get(cache_key)
-        if b64 is None:
-            try:
-                url = f"{_IMAGERY_URL}/{latitude},{longitude}/{zoom}"
-                resp = self.session.get(
-                    url,
-                    params={"mapSize": f"{width},{height}", "format": "jpeg", "key": self.api_key},
-                    timeout=15,
-                )
-                resp.raise_for_status()
-                b64 = base64.b64encode(resp.content).decode("ascii")
-                cache.set(cache_key, b64, _SATELLITE_CACHE_TTL)
-            except requests.exceptions.RequestException as exc:
-                logger.warning("Bing Maps satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
-                return None
-
-        if not b64:
-            return None
-
-        return SatelliteSlide(
+        try:
+            url = f"{_IMAGERY_URL}/{latitude},{longitude}/{zoom}"
+            resp = self.session.get(
+                url,
+                params={"mapSize": f"{width},{height}", "format": "jpeg", "key": self.api_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            b64 = base64.b64encode(resp.content).decode("ascii")
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Bing Maps satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
+            return
+        
+        yield SatelliteSlide(
             img_src=f"data:image/jpeg;base64,{b64}",
             source="Bing Maps Aerial",
             date="Current",

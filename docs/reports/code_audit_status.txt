@@ -184,12 +184,6 @@ Mixed results:
     Google Places Find Place (textquery) with zero callers. Place search in the
     app uses GooglePlacesGateway instead.
 
-  - get_satellite_view — DEPRECATED, DELETED.
-    Was the server-side Static Maps API approach for satellite imagery. The live
-    pin detail view (satellite_view_google_image) now uses a client-side Leaflet/Esri
-    tile layer instead, passing coordinates to a template. Server-side image fetch
-    is no longer used.
-
   - import_pins_from_file — DEPRECATED, DELETED.
     Non-streaming predecessor to import_pins_streaming. Uses tqdm for a terminal
     progress bar and bulk-creates Pin objects synchronously. Fully superseded by

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, create_bbox
 from urbanlens.dashboard.services.gateway import Gateway
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 _DEFAULT_YEARS: tuple[int, ...] = (2019, 2016, 2013, 2011)
 
@@ -19,14 +22,14 @@ _WMS_BASE = (
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NasaGibsGateway(Gateway):
+class NasaGibsGateway(SatelliteViewProvider):
     """Gateway for NASA GIBS WMS satellite imagery.
 
     Provides access to annual Landsat true-colour composites at approximately
     30 m resolution with global coverage.  No API key is required.
     """
 
-    service_key: ClassVar[str | None] = None
+    service_key: ClassVar[str] = "nasa_gibs"
 
     def get_landsat_slides(
         self,
@@ -52,3 +55,16 @@ class NasaGibsGateway(Gateway):
             )
             for year in years
         ]
+
+    def _generate_satellite_slides(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        zoom: int = 18,
+        width: int = 640,
+        height: int = 400,
+        limit: int = -1,
+    ) -> Generator[SatelliteSlide]:
+        bbox = create_bbox(latitude, longitude)
+        yield from self.get_landsat_slides(bbox)

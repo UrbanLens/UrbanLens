@@ -228,6 +228,8 @@ Features planned for future releases.
 * pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.
 * Move inline JS into separate TS files for performance, maintainability, typescript.
 * Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it.
+* Reorganize api services
+* Reorganize template partials
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

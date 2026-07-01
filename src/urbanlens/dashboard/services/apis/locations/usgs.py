@@ -73,6 +73,7 @@ class UsgsGateway(Gateway):
                 cache.set(_M2M_SESSION_CACHE_KEY, token, _M2M_SESSION_TTL)
             return token
         except Exception:
+            # TODO: Catch specific exception
             logger.exception("USGS M2M login-token exchange failed")
             return None
 

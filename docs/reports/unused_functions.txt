@@ -71,7 +71,6 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
     [High  ] ./urbanlens/dashboard/services/ai/scanner.py:139  sanitize  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:55  GoogleMapsGateway.get_directions  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:70  GoogleMapsGateway.find_place  (refs: 0)
-    [High  ] ./urbanlens/dashboard/services/google/maps.py:84  GoogleMapsGateway.get_satellite_view  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:180  GoogleMapsGateway.import_pins_from_file  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/places.py:94  GooglePlacesGateway.get_place_photos  (refs: 0)
     [High  ] ./urbanlens/dashboard/services/google/places.py:107  GooglePlacesGateway.get_recent_search_results  (refs: 0)
@@ -246,7 +245,6 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
     [High  ] ./urbanlens/dashboard/services/google/location_history.py:59  _parse_semantic  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/google/location_history.py:104  _nearest_pin  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/google/location_history.py:122  import_location_history_streaming  (refs: 1)
-    [High  ] ./urbanlens/dashboard/services/google/maps.py:109  GoogleMapsGateway.get_street_view  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:166  GoogleMapsGateway.calculate_heading  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:532  GoogleMapsGateway.import_preview_streaming  (refs: 1)
     [High  ] ./urbanlens/dashboard/services/google/maps.py:753  GoogleMapsGateway.takeout_csv_to_dict  (refs: 1)
@@ -410,8 +408,6 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
     [Medium] ./urbanlens/dashboard/controllers/pin.py:186  PinController.get_smithsonian_images  (refs: 1)
                - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/pin.py:212  PinController.web_search  (refs: 1)
-               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-    [Medium] ./urbanlens/dashboard/controllers/pin.py:273  PinController.satellite_view_google_image  (refs: 1)
                - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/pin.py:339  PinController.import_form  (refs: 1)
                - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace

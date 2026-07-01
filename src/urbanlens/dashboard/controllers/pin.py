@@ -24,7 +24,7 @@ from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
 from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
 from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, StreetViewSlide, create_bbox
+from urbanlens.dashboard.services.apis.locations.meta import create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
@@ -36,6 +36,8 @@ from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
+
+    from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +287,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {"search_results": page_obj.object_list, "page_obj": page_obj},
         )
 
-    def satellite_view_google_image(self, request: HttpRequest, **kwargs):
+    def satellite_view_carousell(self, request: HttpRequest, **kwargs):
         """Returns an HTML fragment with a multi-source satellite imagery carousel.
 
         Sources included (where available):
@@ -312,31 +314,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 {"error": "No coordinates available."},
             )
 
-        bbox = create_bbox(lat, lng)
         slides: list[SatelliteSlide] = []
-
-        # 1. Google Maps Static (current, high-res) - fetched server-side to protect the API key
-        if slide := GoogleMapsGateway().get_satellite_view(lat, lng):
-            slides.append(slide)
-
-        # 2, 3. Esri World Imagery + USGS National Map; 4. Esri Wayback historical snapshots
-        esri = EsriGateway()
-        slides.extend([esri.get_world_imagery_slide(bbox), esri.get_usgs_slide(bbox)])
-        slides.extend(esri.get_wayback_slides(bbox))
-
-        # 5. NASA GIBS / Landsat Annual composites (global, ~30 m resolution)
-        slides.extend(NasaGibsGateway().get_landsat_slides(bbox))
-
-        # 6. Mapbox satellite (current, high-res, server-side fetch)
-        if slide := MapboxGateway().get_satellite_slide(lat, lng):
-            slides.append(slide)
-
-        # 7. Bing Maps aerial (current, high-res, server-side fetch)
-        if slide := BingMapsGateway().get_satellite_slide(lat, lng):
-            slides.append(slide)
-
-        # 8. OpenAerialMap community imagery (browser-loaded thumbnails)
-        slides.extend(OpenAerialMapGateway().get_satellite_slides(lat, lng))
+        gateways: list[SatelliteViewProvider] = [
+            GoogleMapsGateway(),
+            EsriGateway(),
+            NasaGibsGateway(),
+            MapboxGateway(),
+            BingMapsGateway(),
+            OpenAerialMapGateway(),
+        ]
+        for gateway in gateways:
+            slides.extend(gateway.get_satellite_slides(lat, lng))
 
         return render(
             request,
@@ -352,8 +340,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
-        from django.core.cache import cache
-
         try:
             pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
@@ -365,46 +351,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
         slides: list[StreetViewSlide] = []
-
-        # 1. Google Street View - server-side fetch, protected API key, 30-day cache.
-        gsv_cache_key = make_cache_key("street_view", f"{float(lat):.6f}", f"{float(lng):.6f}")
-        gsv_cached = cache.get(gsv_cache_key)
-        if gsv_cached is not None:
-            image_b64, capture_date = gsv_cached
-            slides.append(StreetViewSlide(
-                img_src=f"data:image/jpeg;base64,{image_b64}",
-                source="Google Street View",
-                date=capture_date or "Unknown",
-            ))
-        else:
-            try:
-                google_maps_gateway = GoogleMapsGateway(api_key=settings.google_street_view_api_key or "")
-                image_bytes, capture_date = google_maps_gateway.get_street_view(lat, lng)
-                image_b64 = base64.b64encode(image_bytes).decode("ascii")
-                cache.set(gsv_cache_key, (image_b64, capture_date), 30 * 24 * 3600)
-                slides.append(StreetViewSlide(
-                    img_src=f"data:image/jpeg;base64,{image_b64}",
-                    source="Google Street View",
-                    date=capture_date or "Unknown",
-                ))
-            except (OSError, ValueError, RuntimeError) as exc:
-                logger.warning("Google Street View unavailable for pin %s: %s", kwargs.get("pin_slug"), exc)
-
-        # 2. Mapillary - crowdsourced, browser-loaded URLs, 24-hour cache.
-        mapillary_cache_key = make_cache_key("sv_mapillary", f"{float(lat):.5f}", f"{float(lng):.5f}")
-        mapillary_slides = cache.get(mapillary_cache_key)
-        if mapillary_slides is None:
-            mapillary_slides = MapillaryGateway().get_street_view_slides(lat, lng)
-            cache.set(mapillary_cache_key, mapillary_slides, 24 * 3600)
-        slides.extend(mapillary_slides)
-
-        # 3. KartaView - open crowdsourced imagery, browser-loaded URLs, 24-hour cache.
-        kartaview_cache_key = make_cache_key("sv_kartaview", f"{float(lat):.5f}", f"{float(lng):.5f}")
-        kartaview_slides = cache.get(kartaview_cache_key)
-        if kartaview_slides is None:
-            kartaview_slides = KartaViewGateway().get_street_view_slides(lat, lng)
-            cache.set(kartaview_cache_key, kartaview_slides, 24 * 3600)
-        slides.extend(kartaview_slides)
+        providers: list[StreetViewProvider] = [
+            GoogleMapsGateway(api_key=settings.google_street_view_api_key or ""),
+            MapillaryGateway(),
+            KartaViewGateway(),
+        ]
+        for provider in providers:
+            slides.extend(provider.get_street_view_slides(lat, lng))
 
         return render(
             request,
