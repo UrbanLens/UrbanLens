@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
 try:
-    from tqdm import tqdm  # type: ignore
+    from tqdm import tqdm  # type: ignore[import-untyped]
 
     _HAS_TQDM = True
 except ImportError:  # pragma: no cover - optional dependency
@@ -197,7 +197,7 @@ def _read_source(path: str) -> str:
     last_exc: Exception | None = None
     for encoding in _FALLBACK_ENCODINGS:
         try:
-            with open(path, encoding=encoding) as fh:
+            with open(path, encoding=encoding) as fh:  # noqa: FURB101 - TODO temporarily ignore
                 return fh.read()
         except (UnicodeDecodeError, UnicodeError) as exc:
             last_exc = exc
@@ -363,7 +363,7 @@ class AnalysisResult:
     errors: list[str]
 
 
-def analyze(
+def analyze(  # noqa: PLR0917
     root: str,
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,
@@ -569,7 +569,7 @@ def _build_findings(
     return findings
 
 
-def find_unused_functions(
+def find_unused_functions(  # noqa: PLR0917
     root: str,
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,

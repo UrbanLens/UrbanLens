@@ -43,7 +43,8 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\tasks.py src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py; echo \"EXIT:$LASTEXITCODE\")",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src\\\\urbanlens\\\\dashboard\\\\tasks.py src\\\\urbanlens\\\\dashboard\\\\controllers\\\\maps.py)",
       "Bash(grep -E \"\\\\.\\(scss|css|html\\)$\")",
-      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/pin.py 2>&1)"
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/pin.py 2>&1)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/pin.py src/urbanlens/dashboard/services/google/maps.py src/urbanlens/dashboard/services/esri.py src/urbanlens/dashboard/services/nasa_gibs.py src/urbanlens/dashboard/services/satellite_imagery.py)"
     ]
   }
 }

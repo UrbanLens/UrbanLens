@@ -18,9 +18,11 @@ from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
@@ -44,15 +46,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _google_maps_api_key() -> str:
+    """
+    Enforces that the Google Maps API key is set.
+    """
+    if not settings.google_maps_api_key:
+        raise ValueError("Google Maps API key is not set")
+    return settings.google_maps_api_key
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GoogleMapsGateway(Gateway):
     """
     Gateway for the Google Maps API.
+    
+    Defaults to the settings.google_maps_api_key, but the app
+    occasionally passes a different api key (e.g. street_view_api_key)
     """
 
     service_key: ClassVar[str] = "google_maps"
 
-    api_key: str
+    api_key: str = field(
+        default_factory=_google_maps_api_key,
+    )
 
     def get_directions(self, origin, destination, mode="driving"):
         """
@@ -69,11 +85,23 @@ class GoogleMapsGateway(Gateway):
         response.raise_for_status()
         return response.json()
     
-    def get_satellite_view(self, latitude, longitude) -> dict | None:
+    def get_satellite_view(self, latitude: float, longitude: float) -> SatelliteSlide | None:
+        """Return a server-fetched Google Maps Static satellite image as a SatelliteSlide.
+
+        The image is retrieved server-side (rather than via a browser URL) so that the
+        API key is never exposed to the client.  The encoded result is cached for 30 days.
+
+        Args:
+            latitude: WGS-84 latitude of the target location.
+            longitude: WGS-84 longitude of the target location.
+
+        Returns:
+            SatelliteSlide with a ``data:`` URI image source, or ``None`` when no API
+            key is configured or the request fails.
         """
-        Get the satellite view image for the given latitude and longitude.
-        TODO: Improve return type & cleanup
-        """
+        if not self.api_key:
+            return None
+
         cache_key = make_cache_key("satellite_google", f"{latitude:.5f}", f"{longitude:.5f}")
         google_b64 = cache.get(cache_key)
         if google_b64 is None:
@@ -92,20 +120,19 @@ class GoogleMapsGateway(Gateway):
                 resp.raise_for_status()
                 google_b64 = base64.b64encode(resp.content).decode("ascii")
                 cache.set(cache_key, google_b64, 30 * 24 * 3600)
-            except Exception as exc:
-                # TODO: Catch specific exception
-                logger.warning("Google satellite image unavailable for %s, %s -> %s", latitude, longitude, exc)
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Google satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
                 return None
 
         if not google_b64:
             return None
-        
-        return {
-            "img_src": f"data:image/jpeg;base64,{google_b64}",
-            "source": "Google Maps",
-            "date": "Current",
-            "detail": "High resolution · current imagery",
-        }
+
+        return SatelliteSlide(
+            img_src=f"data:image/jpeg;base64,{google_b64}",
+            source="Google Maps",
+            date="Current",
+            detail="High resolution - current imagery",
+        )
 
     def get_street_view(
         self,
