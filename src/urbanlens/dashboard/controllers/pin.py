@@ -210,6 +210,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
+        if not pin.meaningful_official_name:
+            return HttpResponse(status=204)
+
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 

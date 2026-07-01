@@ -72,11 +72,11 @@ def format_search_date(raw: str | None) -> str:
 
 
 def build_pin_search_query(pin: Pin) -> str:
-    """Build a web search query combining the pin's name with optional location keywords.
+    """Build a web search query from the pin's official name and location keywords.
 
-    The effective name and place name are the primary search terms. Street name, city,
-    and state are appended so search engines can disambiguate without requiring an exact
-    phrase match.
+    Only the externally sourced official name is used as the name term. Street name,
+    city, and state may be appended for disambiguation, but the query is empty when
+    the pin has no meaningful official name.
 
     Args:
         pin: The Pin whose metadata drives the query.
@@ -87,6 +87,9 @@ def build_pin_search_query(pin: Pin) -> str:
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
     name = pin.effective_official_name if is_meaningful_name(pin.effective_official_name) else None
+    if not name:
+        return ""
+
     address_basic = pin.address_basic
     route = pin.location.route if pin.location else None
 
@@ -106,12 +109,5 @@ def build_pin_search_query(pin: Pin) -> str:
         location.append(pin.county)
     if pin.state:
         location.append(pin.state)
-
-    if not primary:
-        if location:
-            return ", ".join(location)
-        if pin.effective_latitude is not None and pin.effective_longitude is not None:
-            return f"{pin.effective_latitude}, {pin.effective_longitude}"
-        return ""
 
     return ", ".join(filter(None, [primary_str, *location]))
