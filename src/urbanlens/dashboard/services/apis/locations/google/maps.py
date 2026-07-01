@@ -67,6 +67,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
 
     service_key: ClassVar[str] = "google_maps"
+    paid_service: ClassVar[bool] = True
 
     api_key: str = field(
         default_factory=_google_maps_api_key,

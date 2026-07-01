@@ -33,6 +33,7 @@ class GoogleEarthGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "google_earth"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = field(default_factory=lambda: settings.google_earth_api_key)
 

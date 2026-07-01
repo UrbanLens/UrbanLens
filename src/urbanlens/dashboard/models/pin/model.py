@@ -217,7 +217,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     @property
     def effective_official_name(self) -> str:
         """Externally supplied name for API lookups, falling back to the location."""
-        return self.official_name or (self.location.official_name if self.location else "")
+        return self.official_name or (self.location.official_name if self.location and self.location.official_name else "")
 
     @property
     def meaningful_official_name(self) -> str | None:

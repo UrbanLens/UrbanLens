@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True, kw_only=True)
 class NPSMapGateway(Gateway):
     service_key: ClassVar[str] = "nps"
+    paid_service: ClassVar[bool] = False
 
     base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
 

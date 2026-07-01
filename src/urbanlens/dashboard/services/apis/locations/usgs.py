@@ -43,6 +43,7 @@ class UsgsGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "usgs"
+    paid_service: ClassVar[bool] = False
 
     api_key: str | None = field(default_factory=lambda: settings.usgs_api_key)
     username: str | None = field(default_factory=lambda: settings.usgs_username)

@@ -873,10 +873,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.latitude or not pin.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
-        from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
 
-        # Instantiate the WeatherForecastGateway with the API key
-        weather_forecast_gateway = WeatherForecastGateway()
+        # Instantiate the OpenWeatherMapGateway with the API key
+        weather_forecast_gateway = OpenWeatherMapGateway()
 
         # Get the weather forecast from the OpenWeather API
         weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.latitude, pin.longitude)

@@ -30,6 +30,7 @@ class NasaGibsGateway(SatelliteViewProvider):
     """
 
     service_key: ClassVar[str] = "nasa_gibs"
+    paid_service: ClassVar[bool] = False
 
     def get_landsat_slides(
         self,

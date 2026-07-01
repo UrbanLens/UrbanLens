@@ -13,6 +13,7 @@ class NewsGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "news"
+    paid_service: ClassVar[bool] = True
 
     api_key: str
     base_url: str = "https://newsapi.google.com/v2/everything"  # Google News API URL

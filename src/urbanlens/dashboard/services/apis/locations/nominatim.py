@@ -25,6 +25,7 @@ class NominatimGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "nominatim"
+    paid_service: ClassVar[bool] = False
 
     base_url: str = _API_URL
 

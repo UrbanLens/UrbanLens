@@ -38,6 +38,7 @@ class BingMapsGateway(SatelliteViewProvider):
     """
 
     service_key: ClassVar[str] = "bing_maps"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = field(default_factory=lambda: settings.bing_maps_api_key)
 

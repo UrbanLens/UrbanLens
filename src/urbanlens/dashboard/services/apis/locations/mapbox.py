@@ -38,6 +38,7 @@ class MapboxGateway(SatelliteViewProvider):
     """
 
     service_key: ClassVar[str] = "mapbox"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = field(default_factory=lambda: settings.mapbox_api_key)
 

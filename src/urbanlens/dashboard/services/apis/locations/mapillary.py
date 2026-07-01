@@ -33,6 +33,7 @@ class MapillaryGateway(StreetViewProvider):
     """
 
     service_key: ClassVar[str] = "mapillary"
+    paid_service: ClassVar[bool] = False
 
     access_token: str | None = field(default_factory=lambda: settings.mapillary_access_token)
 

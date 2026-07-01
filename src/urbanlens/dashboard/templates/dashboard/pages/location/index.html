@@ -2434,9 +2434,10 @@
             var serverPage = parseInt(controls.dataset.serverPage || '1', 10) || 1;
             var serverPages = parseInt(controls.dataset.serverPages || '1', 10) || 1;
             var nextUrl = controls.dataset.nextUrl || '';
+            var prevUrl = controls.dataset.prevUrl || '';
             var labelSuffix = serverPages > 1 ? ' · batch ' + serverPage + ' of ' + serverPages : '';
             controls.innerHTML = '';
-            if (totalClientPages <= 1 && !nextUrl) {
+            if (totalClientPages <= 1 && !nextUrl && !prevUrl) {
                 controls.hidden = true;
                 return;
             }
@@ -2444,10 +2445,14 @@
             var prev = document.createElement('button');
             prev.type = 'button';
             prev.className = 'pagination-btn';
-            prev.disabled = page <= 1;
+            prev.disabled = page <= 1 && !prevUrl;
             prev.setAttribute('aria-label', 'Previous page');
             prev.innerHTML = '<i class="material-icons">chevron_left</i>';
-            prev.addEventListener('click', function () { showPage(card, page - 1, pageSize); });
+            if (page > 1) {
+                prev.addEventListener('click', function () { showPage(card, page - 1, pageSize); });
+            } else if (prevUrl && window.htmx) {
+                prev.addEventListener('click', function () { window.htmx.ajax('GET', prevUrl, { target: card, swap: 'outerHTML' }); });
+            }
 
             var label = document.createElement('span');
             label.className = 'pagination-label';
@@ -2477,26 +2482,31 @@
             if (controls) renderControls(card, controls, page, pageSize, items.length);
         }
 
-        function initAdaptivePagination(root) {
+        function initAdaptivePagination(root, forceReinit) {
             (root || document).querySelectorAll('[data-adaptive-pagination-list]').forEach(function (list) {
                 var card = list.closest('.card');
                 if (!card) return;
+                // Skip already-initialized cards unless explicitly asked to reinit (e.g. on resize).
+                if (!forceReinit && card.dataset.adaptivePaginationReady === '1') return;
                 var items = getItems(card);
                 if (!items.length) return;
                 var pageSize = measureVisiblePageSize(card, list, items);
                 card.dataset.adaptivePaginationPageSize = pageSize;
+                card.dataset.adaptivePaginationReady = '1';
                 showPage(card, 1, pageSize);
                 card.querySelectorAll('img').forEach(function (img) {
                     if (img.dataset.adaptivePaginationObserved) return;
                     img.dataset.adaptivePaginationObserved = '1';
-                    img.addEventListener('load', function () { initAdaptivePagination(card); }, { once: true });
+                    img.addEventListener('load', function () { initAdaptivePagination(card, true); }, { once: true });
                 });
             });
         }
 
-        window.addEventListener('resize', function () { initAdaptivePagination(document); });
-        document.body.addEventListener('htmx:afterSwap', function (evt) { initAdaptivePagination(evt.detail && evt.detail.target); });
-        document.addEventListener('DOMContentLoaded', function () { initAdaptivePagination(document); });
+        window.addEventListener('resize', function () { initAdaptivePagination(document, true); });
+        // For outerHTML swaps, evt.detail.target is the replaced (now-detached) element, not the
+        // newly inserted content. Scan document instead so the fresh card is found and paginated.
+        document.body.addEventListener('htmx:afterSwap', function () { initAdaptivePagination(document, false); });
+        document.addEventListener('DOMContentLoaded', function () { initAdaptivePagination(document, false); });
     }());
 
     // ── External-data panels: handle 204 (no data) and request errors ────────
@@ -2504,6 +2514,7 @@
         var _extSections = new Set([
             'wikipedia-section', 'nominatim-section', 'nps-section',
             'wikimedia-section', 'loopnet-section', 'usgs-topo-section',
+            'web-search-section', 'smithsonian-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the

@@ -26,6 +26,7 @@ class KartaViewGateway(StreetViewProvider):
     """
 
     service_key: ClassVar[str] = "kartaview"
+    paid_service: ClassVar[bool] = False
 
     def search_photos_near_coordinates(
         self,

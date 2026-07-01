@@ -49,7 +49,7 @@ by direct grep, not just the scanner). Resolved each:
     API data from any API, in order to reduce api usage and improve performance.
 
   - refresh_weather_forecast — DEAD, DELETED.
-    Same shape as above: WeatherForecastGateway (services/openweather/gateway.py)
+    Same shape as above: OpenWeatherMapGateway (services/openweather/gateway.py)
     has no caching at all (verified by reading the gateway), so the task fetched
     and threw away data. No-op stub.
 

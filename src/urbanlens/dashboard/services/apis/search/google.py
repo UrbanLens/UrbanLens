@@ -37,6 +37,7 @@ class GoogleCustomSearchGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "google_search"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = settings.google_search_api_key
     cx: str | None = settings.google_search_tenant

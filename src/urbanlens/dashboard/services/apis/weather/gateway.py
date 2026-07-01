@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, kw_only=True)
-class WeatherForecastGateway(Gateway):
+class OpenWeatherMapGateway(Gateway):
     service_key: ClassVar[str] = "openweathermap"
+    paid_service: ClassVar[bool] = False
 
     api_key: str | None = settings.openweathermap_api_key
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"

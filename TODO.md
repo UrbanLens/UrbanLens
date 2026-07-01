@@ -9,12 +9,10 @@ Features planned for this release.
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]
 * Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]
-* Per the above, any of that data which gets passed to an AI needs additional safeguards against jailbreaking. [UL-144]
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Add descriptions to badges that are pre-populated. [UL-245]
 * Remove work account from github project. [UL-247]
-* ~~Switch to gunicorn (or similar) instead of runserver in init.py, except for environment=development. [UL-258]~~
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
 * Consider: handle temporary markers when a user pin exists on that exact point.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
@@ -28,29 +26,19 @@ Features planned for this release.
 * Run bandit and AI vulnerability scans; integrate with CI/CD. [UL-31]
 
 ## Bug Fixes
-* ~~When a full pin refresh is occurring, navigating away from the page encounters latency. [UL-35]~~
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
-* ~~When changing a category to a tag, the tag is visually shown twice in the list until page refresh. [UL-152]~~
-* ~~Organize > Categories Tab -> Merge button is missing from rows. [UL-153]~~
-* ~~Organize > Categories Tab -> Edit / merge / delete button should be hidden when not in hover [UL-154]~~
-* ~~On pin details page, add badge dialog, the search bar doesn't work. [UL-195]~~
 * Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
-* ~~On pin details page, clicking edit, the dialog doesn't scroll when overflowing page height. [UL-215]~~
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog.
 * When filtering the map by rating, I saw a single pin without a rating.
 * I somehow got myself into a filter being active that I couldn't identify?
-* ~~When right clicking on the search sidebar, the context menu for the map opens.~~
-* ~~From badge filtering, you can't drag from "exclude"~~
-* ~~When the filter formula is too long, you can't see the whole formula.~~
 * When clearing a formula, it doesn't trigger a pin refresh.
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
 * Pin details page: Plus buttons don't look good again.
-* ~~On main map, we need confirmation before allowing deleting a pin.~~
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 
@@ -117,11 +105,8 @@ Features planned for future releases.
 * AI suggestions on the trip planning page for when to schedule activities, taking into account drive time and user voting. AI suggestions of pins to add that are relevant to the trip. Etc. [UL-60]
 * Trip planning page should have some ability to go to the pin details page (or location wiki) for each activity. [UL-61]
 * Better UI form fields (sliders, date pickers, etc). [UL-63]
-* ~~Check for wikipedia entry for a pin, cache it, display data from it if it exists. I suppose this requires the wikipedia entry includes an address, which matches the pin, in order to avoid name collisions. [UL-64]~~
-* ~~Search wikimedia commons for images / assets for a pin / location. [UL-259]~~
 * Gallery photos can have additional metadata, including: an angle of view, floor, room, etc. [UL-65]
 * Types of friends: "connections", "friends", "close friends", etc? I'm not sure this is needed in light of people badges. However, the mobile app idea of "connect with explorer" would encourage adding someone as a connection without necessarily wanting them to be a friend. I suppose this is also useful in the web app if you regularly encounter someone you may want to DM or keep track of, but don't want them to be impacted by your privacy and sharing settings. [UL-66]
-* ~~Import data feature, so users can migrate from the publicly available app to their own private server if they wish. [UL-68]~~
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
 * Saved map searches ("My Bucket List", etc). [UL-71]
@@ -170,8 +155,6 @@ Features planned for future releases.
 * UI: Tiny "saved" notice on settings pages should be better distinguished. [UL-184]
 * Map Layer: Show/Hide Street Details (otherwise does not show on sat view) [UL-185]
 * Main map: Some ability to go "back to home" quickly. [UL-187]
-* ~~Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]~~
-* ~~Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]~~
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 * Organize page: Confirm before deleting badge with pins. [UL-192]
 * Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193]
@@ -188,8 +171,6 @@ Features planned for future releases.
 * ~~on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]~~
 * Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
-* ~~BUG: Developer toolbar only shows up when the ui admin setting for environment is set to development, but not when the env var is set to development and the ui setting is default. [UL-213]~~
-* ~~Pin details page: There should be a button to delete the pin. [UL-214]~~
 * Add FAQ to about page. [UL-217]
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
 * Handle case where user has a comment, someone else replies to it, and then the original comment is deleted. [UL-219]
@@ -203,7 +184,6 @@ Features planned for future releases.
 * Ensure dialogs that are closed have their data cleared (this occurred on the trip details page) [UL-229]
 * Trip Detail Page > Add Pin Dialog: "Proposed / Confirmed" toggle looks weird. Hide location checkbox doesn't have an active state. Explanation of hide location should be a tooltip, not raw text below. The option for a Child Trip is great, but it should replace the pin selection area, not look like it's a separate option from pin selection. [UL-230]
 * Trip Detail Page > Activities: After adding an activity with "hidden", the user who added the activity can't see the pin. That user should be able to, regardless of privacy settings... but we should show a "hidden" icon to make it clear that others may not see it. [UL-231]
-* ~~Replace "added by {username}" with nothing or "added by you" for the same user in order to reduce text and simplify the ui. [UL-232]~~
 * UI Bug: Trip Details Page > Activity section: When no confirmed activities exist, and you click on the activity tab, the content section seems to disappear, rather than existing with no content. [UL-233]
 * Implement a few extra "undos". For instance: pin deletion, etc. [UL-234]
 * Handle case where a user is invited via one email address, but joins the site using a different email. [UL-235]
@@ -215,7 +195,6 @@ Features planned for future releases.
 * After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]
 * When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
 * When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
-* ~~Add site admin setting to make the site invite only, and suspend public signups. [UL-244]~~
 * Loopnet API or Scraping [UL-248]
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 * ~~Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20")~~p, and allow multi-select before dragging to drag as a group. [UL-250]

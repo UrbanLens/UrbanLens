@@ -13,6 +13,7 @@ class LOCJsonGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "library_of_congress"
+    paid_service: ClassVar[bool] = False
 
     base_url: str = "https://loc.gov/api"
 

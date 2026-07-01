@@ -37,6 +37,7 @@ class Gateway(ABC):  # noqa: B024 - Abstract so it cannot be instantiated direct
     """
 
     service_key: ClassVar[str | None] = None
+    paid_service: ClassVar[bool] = False
 
     session: requests.Session = field(default_factory=requests.Session)
 

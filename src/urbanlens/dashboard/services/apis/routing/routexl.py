@@ -26,6 +26,7 @@ class RouteXLGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "routexl"
+    paid_service: ClassVar[bool] = True
 
     username: str
     password: str

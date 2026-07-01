@@ -22,6 +22,7 @@ class NPSGateway(Gateway):
     """Gateway for the National Park Service public API."""
 
     service_key: ClassVar[str] = "nps"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = settings.nps_api_key
     base_url: str = "https://developer.nps.gov/api/v1"

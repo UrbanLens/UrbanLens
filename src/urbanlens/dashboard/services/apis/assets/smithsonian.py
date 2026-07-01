@@ -16,6 +16,7 @@ class SmithsonianGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "smithsonian"
+    paid_service: ClassVar[bool] = False
 
     api_key: str
     base_url: str = "https://api.si.edu/openaccess/api/v1.0/search"

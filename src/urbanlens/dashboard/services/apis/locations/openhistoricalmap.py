@@ -19,6 +19,7 @@ class OpenHistoricalMapGateway(Gateway):
     """Gateway for OpenHistoricalMap API, search, Overpass, and tile services."""
 
     service_key: ClassVar[str] = "openhistoricalmap"
+    paid_service: ClassVar[bool] = False
 
     def search(self, query: str, **params: Any) -> list[dict[str, Any]]:
         """Search OpenHistoricalMap by name or address."""

@@ -26,6 +26,7 @@ class OpenAerialMapGateway(SatelliteViewProvider):
     """
 
     service_key: ClassVar[str] = "open_aerial_map"
+    paid_service: ClassVar[bool] = False
 
     def search_imagery_for_coordinates(
         self,

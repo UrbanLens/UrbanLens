@@ -27,6 +27,7 @@ class WikipediaGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "wikipedia"
+    paid_service: ClassVar[bool] = False
 
     base_url: str = _GEO_SEARCH_URL
 

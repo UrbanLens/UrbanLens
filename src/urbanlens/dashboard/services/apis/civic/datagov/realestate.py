@@ -15,6 +15,7 @@ class RealEstateSalesGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "datagov"
+    paid_service: ClassVar[bool] = False
 
     base_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/rows.json"
     data_dictionary_url: str = "https://data.ct.gov/api/views/5mzw-sjtu/columns.json"

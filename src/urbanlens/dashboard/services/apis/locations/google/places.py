@@ -15,6 +15,7 @@ class GooglePlacesGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "google_places"
+    paid_service: ClassVar[bool] = True
 
     api_key: str
 

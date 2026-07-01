@@ -13,7 +13,8 @@ Conventions relied on:
 <div class="pagination-bar" data-adaptive-pagination-controls
      data-server-page="{{ page_obj.number }}"
      data-server-pages="{{ page_obj.paginator.num_pages }}"
-     data-next-url="{% if page_obj.has_next %}{{ request.path }}?page={{ page_obj.next_page_number }}{% endif %}"></div>
+     data-next-url="{% if page_obj.has_next %}{{ request.path }}?page={{ page_obj.next_page_number }}{% endif %}"
+     data-prev-url="{% if page_obj.has_previous %}{{ request.path }}?page={{ page_obj.previous_page_number }}{% endif %}"></div>
 {% elif page_obj.paginator.num_pages > 1 %}
 <div class="pagination-bar">
     {% if page_obj.has_previous %}

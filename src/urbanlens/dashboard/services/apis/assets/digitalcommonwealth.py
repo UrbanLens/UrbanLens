@@ -11,6 +11,7 @@ from urbanlens.dashboard.services.gateway import Gateway
 @dataclass(slots=True, kw_only=True)
 class DigitalCommonwealthGateway(Gateway):
     service_key: ClassVar[str] = "digital_commonwealth"
+    paid_service: ClassVar[bool] = False
 
     def get_oai_metadata(self, identifier: str) -> bytes:
         oai_url = "https://oai.digitalcommonwealth.org/catalog/oai"

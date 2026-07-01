@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
-    from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
+    from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
 
 logger = logging.getLogger(__name__)
 
@@ -1398,7 +1398,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_activity_forecasts(activities: list[TripActivity], gateway: WeatherForecastGateway) -> list[dict]:
+def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeatherMapGateway) -> list[dict]:
     """For each activity, find the closest 3-hourly forecast slot at its location/time.
 
     Returns a list of dicts with keys:
@@ -1473,7 +1473,7 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.apis.weather.gateway import WeatherForecastGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -1499,7 +1499,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
-                    gateway = WeatherForecastGateway()
+                    gateway = OpenWeatherMapGateway()
                     activity_forecasts = _build_activity_forecasts(activities, gateway)
 
                     day_map: dict = defaultdict(list)

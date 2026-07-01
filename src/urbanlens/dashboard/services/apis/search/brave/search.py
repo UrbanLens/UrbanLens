@@ -35,6 +35,7 @@ class BraveSearchGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "brave_search"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = None
     base_url: str = "https://api.search.brave.com/res/v1/web/search"

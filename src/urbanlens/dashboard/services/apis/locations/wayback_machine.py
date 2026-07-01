@@ -18,6 +18,7 @@ class WaybackMachineGateway(Gateway):
     """Gateway for Internet Archive Wayback Machine APIs."""
 
     service_key: ClassVar[str] = "wayback_machine"
+    paid_service: ClassVar[bool] = False
 
     def get_availability(self, url: str, *, timestamp: str | None = None) -> dict[str, Any]:
         """Return the closest archived snapshot for a URL.

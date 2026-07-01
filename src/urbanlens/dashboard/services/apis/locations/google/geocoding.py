@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = settings.google_maps_api_key
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"

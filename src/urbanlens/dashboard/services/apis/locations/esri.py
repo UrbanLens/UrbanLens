@@ -53,6 +53,7 @@ class EsriGateway(SatelliteViewProvider):
     """
 
     service_key: ClassVar[str] = "esri"
+    paid_service: ClassVar[bool] = False
 
     def _generate_satellite_slides(
         self,

@@ -28,6 +28,7 @@ class AppleMapsGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "apple_maps"
+    paid_service: ClassVar[bool] = True
 
     api_key: str | None = field(default_factory=lambda: settings.apple_maps_api_key)
 
