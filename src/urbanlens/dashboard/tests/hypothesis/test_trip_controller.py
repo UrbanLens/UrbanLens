@@ -53,7 +53,7 @@ class TripListPartialTests(TestCase):
         )
 
         html = render_to_string(
-            "dashboard/partials/trip_list_partial.html",
+            "dashboard/partials/trips/trip_list_partial.html",
             {"trips": [trip], "profile": self.profile},
         )
 
@@ -69,7 +69,7 @@ class TripListPartialTests(TestCase):
         )
 
         html = render_to_string(
-            "dashboard/partials/trip_list_partial.html",
+            "dashboard/partials/trips/trip_list_partial.html",
             {"trips": [trip], "profile": self.profile},
         )
 
@@ -104,7 +104,7 @@ class TripCreateViewTests(TestCase):
         )
         trip = Trip.objects.get(name="Weekend Explore")
         self.assertTrue(
-            TripMembership.objects.filter(trip=trip, profile=self.profile).exists()
+            TripMembership.objects.filter(trip=trip, profile=self.profile).exists(),
         )
 
     def test_post_without_name_returns_400(self):
@@ -448,25 +448,25 @@ class TripActivityVoteViewTests(TestCase):
         self.client.post(self._url(), data={"vote": "up"})
         self.assertTrue(
             TripActivityVote.objects.filter(
-                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP
-            ).exists()
+                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
+            ).exists(),
         )
 
     def test_downvote_created(self):
         self.client.post(self._url(), data={"vote": "down"})
         self.assertTrue(
             TripActivityVote.objects.filter(
-                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_DOWN
-            ).exists()
+                activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_DOWN,
+            ).exists(),
         )
 
     def test_empty_vote_clears_existing(self):
         TripActivityVote.objects.create(
-            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP
+            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
         )
         self.client.post(self._url(), data={"vote": ""})
         self.assertFalse(
-            TripActivityVote.objects.filter(activity=self.activity, profile=self.creator).exists()
+            TripActivityVote.objects.filter(activity=self.activity, profile=self.creator).exists(),
         )
 
     def test_invalid_vote_value_returns_400(self):
@@ -481,7 +481,7 @@ class TripActivityVoteViewTests(TestCase):
 
     def test_vote_updated_not_duplicated(self):
         TripActivityVote.objects.create(
-            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP
+            activity=self.activity, profile=self.creator, vote=TripActivityVote.VOTE_UP,
         )
         self.client.post(self._url(), data={"vote": "down"})
         votes = TripActivityVote.objects.filter(activity=self.activity, profile=self.creator)
@@ -566,7 +566,7 @@ class TripMemberRSVPViewTests(TestCase):
 
     def test_invalid_rsvp_value_returns_400(self):
         resp = self.client.post(
-            self._url(), data=json.dumps({"rsvp": "absolutely"}), content_type="application/json"
+            self._url(), data=json.dumps({"rsvp": "absolutely"}), content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
 
@@ -601,7 +601,7 @@ class TripLeaveViewTests(TestCase):
         resp = client.delete(self._url())
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(
-            TripMembership.objects.filter(trip=self.trip, profile=self.member).exists()
+            TripMembership.objects.filter(trip=self.trip, profile=self.member).exists(),
         )
 
     def test_creator_cannot_leave(self):

@@ -221,7 +221,10 @@ class EsriGateway(SatelliteViewProvider):
             try:
                 release_num = int(raw_release_num)
             except (TypeError, ValueError):
-                release_num = item.get("releaseNum")
+                try:
+                    release_num = int(item.get("releaseNum"))
+                except (TypeError, ValueError):
+                    continue
 
             if release_num is None:
                 continue

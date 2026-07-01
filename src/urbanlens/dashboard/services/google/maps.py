@@ -118,7 +118,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 "https://maps.googleapis.com/maps/api/staticmap",
                 params={
                     "center": f"{latitude},{longitude}",
-                    "zoom": 18,
+                    "zoom": "18",
                     "size": "640x400",
                     "maptype": "satellite",
                     "key": self.api_key,
@@ -506,7 +506,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 elif fmt == "kml":
                     raw_pins = self.takeout_kml_to_dict(text, user_profile)
                 elif fmt == "csv":
-                    raw_pins = list[dict[str, Any]](self._csv_row_iter(text, user_profile))
+                    raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
                 else:
                     continue
             except (UnicodeDecodeError, ValueError, KeyError, AttributeError) as exc:
