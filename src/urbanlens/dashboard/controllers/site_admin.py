@@ -12,8 +12,10 @@ import time
 
 import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -95,7 +97,11 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
     request: HttpRequest
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
+        # The user should never be anonymous, but just in case.
+        if not isinstance(request.user, User):
+            return HttpResponseForbidden()
+        
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
         return render(
@@ -112,7 +118,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             },
         )
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         settings = SiteSettings.get_current()
 
         try:
@@ -197,7 +203,7 @@ class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, Vie
             )
         return super().handle_no_permission()
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         settings = SiteSettings.get_current()
         if not settings.is_development_environment():
             return HttpResponse(status=403)
@@ -219,7 +225,7 @@ class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, Vie
     raise_exception = True
     request: HttpRequest
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
 
         settings = SiteSettings.get_current()
@@ -248,7 +254,7 @@ class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixi
     raise_exception = True
     request: HttpRequest
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import Profile, ThemeChoice
 
         settings = SiteSettings.get_current()
@@ -280,7 +286,7 @@ class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, Vi
     raise_exception = True
     request: HttpRequest
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         settings = SiteSettings.get_current()
         if not settings.is_development_environment():
             return HttpResponse(status=403)
@@ -305,7 +311,7 @@ class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin,
     raise_exception = True
     request: HttpRequest
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile
 
         settings = SiteSettings.get_current()
@@ -341,7 +347,7 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             )
         return super().handle_no_permission()
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from django.contrib.auth.models import User
 
         from urbanlens.dashboard.models.location.model import Location
@@ -373,7 +379,7 @@ class SiteAdminPullLatestCodeView(LoginRequiredMixin, PermissionRequiredMixin, V
     raise_exception = True
     request: HttpRequest
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         settings = SiteSettings.get_current()
         if not settings.is_development_environment():
             return JsonResponse(
@@ -426,7 +432,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
     raise_exception = True
     request: HttpRequest
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription
 
         SubscriptionRole.ensure_defaults()
@@ -443,7 +449,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             },
         )
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         from urllib.parse import urlencode
 
         from django.contrib.auth.models import User
@@ -510,7 +516,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         return [get_limit_config(key) for key in sorted(SERVICE_REGISTRY)]
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
         configs = self._get_all_configs()
@@ -559,7 +565,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         cfg.notes = post_data.get("notes", "").strip()
 
-    def post(self, request):
+    def post(self, request: HttpRequest):
         from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
         service = request.POST.get("service", "").strip()
@@ -606,7 +612,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
             )
         return super().handle_no_permission()
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from django.conf import settings as django_settings
         from django.contrib.auth.models import User
 
@@ -696,7 +702,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
     GET /site-admin/stats/kpi/
     """
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from django.contrib.auth.models import User
 
         from urbanlens.dashboard.models.friendship.model import Friendship
@@ -777,7 +783,7 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
     GET /site-admin/stats/system/
     """
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from django.conf import settings as django_settings
 
         from urbanlens.core.version import (
@@ -828,7 +834,7 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
     GET /site-admin/stats/api/
     """
 
-    def get(self, request):
+    def get(self, request: HttpRequest):
         from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY
 
         api_usage: list[dict] = []
