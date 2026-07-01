@@ -90,6 +90,7 @@
       <div class="reaction-picker-popup" hidden>
         {% for emoji in allowed_emojis %}
         <button type="button" class="reaction-picker-emoji"
+                data-emoji="{{ emoji }}"
                 {% if context_type == "pin" or context_type == "wiki" %}
                 hx-post="{% url 'comment.react' comment.id %}"
                 {% else %}
