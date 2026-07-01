@@ -348,6 +348,11 @@
         }
     }
 
+    .card__body {
+        padding: $space-md;
+        color: var(--ul-grey-9);
+    }
+
     h1,
     h2,
     h3,

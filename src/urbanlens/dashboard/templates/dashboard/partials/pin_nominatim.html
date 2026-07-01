@@ -4,17 +4,16 @@
     <div class="card-header">
         <i class="material-icons">map</i>
         <h3>
-            {% if place.osm_url %}
-            <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
-            {% else %}
             OpenStreetMap
-            {% endif %}
         </h3>
     </div>
-    <div class="card-body nominatim-body">
-
+    <div class="card__body nominatim-body">
         {% if place.name %}
         <p class="nominatim-place-name">{{ place.name }}</p>
+        {% endif %}
+        
+        {% if place.osm_url %}
+        <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
         {% endif %}
 
         <dl class="nominatim-meta">

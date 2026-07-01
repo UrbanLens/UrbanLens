@@ -95,7 +95,7 @@ Context:
 (function () {
   // ── State ──────────────────────────────────────────────────────────────────
   var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
-  var REPOSITION_BASE = '{% if context_type == "pin" %}/map/pin/{{ pin.slug }}/gallery/{% else %}/location/{{ location.slug }}/wiki/gallery/{% endif %}';
+  var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
 
   // Build an ordered list of image ids for lightbox navigation.

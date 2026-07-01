@@ -3,15 +3,15 @@
     <div class="card-header">
         <i class="material-icons">park</i>
         <h3>National Park Service</h3>
+    </div>
+
+    <div class="nps-body card__body">
         {% if park.url %}
         <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer"
            class="card-header-link" title="View on NPS.gov">
             <i class="material-icons">open_in_new</i>
         </a>
         {% endif %}
-    </div>
-
-    <div class="nps-body">
         {% if park.images %}
         {% with img=park.images.0 %}
         {% if img.url %}
