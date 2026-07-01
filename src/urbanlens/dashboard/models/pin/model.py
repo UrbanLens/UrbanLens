@@ -79,6 +79,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     # User's custom label. None = show location.name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
+    # External-source name for this pin. User edits must never write this field.
+    official_name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
     # User's personal notes. Unrelated to Location.description (place-level info).
     description = TextField(null=True, blank=True)
@@ -211,6 +213,16 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     def effective_name(self) -> str:
         """User's custom name, or the location's canonical name."""
         return self.name or (self.location.name if self.location else "")
+
+    @property
+    def effective_official_name(self) -> str:
+        """Externally supplied name for API lookups, falling back to the location."""
+        return self.official_name or (self.location.official_name if self.location else "")
+
+    @property
+    def meaningful_official_name(self) -> str | None:
+        """Official name only when it is useful for external API searches."""
+        return self.effective_official_name if is_meaningful_name(self.effective_official_name) else None
     
     @property
     def meaningful_name(self) -> str | None:
@@ -301,6 +313,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             "uuid": str(self.uuid),
             "slug": self.slug or str(self.uuid),
             "name": self.effective_name,
+            "official_name": self.effective_official_name,
             "icon": self.effective_icon,
             "place_name": self.place_name,
             "description": self.description,

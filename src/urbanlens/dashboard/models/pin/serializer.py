@@ -20,6 +20,8 @@ class PinSerializer(serializers.ModelSerializer):
     """
 
     effective_name = serializers.ReadOnlyField()
+    effective_official_name = serializers.ReadOnlyField()
+    official_name = serializers.ReadOnlyField()
     effective_icon = serializers.ReadOnlyField()
     effective_latitude = serializers.ReadOnlyField()
     effective_longitude = serializers.ReadOnlyField()
@@ -30,7 +32,9 @@ class PinSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "name_is_user_provided",
+            "official_name",
             "effective_name",
+            "effective_official_name",
             "icon",
             "effective_icon",
             "categories",

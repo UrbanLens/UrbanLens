@@ -86,18 +86,14 @@ def build_pin_search_query(pin: Pin) -> str:
     """
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-    name = pin.effective_name if is_meaningful_name(pin.effective_name) else None
-    place_name = getattr(pin, "place_name", None)
-    place_name = place_name if is_meaningful_name(place_name) else None
+    name = pin.effective_official_name if is_meaningful_name(pin.effective_official_name) else None
     address_basic = pin.address_basic
     route = pin.location.route if pin.location else None
 
     primary: list[str] = []
     if name:
         primary.append(name)
-    if place_name and place_name not in {name, address_basic}:
-        primary.append(place_name)
-    elif address_basic and address_basic != name:
+    if address_basic and address_basic != name:
         primary.append(address_basic)
     primary_str = " ".join(primary)
 

@@ -19,8 +19,10 @@ from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
 from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
 from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
@@ -28,10 +30,8 @@ from urbanlens.dashboard.services.apis.locations.meta import create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
-from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
-from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -214,7 +214,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_official_name) if img.get("url")]
         page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
 
         return render(
@@ -241,7 +241,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.meaningful_name:
+        if not pin.meaningful_official_name:
             return HttpResponse("", status=204)
 
         cache_key = make_cache_key("web_search_pin", str(pin.pk))
@@ -565,7 +565,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             except Exception:
                 logger.exception("Wikipedia lookup failed for pin %s", pin_slug)
                 article = None
-            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
             data = article
         else:
             data = cached.data or None
@@ -590,8 +590,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        if not pin.meaningful_name:
-            logger.debug("wikimedia_assets: pin %s has no meaningful name, skipping", pin_slug)
+        if not pin.meaningful_official_name:
+            logger.debug("wikimedia_assets: pin %s has no meaningful official name, skipping", pin_slug)
             return HttpResponse(status=204)
 
         location = pin.location
@@ -599,7 +599,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikimedia_assets: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        query = pin.effective_name or ""
+        query = pin.effective_official_name or ""
         cached = LocationCache.get_fresh(location, "wikimedia")
         if cached is None:
             try:
@@ -710,7 +710,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     float(lat),
                     float(lng),
                     state_code=state_code,
-                    location_name=pin.effective_name or "",
+                    location_name=pin.effective_official_name or "",
                 )
             except Exception:
                 logger.exception("NPS lookup failed for pin %s", pin_slug)
