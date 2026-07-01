@@ -33,6 +33,51 @@ class NominatimGateway(Gateway):
         Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
+    def search(self, query: str, *, limit: int = 5, **params: Any) -> list[dict[str, Any]]:
+        """Search OpenStreetMap places by free-text query through Nominatim."""
+        request_params: dict[str, Any] = {
+            "q": query,
+            "format": "json",
+            "limit": max(1, min(int(limit), 50)),
+            "extratags": 1,
+            "namedetails": 1,
+            "addressdetails": 1,
+            **params,
+        }
+        try:
+            resp = self.session.get(f"{self.base_url}/search", params=request_params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()
+        except Exception:
+            logger.exception("Nominatim search failed for %r", query)
+            return []
+        if not isinstance(raw, list):
+            return []
+        return [self._normalise(item) for item in raw if isinstance(item, dict)]
+
+    def lookup(self, osm_ids: list[str], **params: Any) -> list[dict[str, Any]]:
+        """Lookup OSM objects by ids like ``N123``, ``W456``, or ``R789``."""
+        if not osm_ids:
+            return []
+        request_params: dict[str, Any] = {
+            "osm_ids": ",".join(osm_ids[:50]),
+            "format": "json",
+            "extratags": 1,
+            "namedetails": 1,
+            "addressdetails": 1,
+            **params,
+        }
+        try:
+            resp = self.session.get(f"{self.base_url}/lookup", params=request_params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()
+        except Exception:
+            logger.exception("Nominatim lookup failed for %s", osm_ids)
+            return []
+        if not isinstance(raw, list):
+            return []
+        return [self._normalise(item) for item in raw if isinstance(item, dict)]
+
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """
         Reverse-geocode coordinates and return structured place metadata.
@@ -100,4 +145,10 @@ class NominatimGateway(Gateway):
             "tourism": extra.get("tourism") or address.get("tourism") or "",
             "historic": extra.get("historic") or address.get("historic") or "",
             "wikipedia": extra.get("wikipedia") or "",
+            "category": raw.get("category", ""),
+            "type": raw.get("type", ""),
+            "importance": raw.get("importance"),
+            "lat": raw.get("lat"),
+            "lon": raw.get("lon"),
+            "boundingbox": raw.get("boundingbox") or [],
         }
