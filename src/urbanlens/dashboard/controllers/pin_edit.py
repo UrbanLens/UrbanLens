@@ -312,6 +312,7 @@ class PinEditView(LoginRequiredMixin, View):
             pin_type = pin.pin_type
 
         pin.name = name
+        pin.name_is_user_provided = bool((name or "").strip())
         pin.description = description
         pin.pin_type = pin_type
         pin.priority = priority
@@ -324,7 +325,7 @@ class PinEditView(LoginRequiredMixin, View):
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(update_fields=[
-            "name", "description", "pin_type", "priority", "vulnerability", "danger", "last_visited",
+            "name", "name_is_user_provided", "description", "pin_type", "priority", "vulnerability", "danger", "last_visited",
             "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
             "date_abandoned", "date_last_active", "updated",
         ])

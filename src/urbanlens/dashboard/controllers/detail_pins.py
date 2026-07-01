@@ -49,8 +49,10 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
+        detail_name = body.get("name") or None
         detail_pin = Pin.objects.create(
-            name=body.get("name") or None,
+            name=detail_name,
+            name_is_user_provided=bool((detail_name or "").strip()),
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),
@@ -189,6 +191,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         pin_name = body.get("name") or None
         detail_pin = Pin.objects.create(
             name=pin_name,
+            name_is_user_provided=bool((pin_name or "").strip()),
             description=body.get("description") or None,
             latitude=float(lat),
             longitude=float(lon),

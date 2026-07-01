@@ -165,6 +165,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
             pin = Pin.objects.create(
                 name=name,
+                name_is_user_provided=bool((name or "").strip()),
                 location=location,
                 latitude=None,
                 longitude=None,
@@ -195,11 +196,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if google_place_id and not is_private:
                 try:
                     from urbanlens.dashboard.services.google.place_info import GooglePlaceService
+                    from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
                     gp_service = GooglePlaceService()
                     gp_service.ensure_linked_by_place_id(pin, google_place_id)
                     if location:
                         gp_service.ensure_linked_by_place_id(location, google_place_id)
+                    update_location_name_from_external_sources(location)
                 except Exception as gp_exc:
                     logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
 
@@ -564,6 +567,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         if name is not None:
             pin.name = name or None
+            pin.name_is_user_provided = bool(name.strip())
         if latitude is not None:
             with contextlib.suppress(ValueError):
                 pin.latitude = float(latitude)

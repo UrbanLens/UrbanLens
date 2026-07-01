@@ -70,6 +70,13 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     # having any community presence at these coordinates.
     is_private = BooleanField(default=False)
 
+    # True when ``name`` was explicitly typed by the user. External API naming
+    # refreshes may replace placeholder/auto-generated labels only while this is False.
+    name_is_user_provided = BooleanField(
+        default=False,
+        help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
+    )
+
     # User's custom label. None = show location.name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
@@ -309,6 +316,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             "longitude": self.effective_longitude,
             "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
             "profile": self.profile.id,
+            "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
             "tags": [

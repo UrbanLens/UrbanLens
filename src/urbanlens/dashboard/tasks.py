@@ -143,6 +143,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
     location = Location.objects.filter(pk=location_id).first()
     if not location:
@@ -167,6 +168,10 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             }
             article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
             LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            update_location_name_from_external_sources(
+                location,
+                extra_candidates=[("wikipedia", (article or {}).get("title"))],
+            )
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
@@ -181,6 +186,10 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
             park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.name or "")
             LocationCache.set(location, "nps", park or {}, query_key=state_code)
+            update_location_name_from_external_sources(
+                location,
+                extra_candidates=[("nps", (park or {}).get("fullName") or (park or {}).get("name"))],
+            )
             logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
@@ -194,6 +203,12 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             place_data = django_cache.get(f"ul_place_details_{google_place_id}")
             if place_data:
                 LocationCache.set(location, "google_places", place_data, query_key=google_place_id)
+                update_location_name_from_external_sources(
+                    location,
+                    extra_candidates=[
+                        ("google_places", place_data.get("name") if isinstance(place_data, dict) else None),
+                    ],
+                )
                 logger.info(
                     "prefetch_location_external_data: migrated Google Places cache for location %s", location_id,
                 )
