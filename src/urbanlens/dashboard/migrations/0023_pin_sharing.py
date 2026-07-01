@@ -35,4 +35,31 @@ class Migration(migrations.Migration):
             model_name="pinshare",
             constraint=models.UniqueConstraint(condition=models.Q(("status", "pending")), fields=("pin", "to_profile"), name="dashboard_pin_share_one_pending_per_pin_user"),
         ),
+        migrations.AddField(
+            model_name="emailverification",
+            name="pending_invite_token",
+            field=models.UUIDField(blank=True, null=True),
+        ),
+        migrations.AlterField(
+            model_name="comment",
+            name="parent",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=models.SET_NULL,
+                related_name="replies",
+                to="dashboard.comment",
+            ),
+        ),
+        migrations.AlterField(
+            model_name="tripcomment",
+            name="parent",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=models.SET_NULL,
+                related_name="replies",
+                to="dashboard.tripcomment",
+            ),
+        ),
     ]
