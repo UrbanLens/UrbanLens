@@ -7,6 +7,7 @@
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
   </div>
 
+  <div class="card__body comment-panel-body">
   {% if rendered_comments %}
   <ul class="comment-list">
     {% for item in rendered_comments %}
@@ -22,4 +23,5 @@
 
   {# ── Compose form ── #}
   {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}
+  </div>
 </div>
