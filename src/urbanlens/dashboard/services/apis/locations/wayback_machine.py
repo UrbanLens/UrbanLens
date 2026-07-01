@@ -13,7 +13,7 @@ _SAVE_URL = "https://web.archive.org/save"
 _MEMENTO_TIMEMAP_URL = "https://web.archive.org/web/timemap"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class WaybackMachineGateway(Gateway):
     """Gateway for Internet Archive Wayback Machine APIs."""
 

@@ -15,7 +15,7 @@ _DATA_CATALOG_URL = "https://developers.google.com/earth-engine/datasets/catalog
 _EARTH_WEB_URL = "https://earth.google.com/web"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class GoogleEarthGateway(Gateway):
     """Gateway for Google Earth Engine REST API and Google Earth Web deep links.
 

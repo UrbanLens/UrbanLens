@@ -19,6 +19,7 @@ from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
@@ -246,6 +247,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if not pin.meaningful_official_name:
             return HttpResponse("", status=204)
+
+        if not user_has_feature(request.user, SiteFeature.SEARCH):
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {"error": "Web search is available to VIP subscribers."},
+                status=403,
+            )
 
         cache_key = make_cache_key("web_search_pin", str(pin.pk))
         site_settings = SiteSettings.get_current()

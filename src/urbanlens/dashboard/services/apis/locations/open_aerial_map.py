@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.openaerialmap.org"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class OpenAerialMapGateway(SatelliteViewProvider):
     """Gateway for OpenAerialMap imagery metadata and tile indexes.
 

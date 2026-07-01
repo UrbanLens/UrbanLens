@@ -9,7 +9,7 @@ from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class SmithsonianGateway(Gateway):
     """
     Gateway for the Smithsonian Open Access API.

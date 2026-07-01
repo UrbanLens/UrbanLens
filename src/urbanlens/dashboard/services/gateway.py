@@ -21,7 +21,7 @@ from typing import ClassVar
 import requests
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class Gateway(ABC):  # noqa: B024 - Abstract so it cannot be instantiated directly
     """An abstract class to serve as a template for API gateways.
 

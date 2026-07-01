@@ -21,7 +21,7 @@ _M2M_SESSION_CACHE_KEY = "usgs_m2m_auth"
 _M2M_SESSION_TTL = 7200  # USGS M2M session tokens expire after ~2 hours
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class UsgsGateway(Gateway):
     """Gateway for USGS M2M/EarthExplorer, TNMAccess, topoView, and HTMC.
 

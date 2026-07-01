@@ -14,7 +14,7 @@ _OVERPASS_URL = "https://overpass-api.openhistoricalmap.org/api/interpreter"
 _TILE_URL = "https://tile.openhistoricalmap.org"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class OpenHistoricalMapGateway(Gateway):
     """Gateway for OpenHistoricalMap API, search, Overpass, and tile services."""
 

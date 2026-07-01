@@ -18,10 +18,10 @@ from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
-from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
@@ -57,7 +57,7 @@ def _google_maps_api_key() -> str:
     return settings.google_maps_api_key
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(kw_only=True)
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
     Gateway for the Google Maps API.
@@ -303,10 +303,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             str: SSE-formatted data lines.
         """
 
-        from urbanlens.dashboard.services.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.apis.locations.google.location_history import (
             import_location_history_streaming,
         )
+        from urbanlens.dashboard.services.archive_extractor import validate_content_type
 
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
