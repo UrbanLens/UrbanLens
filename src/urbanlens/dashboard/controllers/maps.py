@@ -214,9 +214,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 from urbanlens.dashboard.tasks import prefetch_location_external_data, refresh_pin_web_search
 
                 safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
-                safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
             from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+            if location and not is_private and user_has_feature(request.user, SiteFeature.SEARCH):
+                safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
             if user_has_feature(request.user, SiteFeature.AI):
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
