@@ -14,7 +14,7 @@ _API_URL = "https://nominatim.openstreetmap.org"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class NominatimGateway(Gateway):
     """
     Reverse-geocodes coordinates via the Nominatim API and returns rich place metadata.

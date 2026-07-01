@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
 

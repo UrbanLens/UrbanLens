@@ -25,7 +25,7 @@ _TILE_BASE = "https://api.mapbox.com/v4/mapbox.satellite"
 _SATELLITE_CACHE_TTL = 30 * 24 * 3600
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class MapboxGateway(SatelliteViewProvider):
     """Gateway for Mapbox Static Images API and satellite tile access.
 

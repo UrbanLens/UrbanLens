@@ -30,7 +30,7 @@ def _mask_secret(value: str | None) -> str:
     return f"{value[:4]}...{value[-4:]}"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class GoogleCustomSearchGateway(Gateway):
     """
     Gateway for the Google Custom Search API.

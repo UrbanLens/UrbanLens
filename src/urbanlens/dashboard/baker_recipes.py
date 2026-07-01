@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 
 def _make_profile(**attrs) -> Profile:
     """Create a fresh User and return the Profile auto-created by the post_save signal."""
-    user = _baker.make(User)
+    user = _baker.make(User, is_staff=False, is_superuser=False, is_active=True)
     for field, value in attrs.items():
         setattr(user.profile, field, value)
     if attrs:

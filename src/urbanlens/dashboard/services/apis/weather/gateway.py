@@ -13,7 +13,7 @@ from urbanlens.UrbanLens.settings.app import settings
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class WeatherForecastGateway(Gateway):
     service_key: ClassVar[str] = "openweathermap"
 
