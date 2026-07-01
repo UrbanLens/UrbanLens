@@ -42,7 +42,7 @@ _WAYBACK_CACHE_KEY = "satellite_esri_wayback_releases_v3"
 _WAYBACK_CACHE_TTL = 24 * 3600
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class EsriGateway(SatelliteViewProvider):
     """Gateway for Esri ArcGIS REST imagery services.
 
@@ -221,13 +221,13 @@ class EsriGateway(SatelliteViewProvider):
             try:
                 release_num = int(raw_release_num)
             except (TypeError, ValueError):
+                raw_item_release_num = item.get("releaseNum")
+                if raw_item_release_num is None:
+                    continue
                 try:
-                    release_num = int(item.get("releaseNum"))  # pyright: ignore[reportArgumentType] - caught below
+                    release_num = int(raw_item_release_num)
                 except (TypeError, ValueError):
                     continue
-
-            if release_num is None:
-                continue
 
             releases.append(
                 {

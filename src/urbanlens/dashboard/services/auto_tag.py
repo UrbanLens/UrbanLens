@@ -217,18 +217,14 @@ class AutoTagService:
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         parts: list[str] = []
-        # Pin exposes meaningful_name; Location just has name.
-        name: str | None = getattr(target, "meaningful_name", None)
+        official = getattr(target, "meaningful_official_name", None)
+        name: str | None = official if official is not None else None
         if name is None:
-            raw = getattr(target, "name", None)
+            raw = getattr(target, "official_name", None)
             if raw and is_meaningful_name(raw):
                 name = raw
         if name:
             parts.append(name)
-        if getattr(target, "has_place_name", lambda: False)():
-            place = getattr(target, "place_name", None)
-            if place:
-                parts.append(place)
         return " ".join(parts)
 
     @staticmethod
@@ -408,9 +404,10 @@ class AutoTagService:
 
         # User-supplied fields wrapped to guard against prompt injection.
         user_fields = ""
-        name: str | None = getattr(target, "meaningful_name", None)
+        official = getattr(target, "meaningful_official_name", None)
+        name: str | None = official if official is not None else None
         if name is None:
-            raw = getattr(target, "name", None)
+            raw = getattr(target, "official_name", None)
             if raw and is_meaningful_name(raw):
                 name = raw
         if name:

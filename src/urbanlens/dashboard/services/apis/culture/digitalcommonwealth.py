@@ -8,7 +8,7 @@ import requests
 from urbanlens.dashboard.services.gateway import Gateway
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class DigitalCommonwealthGateway(Gateway):
     service_key: ClassVar[str] = "digital_commonwealth"
 

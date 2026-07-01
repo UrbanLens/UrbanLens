@@ -25,7 +25,7 @@ _METADATA_URL = "https://dev.virtualearth.net/REST/V1/Imagery/Metadata/Aerial"
 _SATELLITE_CACHE_TTL = 30 * 24 * 3600
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class BingMapsGateway(SatelliteViewProvider):
     """Gateway for the Bing Maps REST Imagery API.
 

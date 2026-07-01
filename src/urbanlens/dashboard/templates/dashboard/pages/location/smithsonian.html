@@ -6,10 +6,10 @@
         <h3>Smithsonian Archives</h3>
         {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     </div>
-    <div class="smithsonian-grid">
+    <div class="smithsonian-grid" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="12">
         {% for image in images %}
         {% if image.url %}
-        <div class="smithsonian-image">
+        <div class="smithsonian-image" data-adaptive-pagination-item>
             <a href="{{ image.url }}" target="_blank" rel="noopener">
                 <img src="{{ image.thumbnail }}" alt="{{ image.title }}" loading="lazy">
                 <span class="smithsonian-title">{{ image.title }}</span>

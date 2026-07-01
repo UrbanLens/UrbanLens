@@ -17,7 +17,7 @@ _BASE_URL = "https://api.kartaview.org/2.0"
 _STORAGE_URL = "https://storage.kartaview.com"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class KartaViewGateway(StreetViewProvider):
     """Gateway for the KartaView street-level imagery API.
 

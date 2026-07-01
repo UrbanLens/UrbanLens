@@ -20,6 +20,7 @@ class SiteFeature(TextChoices):
 
     AI = "ai", "AI features"
     PLACES = "places", "Places layer (Google Places landmarks)"
+    SEARCH = "search", "Web search engines"
 
 
 class SubscriptionRole(abstract.Model):
@@ -36,7 +37,7 @@ class SubscriptionRole(abstract.Model):
     # Canonical features every VIP role must include.  Add new SiteFeature values here
     # when they should be automatically granted to VIPs; ensure_defaults will merge them
     # into existing rows without removing any admin-configured extras.
-    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES})
+    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH})
 
     @classmethod
     def ensure_defaults(cls) -> None:

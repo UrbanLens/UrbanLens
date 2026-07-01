@@ -9,7 +9,7 @@ from requests.auth import HTTPBasicAuth
 from urbanlens.dashboard.services.gateway import Gateway
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class RouteXLGateway(Gateway):
     """
     Gateway for the RouteXL API to optimize trip routes.

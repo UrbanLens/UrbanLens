@@ -19,6 +19,7 @@ from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
@@ -41,9 +42,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WIKIMEDIA_PAGE_SIZE = 12
-_WEB_SEARCH_PAGE_SIZE = 5
-_SMITHSONIAN_PAGE_SIZE = 12
+_WIKIMEDIA_CLIENT_PAGE_SIZE = 12
+_WEB_SEARCH_CLIENT_PAGE_SIZE = 5
+_SMITHSONIAN_CLIENT_PAGE_SIZE = 12
+_ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
+_WIKIMEDIA_PAGE_SIZE = _WIKIMEDIA_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_SMITHSONIAN_PAGE_SIZE = _SMITHSONIAN_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -210,11 +215,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
+        if not pin.meaningful_official_name:
+            return HttpResponse(status=204)
+
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_official_name) if img.get("url")]
         page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
 
         return render(
@@ -223,6 +231,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {
                 "images": page_obj.object_list,
                 "page_obj": page_obj,
+                "adaptive_pagination": True,
             },
         )
 
@@ -241,8 +250,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.meaningful_name:
+        if not pin.meaningful_official_name:
             return HttpResponse("", status=204)
+
+        if not user_has_feature(request.user, SiteFeature.SEARCH):
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {"error": "Web search is available to VIP subscribers."},
+                status=403,
+            )
 
         cache_key = make_cache_key("web_search_pin", str(pin.pk))
         site_settings = SiteSettings.get_current()
@@ -255,7 +272,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"search_results": page_obj.object_list, "page_obj": page_obj},
+                    {"search_results": page_obj.object_list, "page_obj": page_obj, "adaptive_pagination": True},
                 )
 
         try:
@@ -284,7 +301,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/web_search.html",
-            {"search_results": page_obj.object_list, "page_obj": page_obj},
+            {"search_results": page_obj.object_list, "page_obj": page_obj, "adaptive_pagination": True},
         )
 
     def satellite_view_carousell(self, request: HttpRequest, **kwargs):
@@ -565,7 +582,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             except Exception:
                 logger.exception("Wikipedia lookup failed for pin %s", pin_slug)
                 article = None
-            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
             data = article
         else:
             data = cached.data or None
@@ -590,8 +607,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        if not pin.meaningful_name:
-            logger.debug("wikimedia_assets: pin %s has no meaningful name, skipping", pin_slug)
+        if not pin.meaningful_official_name:
+            logger.debug("wikimedia_assets: pin %s has no meaningful official name, skipping", pin_slug)
             return HttpResponse(status=204)
 
         location = pin.location
@@ -599,7 +616,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikimedia_assets: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        query = pin.effective_name or ""
+        query = pin.effective_official_name or ""
         cached = LocationCache.get_fresh(location, "wikimedia")
         if cached is None:
             try:
@@ -620,7 +637,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/partials/pins/pin_wikimedia.html",
-            {"images": page_obj.object_list, "page_obj": page_obj, "query": query},
+            {"images": page_obj.object_list, "page_obj": page_obj, "query": query, "adaptive_pagination": True},
         )
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
@@ -710,7 +727,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     float(lat),
                     float(lng),
                     state_code=state_code,
-                    location_name=pin.effective_name or "",
+                    location_name=pin.effective_official_name or "",
                 )
             except Exception:
                 logger.exception("NPS lookup failed for pin %s", pin_slug)

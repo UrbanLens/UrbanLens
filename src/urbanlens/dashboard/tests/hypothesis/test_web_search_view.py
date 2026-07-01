@@ -15,6 +15,7 @@ import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
@@ -137,22 +138,42 @@ class LocationHasPlaceNameTests(TestCase):
         self.assertTrue(loc.has_place_name())
 
 
+class SearchSubscriptionFeatureTests(TestCase):
+    """Search subscription feature defaults."""
+
+    def test_vip_defaults_grant_search_feature(self):
+        SubscriptionRole.ensure_defaults()
+
+        vip = SubscriptionRole.objects.get(slug="vip")
+
+        self.assertTrue(vip.grants(SiteFeature.SEARCH))
+
 # ---------------------------------------------------------------------------
 # web_search controller - via Django test client
 # ---------------------------------------------------------------------------
 
+
 class WebSearchViewTests(TestCase):
     """web_search view integrates search gateway and enriches results with domain."""
 
-    def _make_pin(self) -> Pin:
+    def _make_pin(self, *, subscribe: bool = True) -> Pin:
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.profile.model import Profile
-        loc = baker.make(Location, name="Test Location", latitude=41.0, longitude=-81.5)
+        loc = baker.make(
+            Location,
+            name="Test Location",
+            official_name="Official Test Location",
+            latitude=41.0,
+            longitude=-81.5,
+        )
         user = baker.make("auth.User")
         # The post_save signal creates a Profile automatically; retrieve it rather
         # than letting baker create a second one (which would violate the unique constraint).
         profile = Profile.objects.get(user=user)
         pin = baker.make(Pin, location=loc, profile=profile)
+        if subscribe:
+            role = baker.make(SubscriptionRole, features=SiteFeature.SEARCH)
+            grant_subscription(user, role, user, None)
         return pin
 
     def test_nonexistent_pin_slug_returns_404(self):
@@ -167,12 +188,33 @@ class WebSearchViewTests(TestCase):
         response = view.web_search(request, pin_slug="nonexistent-pin-slug")
         self.assertEqual(response.status_code, 404)
 
+    def test_unsubscribed_user_cannot_access_search_gateway(self):
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin(subscribe=False)
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch.object(Pin.objects, "get", return_value=pin),
+        ):
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 403)
+        mock_factory.assert_not_called()
+
     def test_successful_search_returns_200(self):
         from django.test import RequestFactory
 
         from urbanlens.dashboard.controllers.pin import PinController
 
         pin = self._make_pin()
+        pin.name = "User Edited Location"
         rf = RequestFactory()
         request = rf.get("/")
         request.user = pin.profile.user
@@ -191,6 +233,32 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
+        mock_gw.search.assert_called_once()
+        self.assertIn("Official Test Location", mock_gw.search.call_args.args[0])
+        self.assertNotIn("User Edited Location", mock_gw.search.call_args.args[0])
+
+    def test_search_skips_pins_without_official_name(self):
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin()
+        pin.name = "User Edited Location"
+        pin.official_name = ""
+        pin.location.official_name = ""
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch.object(Pin.objects, "get", return_value=pin),
+        ):
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 204)
+        mock_factory.assert_not_called()
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory

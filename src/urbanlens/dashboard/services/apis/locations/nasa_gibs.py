@@ -21,7 +21,7 @@ _WMS_BASE = (
 )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class NasaGibsGateway(SatelliteViewProvider):
     """Gateway for NASA GIBS WMS satellite imagery.
 

@@ -11,7 +11,7 @@ from urbanlens.UrbanLens.settings.app import settings
 _BASE_URL = "https://maps-api.apple.com/v1"
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class AppleMapsGateway(Gateway):
     """Gateway for Apple Maps Server API endpoints.
 
