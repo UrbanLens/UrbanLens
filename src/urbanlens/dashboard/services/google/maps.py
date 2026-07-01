@@ -429,15 +429,19 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
                 # Apply a per-file tag to every pin produced from this file.
                 if file_pins:
-                    from urbanlens.dashboard.models.badges.model import Badge
+                    try:
+                        from urbanlens.dashboard.models.badges.model import Badge
 
-                    tag_name = _filename_stem(filename)
-                    file_tag = Badge.objects.filter(
-                        profile=user_profile,
-                        name__iexact=tag_name,
-                    ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
-                    for pin in file_pins:
-                        pin.badges.add(file_tag)
+                        tag_name = _filename_stem(filename)
+                        file_tag = Badge.objects.filter(
+                            profile=user_profile,
+                            name__iexact=tag_name,
+                        ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
+                        for pin in file_pins:
+                            pin.badges.add(file_tag)
+                    except Exception as exc:
+                        # TODO: Catch specific exception
+                        logger.exception("Unable to add badge to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})

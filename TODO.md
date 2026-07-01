@@ -117,11 +117,11 @@ Features planned for future releases.
 * AI suggestions on the trip planning page for when to schedule activities, taking into account drive time and user voting. AI suggestions of pins to add that are relevant to the trip. Etc. [UL-60]
 * Trip planning page should have some ability to go to the pin details page (or location wiki) for each activity. [UL-61]
 * Better UI form fields (sliders, date pickers, etc). [UL-63]
-* Check for wikipedia entry for a pin, cache it, display data from it if it exists. I suppose this requires the wikipedia entry includes an address, which matches the pin, in order to avoid name collisions. [UL-64]
-* Search wikimedia commons for images / assets for a pin / location. [UL-259]
+* ~~Check for wikipedia entry for a pin, cache it, display data from it if it exists. I suppose this requires the wikipedia entry includes an address, which matches the pin, in order to avoid name collisions. [UL-64]~~
+* ~~Search wikimedia commons for images / assets for a pin / location. [UL-259]~~
 * Gallery photos can have additional metadata, including: an angle of view, floor, room, etc. [UL-65]
 * Types of friends: "connections", "friends", "close friends", etc? I'm not sure this is needed in light of people badges. However, the mobile app idea of "connect with explorer" would encourage adding someone as a connection without necessarily wanting them to be a friend. I suppose this is also useful in the web app if you regularly encounter someone you may want to DM or keep track of, but don't want them to be impacted by your privacy and sharing settings. [UL-66]
-* Import data feature, so users can migrate from the publicly available app to their own private server if they wish. [UL-68]
+* ~~Import data feature, so users can migrate from the publicly available app to their own private server if they wish. [UL-68]~~
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
 * Saved map searches ("My Bucket List", etc). [UL-71]
@@ -171,7 +171,7 @@ Features planned for future releases.
 * Map Layer: Show/Hide Street Details (otherwise does not show on sat view) [UL-185]
 * Main map: Some ability to go "back to home" quickly. [UL-187]
 * ~~Organize Page: Create a new badge should probably open a dialog rather than an element inline. [UL-188]~~
-* Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]
+* ~~Create badge dialog -> We can put the "upload custom icon" in the choose icon dropdown, so it doesn't look like it's a separate thing. [UL-189]~~
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 * Organize page: Confirm before deleting badge with pins. [UL-192]
 * Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193]
