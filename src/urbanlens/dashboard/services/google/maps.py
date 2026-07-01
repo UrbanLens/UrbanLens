@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.dashboard.services.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.google.place_info import GooglePlaceService
 from urbanlens.UrbanLens.settings.app import settings
@@ -435,7 +436,15 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     file_tag = Badge.objects.filter(
                         profile=user_profile,
                         name__iexact=tag_name,
-                    ).first() or Badge.objects.create(profile=user_profile, name=tag_name)
+                    ).first()
+                    if file_tag is None:
+                        style = suggest_badge_style(tag_name, user_profile)
+                        file_tag = Badge.objects.create(
+                            profile=user_profile,
+                            name=tag_name,
+                            icon=style.icon,
+                            color=style.color,
+                        )
                     for pin in file_pins:
                         pin.badges.add(file_tag)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
