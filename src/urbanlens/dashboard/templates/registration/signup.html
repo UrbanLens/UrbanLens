@@ -45,6 +45,9 @@
 
 <form method="post" class="auth-form" novalidate>
     {% csrf_token %}
+    {% if request.GET.invite or request.POST.invite %}
+    <input type="hidden" name="invite" value="{{ request.GET.invite|default:request.POST.invite }}">
+    {% endif %}
 
     <div class="auth-field">
         <label for="id_email">Email address</label>
