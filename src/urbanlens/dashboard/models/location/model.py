@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import PointField, PolygonField
-from django.contrib.gis.geos import Point, Polygon
+from django.contrib.gis.geos import Point
 from django.db import DatabaseError
 from django.db.models import Index, ManyToManyField
 from django.db.models.fields import CharField, DateField, DecimalField, SlugField, TextField
@@ -14,16 +14,11 @@ from django.db.models.fields import CharField, DateField, DecimalField, SlugFiel
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.queryset import LocationManager
-from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.UrbanLens.settings.app import settings
+from urbanlens.dashboard.services.locations.boundaries import default_bbox
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.model import Badge
 
-
-# ~50 m radius expressed in degrees (at mid-latitudes). Used as the default
-# bounding box when a new Location is created without an explicit boundary.
-_DEFAULT_BBOX_DEGREES = 0.00045
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +56,9 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
     official_name = CharField(max_length=255, null=True, blank=True)
     description = TextField(null=True, blank=True)
 
-    # Bounding box for this location. Used to auto-link new pins whose coordinates
-    # fall within this polygon. Defaults to a small circle (~50 m) around the point.
+    # Boundary for this location. Used to auto-link new pins whose coordinates
+    # fall within this polygon. Defaults are supplied by the location boundary
+    # provider chain during creation, with a small local bbox fallback on save.
     # Users can expand this to cover a campus or multi-building site via the wiki.
     bounding_box = PolygonField(geography=True, null=True, blank=True, srid=4326)
 
@@ -137,14 +133,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
             if self.bounding_box is None:
-                self.bounding_box = Polygon.from_bbox(
-                    (
-                        lon - _DEFAULT_BBOX_DEGREES,
-                        lat - _DEFAULT_BBOX_DEGREES,
-                        lon + _DEFAULT_BBOX_DEGREES,
-                        lat + _DEFAULT_BBOX_DEGREES,
-                    ),
-                )
+                self.bounding_box = default_bbox(lat, lon)
         super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):

@@ -103,6 +103,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=500,
         notes="Free API. Hard limit: 1 req/second per OSM ToS.",
     ),
+    "overpass": ServiceDefaults(
+        display_name="Overpass API (OpenStreetMap)",
+        calls_per_minute=2,
+        calls_per_day=500,
+        notes="Free API. Be conservative; public Overpass instances are shared community infrastructure.",
+    ),
     "brave_search": ServiceDefaults(
         display_name="Brave Search API",
         calls_per_minute=10,
