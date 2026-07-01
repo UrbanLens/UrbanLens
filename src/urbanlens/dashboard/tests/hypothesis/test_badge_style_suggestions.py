@@ -17,9 +17,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 @pytest.mark.django_db
-def test_suggest_badge_style_requires_ai_subscription() -> None:
+def test_suggest_badge_style_requires_ai_subscription(monkeypatch: pytest.MonkeyPatch) -> None:
     profile = _make_profile(ai_enabled=True)
 
+    monkeypatch.setattr(
+        "urbanlens.dashboard.services.badges.style_suggestions.user_has_feature",
+        lambda _user, _feature: False,
+    )
     with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway:
         suggestion = suggest_badge_style("Factories", profile)
 

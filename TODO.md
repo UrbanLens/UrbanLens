@@ -1,9 +1,6 @@
 # Currently Planned Features
 Features planned for this release.
 
-## UI Adjustments
-* Loading indicators for all ui actions that take time. (Creating pin, searching map, etc) [UL-8]
-
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
