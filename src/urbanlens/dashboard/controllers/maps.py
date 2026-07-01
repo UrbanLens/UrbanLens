@@ -405,7 +405,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
         return render(
             request,
-            "dashboard/partials/_pin_list_panel.html",
+            "dashboard/partials/pins/_pin_list_panel.html",
             {
                 "page_obj": page_obj,
                 "pins": page_obj.object_list,

@@ -13,8 +13,8 @@ Optional:
   modifier         - extra BEM modifier, e.g. "priority"
 
 Usage:
-  <h2>Section title {% include "dashboard/partials/_page_explainer_anchor.html" with explainer_id="my-explainer" %}</h2>
-  {% include "dashboard/partials/_page_explainer.html" with explainer_id="my-explainer" kicker="Tip" heading="..." body="..." %}
+  <h2>Section title {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="my-explainer" %}</h2>
+  {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="my-explainer" kicker="Tip" heading="..." body="..." %}
 {% endcomment %}
 <div class="ul-page-explainer{% if modifier %} ul-page-explainer--{{ modifier }}{% endif %}"
      id="{{ explainer_id }}"

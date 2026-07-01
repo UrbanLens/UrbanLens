@@ -188,7 +188,7 @@ class PinOverviewView(LoginRequiredMixin, View):
         pin = result
         if pin.location and not pin.location.route:
             _ensure_location_address(pin.location)
-        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
+        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
 
 class PinEditView(LoginRequiredMixin, View):
@@ -370,14 +370,14 @@ class PinEditView(LoginRequiredMixin, View):
         submitted_fields = set(body.keys()) - {"client_version"}
         if len(submitted_fields) == 1 and submitted_fields <= set(STAT_FIELD_META):
             field = next(iter(submitted_fields))
-            fragment = render(request, "dashboard/partials/_pin_stat_rating_item.html", _stat_item_context(pin, field))
+            fragment = render(request, "dashboard/partials/pins/_pin_stat_rating_item.html", _stat_item_context(pin, field))
             if client_version is not None and client_version == pre_save_version:
                 return fragment
             oob_context = {**_overview_context(pin), "oob": True}
-            oob = render(request, "dashboard/partials/pin_overview_partial.html", oob_context)
+            oob = render(request, "dashboard/partials/pins/pin_overview_partial.html", oob_context)
             return HttpResponse(fragment.content + oob.content)
 
-        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
+        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
 
 class PinNotesView(LoginRequiredMixin, View):
@@ -393,7 +393,7 @@ class PinNotesView(LoginRequiredMixin, View):
             return result
         pin = result
         notes = pin.notes.order_by("-created")
-        return render(request, "dashboard/partials/pin_notes_panel.html", {"pin": pin, "notes": notes})
+        return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
     def post(self, request, pin_slug):
         result = _pin_for_user(pin_slug, request)
@@ -412,7 +412,7 @@ class PinNotesView(LoginRequiredMixin, View):
 
         PinNote.objects.create(pin=pin, text=text)
         notes = pin.notes.order_by("-created")
-        return render(request, "dashboard/partials/pin_notes_panel.html", {"pin": pin, "notes": notes})
+        return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
 
 class PinNoteDeleteView(LoginRequiredMixin, View):
@@ -485,7 +485,7 @@ class PinRelinkView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/pin_location_picker.html",
+            "dashboard/partials/pins/pin_location_picker.html",
             {"pin": pin, "locations": locations},
         )
 
@@ -533,4 +533,4 @@ class PinRelinkView(LoginRequiredMixin, View):
         pin.save(update_fields=["location"])
         pin.refresh_from_db()
 
-        return render(request, "dashboard/partials/pin_overview_partial.html", _overview_context(pin))
+        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))

@@ -28,7 +28,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/detail_pins_panel.html",
+            "dashboard/partials/pins/detail_pins_panel.html",
             {
                 "pin": pin,
                 "detail_pins": detail_pins,
@@ -160,7 +160,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/location_detail_pins_panel.html",
+            "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
                 "detail_pins": detail_pins,
@@ -271,7 +271,7 @@ class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
         )
         return render(
             request,
-            "dashboard/partials/location_detail_pins_panel.html",
+            "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
                 "detail_pins": detail_pins,

@@ -12,14 +12,14 @@
     {% for item in rendered_comments %}
     {% with c=item.comment %}
     <li class="comment-item" id="comment-{{ c.id }}">
-      {% include "dashboard/partials/_comment_body.html" with comment=c rendered_text=item.rendered_text reactions=item.reactions replies=item.replies context_type=context_type pin=pin location=location profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=False %}
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=c rendered_text=item.rendered_text reactions=item.reactions replies=item.replies context_type=context_type pin=pin location=location profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=False %}
     </li>
     {% endwith %}
     {% endfor %}
   </ul>
   {% endif %}
-  {% include "dashboard/partials/_pagination_controls.html" %}
+  {% include "dashboard/partials/ui/_pagination_controls.html" %}
 
   {# ── Compose form ── #}
-  {% include "dashboard/partials/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}
+  {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}
 </div>

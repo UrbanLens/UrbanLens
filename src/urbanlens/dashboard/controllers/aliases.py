@@ -27,7 +27,7 @@ class PinAliasView(LoginRequiredMixin, View):
         aliases = pin.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/pin_aliases_panel.html",
+            "dashboard/partials/pins/pin_aliases_panel.html",
             {"pin": pin, "aliases": aliases},
         )
 
@@ -43,7 +43,7 @@ class PinAliasView(LoginRequiredMixin, View):
         aliases = pin.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/pin_aliases_panel.html",
+            "dashboard/partials/pins/pin_aliases_panel.html",
             {"pin": pin, "aliases": aliases},
         )
 
@@ -55,7 +55,7 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         aliases = pin.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/pin_aliases_panel.html",
+            "dashboard/partials/pins/pin_aliases_panel.html",
             {"pin": pin, "aliases": aliases},
         )
 
@@ -68,7 +68,7 @@ class LocationAliasView(LoginRequiredMixin, View):
         aliases = location.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/location_aliases_panel.html",
+            "dashboard/partials/pins/location_aliases_panel.html",
             {"location": location, "aliases": aliases},
         )
 
@@ -90,7 +90,7 @@ class LocationAliasView(LoginRequiredMixin, View):
         aliases = location.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/location_aliases_panel.html",
+            "dashboard/partials/pins/location_aliases_panel.html",
             {"location": location, "aliases": aliases},
         )
 
@@ -110,6 +110,6 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
         aliases = location.aliases.order_by("name")
         return render(
             request,
-            "dashboard/partials/location_aliases_panel.html",
+            "dashboard/partials/pins/location_aliases_panel.html",
             {"location": location, "aliases": aliases},
         )

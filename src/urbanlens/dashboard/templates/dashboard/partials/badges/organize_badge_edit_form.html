@@ -53,9 +53,9 @@
             <div class="icon-picker-wrap">
                 {% with picker_id=badge.id|stringformat:"d" current_icon=badge.icon|default:"" field_name="icon" show_upload=True %}
                 {% if badge.custom_icon %}
-                {% include 'dashboard/partials/_icon_picker.html' with current_custom_icon_url=badge.custom_icon.url %}
+                {% include 'dashboard/partials/ui/_icon_picker.html' with current_custom_icon_url=badge.custom_icon.url %}
                 {% else %}
-                {% include 'dashboard/partials/_icon_picker.html' with current_custom_icon_url="" %}
+                {% include 'dashboard/partials/ui/_icon_picker.html' with current_custom_icon_url="" %}
                 {% endif %}
                 {% endwith %}
             </div>

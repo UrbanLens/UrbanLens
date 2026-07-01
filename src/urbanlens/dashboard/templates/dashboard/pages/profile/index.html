@@ -286,7 +286,7 @@
 
     {# ── Private annotation panel (viewer ≠ profile owner) ─────────────────── #}
     {% if user.is_authenticated and profile.user != request.user %}
-    {% include "dashboard/partials/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
+    {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
     {% endif %}
 
     {# ── Friends ───────────────────────────────────────────────────────────── #}

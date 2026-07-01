@@ -12,8 +12,8 @@
         </button>
     </div>
 
-    {% include "dashboard/partials/_badge_chips.html" with badge_url_kind=badge_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_badges=all_badges member_ids=member_ids empty_text=empty_text %}
+    {% include "dashboard/partials/badges/_badge_chips.html" with badge_url_kind=badge_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_badges=all_badges member_ids=member_ids empty_text=empty_text %}
 
-    {% include "dashboard/partials/_badge_dialog.html" with dialog_id_prefix=dialog_id_prefix dialog_id_suffix=dialog_id_suffix badge_url_kind=badge_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_badges=all_badges member_ids=member_ids %}
+    {% include "dashboard/partials/badges/_badge_dialog.html" with dialog_id_prefix=dialog_id_prefix dialog_id_suffix=dialog_id_suffix badge_url_kind=badge_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_badges=all_badges member_ids=member_ids %}
 </div>
-{% include "dashboard/partials/_badge_dialog_js.html" %}
+{% include "dashboard/partials/badges/_badge_dialog_js.html" %}

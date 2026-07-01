@@ -33,7 +33,7 @@ def _profile(request) -> Profile:
 
 
 def _render_comments(request, context: dict) -> HttpResponse:
-    return render(request, "dashboard/partials/comment_panel.html", context)
+    return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
 def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
@@ -257,7 +257,7 @@ def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpRes
     reactions = _aggregate_reactions(comment.reactions.all())
     return render(
         request,
-        "dashboard/partials/comment_reactions.html",
+        "dashboard/partials/comments/comment_reactions.html",
         {
             "comment": comment,
             "reactions": reactions,
@@ -272,7 +272,7 @@ def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpRespons
     reactions = _aggregate_reactions(comment.reactions.all())
     return render(
         request,
-        "dashboard/partials/comment_reactions.html",
+        "dashboard/partials/comments/comment_reactions.html",
         {
             "comment": comment,
             "reactions": reactions,
