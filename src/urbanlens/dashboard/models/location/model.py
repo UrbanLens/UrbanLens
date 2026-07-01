@@ -57,6 +57,8 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
 
     # Canonical name of the place - NOT a user's personal label (that's Pin.name).
     name = CharField(max_length=255)
+    # External-source name for this location. User edits must never write this field.
+    official_name = CharField(max_length=255, null=True, blank=True)
     description = TextField(null=True, blank=True)
 
     # Bounding box for this location. Used to auto-link new pins whose coordinates
@@ -112,6 +114,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         return {
             "id": self.id,
             "name": self.name,
+            "official_name": self.official_name,
             "place_name": self.place_name,
             "description": self.description,
             "address": self.address,
@@ -151,6 +154,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
             Index(fields=["uuid"]),
             Index(fields=["latitude", "longitude"]),
             Index(fields=["name"]),
+            Index(fields=["official_name"]),
             Index(fields=["google_place"]),
         ]
         unique_together = [

@@ -180,7 +180,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 "administrative_area_level_1": location.administrative_area_level_1 or "",
             }
             article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
             update_location_name_from_external_sources(
                 location,
                 extra_candidates=[("wikipedia", (article or {}).get("title"))],
@@ -197,7 +197,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         try:
             from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
-            park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.name or "")
+            park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.official_name or "")
             LocationCache.set(location, "nps", park or {}, query_key=state_code)
             update_location_name_from_external_sources(
                 location,
@@ -304,7 +304,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    if pin is None or not pin.meaningful_name:
+    if pin is None or not pin.meaningful_official_name:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search…")
     results = get_search_gateway().search(build_pin_search_query(pin))

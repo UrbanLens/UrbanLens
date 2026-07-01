@@ -57,6 +57,7 @@ class LocationCreationService:
                 with transaction.atomic():
                     location = Location.objects.create(
                         name=name,
+                        official_name=place_name,
                         latitude=latitude,
                         longitude=longitude,
                         point=point,

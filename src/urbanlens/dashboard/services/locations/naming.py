@@ -206,18 +206,21 @@ def update_location_name_from_external_sources(
     """Replace a meaningless Location.name with the best externally loaded name."""
     resolved = best_external_name_for_location(location, extra_candidates=extra_candidates)
     original_name = location.name
-    name_changed = False
-    if not is_meaningful_name(location.name) and resolved is not None:
+    changed_fields: set[str] = set()
+    if resolved is not None:
         name, _source = resolved
-        if location.name != name:
+        if location.official_name != name:
+            location.official_name = name
+            changed_fields.add("official_name")
+        if not is_meaningful_name(location.name) and location.name != name:
             location.name = name
-            name_changed = True
-            if save and location.pk:
-                location.save(update_fields=["name", "updated"])
+            changed_fields.add("name")
+        if changed_fields and save and location.pk:
+            location.save(update_fields=[*sorted(changed_fields), "updated"])
 
     alias_names = _candidate_names(external_name_candidates_for_location(location, extra_candidates=extra_candidates))
     changed = _add_location_aliases(location, alias_names)
-    if name_changed:
+    if changed_fields:
         return True
     if original_name == location.name and resolved is None:
         return changed
@@ -232,18 +235,27 @@ def update_pin_name_from_external_sources(
 ) -> bool:
     """Replace an auto/placeholder pin label unless the user typed a name."""
     name_changed = False
-    if not pin.name_is_user_provided and not is_meaningful_name(pin.name):
-        location = pin.location if pin.location_id else None
-        if location is not None:
-            name_changed = update_location_name_from_external_sources(location, extra_candidates=extra_candidates, save=save)
-        elif extra_candidates:
-            for _source, value in extra_candidates:
-                if name := _clean_candidate(value):
-                    pin.name = name
-                    name_changed = True
-                    if save and pin.pk:
-                        pin.save(update_fields=["name", "updated"])
-                    break
+    location = pin.location if pin.location_id else None
+    if location is not None:
+        name_changed = update_location_name_from_external_sources(location, extra_candidates=extra_candidates, save=save)
+
+    official_candidate = None
+    if extra_candidates:
+        for _source, value in extra_candidates:
+            if name := _clean_candidate(value):
+                official_candidate = name
+                break
+    if official_candidate and pin.official_name != official_candidate:
+        pin.official_name = official_candidate
+        if save and pin.pk:
+            pin.save(update_fields=["official_name", "updated"])
+        name_changed = True
+
+    if not pin.name_is_user_provided and not is_meaningful_name(pin.name) and official_candidate:
+        pin.name = official_candidate
+        if save and pin.pk:
+            pin.save(update_fields=["name", "updated"])
+        name_changed = True
 
     alias_names = _candidate_names(extra_candidates)
     changed = _add_pin_aliases(pin, alias_names)

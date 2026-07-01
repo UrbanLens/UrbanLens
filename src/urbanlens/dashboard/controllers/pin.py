@@ -211,11 +211,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
+        if not pin.meaningful_official_name:
+            return HttpResponse(status=204)
+
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_name) if img.get("url")]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_official_name) if img.get("url")]
         page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
 
         return render(
@@ -242,7 +245,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.meaningful_name:
+        if not pin.meaningful_official_name:
             return HttpResponse("", status=204)
 
         if not user_has_feature(request.user, SiteFeature.SEARCH):
@@ -574,7 +577,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             except Exception:
                 logger.exception("Wikipedia lookup failed for pin %s", pin_slug)
                 article = None
-            LocationCache.set(location, "wikipedia", article or {}, query_key=location.name or "")
+            LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
             data = article
         else:
             data = cached.data or None
@@ -599,8 +602,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        if not pin.meaningful_name:
-            logger.debug("wikimedia_assets: pin %s has no meaningful name, skipping", pin_slug)
+        if not pin.meaningful_official_name:
+            logger.debug("wikimedia_assets: pin %s has no meaningful official name, skipping", pin_slug)
             return HttpResponse(status=204)
 
         location = pin.location
@@ -608,7 +611,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikimedia_assets: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        query = pin.effective_name or ""
+        query = pin.effective_official_name or ""
         cached = LocationCache.get_fresh(location, "wikimedia")
         if cached is None:
             try:
@@ -719,7 +722,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     float(lat),
                     float(lng),
                     state_code=state_code,
-                    location_name=pin.effective_name or "",
+                    location_name=pin.effective_official_name or "",
                 )
             except Exception:
                 logger.exception("NPS lookup failed for pin %s", pin_slug)
