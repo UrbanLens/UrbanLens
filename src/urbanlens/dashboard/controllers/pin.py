@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -551,7 +551,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         htmx:afterOnLoad handler removes the loading placeholder on 204.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -600,7 +600,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Skipped entirely when the pin has no meaningful name.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.culture.wikimedia import WikimediaGateway
+        from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)

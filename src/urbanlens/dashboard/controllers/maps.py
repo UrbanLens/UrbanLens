@@ -746,7 +746,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # ── Wikipedia ────────────────────────────────────────────────────────
         if use_wiki:
             try:
-                from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
+                from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
                 wiki_gw = WikipediaGateway()
                 wiki_places = wiki_gw.get_nearby_articles(lat, lng, radius_m=5000, limit=15)

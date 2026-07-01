@@ -10,7 +10,7 @@ from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.culture.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
 
 _hyp = settings(max_examples=50, deadline=None)
 
@@ -140,13 +140,13 @@ class SmithsonianGetDataCacheMissTests(TestCase):
         self.gw.session.get.return_value = self.mock_resp
 
     def test_cache_miss_calls_api(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = None
             self.gw.get_data("abandoned mill")
             self.gw.session.get.assert_called_once()
 
     def test_cache_miss_stores_result_in_cache(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = None
             self.gw.get_data("abandoned mill")
             mock_cache.set.assert_called_once()
@@ -156,14 +156,14 @@ class SmithsonianGetDataCacheMissTests(TestCase):
             self.assertEqual(args[0][2], 86400)
 
     def test_cache_miss_returns_parsed_images(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = None
             result = self.gw.get_data("abandoned mill")
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]["title"], "Cache Miss Result")
 
     def test_api_called_with_correct_params(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = None
             self.gw.get_data("steel factory")
             call_kwargs = self.gw.session.get.call_args
@@ -173,7 +173,7 @@ class SmithsonianGetDataCacheMissTests(TestCase):
             self.assertEqual(params["online_media_type"], "Images")
 
     def test_raises_for_status_is_called(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = None
             self.gw.get_data("test")
             self.mock_resp.raise_for_status.assert_called_once()
@@ -191,26 +191,26 @@ class SmithsonianGetDataCacheHitTests(TestCase):
         self.cached_data = _make_si_response([_make_row(title="Cached Result")])
 
     def test_cache_hit_skips_api_call(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = self.cached_data
             self.gw.get_data("factory")
             self.gw.session.get.assert_not_called()
 
     def test_cache_hit_returns_parsed_data(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = self.cached_data
             result = self.gw.get_data("factory")
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]["title"], "Cached Result")
 
     def test_cache_hit_does_not_write_to_cache_again(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = self.cached_data
             self.gw.get_data("factory")
             mock_cache.set.assert_not_called()
 
     def test_cache_key_is_derived_from_search_term(self):
-        with patch("urbanlens.dashboard.services.apis.culture.smithsonian.cache") as mock_cache:
+        with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:
             mock_cache.get.return_value = self.cached_data
             self.gw.get_data("unique_term_xyz")
             call_args = mock_cache.get.call_args
@@ -280,7 +280,7 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
     def test_geocoder_instantiated_with_google_api_key(self):
         with (
             patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway") as MockGeocoder,
-            patch("urbanlens.dashboard.services.apis.culture.smithsonian.settings") as mock_settings,
+            patch("urbanlens.dashboard.services.apis.assets.smithsonian.settings") as mock_settings,
             patch.object(SmithsonianGateway, "get_data", return_value=[]),
         ):
             mock_settings.google_maps_api_key = "google-key-xyz"

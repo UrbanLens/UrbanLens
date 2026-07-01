@@ -171,7 +171,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     # Wikipedia
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.apis.culture.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
             address_components = {
                 "locality": location.locality or "",
