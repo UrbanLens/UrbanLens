@@ -80,6 +80,10 @@ class Migration(migrations.Migration):
         ),
         # 3. Backfill generated_polygon and re-key user campuses to pin.
         migrations.RunPython(migrate_campus_pin_scoping, migrations.RunPython.noop),
+        # Flush deferred FK trigger events before creating new partial indexes.
+        # PostgreSQL refuses CREATE INDEX when there are pending trigger events in
+        # the same transaction (from the deletes above touching deferrable FKs).
+        migrations.RunSQL("SET CONSTRAINTS ALL IMMEDIATE", migrations.RunSQL.noop),
         # 4. Drop old constraints.
         migrations.RemoveConstraint(
             model_name="campus",
@@ -105,5 +109,9 @@ class Migration(migrations.Migration):
                 fields=["pin"],
                 name="campus_unique_pin",
             ),
+        ),
+        migrations.RemoveField(
+            model_name="location",
+            name="bounding_box",
         ),
     ]
