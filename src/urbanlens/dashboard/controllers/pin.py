@@ -385,6 +385,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 slides.extend(provider.get_street_view_slides(lat, lng))
             except Exception:
+                # TODO: Catch specific exceptions
                 logger.warning("Street view provider %s failed", provider.__class__.__name__, exc_info=True)
 
         return render(
