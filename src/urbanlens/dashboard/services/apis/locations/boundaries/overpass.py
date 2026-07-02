@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import json
 import logging
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Protocol
 
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
 import requests
 
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _best_polygon_from_geometry, _is_reasonable_default
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -21,8 +24,62 @@ _DEFAULT_FEATURE_TAG_FILTER = (
 OsmElementType = Literal["node", "way", "relation"]
 
 
+def _polygon_from_ring(coords: list[tuple[float, float]]) -> Polygon | None:
+    if len(coords) < 4:
+        return None
+    if coords[0] != coords[-1]:
+        coords.append(coords[0])
+    try:
+        geom = GEOSGeometry(json.dumps({"type": "Polygon", "coordinates": [coords]}), srid=4326)
+    except (TypeError, ValueError):
+        return None
+    if geom.empty or not isinstance(geom, Polygon):
+        return None
+    if not geom.valid:
+        geom = geom.buffer(0)
+    return _best_polygon_from_geometry(geom)
+
+
+def _coords_from_geometry(geometry: list) -> list[tuple[float, float]]:
+    coords: list[tuple[float, float]] = []
+    for node in geometry:
+        try:
+            coords.append((float(node["lon"]), float(node["lat"])))
+        except (KeyError, TypeError, ValueError):
+            return []
+    return coords
+
+
+def _outer_rings_from_element(element: dict) -> list[list[tuple[float, float]]]:
+    if isinstance(element.get("geometry"), list):
+        return [_coords_from_geometry(element["geometry"])]
+
+    members = element.get("members")
+    if not isinstance(members, list):
+        return []
+
+    rings: list[list[tuple[float, float]]] = []
+    for member in members:
+        if member.get("role") not in {"outer", ""} or not isinstance(member.get("geometry"), list):
+            continue
+        coords = _coords_from_geometry(member["geometry"])
+        if coords:
+            rings.append(coords)
+    return rings
+
+
+def _polygon_from_element(element: dict) -> Polygon | None:
+    """Extract the best polygon from an Overpass way or multipolygon relation."""
+    rings = _outer_rings_from_element(element)
+    polygons = [_polygon_from_ring(ring) for ring in rings]
+    polygons = [polygon for polygon in polygons if polygon is not None]
+    if not polygons:
+        return None
+    return max(polygons, key=lambda polygon: polygon.area)
+
+
 @dataclass(slots=True, kw_only=True)
-class OverpassGateway(Gateway):
+class OverpassGateway(Gateway, BoundaryProvider):
     """Fetch OpenStreetMap elements from Overpass."""
 
     service_key: ClassVar[str] = "overpass"
@@ -30,6 +87,7 @@ class OverpassGateway(Gateway):
 
     base_url: str = _API_URL
     timeout: int = 12
+    radius_meters: int = 100
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
@@ -119,3 +177,16 @@ class OverpassGateway(Gateway):
 );
 {out_clause}
 """.strip()
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        point = Point(float(longitude), float(latitude), srid=4326)
+        candidates: list[Polygon] = []
+        for element in self.nearby_boundary_candidates(latitude, longitude, self.radius_meters):
+            polygon = _polygon_from_element(element)
+            if polygon is None or not _is_reasonable_default(polygon):
+                continue
+            if polygon.contains(point) or polygon.touches(point):
+                candidates.append(polygon)
+        if not candidates:
+            return None
+        return min(candidates, key=lambda polygon: polygon.area)

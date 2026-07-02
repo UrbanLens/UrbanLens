@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +24,6 @@ _WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vp
 
 # Fields a community member may edit via "Suggest edits".
 _WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
-
-
-def _default_location_campus_polygon(location: Location) -> MultiPolygon:
-    geom = BoundaryProviderChain().boundary_for_point(
-        float(location.latitude),
-        float(location.longitude),
-        name=location.name,
-    )
-    return MultiPolygon(geom, srid=geom.srid) if isinstance(geom, Polygon) else geom
 
 
 class LocationWikiView(LoginRequiredMixin, View):
@@ -190,7 +181,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
         location = get_object_or_404(Location, slug=location_slug)
         campus, _ = Campus.objects.get_or_create(location=location, profile=None)
         if campus.polygon is None:
-            campus.polygon = _default_location_campus_polygon(location)
+            campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.name)
             campus.save(update_fields=["polygon", "updated"])
         return JsonResponse({"polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
@@ -205,7 +196,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not polygon_geojson:
-            geom = _default_location_campus_polygon(location)
+            geom = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.name)
         else:
             try:
                 geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)

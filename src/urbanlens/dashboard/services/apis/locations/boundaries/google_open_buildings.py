@@ -25,9 +25,9 @@ import csv
 from dataclasses import dataclass
 import gzip
 import io
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import BBox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _lookup_bbox, validate_bbox
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.gateway import Gateway
@@ -43,6 +43,9 @@ try:
 except ImportError:  # pragma: no cover
     shapely_wkt = None
     shapely_mapping = None
+    
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import Polygon
 
 POLYGONS_BASE_URL = "https://storage.googleapis.com/open-buildings-data/v3/polygons_s2_level_4_gzip"
 POINTS_BASE_URL = "https://storage.googleapis.com/open-buildings-data/v3/points_s2_level_4_gzip"
@@ -67,7 +70,7 @@ def _s2_tokens_for_bbox(bbox: BBox) -> list[str]:
 
 
 @dataclass(slots=True, kw_only=True)
-class GoogleOpenBuildingsGateway(Gateway):
+class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
     """Fetch building polygons/points from Google's Open Buildings V3 dataset.
 
     Attributes:
@@ -78,6 +81,7 @@ class GoogleOpenBuildingsGateway(Gateway):
     service_key: ClassVar[str | None] = "google_open_buildings"
     paid_service: ClassVar[bool] = False
 
+    bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
     min_confidence: float = 0.0
 
     def get_buildings(self, bbox: BBox, *, as_geojson: bool = True) -> list[dict]:
@@ -138,3 +142,10 @@ class GoogleOpenBuildingsGateway(Gateway):
             "geometry": shapely_mapping(shapely_wkt.loads(row["geometry"])),
             "properties": properties,
         }
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        return _best_containing_polygon(
+            self.get_buildings(_lookup_bbox(latitude, longitude, self.bbox_delta)),
+            latitude,
+            longitude,
+        )

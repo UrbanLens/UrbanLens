@@ -185,14 +185,14 @@
 
                 {# ── Bottom-left overlay controls ── #}
                 <div class="map-bottom-controls">
-                    <button id="bbox-edit-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startBboxEdit()">
+                    <button id="bbox-edit-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startBboxEdit()">
                         <i class="material-icons">pentagon</i> Edit Boundary
                     </button>
                     <div id="bbox-save-controls" class="map-overlay-btn-group" style="display:none">
-                        <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearBbox()">
+                        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBbox()">
                             <i class="material-icons">delete_outline</i> Clear
                         </button>
-                        <button class="map-overlay-btn map-overlay-btn--cancel" onclick="cancelBboxEdit()">
+                        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelBboxEdit()">
                             <i class="material-icons">close</i> Cancel
                         </button>
                     </div>
@@ -203,7 +203,7 @@
                                 <i class="material-icons">place</i> Pin
                             </button>
                         </div>
-                        <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
+                        <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
                                 id="add-detail-btn" onclick="toggleAddDetailMenu()">
                             <i class="material-icons">add_location_alt</i> Add Detail
                             <i class="material-icons add-detail-chevron">expand_less</i>

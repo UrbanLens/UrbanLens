@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import create_bbox
+from urbanlens.dashboard.services.apis.locations.base import create_bbox
 from urbanlens.dashboard.services.gateway import Gateway
 
 _API_URL = "https://www.openhistoricalmap.org/api/0.6"

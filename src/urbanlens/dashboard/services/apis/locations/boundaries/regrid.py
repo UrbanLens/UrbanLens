@@ -20,14 +20,28 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import os
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import BBox, bbox_to_polygon_geojson, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BBox, BoundaryProvider, _best_containing_polygon, bbox_to_polygon_geojson, validate_bbox
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import Polygon
+
+
+def _features_from_payload(payload: dict) -> list[dict]:
+    features: list[dict] = []
+    for key in ("buildings", "parcels"):
+        collection = payload.get(key)
+        if isinstance(collection, dict) and isinstance(collection.get("features"), list):
+            features.extend(collection["features"])
+    if isinstance(payload.get("features"), list):
+        features.extend(payload["features"])
+    return features
 
 
 @dataclass(slots=True, kw_only=True)
-class RegridGateway(Gateway):
+class RegridGateway(Gateway, BoundaryProvider):
     """Query Regrid's nationwide (US + Canada, plus limited international) parcel data.
 
     Attributes:
@@ -162,3 +176,13 @@ class RegridGateway(Gateway):
         """Fetch the current Regrid Parcel Schema field definitions."""
         params = {} if premium_only is None else {"premium_only": premium_only}
         return self._request("GET", "/api/v2/us/schemas/parcel", params=params)
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        payload = self.get_parcel_by_point(
+            latitude,
+            longitude,
+            radius=0,
+            limit=5,
+            return_matched_buildings=True,
+        )
+        return _best_containing_polygon(_features_from_payload(payload), latitude, longitude)

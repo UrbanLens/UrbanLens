@@ -4,17 +4,22 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar
 
+from django.contrib.gis.geos import Polygon
 from django.core.cache import cache
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.gateway import Gateway, Service
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
 
+
 BBox = tuple[float, float, float, float]
+DEFAULT_BBOX_DEGREES = 0.00045
+BOUNDARY_LOOKUP_BBOX_DEGREES = 0.001
+MAX_DEFAULT_BOUNDARY_AREA_DEGREES = 0.02
 
 
 @dataclass(frozen=True)
@@ -94,8 +99,33 @@ class StreetViewProvider(Gateway, ABC):
         return slides
 
 
+class BoundaryProvider(Service, ABC):
+    """Provider interface for future default-boundary data sources."""
+
+    @abstractmethod
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        """Return a polygon boundary for the coordinate, or None to allow fallback."""
+        ...
+
+
+@dataclass(slots=True)
+class StaticBoundaryProvider(BoundaryProvider):
+    """Deterministic fallback used when external providers cannot find a boundary."""
+
+    service_key: ClassVar[str | None] = "static_default_boundary"
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon:
+        return default_bbox(latitude, longitude)
+
+
 def create_bbox(latitude: float, longitude: float, delta: float = 0.005) -> str:
     return f"{longitude - delta},{latitude - delta},{longitude + delta},{latitude + delta}"
+
+
+def default_bbox(latitude: float, longitude: float) -> Polygon:
+    """Return the local no-network fallback boundary around a coordinate."""
+    delta = DEFAULT_BBOX_DEGREES
+    return Polygon.from_bbox((longitude - delta, latitude - delta, longitude + delta, latitude + delta))
 
 
 def validate_bbox(bbox: BBox) -> None:
@@ -175,4 +205,3 @@ def feature_intersects_bbox(feature: dict, bbox: BBox) -> bool:
     if feature_bbox is None:
         return False
     return bbox_intersects(feature_bbox, bbox)
-

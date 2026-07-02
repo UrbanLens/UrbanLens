@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, create_bbox
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox
 from urbanlens.dashboard.services.gateway import Gateway
 
 if TYPE_CHECKING:

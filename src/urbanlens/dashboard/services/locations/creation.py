@@ -61,7 +61,7 @@ class LocationCreationService:
                         latitude=latitude,
                         longitude=longitude,
                         point=point,
-                        bounding_box=self.boundary_resolver.boundary_for_point(latitude, longitude, name=name),
+                        bounding_box=self.boundary_resolver.get_boundary(latitude, longitude, name=name),
                         google_place=google_place,
                     )
             except IntegrityError:

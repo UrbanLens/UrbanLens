@@ -11,7 +11,7 @@ from django.core.cache import cache
 import requests
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 

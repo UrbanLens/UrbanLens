@@ -14,18 +14,12 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
-
-
-def _default_campus_polygon(latitude: float, longitude: float, *, name: str | None = None) -> MultiPolygon:
-    """Resolve the default boundary and normalize it for Campus.polygon."""
-    geom = BoundaryProviderChain().boundary_for_point(float(latitude), float(longitude), name=name)
-    return MultiPolygon(geom, srid=geom.srid) if isinstance(geom, Polygon) else geom
 
 
 class CampusController(LoginRequiredMixin, GenericViewSet):
@@ -63,7 +57,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
         if campus.polygon is None:
-            campus.polygon = _default_campus_polygon(lat, lon, name=pin.effective_name)
+            campus.polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
             campus.save(update_fields=["polygon", "updated"])
 
         return JsonResponse(
@@ -105,10 +99,8 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Invalid request body"}, status=400)
 
         try:
-            profile: Profile | None = request.user.profile
+            profile: Profile = request.user.profile
         except Profile.DoesNotExist:
-            return JsonResponse({"error": "User has no profile"}, status=403)
-        if profile is None:
             return JsonResponse({"error": "User has no profile"}, status=403)
 
         polygon_geojson = data.get("polygon")
@@ -119,11 +111,11 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
                 geom = MultiPolygon(geom, srid=geom.srid)
             campus.polygon = geom
         else:
-            campus.polygon = _default_campus_polygon(
-                float(pin.effective_latitude),
-                float(pin.effective_longitude),
-                name=pin.effective_name,
-            )
+            lat = pin.effective_latitude
+            lon = pin.effective_longitude
+            if lat is None or lon is None:
+                return JsonResponse({"error": "Pin has no coordinates"}, status=400)
+            campus.polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
         campus.save(update_fields=["polygon", "updated"])
 
         return JsonResponse({"status": "ok", "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})

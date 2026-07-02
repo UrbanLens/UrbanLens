@@ -61,16 +61,16 @@
 
             {# ── Bottom-left map controls ── #}
             <div class="map-bottom-controls">
-                <button id="edit-campus-btn" class="map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
+                <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
                         data-tooltip="Draw or resize the boundary polygon for this location. Pins dropped inside this boundary are automatically linked to this wiki entry."
                         data-tooltip-pos="below">
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
                 <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
-                    <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
+                    <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
                         <i class="material-icons">delete_outline</i> Clear
                     </button>
-                    <button class="map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
+                    <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
                         <i class="material-icons">close</i> Cancel
                     </button>
                 </div>
@@ -99,7 +99,7 @@
                             <i class="material-icons">format_shapes</i> Polygon
                         </button>
                     </div>
-                    <button type="button" class="map-overlay-btn map-overlay-btn--add-detail"
+                    <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
                             id="add-detail-btn" onclick="toggleAddDetailMenu()"
                             data-tooltip="Add a personal detail marker, shape, or text to this map. Only you can see theses details."
                             data-tooltip-pos="below">

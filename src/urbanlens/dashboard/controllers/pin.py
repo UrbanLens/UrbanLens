@@ -21,13 +21,13 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.apis.locations.base import create_bbox
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
 from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
 from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
-from urbanlens.dashboard.services.apis.locations.meta import create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
@@ -38,7 +38,7 @@ from urbanlens.UrbanLens.settings.app import settings
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 
 logger = logging.getLogger(__name__)
 

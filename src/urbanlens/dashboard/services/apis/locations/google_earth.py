@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from urllib.parse import urlencode
 
-from urbanlens.dashboard.services.apis.locations.meta import create_bbox
+from urbanlens.dashboard.services.apis.locations.base import create_bbox
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 

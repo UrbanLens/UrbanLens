@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import BBox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _features_from_geodataframe, _lookup_bbox, validate_bbox
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.gateway import Gateway
@@ -37,9 +37,14 @@ try:
 except ImportError:  # pragma: no cover
     _overture_geodataframe = None
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import Polygon
+
 
 @dataclass(slots=True, kw_only=True)
-class OvertureMapsGateway(Gateway):
+class OvertureMapsGateway(Gateway, BoundaryProvider):
     """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox.
 
     Attributes:
@@ -56,6 +61,7 @@ class OvertureMapsGateway(Gateway):
     release: str | None = None
     connect_timeout: int | None = None
     request_timeout: int | None = None
+    bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
 
     def __post_init__(self) -> None:
         # NOTE: zero-arg super() breaks here because @dataclass(slots=True)
@@ -130,3 +136,10 @@ class OvertureMapsGateway(Gateway):
 
     def get_infrastructure(self, bbox: BBox):
         return self._fetch("infrastructure", bbox)
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        return _best_containing_polygon(
+            _features_from_geodataframe(self.get_buildings(_lookup_bbox(latitude, longitude, self.bbox_delta))),
+            latitude,
+            longitude,
+        )

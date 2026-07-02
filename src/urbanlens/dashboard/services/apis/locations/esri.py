@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.cache import cache
 import requests
 
-from urbanlens.dashboard.services.apis.locations.meta import (
+from urbanlens.dashboard.services.apis.locations.base import (
     SatelliteSlide,
     SatelliteViewProvider,
     create_bbox,

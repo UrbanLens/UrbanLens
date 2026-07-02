@@ -5,7 +5,7 @@ from urbanlens.dashboard.services.apis.locations.google_earth import GoogleEarth
 from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
 from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
 from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
-from urbanlens.dashboard.services.apis.locations.meta import SatelliteSlide, StreetViewSlide, create_bbox
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide, create_bbox
 from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.openhistoricalmap import OpenHistoricalMapGateway

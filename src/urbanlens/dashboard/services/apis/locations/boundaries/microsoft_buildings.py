@@ -27,10 +27,13 @@ import gzip
 import io
 import json
 import math
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.meta import BBox, feature_intersects_bbox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _lookup_bbox, feature_intersects_bbox, validate_bbox
 from urbanlens.dashboard.services.gateway import Gateway
+
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import Polygon
 
 DATASET_LINKS_URL = (
     "https://raw.githubusercontent.com/microsoft/GlobalMLBuildingFootprints/main/dataset-links.csv"
@@ -72,7 +75,7 @@ def quadkeys_for_bbox(bbox: BBox, *, zoom: int) -> set[str]:
 
 
 @dataclass(slots=True, kw_only=True)
-class MicrosoftBuildingFootprintsGateway(Gateway):
+class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
     """Fetch building footprint polygons from Microsoft's open dataset.
 
     Attributes:
@@ -85,7 +88,8 @@ class MicrosoftBuildingFootprintsGateway(Gateway):
 
     quadkey_zoom: int = 9
     _dataset_links: list[dict[str, str]] | None = field(default=None, repr=False)
-
+    bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
+    
     def _load_dataset_links(self) -> list[dict[str, str]]:
         if self._dataset_links is None:
             response = self.session.get(DATASET_LINKS_URL, timeout=60)
@@ -132,3 +136,10 @@ class MicrosoftBuildingFootprintsGateway(Gateway):
                 if feature_intersects_bbox(feature, bbox):
                     features.append(feature)
         return features
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        return _best_containing_polygon(
+            self.get_buildings(_lookup_bbox(latitude, longitude, self.bbox_delta)),
+            latitude,
+            longitude,
+        )
