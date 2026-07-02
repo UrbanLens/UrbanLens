@@ -1,203 +1,119 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
-<div class="site-admin-page page-content">
+<div class="site-admin-page page-content api-limits-page">
     <div class="site-admin-header">
-        <h1 class="site-admin-title">
-            <i class="material-icons">tune</i>
-            API Rate Limits
-        </h1>
-        <p class="site-admin-subtitle">Configure per-service rate limits and geo-filtering. Changes save automatically.</p>
         <div class="site-admin-breadcrumb">
             <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
                 <i class="material-icons">arrow_back</i>
                 Admin Home
             </a>
         </div>
+        <h1 class="site-admin-title">
+            <i class="material-icons">tune</i>
+            API Rate Limits
+        </h1>
+        <p class="site-admin-subtitle">Configure per-service rate limits and geo-filtering.</p>
     </div>
 
-    <style>
-    /* ── Grid ────────────────────────────────────────────── */
-    .api-limits-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-        gap: .5rem;
-        margin-top: .75rem;
-    }
-    /* ── Card ────────────────────────────────────────────── */
-    .api-limit-card {
-        background: var(--ul-grey-0a);
-        border: 1px solid var(--ul-grey-0b);
-        border-radius: 8px;
-        padding: .6rem .875rem;
-        transition: border-color .2s, opacity .2s;
-    }
-    .api-limit-card.disabled { opacity: .48; }
-    .api-limit-card.is-saving { border-color: var(--ul-accent, #0891b2); }
-    /* ── Header row ──────────────────────────────────────── */
-    .api-limit-header {
-        display: flex;
-        align-items: center;
-        gap: .45rem;
-        margin-bottom: .35rem;
-    }
-    .api-state-icon { font-size: 1rem !important; flex-shrink: 0; }
-    .api-limit-name { font-weight: 600; font-size: .875rem; line-height: 1.2; }
-    .api-limit-key  { font-size: .68rem; color: var(--ul-text-muted, #6b7280); font-family: monospace; }
-    .api-limit-status {
-        font-size: .72rem;
-        opacity: 0;
-        transition: opacity .25s;
-        margin-left: auto;
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-    .api-limit-status.saving { color: var(--ul-text-muted, #6b7280); opacity: 1; }
-    .api-limit-status.saved  { color: var(--ul-accent, #0891b2);      opacity: 1; }
-    .api-limit-status.error  { color: #b91c1c;                         opacity: 1; }
-    /* ── Stats row ───────────────────────────────────────── */
-    .api-limit-stats {
-        display: flex;
-        gap: .35rem;
-        flex-wrap: wrap;
-        align-items: center;
-        font-size: .7rem;
-        color: var(--ul-text-muted, #6b7280);
-        margin-bottom: .35rem;
-    }
-    /* ── Fields row ──────────────────────────────────────── */
-    .api-limit-fields {
-        display: flex;
-        gap: .55rem;
-        align-items: flex-end;
-        flex-wrap: wrap;
-    }
-    .api-limit-field { display: flex; flex-direction: column; gap: .15rem; }
-    .api-limit-field label {
-        font-size: .68rem;
-        font-weight: 600;
-        color: var(--ul-text-muted, #6b7280);
-        white-space: nowrap;
-    }
-    .api-limit-field input[type=number] { width: 88px; }
-    .api-limit-field--notes { flex: 1; min-width: 120px; }
-    .api-limit-field--notes textarea {
-        width: 100%;
-        box-sizing: border-box;
-        resize: vertical;
-        min-height: 2rem;
-        font-size: .78rem;
-        line-height: 1.3;
-    }
-    .toggle-row {
-        display: flex;
-        align-items: center;
-        gap: .3rem;
-        font-size: .78rem;
-        cursor: pointer;
-        white-space: nowrap;
-        padding-bottom: .1rem;
-    }
-    /* ── Badges ──────────────────────────────────────────── */
-    .badge { border-radius: 3px; padding: 0 4px; font-size: .67rem; line-height: 1.5; font-weight: 500; }
-    .badge-blocked { background: #fee2e2; color: #b91c1c; }
-    .badge-geo     { background: #e0f2fe; color: #0369a1; }
-    .badge-err     { color: #b91c1c; font-size: .68rem; }
-    /* ── Pill toggle switch ──────────────────────────────── */
-    .api-toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-    .api-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-    .api-toggle-track {
-        width: 32px;
-        height: 18px;
-        background: #d1d5db;
-        border-radius: 9px;
-        transition: background .2s;
-        position: relative;
-    }
-    .api-toggle input:checked ~ .api-toggle-track { background: var(--ul-primary, #6366f1); }
-    .api-toggle-track::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 14px;
-        height: 14px;
-        background: #fff;
-        border-radius: 50%;
-        transition: transform .2s;
-        box-shadow: 0 1px 2px rgba(0,0,0,.2);
-    }
-    .api-toggle input:checked ~ .api-toggle-track::after { transform: translateX(14px); }
-    </style>
-
-    <p style="font-size:.78rem;color:var(--ul-text-muted,#6b7280);margin-bottom:.5rem">
-        Rolling-window per-minute · UTC calendar day per-day · 30-day usage shown · blank = unlimited · auto-saves on change
-    </p>
+    <div class="api-limits-toolbar">
+        <div class="ul-notice ul-notice--info">
+            <i class="material-icons">sync</i>
+        </div>
+        <span class="admin-home-meta-pill">
+            <i class="material-icons">cloud</i>
+            {{ services|length }} service{{ services|length|pluralize }}
+        </span>
+    </div>
 
     <div class="api-limits-grid">
     {% for svc in services %}
     {% with cfg=svc.config %}
-    <div class="api-limit-card{% if not cfg.enabled %} disabled{% endif %}" data-service="{{ cfg.service }}">
+    <section class="site-admin-card ul-section card stats-service-card api-limit-card{% if not cfg.enabled %} is-disabled{% endif %}"
+             data-service="{{ cfg.service }}">
         <form method="post"
               action="{% url 'site_admin_api_limits' %}"
-              class="api-limit-form"
+              class="api-limit-form site-admin-form"
               hx-post="{% url 'site_admin_api_limits' %}"
               hx-trigger="change, input delay:700ms"
               hx-swap="none">
             {% csrf_token %}
             <input type="hidden" name="service" value="{{ cfg.service }}">
 
-            <div class="api-limit-header">
-                <i class="material-icons api-state-icon" style="color:{% if cfg.enabled %}var(--ul-primary,#6366f1){% else %}#9ca3af{% endif %}">
-                    {% if cfg.enabled %}cloud{% else %}cloud_off{% endif %}
-                </i>
-                <div>
-                    <div class="api-limit-name">{{ cfg.display_name }}</div>
-                    <div class="api-limit-key">{{ cfg.service }}</div>
+            <div class="card-header stats-service-card__header">
+                <div class="stats-service-card__title">
+                    <i class="material-icons api-state-icon">{% if cfg.enabled %}cloud{% else %}cloud_off{% endif %}</i>
+                    <div>
+                        <span class="api-limit-service-name">{{ cfg.display_name }}</span>
+                        <code class="api-limit-service-key">{{ cfg.service }}</code>
+                    </div>
                 </div>
-                <span class="api-limit-status" aria-live="polite" aria-atomic="true"></span>
-                <label class="api-toggle" title="Enable or disable this API site-wide">
-                    <input type="checkbox" name="enabled" value="on" class="api-enabled-cb" {% if cfg.enabled %}checked{% endif %}>
-                    <span class="api-toggle-track"></span>
-                </label>
+                <div class="api-limit-header-actions">
+                    <span class="api-limit-status" aria-live="polite" aria-atomic="true"></span>
+                    <label class="ul-switch" title="Enable or disable this API site-wide">
+                        <input type="checkbox" name="enabled" value="on" class="api-enabled-cb" {% if cfg.enabled %}checked{% endif %}>
+                        <span class="ul-switch__track"></span>
+                    </label>
+                </div>
             </div>
 
             {% if svc.calls_30d or svc.blocked_30d or svc.geo_skipped_30d or svc.errors_30d or svc.avg_ms %}
             <div class="api-limit-stats">
-                {% if svc.calls_30d %}<span>{{ svc.calls_30d }} calls</span>{% endif %}
-                {% if svc.blocked_30d %}<span class="badge badge-blocked">{{ svc.blocked_30d }} blocked</span>{% endif %}
-                {% if svc.geo_skipped_30d %}<span class="badge badge-geo">{{ svc.geo_skipped_30d }} geo-skip</span>{% endif %}
-                {% if svc.errors_30d %}<span class="badge-err">{{ svc.errors_30d }} err</span>{% endif %}
-                {% if svc.avg_ms %}<span>~{{ svc.avg_ms }}ms avg</span>{% endif %}
+                {% if svc.calls_30d %}
+                <span class="ul-chip">
+                    <i class="material-icons">call_made</i>
+                    {{ svc.calls_30d }} calls
+                </span>
+                {% endif %}
+                {% if svc.blocked_30d %}
+                <span class="ul-badge ul-badge--danger">{{ svc.blocked_30d }} blocked</span>
+                {% endif %}
+                {% if svc.geo_skipped_30d %}
+                <span class="ul-badge ul-badge--primary">{{ svc.geo_skipped_30d }} geo-skip</span>
+                {% endif %}
+                {% if svc.errors_30d %}
+                <span class="ul-badge ul-badge--warning">{{ svc.errors_30d }} err</span>
+                {% endif %}
+                {% if svc.avg_ms %}
+                <span class="ul-chip">
+                    <i class="material-icons">speed</i>
+                    ~{{ svc.avg_ms }}ms
+                </span>
+                {% endif %}
             </div>
             {% endif %}
 
-            <div class="api-limit-fields">
-                <label class="toggle-row">
-                    <input type="checkbox" name="usa_only" value="on" {% if cfg.usa_only %}checked{% endif %}>
-                    USA only
-                </label>
-                <div class="api-limit-field">
-                    <label for="cpm-{{ cfg.service }}">Per minute</label>
-                    <input type="number" id="cpm-{{ cfg.service }}" name="calls_per_minute"
-                           value="{{ cfg.calls_per_minute|default:'' }}" min="1" max="60000" placeholder="∞">
-                </div>
-                <div class="api-limit-field">
-                    <label for="cpd-{{ cfg.service }}">Per day</label>
-                    <input type="number" id="cpd-{{ cfg.service }}" name="calls_per_day"
-                           value="{{ cfg.calls_per_day|default:'' }}" min="1" max="10000000" placeholder="∞">
-                </div>
-                <div class="api-limit-field api-limit-field--notes">
-                    <label for="notes-{{ cfg.service }}">Notes</label>
-                    <textarea id="notes-{{ cfg.service }}" name="notes"
-                              placeholder="Free-tier limits, billing info…">{{ cfg.notes }}</textarea>
+            <div class="api-limit-body">
+                <div class="api-limit-fields">
+                    <label class="settings-toggle-row" title="Restrict this API to US locations only">
+                        <input type="checkbox" name="usa_only" value="on" class="settings-toggle-input" {% if cfg.usa_only %}checked{% endif %}>
+                        <span class="settings-toggle-label">USA only</span>
+                    </label>
+                    <div class="form-row">
+                        <label for="cpm-{{ cfg.service }}">Per minute</label>
+                        <input type="number" id="cpm-{{ cfg.service }}" name="calls_per_minute"
+                               value="{{ cfg.calls_per_minute|default:'' }}" min="1" max="60000" placeholder="∞">
+                    </div>
+                    <div class="form-row">
+                        <label for="cpd-{{ cfg.service }}">Per day</label>
+                        <input type="number" id="cpd-{{ cfg.service }}" name="calls_per_day"
+                               value="{{ cfg.calls_per_day|default:'' }}" min="1" max="10000000" placeholder="∞">
+                    </div>
+                    <div class="form-row form-row--notes">
+                        <label for="notes-{{ cfg.service }}">Notes</label>
+                        <textarea id="notes-{{ cfg.service }}" name="notes" rows="2"
+                                  placeholder="Free-tier limits, billing info…">{{ cfg.notes }}</textarea>
+                    </div>
                 </div>
             </div>
         </form>
-    </div>
+    </section>
     {% endwith %}
     {% empty %}
-    <p style="color:var(--ul-text-muted,#6b7280)">No service configurations found. They are created automatically on first API call.</p>
+    <div class="ul-empty">
+        <i class="material-icons">cloud_off</i>
+        <p>No service configurations found. They are created automatically on first API call.</p>
+    </div>
     {% endfor %}
     </div>
 </div>
@@ -211,7 +127,7 @@
     function setStatus(card, state, text) {
         var el = card && card.querySelector('.api-limit-status');
         if (!el) return;
-        el.className = 'api-limit-status ' + state;
+        el.className = 'api-limit-status is-' + state;
         el.textContent = text;
         clearTimeout(el._t);
         if (state === 'saved' || state === 'error') {
@@ -227,18 +143,16 @@
         }
     }
 
-    // Immediately reflect enabled/disabled state in the UI when the toggle is flipped.
     document.body.addEventListener('change', function (e) {
         var cb = e.target;
         if (!cb.classList.contains('api-enabled-cb')) return;
         var card = getCard(cb);
         if (!card) return;
         var enabled = cb.checked;
-        card.classList.toggle('disabled', !enabled);
+        card.classList.toggle('is-disabled', !enabled);
         var icon = card.querySelector('.api-state-icon');
         if (icon) {
             icon.textContent = enabled ? 'cloud' : 'cloud_off';
-            icon.style.color = enabled ? 'var(--ul-primary,#6366f1)' : '#9ca3af';
         }
     });
 
@@ -257,14 +171,14 @@
         if (card) card.classList.remove('is-saving');
         var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
         if (!(status >= 200 && status < 300)) {
-            setStatus(card, 'error', '✗ Save failed (' + (status || '?') + ')');
+            setStatus(card, 'error', 'Save failed (' + (status || '?') + ')');
         }
     });
 
     document.body.addEventListener('apiLimitSaved', function (evt) {
         var svc = evt.detail && evt.detail.service;
         var card = svc && document.querySelector('.api-limit-card[data-service="' + svc + '"]');
-        setStatus(card, 'saved', '✓ Saved');
+        setStatus(card, 'saved', 'Saved');
     });
 }());
 </script>

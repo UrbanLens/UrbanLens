@@ -172,6 +172,185 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 }
 
 
+// ── API rate limits page ──────────────────────────────────────────────────────
+
+.api-limits-page {
+    .site-admin-form {
+        padding: 0;
+    }
+}
+
+.api-limits-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: 1rem;
+
+    .ul-notice {
+        margin: 0;
+        flex: 1 1 280px;
+    }
+}
+
+.api-limits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: .75rem;
+
+    > .ul-empty {
+        grid-column: 1 / -1;
+    }
+}
+
+.api-limit-card {
+    margin-bottom: 0 !important;
+    transition: border-color .2s, opacity .2s, box-shadow .15s;
+
+    &.is-disabled {
+        opacity: .52;
+
+        .api-state-icon {
+            color: var(--ul-grey-5) !important;
+        }
+    }
+
+    &.is-saving {
+        border-color: rgba($color-blue-500, .45);
+        box-shadow: 0 0 0 1px rgba($color-blue-500, .2);
+    }
+
+    .card-header {
+        padding: .7rem 1rem;
+        gap: .65rem;
+    }
+
+    .stats-service-card__title {
+        min-width: 0;
+
+        > div {
+            min-width: 0;
+        }
+    }
+
+    &:not(.is-disabled) .api-state-icon {
+        color: var(--primary-color);
+    }
+}
+
+.api-limit-service-name {
+    display: block;
+    font-size: .92rem;
+    font-weight: 600;
+    color: var(--ul-grey-9);
+    line-height: 1.25;
+}
+
+.api-limit-service-key {
+    display: block;
+    margin-top: .1rem;
+    font-size: .7rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ul-grey-6);
+    letter-spacing: -.01em;
+}
+
+.api-limit-header-actions {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex-shrink: 0;
+}
+
+.api-limit-status {
+    font-size: .72rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity .25s;
+    white-space: nowrap;
+
+    &.is-saving {
+        color: var(--ul-grey-6);
+        opacity: 1;
+    }
+
+    &.is-saved {
+        color: $color-green-600;
+        opacity: 1;
+    }
+
+    &.is-error {
+        color: $color-red-600;
+        opacity: 1;
+    }
+}
+
+.api-limit-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    padding: 0 1rem .6rem;
+}
+
+.api-limit-body {
+    padding: 0 1rem .85rem;
+}
+
+.api-limit-fields {
+    display: grid;
+    grid-template-columns: auto minmax(72px, 1fr) minmax(72px, 1fr);
+    gap: .55rem .65rem;
+    align-items: end;
+
+    .form-row {
+        margin-bottom: 0;
+    }
+
+    .form-row--notes {
+        grid-column: 1 / -1;
+
+        textarea {
+            min-height: 2.1rem;
+            resize: vertical;
+            font-size: .82rem;
+            line-height: 1.35;
+        }
+    }
+
+    .settings-toggle-row {
+        align-self: center;
+        margin: 0;
+        white-space: nowrap;
+        gap: .4rem;
+
+        .settings-toggle-input {
+            margin-top: 0;
+            width: .95rem;
+            height: .95rem;
+        }
+
+        .settings-toggle-label {
+            font-size: .78rem;
+            font-weight: 600;
+        }
+    }
+
+    input[type="number"] {
+        width: 100%;
+        min-width: 0;
+        padding: .4rem .55rem;
+        font-size: .82rem;
+    }
+
+    @media (max-width: 420px) {
+        grid-template-columns: 1fr 1fr;
+
+        .settings-toggle-row {
+            grid-column: 1 / -1;
+        }
+    }
+}
+
 // ── Site admin page ───────────────────────────────────────────────────────
 
 .site-admin-page {
@@ -897,6 +1076,20 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         &:hover {
             border-color: rgba($color-blue-500, .4);
             box-shadow: 0 4px 20px rgba($color-blue-500, .08);
+        }
+    }
+
+    .api-limit-card.is-saving {
+        border-color: rgba($color-blue-500, .35);
+        box-shadow: 0 0 0 1px rgba($color-blue-500, .15);
+    }
+
+    .api-limit-fields input[type="number"] {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-3b);
+
+        &:focus {
+            border-color: color.adjust($primary-color, $lightness: 10%);
         }
     }
 
