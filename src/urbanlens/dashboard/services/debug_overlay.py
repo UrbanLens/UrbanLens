@@ -21,11 +21,15 @@ class DebugEntry:
         source: Short identifier for the data source (e.g. ``"wikipedia"``, ``"esri"``).
         query: The search term, address, or coordinates actually used for the lookup.
         from_cache: Whether this result was served from cache rather than a fresh API call.
+        count: Number of results the lookup produced, when meaningful (e.g. media
+            items, search hits, listings). ``None`` for sources that return a
+            single yes/no match (coordinates-only providers) rather than a set.
     """
 
     source: str
     query: str
     from_cache: bool
+    count: int | None = None
 
 
 def can_view_debug_overlay(user: AbstractBaseUser | AnonymousUser) -> bool:

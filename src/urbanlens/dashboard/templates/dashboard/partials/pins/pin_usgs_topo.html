@@ -3,7 +3,8 @@
     <span class="debug-marker" hidden
           data-debug-source="{{ debug.source }}"
           data-debug-query="{{ debug.query }}"
-          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"></span>
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
     {% endif %}
     <div class="card-header">
         <i class="material-icons">terrain</i>

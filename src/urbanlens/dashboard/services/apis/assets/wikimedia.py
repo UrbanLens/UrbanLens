@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 _API_URL = "https://commons.wikimedia.org/w/api.php"
 _THUMB_WIDTH = 400
 _MAX_RESULTS = 60
+# The MediaWiki API caps the `titles` parameter at 50 values per request for
+# unauthenticated (non-bot) requests -- exceeding it doesn't truncate, it
+# fails the whole request with a "toomanyvalues" error, silently dropping
+# every result. _MAX_RESULTS (60) is above that limit, so imageinfo lookups
+# must be chunked.
+_TITLES_BATCH_SIZE = 50
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 
@@ -86,7 +92,18 @@ class WikimediaGateway(MediaProvider):
             return []
 
     def _fetch_image_info(self, titles: list[str]) -> list[dict[str, Any]]:
-        """Batch-fetch image URLs and thumbnail URLs for the given file titles."""
+        """Fetch image URLs and thumbnail URLs for the given file titles.
+
+        Chunks requests to stay under the API's 50-titles-per-request cap --
+        see ``_TITLES_BATCH_SIZE``.
+        """
+        results: list[dict[str, Any]] = []
+        for i in range(0, len(titles), _TITLES_BATCH_SIZE):
+            results.extend(self._fetch_image_info_batch(titles[i:i + _TITLES_BATCH_SIZE]))
+        return results
+
+    def _fetch_image_info_batch(self, titles: list[str]) -> list[dict[str, Any]]:
+        """Fetch image info for a single batch of at most _TITLES_BATCH_SIZE titles."""
         params: dict[str, str | int] = {
             "action": "query",
             "titles": "|".join(titles),
@@ -98,7 +115,11 @@ class WikimediaGateway(MediaProvider):
         try:
             resp = self.session.get(self.base_url, params=params, timeout=15)
             resp.raise_for_status()
-            pages = resp.json().get("query", {}).get("pages", {}).values()
+            data = resp.json()
+            if "error" in data:
+                logger.warning("Wikimedia imageinfo fetch returned an error: %r", data["error"])
+                return []
+            pages = data.get("query", {}).get("pages", {}).values()
         except Exception:
             logger.exception("Wikimedia imageinfo fetch failed")
             return []

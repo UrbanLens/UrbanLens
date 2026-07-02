@@ -4,7 +4,8 @@
     <span class="debug-marker" hidden
           data-debug-source="{{ entry.source }}"
           data-debug-query="{{ entry.query }}"
-          data-debug-cache="{{ entry.from_cache|yesno:'hit,miss' }}"></span>
+          data-debug-cache="{{ entry.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ entry.count }}"></span>
     {% endfor %}
     <div class="card-header">
         <i class="material-icons">satellite_alt</i>

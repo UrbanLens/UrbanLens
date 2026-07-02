@@ -44,9 +44,12 @@
         }
         listEl.innerHTML = entries.map(function (el) {
             var hit = el.dataset.debugCache === 'hit';
+            var countRaw = el.dataset.debugCount;
+            var count = countRaw !== undefined && countRaw !== '' && !isNaN(parseInt(countRaw, 10)) ? parseInt(countRaw, 10) : null;
             return '<div class="pin-debug-overlay__row">'
                 + '<span class="pin-debug-overlay__source">' + escapeHtml(el.dataset.debugSource || '') + '</span>'
                 + '<span class="pin-debug-overlay__query">' + escapeHtml(el.dataset.debugQuery || '(none)') + '</span>'
+                + (count === null ? '' : '<span class="pin-debug-overlay__count">' + count + '</span>')
                 + '<span class="pin-debug-overlay__badge pin-debug-overlay__badge--' + (hit ? 'hit' : 'miss') + '">'
                 + (hit ? 'CACHE' : 'FRESH') + '</span>'
                 + '</div>';

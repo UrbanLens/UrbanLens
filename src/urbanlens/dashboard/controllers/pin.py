@@ -203,7 +203,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def _debug_entry(self, request: HttpRequest, source: str, query: str, *, from_cache: bool):
+    def _debug_entry(self, request: HttpRequest, source: str, query: str, *, from_cache: bool, count: int | None = None):
         """Build a `DebugEntry` for the external-API debug overlay, admins only.
 
         Args:
@@ -211,6 +211,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             source: Short identifier for the data source (e.g. ``"wikipedia"``).
             query: The search term, address, or coordinates used for the lookup.
             from_cache: Whether the result was served from cache.
+            count: Number of results the lookup produced, when meaningful.
 
         Returns:
             A `DebugEntry`, or None if the requesting user can't view debug info.
@@ -219,7 +220,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if not can_view_debug_overlay(request.user):
             return None
-        return DebugEntry(source=source, query=query, from_cache=from_cache)
+        return DebugEntry(source=source, query=query, from_cache=from_cache, count=count)
 
     def media_provider(self, request: HttpRequest, pin_slug: str, source: str):
         """
@@ -287,7 +288,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # empty tile to the gallery (see the media-item-count check that hides
         # the whole section when no provider found anything, in index.html).
         debug_query = " | ".join(search_terms)
-        context = {"items": items, "debug": self._debug_entry(request, source, debug_query, from_cache=from_cache)}
+        context = {"items": items, "debug": self._debug_entry(request, source, debug_query, from_cache=from_cache, count=len(items))}
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 
     def web_search(self, request: HttpRequest, pin_slug):
@@ -328,7 +329,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                         "search_results": page_obj.object_list,
                         "page_obj": page_obj,
                         "adaptive_pagination": True,
-                        "debug": self._debug_entry(request, "web_search", search_name, from_cache=True),
+                        "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(cached)),
                     },
                 )
 
@@ -368,7 +369,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "search_results": page_obj.object_list,
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
-                "debug": self._debug_entry(request, "web_search", search_name, from_cache=False),
+                "debug": self._debug_entry(request, "web_search", search_name, from_cache=False, count=len(search_results)),
             },
         )
 
@@ -414,14 +415,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 gateway_slides, from_cache = gateway.get_satellite_slides(lat, lng)
                 slides.extend(gateway_slides)
-                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=from_cache):
+                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=from_cache, count=len(gateway_slides)):
                     debug_entries.append(entry)
             except RequestCancelledError as rce:
                 logger.debug("Satellite view provider %s request cancelled -> %s", gateway.service_key, rce)
             except Exception as e:
                 # TODO: Catch specific exceptions
                 logger.warning("Satellite view provider %s failed -> %s", gateway.service_key, e)
-                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=False):
+                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=False, count=0):
                     debug_entries.append(entry)
 
         return render(
@@ -460,14 +461,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 provider_slides, from_cache = provider.get_street_view_slides(lat, lng)
                 slides.extend(provider_slides)
-                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=from_cache):
+                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=from_cache, count=len(provider_slides)):
                     debug_entries.append(entry)
             except RequestCancelledError as rce:
                 logger.debug("Street view provider %s request cancelled -> %s", provider.service_key, rce)
             except Exception:
                 # TODO: Catch specific exceptions
                 logger.warning("Street view provider %s failed", provider.__class__.__name__, exc_info=True)
-                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=False):
+                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=False, count=0):
                     debug_entries.append(entry)
 
         return render(
@@ -702,7 +703,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
-        context = {"article": data, "debug": self._debug_entry(request, "wikipedia", query_key, from_cache=cached is not None)}
+        context = {"article": data, "debug": self._debug_entry(request, "wikipedia", query_key, from_cache=cached is not None, count=1)}
         return render(request, "dashboard/partials/pins/pin_wikipedia.html", context)
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
@@ -755,7 +756,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "result": data,
             "address": address,
-            "debug": self._debug_entry(request, "loopnet", address, from_cache=cached is not None),
+            "debug": self._debug_entry(request, "loopnet", address, from_cache=cached is not None, count=len(data.get("listings") or [])),
         }
         return render(request, "dashboard/partials/pins/pin_loopnet.html", context)
 
@@ -814,7 +815,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
             return HttpResponse(status=204)
 
-        context = {"park": data, "debug": self._debug_entry(request, "nps", query_key, from_cache=cached is not None)}
+        context = {"park": data, "debug": self._debug_entry(request, "nps", query_key, from_cache=cached is not None, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
@@ -863,7 +864,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
-        context = {"place": data, "debug": self._debug_entry(request, "nominatim", query_key, from_cache=cached is not None)}
+        context = {"place": data, "debug": self._debug_entry(request, "nominatim", query_key, from_cache=cached is not None, count=1)}
         return render(request, "dashboard/partials/pins/pin_nominatim.html", context)
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
@@ -913,7 +914,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         context = {
             "maps": maps_list[:20],
-            "debug": self._debug_entry(request, "usgs_topo", query_key, from_cache=cached is not None),
+            "debug": self._debug_entry(request, "usgs_topo", query_key, from_cache=cached is not None, count=len(maps_list)),
         }
         return render(request, "dashboard/partials/pins/pin_usgs_topo.html", context)
 

@@ -2313,7 +2313,7 @@ body.page-location-details .pin-detail-grid {
 
 .pin-debug-overlay__row {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto;
     align-items: center;
     gap: 0.5rem;
     padding: 0.25rem 0.75rem;
@@ -2333,6 +2333,18 @@ body.page-location-details .pin-detail-grid {
     text-overflow: ellipsis;
     white-space: nowrap;
     opacity: 0.85;
+}
+
+.pin-debug-overlay__count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    white-space: nowrap;
+
+    &::before {
+        content: '×';
+        margin-right: 0.125rem;
+        opacity: 0.6;
+    }
 }
 
 .pin-debug-overlay__badge {
