@@ -6,15 +6,17 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSException
+from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,15 @@ _WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vp
 
 # Fields a community member may edit via "Suggest edits".
 _WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
+
+
+def _default_location_campus_polygon(location: Location) -> MultiPolygon:
+    geom = BoundaryProviderChain().boundary_for_point(
+        float(location.latitude),
+        float(location.longitude),
+        name=location.name,
+    )
+    return MultiPolygon(geom, srid=geom.srid) if isinstance(geom, Polygon) else geom
 
 
 class LocationWikiView(LoginRequiredMixin, View):
@@ -177,11 +188,11 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
-        if location.bounding_box:
-            import json as _json
-
-            return JsonResponse({"polygon": _json.loads(location.bounding_box.geojson)})
-        return JsonResponse({"polygon": None})
+        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+        if campus.polygon is None:
+            campus.polygon = _default_location_campus_polygon(location)
+            campus.save(update_fields=["polygon", "updated"])
+        return JsonResponse({"polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
     def post(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
@@ -194,15 +205,15 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not polygon_geojson:
-            return JsonResponse({"error": "polygon is required"}, status=400)
-
-        try:
-            from django.contrib.gis.geos import GEOSGeometry
-
-            geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-        except (GEOSException, ValueError) as exc:
-            logger.exception("Invalid polygon GeoJSON: %s", exc)
-            return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
+            geom = _default_location_campus_polygon(location)
+        else:
+            try:
+                geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
+                if isinstance(geom, Polygon):
+                    geom = MultiPolygon(geom, srid=geom.srid)
+            except (GEOSException, ValueError) as exc:
+                logger.exception("Invalid polygon GeoJSON: %s", exc)
+                return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
 
         # Check area against the site-wide limit.  Project to an equal-area CRS
         # (EPSG:6933) so the area calculation is meaningful globally.
@@ -222,9 +233,10 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        old_wkt = location.bounding_box.wkt if location.bounding_box else None
-        location.bounding_box = geom
-        location.save(update_fields=["bounding_box", "updated"])
+        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+        old_wkt = campus.polygon.wkt if campus.polygon else None
+        campus.polygon = geom
+        campus.save(update_fields=["polygon", "updated"])
 
         LocationEdit.objects.create(
             location=location,
@@ -232,7 +244,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             changes={"bounding_box": {"from": old_wkt, "to": geom.wkt}},
         )
 
-        return JsonResponse({"ok": True})
+        return JsonResponse({"ok": True, "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
 
 class LocationWikiHistoryView(LoginRequiredMixin, View):
@@ -270,22 +282,21 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         revert_changes: dict[str, dict] = {}
         for field, diff in target_edit.changes.items():
             old_val = diff.get("from")
-            current_val = (
-                getattr(location, field, None)
-                if field != "bounding_box"
-                else (location.bounding_box.wkt if location.bounding_box else None)
-            )
-            revert_changes[field] = {"from": current_val, "to": old_val}
             if field == "bounding_box":
+                campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+                current_val = campus.polygon.wkt if campus.polygon else None
+                revert_changes[field] = {"from": current_val, "to": old_val}
                 if old_val:
-                    from django.contrib.gis.geos import GEOSGeometry, Polygon
-
                     restored = GEOSGeometry(old_val, srid=4326)
                     if isinstance(restored, Polygon):
-                        location.bounding_box = restored
+                        restored = MultiPolygon(restored, srid=restored.srid)
+                    campus.polygon = restored
                 else:
-                    location.bounding_box = None
+                    campus.polygon = None
+                campus.save(update_fields=["polygon", "updated"])
             else:
+                current_val = getattr(location, field, None)
+                revert_changes[field] = {"from": current_val, "to": old_val}
                 setattr(location, field, old_val)
 
         location.save()

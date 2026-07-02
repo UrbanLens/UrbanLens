@@ -8,14 +8,14 @@ Campus defines the spatial boundary for a Location.
 from __future__ import annotations
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.location.model import Location
 
-
 # ── is_default ────────────────────────────────────────────────────────────────
+
 
 class CampusIsDefaultTests(TestCase):
     """is_default is True when profile_id is None (admin-owned campus)."""
@@ -65,7 +65,7 @@ class CampusEffectivePolygonTests(TestCase):
 
     def _make_campus(self, polygon=None):
         location = baker.make(
-            "dashboard.Location", latitude="40.000000", longitude="-74.000000"
+            "dashboard.Location", latitude="40.000000", longitude="-74.000000",
         )
         campus = baker.make(
             "dashboard.Campus",
@@ -104,10 +104,10 @@ class CampusQuerySetDefaultsTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.user = baker.make("auth.User")
         self.default_campus = baker.make(
-            "dashboard.Campus", location=self.location, profile=None
+            "dashboard.Campus", location=self.location, profile=None,
         )
         self.user_campus = baker.make(
-            "dashboard.Campus", location=self.location, profile=self.user.profile
+            "dashboard.Campus", location=self.location, profile=self.user.profile,
         )
 
     def test_defaults_includes_admin_campus(self) -> None:
@@ -168,10 +168,10 @@ class CampusManagerEffectiveForTests(TestCase):
         self.user = baker.make("auth.User")
         self.other = baker.make("auth.User")
         self.admin_campus = baker.make(
-            "dashboard.Campus", location=self.location, profile=None
+            "dashboard.Campus", location=self.location, profile=None,
         )
         self.user_campus = baker.make(
-            "dashboard.Campus", location=self.location, profile=self.user.profile
+            "dashboard.Campus", location=self.location, profile=self.user.profile,
         )
 
     def test_returns_user_override_when_profile_given(self) -> None:
@@ -241,3 +241,114 @@ class CampusManagerEffectiveForProfileNoneTests(TestCase):
         empty_loc = baker.make("dashboard.Location", latitude="36.0", longitude="-91.0")
         result = Campus.objects.effective_for(empty_loc, profile=None)
         self.assertIsNone(result)
+
+# ── CampusController pin detail defaults ─────────────────────────────────────
+
+
+class CampusControllerBoundaryDefaultsTests(TestCase):
+    """Pin detail campus API uses user-scoped Campus boundaries."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.other_user = baker.make("auth.User")
+        self.location_boundary = MultiPolygon(
+            Polygon(
+                ((-74.001, 39.999), (-74.001, 40.001), (-73.999, 40.001), (-73.999, 39.999), (-74.001, 39.999)),
+                srid=4326,
+            ),
+            srid=4326,
+        )
+        self.pin_boundary = MultiPolygon(
+            Polygon(
+                ((-74.002, 39.998), (-74.002, 40.002), (-73.998, 40.002), (-73.998, 39.998), (-74.002, 39.998)),
+                srid=4326,
+            ),
+            srid=4326,
+        )
+        self.default_boundary = Polygon(
+            ((-74.003, 39.997), (-74.003, 40.003), (-73.997, 40.003), (-73.997, 39.997), (-74.003, 39.997)),
+            srid=4326,
+        )
+        self.default_campus_boundary = MultiPolygon(self.default_boundary, srid=4326)
+        self.location = baker.make(
+            "dashboard.Location",
+            latitude="40.000000",
+            longitude="-74.000000",
+        )
+        self.pin = baker.make(
+            "dashboard.Pin",
+            profile=self.user.profile,
+            location=self.location,
+            slug="pin-boundary-default",
+            latitude=None,
+            longitude=None,
+        )
+        self.location_campus = baker.make("dashboard.Campus", location=self.location, profile=None, polygon=self.location_boundary)
+        self.pin_campus = baker.make("dashboard.Campus", location=self.location, profile=self.user.profile, polygon=self.pin_boundary)
+
+    def _request(self, method="get", data=None):
+        import json
+
+        from django.test import RequestFactory
+
+        factory = RequestFactory()
+        if method == "post":
+            request = factory.post(
+                "/campus/",
+                data=json.dumps(data or {}),
+                content_type="application/json",
+            )
+            request.data = data or {}
+        else:
+            request = factory.get("/campus/")
+        request.user = self.user
+        return request
+
+    def test_get_campus_uses_profile_campus_not_location_campus(self) -> None:
+        import json
+
+        from urbanlens.dashboard.controllers.campus import CampusController
+
+        response = CampusController().get_campus(self._request(), self.pin.slug)
+        payload = json.loads(response.content)
+
+        self.assertEqual(payload["polygon"], json.loads(self.pin_boundary.geojson))
+        self.assertNotEqual(payload["polygon"], json.loads(self.location_boundary.geojson))
+
+    def test_get_campus_creates_profile_campus_default_when_missing(self) -> None:
+        import json
+        from unittest.mock import patch
+
+        from urbanlens.dashboard.controllers.campus import CampusController
+
+        self.pin_campus.delete()
+
+        with patch(
+            "urbanlens.dashboard.controllers.campus.BoundaryProviderChain.boundary_for_point",
+            return_value=self.default_boundary,
+        ):
+            response = CampusController().get_campus(self._request(), self.pin.slug)
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["polygon"], json.loads(self.default_campus_boundary.geojson))
+        campus = Campus.objects.get(location=self.location, profile=self.user.profile)
+        self.assertEqual(json.loads(campus.polygon.geojson), json.loads(self.default_campus_boundary.geojson))
+
+    def test_clear_user_boundary_resets_profile_campus_default_not_location_campus(self) -> None:
+        import json
+        from unittest.mock import patch
+
+        from urbanlens.dashboard.controllers.campus import CampusController
+
+        with patch(
+            "urbanlens.dashboard.controllers.campus.BoundaryProviderChain.boundary_for_point",
+            return_value=self.default_boundary,
+        ):
+            clear_response = CampusController().save_campus(self._request("post", {"polygon": None}), self.pin.slug)
+
+        self.assertEqual(clear_response.status_code, 200)
+        payload = json.loads(clear_response.content)
+        self.assertEqual(payload["polygon"], json.loads(self.default_campus_boundary.geojson))
+        campus = Campus.objects.get(location=self.location, profile=self.user.profile)
+        self.assertEqual(json.loads(campus.polygon.geojson), json.loads(self.default_campus_boundary.geojson))
+        self.assertNotEqual(json.loads(campus.polygon.geojson), json.loads(self.location_boundary.geojson))
