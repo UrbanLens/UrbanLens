@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import create_bbox
+from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
 from urbanlens.dashboard.services.gateway import Gateway
 
 _API_URL = "https://www.openhistoricalmap.org/api/0.6"
@@ -29,7 +29,7 @@ class OpenHistoricalMapGateway(Gateway):
 
     def search_near_coordinates(self, latitude: float, longitude: float, query: str, *, delta: float = 0.005, **params: Any) -> list[dict[str, Any]]:
         """Search OpenHistoricalMap for named historic features near coordinates."""
-        return self.search(query, viewbox=create_bbox(latitude, longitude, delta), bounded=1, **params)
+        return self.search(query, viewbox=create_bbox_str(latitude, longitude, delta), bounded=1, **params)
 
     def reverse_geocode_coordinates(self, latitude: float, longitude: float, **params: Any) -> dict[str, Any]:
         """Reverse geocode coordinates against OpenHistoricalMap."""
@@ -58,7 +58,7 @@ out center tags;
 
     def map_xml_for_coordinates(self, latitude: float, longitude: float, *, delta: float = 0.005) -> str:
         """Return raw OSM XML for map data around coordinates."""
-        response = self.session.get(f"{_API_URL}/map", params={"bbox": create_bbox(latitude, longitude, delta)}, timeout=20)
+        response = self.session.get(f"{_API_URL}/map", params={"bbox": create_bbox_str(latitude, longitude, delta)}, timeout=20)
         response.raise_for_status()
         return response.text
 

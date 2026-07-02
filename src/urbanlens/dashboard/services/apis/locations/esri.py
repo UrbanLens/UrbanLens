@@ -12,7 +12,7 @@ import requests
 from urbanlens.dashboard.services.apis.locations.base import (
     SatelliteSlide,
     SatelliteViewProvider,
-    create_bbox,
+    create_bbox_str,
 )
 
 if TYPE_CHECKING:
@@ -77,14 +77,14 @@ class EsriGateway(SatelliteViewProvider):
         Returns:
             List of SatelliteSlide, empty when no imagery is available or the request fails.
         """
-        bbox = create_bbox(latitude, longitude)
+        bbox_str = create_bbox_str(latitude, longitude)
 
-        yield self.get_world_imagery_slide(bbox, width=width, height=height)
-        yield self.get_usgs_slide(bbox, width=width, height=height)
+        yield self.get_world_imagery_slide(bbox_str, width=width, height=height)
+        yield self.get_usgs_slide(bbox_str, width=width, height=height)
 
         wayback_limit = 5 if limit < 0 else max(0, limit)
         yield from self.get_wayback_slides(
-            bbox,
+            bbox_str,
             width=width,
             height=height,
             max_count=wayback_limit,

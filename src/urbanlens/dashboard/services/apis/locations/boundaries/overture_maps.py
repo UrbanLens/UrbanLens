@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _features_from_geodataframe, _lookup_bbox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _features_from_geodataframe, create_bbox, validate_bbox
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.gateway import Gateway
@@ -139,7 +139,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
         return _best_containing_polygon(
-            _features_from_geodataframe(self.get_buildings(_lookup_bbox(latitude, longitude, self.bbox_delta))),
+            _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta))),
             latitude,
             longitude,
         )

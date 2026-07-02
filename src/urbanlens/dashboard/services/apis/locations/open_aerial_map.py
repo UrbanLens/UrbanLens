@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox_str
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -54,7 +54,7 @@ class OpenAerialMapGateway(SatelliteViewProvider):
             ``provider``, ``acquisition_start``, and ``acquisition_end`` fields.
         """
         limit = limit if limit > 0 else 10
-        params: dict[str, Any] = {"bbox": create_bbox(latitude, longitude, delta), "limit": limit, "sort": sort}
+        params: dict[str, Any] = {"bbox": create_bbox_str(latitude, longitude, delta), "limit": limit, "sort": sort}
         if provider:
             params["provider"] = provider
         response = self.session.get(f"{_BASE_URL}/meta", params=params, timeout=20)
@@ -129,7 +129,7 @@ class OpenAerialMapGateway(SatelliteViewProvider):
         """
         response = self.session.get(
             f"{_BASE_URL}/tms",
-            params={"bbox": create_bbox(latitude, longitude, delta), "limit": str(limit)},
+            params={"bbox": create_bbox_str(latitude, longitude, delta), "limit": str(limit)},
             timeout=20,
         )
         response.raise_for_status()

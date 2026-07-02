@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox_str
 from urbanlens.dashboard.services.gateway import Gateway
 
 if TYPE_CHECKING:
@@ -67,5 +67,5 @@ class NasaGibsGateway(SatelliteViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
-        bbox = create_bbox(latitude, longitude)
+        bbox = create_bbox_str(latitude, longitude)
         yield from self.get_landsat_slides(bbox)

@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-from urbanlens.dashboard.services.apis.locations.base import create_bbox
+from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway

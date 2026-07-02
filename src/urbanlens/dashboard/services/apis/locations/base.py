@@ -119,8 +119,12 @@ class StaticBoundaryProvider(BoundaryProvider):
         return default_bbox(latitude, longitude)
 
 
-def create_bbox(latitude: float, longitude: float, delta: float = 0.005) -> str:
+def create_bbox_str(latitude: float, longitude: float, delta: float = 0.005) -> str:
     return f"{longitude - delta},{latitude - delta},{longitude + delta},{latitude + delta}"
+
+
+def create_bbox(latitude: float, longitude: float, delta: float = 0.001) -> BBox:
+    return (longitude - delta, latitude - delta, longitude + delta, latitude + delta)
 
 
 def default_bbox(latitude: float, longitude: float) -> Polygon:
