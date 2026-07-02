@@ -100,6 +100,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     openai_api_key: str | None = Field(default=None, description="The openai key")
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
+    google_public_api_key: str | None = Field(default=None, description="The google public api key")
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
     google_client_id: str | None = Field(default=None, description="The google client id")
     google_client_secret: str | None = Field(default=None, description="The google client secret")

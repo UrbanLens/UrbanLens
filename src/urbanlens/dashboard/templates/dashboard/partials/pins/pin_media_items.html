@@ -1,0 +1,13 @@
+{# Rendered per-provider and appended (hx-swap="beforeend") into #media-gallery-grid -- #}
+{# see the media-gallery-section loaders in dashboard/pages/location/index.html. #}
+{% for item in items %}
+<a class="media-item" href="{{ item.page_url|default:item.url }}" target="_blank" rel="noopener noreferrer"
+   title="{{ item.caption }}">
+    <span class="media-item-source">{{ item.source }}</span>
+    <img class="media-item-thumb" src="{{ item.thumb_url|default:item.url }}" alt="{{ item.caption }}" loading="lazy"
+         onerror="this.closest('.media-item').style.display='none'">
+    {% if item.caption %}
+    <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
+    {% endif %}
+</a>
+{% endfor %}

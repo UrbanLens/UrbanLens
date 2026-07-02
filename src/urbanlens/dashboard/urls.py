@@ -174,9 +174,9 @@ urlpatterns = [
                                 name="campus.pin",
                             ),
                             path(
-                                "<slug:pin_slug>/smithsonian/",
-                                pin.PinController.as_view({"get": "get_smithsonian_images"}),
-                                name="smithsonian_images",
+                                "<slug:pin_slug>/media/<str:source>/",
+                                pin.PinController.as_view({"get": "media_provider"}),
+                                name="pin.media",
                             ),
                             path(
                                 "<slug:pin_slug>/google/",
@@ -302,11 +302,6 @@ urlpatterns = [
                                 "<slug:pin_slug>/wikipedia/",
                                 pin.PinController.as_view({"get": "wikipedia_info"}),
                                 name="pin.wikipedia",
-                            ),
-                            path(
-                                "<slug:pin_slug>/wikimedia/",
-                                pin.PinController.as_view({"get": "wikimedia_assets"}),
-                                name="pin.wikimedia",
                             ),
                             path(
                                 "<slug:pin_slug>/loopnet/",

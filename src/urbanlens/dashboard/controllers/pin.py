@@ -20,7 +20,6 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -42,13 +41,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WIKIMEDIA_CLIENT_PAGE_SIZE = 12
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
-_SMITHSONIAN_CLIENT_PAGE_SIZE = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
-_WIKIMEDIA_PAGE_SIZE = _WIKIMEDIA_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
-_SMITHSONIAN_PAGE_SIZE = _SMITHSONIAN_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -205,36 +200,53 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         return map_data
 
-    def get_smithsonian_images(self, request: HttpRequest, pin_slug):
+    def media_provider(self, request: HttpRequest, pin_slug: str, source: str):
         """
-        Returns the Smithsonian images for a pin.
-        """
-        # Get the pin
-        try:
-            pin: Pin = Pin.objects.get(slug=pin_slug)
-        except Pin.DoesNotExist:
-            return HttpResponse("Pin does not exist", status=404)
+        HTMX partial: captioned media items for the pin's location from a single provider.
 
-        search_name = pin.get_unique_search_name()
-        if not search_name:
+        Backs the combined "Media" section on the pin detail page. Each provider
+        (Smithsonian, Wikimedia Commons, Library of Congress, ...) is fetched via
+        its own HTMX request targeting the shared gallery grid (see
+        ``media-gallery-section`` in the pin detail template), so a slow
+        provider never blocks the others from appearing.
+        """
+        from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
+        from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
+        from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
+        from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
+        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
+
+        factories = {
+            "smithsonian": lambda: SmithsonianGateway(api_key=settings.smithsonian_api_key or ""),
+            "wikimedia": WikimediaGateway,
+            "loc": LOCJsonGateway,
+        }
+        factory = factories.get(source)
+        if factory is None:
+            return HttpResponse(status=404)
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
             return HttpResponse(status=204)
 
-        # Instantiate the SmithsonianGateway with the API key
-        smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
+        gateway = factory()
+        if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
+            return HttpResponse(status=204)
 
-        # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [img for img in smithsonian_gateway.get_data(search_name) if img.get("url")]
-        page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
+        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country)
+        if not search_term:
+            return HttpResponse(status=204)
 
-        return render(
-            request,
-            "dashboard/pages/location/smithsonian.html",
-            {
-                "images": page_obj.object_list,
-                "page_obj": page_obj,
-                "adaptive_pagination": True,
-            },
-        )
+        items = call_with_deadline(lambda: gateway.get_media(location, search_term), timeout=20, default=[])
+        if not items:
+            return HttpResponse(status=204)
+
+        return render(request, "dashboard/partials/pins/pin_media_items.html", {"items": items})
 
     def web_search(self, request: HttpRequest, pin_slug):
         """
@@ -395,7 +407,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/street_view.html",
-            {"slides": slides, "pin": pin, "google_maps_api_key": settings.google_unrestricted_api_key},
+            {"slides": slides, "pin": pin, "google_maps_api_key": settings.google_public_api_key},
         )
 
     @action(detail=True, methods=["get"])
@@ -568,6 +580,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -593,11 +606,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "street_number": location.street_number or "",
                 "administrative_area_level_1": location.administrative_area_level_1 or "",
             }
-            try:
-                article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
-            except Exception:
-                logger.exception("Wikipedia lookup failed for pin %s", pin_slug)
-                article = None
+            # Bounded to a hard wall-clock deadline: WikipediaGateway can chain up to
+            # five sequential candidate lookups, and requests' own timeout= only bounds
+            # inactivity between reads, not total call duration -- without this, a slow
+            # upstream can hold the request open far longer than any single timeout implies.
+            article = call_with_deadline(
+                lambda: WikipediaGateway().get_article_for_location(lat, lng, address_components),
+                timeout=20,
+                default=None,
+            )
             LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
             data = article
         else:
@@ -608,53 +625,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pins/pin_wikipedia.html", {"article": data})
-
-    def wikimedia_assets(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: Wikimedia Commons images for the pin's location name.
-
-        Skipped entirely when the pin has no meaningful name.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        if not pin.meaningful_official_name:
-            logger.debug("wikimedia_assets: pin %s has no meaningful official name, skipping", pin_slug)
-            return HttpResponse(status=204)
-
-        location = pin.location
-        if not location:
-            logger.debug("wikimedia_assets: pin %s has no location, skipping", pin_slug)
-            return HttpResponse(status=204)
-
-        query = pin.effective_official_name or ""
-        cached = LocationCache.get_fresh(location, "wikimedia")
-        if cached is None:
-            try:
-                images = WikimediaGateway().search_images(query)
-            except Exception:
-                logger.exception("Wikimedia search failed for pin %s", pin_slug)
-                images = []
-            LocationCache.set(location, "wikimedia", {"images": images}, query_key=query)
-            data = images
-        else:
-            data = (cached.data or {}).get("images", [])
-
-        if not data:
-            logger.debug("wikimedia_assets: no images found for pin %s (query=%r)", pin_slug, query)
-            return HttpResponse(status=204)
-
-        page_obj = get_page(request, data, _WIKIMEDIA_PAGE_SIZE)
-        return render(
-            request,
-            "dashboard/partials/pins/pin_wikimedia.html",
-            {"images": page_obj.object_list, "page_obj": page_obj, "query": query, "adaptive_pagination": True},
-        )
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
         """
@@ -769,6 +739,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -788,11 +759,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         cached = LocationCache.get_fresh(location, "nominatim")
         if cached is None:
-            try:
-                place = NominatimGateway().reverse_geocode(float(lat), float(lng))
-            except Exception:
-                logger.exception("Nominatim lookup failed for pin %s", pin_slug)
-                place = None
+            place = call_with_deadline(
+                lambda: NominatimGateway().reverse_geocode(float(lat), float(lng)),
+                timeout=20,
+                default=None,
+            )
             LocationCache.set(location, "nominatim", place or {}, query_key=f"{lat},{lng}")
             data = place
         else:
@@ -862,6 +833,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         204 for non-US locations or when no maps are found within the search area.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -879,11 +851,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         cached = LocationCache.get_fresh(location, "usgs_topo")
         if cached is None:
-            try:
-                result = UsgsGateway().historical_topo_maps_for_coordinates(float(lat), float(lng), delta=0.01)
-            except Exception:
-                logger.exception("USGS topo lookup failed for pin %s", pin_slug)
-                result = None
+            # Bounded to a hard wall-clock deadline: the TNM API's own response can
+            # trickle in slowly for large result sets, and requests' timeout= only
+            # bounds inactivity between reads, not the call's total duration.
+            result = call_with_deadline(
+                lambda: UsgsGateway().historical_topo_maps_for_coordinates(float(lat), float(lng), delta=0.01),
+                timeout=20,
+                default=None,
+            )
             LocationCache.set(location, "usgs_topo", result or {}, query_key=f"{float(lat):.4f},{float(lng):.4f}")
             data = result
         else:

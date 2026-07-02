@@ -1,21 +1,26 @@
-from dataclasses import dataclass, field
-from typing import ClassVar
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.cache import cache
-import requests
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @dataclass(slots=True, kw_only=True)
-class SmithsonianGateway(Gateway):
+class SmithsonianGateway(MediaProvider):
     """
     Gateway for the Smithsonian Open Access API.
     """
 
     service_key: ClassVar[str] = "smithsonian"
+    display_name: ClassVar[str] = "Smithsonian Open Access"
     paid_service: ClassVar[bool] = False
 
     api_key: str
@@ -64,3 +69,17 @@ class SmithsonianGateway(Gateway):
             }
             images.append(image_data)
         return images
+
+    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+        if not search_term:
+            return
+        for image in self.get_data(search_term):
+            url = image.get("url")
+            if not url:
+                continue
+            yield MediaItem(
+                url=url,
+                thumb_url=image.get("thumbnail") or url,
+                caption=image.get("title") or "",
+                source=self.display_name,
+            )

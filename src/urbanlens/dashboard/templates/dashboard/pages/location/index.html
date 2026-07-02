@@ -319,19 +319,38 @@
     {# removed at runtime when their HTMX request returns 204 - see the ────── #}
     {# htmx:afterOnLoad handler near the bottom of this file). ──────────────── #}
     <div class="pin-aux-grid">
-        <div id="smithsonian-section" class="smithsonian-images card card--secondary"
-            hx-get="{% url 'smithsonian_images' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
+        <div id="media-gallery-section" class="media-gallery card card--secondary" hidden>
             <div class="card-header">
                 <i class="material-icons">collections</i>
-                <h3>Smithsonian Archives</h3>
+                <h3>Media</h3>
             </div>
-            <div class="view-loading">
+            <div class="view-loading" id="media-gallery-loading">
                 <i class="material-icons spin">autorenew</i>
                 Loading…
             </div>
+            <div class="media-gallery-grid" id="media-gallery-grid"></div>
         </div>
+        <div class="media-provider-loader"
+            hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader"
+            hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader"
+            hx-get="{% url 'pin.media' pin.slug 'loc' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
 
         {% if pin.meaningful_name %}
         <div id="web-search-section" class="web-search card card--secondary"
@@ -352,7 +371,8 @@
         <div id="wikipedia-section"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
             hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-swap="outerHTML"
+            hx-timeout="25000">
             <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">menu_book</i>
@@ -365,7 +385,8 @@
         <div id="nominatim-section"
             hx-get="{% url 'pin.nominatim' pin.slug %}"
             hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-swap="outerHTML"
+            hx-timeout="25000">
             <div class="card card--secondary">
                 <div class="card-header">
                     <i class="material-icons">map</i>
@@ -387,21 +408,6 @@
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
         </div>
-
-        {% if pin.meaningful_name %}
-        <div id="wikimedia-section"
-            hx-get="{% url 'pin.wikimedia' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-icons">collections</i>
-                    <h3>Wikimedia Commons</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
-            </div>
-        </div>
-        {% endif %}
 
         <div id="loopnet-section"
             hx-get="{% url 'pin.loopnet' pin.slug %}"
@@ -2559,8 +2565,8 @@
     (function () {
         var _extSections = new Set([
             'wikipedia-section', 'nominatim-section', 'nps-section',
-            'wikimedia-section', 'loopnet-section', 'usgs-topo-section',
-            'web-search-section', 'smithsonian-section',
+            'loopnet-section', 'usgs-topo-section',
+            'web-search-section', 'loc-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
@@ -2597,6 +2603,61 @@
                 evt.stopImmediatePropagation();
                 el.remove();
             }
+        }, true);
+    }());
+
+    // ── Media gallery: combines Smithsonian / Wikimedia Commons / Library of ──
+    // Congress results as each provider's own HTMX request completes, so one
+    // slow provider never blocks the others from appearing. Each loader is a
+    // tiny hidden element that appends its results into the shared grid; once
+    // every loader has reported in, the section is removed if the grid is
+    // still empty (no provider found anything for this pin).
+    (function () {
+        var loaders = document.querySelectorAll('.media-provider-loader');
+        if (!loaders.length) return;
+        var pending = loaders.length;
+
+        function isMediaLoader(el) {
+            return !!(el && el.classList && el.classList.contains('media-provider-loader'));
+        }
+
+        function finishLoader(el) {
+            el.remove();
+            pending -= 1;
+            if (pending > 0) return;
+            var loading = document.getElementById('media-gallery-loading');
+            if (loading) loading.remove();
+            var grid = document.getElementById('media-gallery-grid');
+            var section = document.getElementById('media-gallery-section');
+            if (section && (!grid || !grid.children.length)) section.remove();
+        }
+
+        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isMediaLoader(el)) return;
+            if (evt.detail.xhr.status === 200) {
+                var section = document.getElementById('media-gallery-section');
+                if (section) section.hidden = false;
+            }
+            finishLoader(el);
+        });
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isMediaLoader(el)) return;
+            evt.stopImmediatePropagation();
+            finishLoader(el);
+        }, true);
+        document.body.addEventListener('htmx:sendError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isMediaLoader(el)) return;
+            evt.stopImmediatePropagation();
+            finishLoader(el);
+        }, true);
+        document.body.addEventListener('htmx:timeout', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isMediaLoader(el)) return;
+            evt.stopImmediatePropagation();
+            finishLoader(el);
         }, true);
     }());
 </script>

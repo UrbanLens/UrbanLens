@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.gateway import Gateway
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +21,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.man
 
 
 @dataclass(slots=True, kw_only=True)
-class WikimediaGateway(Gateway):
+class WikimediaGateway(MediaProvider):
     """
     Searches Wikimedia Commons for freely licensed images.
 
@@ -26,6 +30,7 @@ class WikimediaGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "wikimedia"
+    display_name: ClassVar[str] = "Wikimedia Commons"
     paid_service: ClassVar[bool] = False
 
     base_url: str = _API_URL
@@ -115,6 +120,21 @@ class WikimediaGateway(Gateway):
                 },
             )
         return results
+
+    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+        if not search_term:
+            return
+        for img in self.search_images(search_term):
+            url = img.get("url") or img.get("thumb")
+            if not url:
+                continue
+            yield MediaItem(
+                url=img.get("url") or img.get("thumb") or "",
+                thumb_url=img.get("thumb") or img.get("url") or "",
+                caption=img.get("description") or img.get("title") or "",
+                source=self.display_name,
+                page_url=img.get("description_url") or "",
+            )
 
 
 def _strip_html(text: str) -> str:

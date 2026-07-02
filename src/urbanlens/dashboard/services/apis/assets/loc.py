@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @dataclass(slots=True, kw_only=True)
-class LOCJsonGateway(Gateway):
+class LOCJsonGateway(MediaProvider):
     """Gateway for the Library of Congress JSON API.
 
     Docs: https://www.loc.gov/apis/json-and-yaml-apis/
@@ -15,7 +18,10 @@ class LOCJsonGateway(Gateway):
     """
 
     service_key: ClassVar[str] = "library_of_congress"
+    display_name: ClassVar[str] = "Library of Congress"
     paid_service: ClassVar[bool] = False
+    usa_only: ClassVar[bool] = True
+    search_with_country: ClassVar[bool] = False
 
     base_url: str = "https://www.loc.gov"
 
@@ -59,3 +65,18 @@ class LOCJsonGateway(Gateway):
                 },
             )
         return results
+
+    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+        if not search_term:
+            return
+        for item in self.search(search_term):
+            thumbnail = item.get("thumbnail")
+            if not thumbnail:
+                continue
+            yield MediaItem(
+                url=item.get("url") or thumbnail,
+                thumb_url=thumbnail,
+                caption=item.get("title") or "",
+                source=self.display_name,
+                page_url=item.get("url") or "",
+            )
