@@ -1,5 +1,11 @@
 <div class="loopnet-info card" id="loopnet-section"
      data-collapse-scope="pin" data-collapse-section="loopnet">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"></span>
+    {% endif %}
     <div class="card-header">
         <i class="material-icons">business_center</i>
         <h3>LoopNet Listings</h3>

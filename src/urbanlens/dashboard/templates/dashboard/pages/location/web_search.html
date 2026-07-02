@@ -1,5 +1,11 @@
 <div class="web-search card" id="web-search-section"
      data-collapse-scope="pin" data-collapse-section="web-search">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"></span>
+    {% endif %}
     <div class="card-header">
         <i class="material-icons">travel_explore</i>
         <h3>Web Results</h3>

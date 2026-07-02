@@ -32,7 +32,9 @@ class MediaItem:
 
     Attributes:
         url: Full-resolution image URL.
-        thumb_url: Thumbnail URL (falls back to ``url`` when the provider has none).
+        thumb_url: Thumbnail URL, or ``""`` when the provider has no preview
+            image for this item (e.g. a text/document record) - the frontend
+            renders a fallback icon tile in that case instead of dropping it.
         caption: Human-readable caption or title.
         source: Human-readable provider name (e.g. ``"Smithsonian Open Access"``).
         page_url: Link to the item's page on the provider's site, if any.
@@ -62,7 +64,7 @@ class MediaProvider(Gateway, ABC):
         """Yield MediaItems for ``search_term``. Implementations should not raise."""
         ...
 
-    def get_media(self, location: Location, search_term: str, *, limit: int = 24) -> list[MediaItem]:
+    def get_media(self, location: Location, search_term: str, *, limit: int = 24) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 
         Args:
@@ -71,13 +73,14 @@ class MediaProvider(Gateway, ABC):
             limit: Maximum number of items to return.
 
         Returns:
-            List of ``MediaItem``s, empty when the provider found nothing or failed.
+            Tuple of (list of ``MediaItem``s, empty when the provider found
+            nothing or failed; whether the result was served from cache).
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         cached = LocationCache.get_fresh(location, self.service_key)
         if cached is not None:
-            return [MediaItem(**item) for item in (cached.data or {}).get("items", [])]
+            return [MediaItem(**item) for item in (cached.data or {}).get("items", [])], True
 
         items: list[MediaItem] = []
         try:
@@ -95,4 +98,4 @@ class MediaProvider(Gateway, ABC):
             {"items": [asdict(item) for item in items]},
             query_key=search_term,
         )
-        return items
+        return items, False

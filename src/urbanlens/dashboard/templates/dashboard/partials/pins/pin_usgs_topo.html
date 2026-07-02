@@ -1,4 +1,10 @@
 <div id="usgs-topo-section" class="usgs-topo card card--secondary">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"></span>
+    {% endif %}
     <div class="card-header">
         <i class="material-icons">terrain</i>
         <h3>USGS Historical Topo Maps</h3>

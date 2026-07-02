@@ -1,5 +1,11 @@
 <div id="street-view-section" class="street-view card card--primary"
      data-collapse-scope="pin" data-collapse-section="street-view">
+    {% for entry in debug_entries %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ entry.source }}"
+          data-debug-query="{{ entry.query }}"
+          data-debug-cache="{{ entry.from_cache|yesno:'hit,miss' }}"></span>
+    {% endfor %}
     <div class="card-header">
         <i class="material-icons">streetview</i>
         <h3>Street View</h3>

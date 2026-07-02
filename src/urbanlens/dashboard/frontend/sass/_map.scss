@@ -138,10 +138,7 @@
 
 .map-overlay-btn {
     background: rgba(255, 255, 255, 0.93);
-
-    &--boundary {
-        color: var(--ul-grey-6);
-    }
+    color: var(--ul-grey-0);
 
     &--save {
         color: $color-green-600;

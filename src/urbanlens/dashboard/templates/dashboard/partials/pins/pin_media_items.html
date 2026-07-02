@@ -1,11 +1,23 @@
 {# Rendered per-provider and appended (hx-swap="beforeend") into #media-gallery-grid -- #}
 {# see the media-gallery-section loaders in dashboard/pages/location/index.html. #}
+{% if debug %}
+<span class="debug-marker" hidden
+      data-debug-source="{{ debug.source }}"
+      data-debug-query="{{ debug.query }}"
+      data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"></span>
+{% endif %}
 {% for item in items %}
 <a class="media-item" href="{{ item.page_url|default:item.url }}" target="_blank" rel="noopener noreferrer"
    title="{{ item.caption }}">
     <span class="media-item-source">{{ item.source }}</span>
-    <img class="media-item-thumb" src="{{ item.thumb_url|default:item.url }}" alt="{{ item.caption }}" loading="lazy"
-         onerror="this.closest('.media-item').style.display='none'">
+    {% if item.thumb_url %}
+    <img class="media-item-thumb" src="{{ item.thumb_url }}" alt="{{ item.caption }}" loading="lazy"
+         onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
+    {% else %}
+    <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">
+        <i class="material-icons">description</i>
+    </span>
+    {% endif %}
     {% if item.caption %}
     <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
     {% endif %}

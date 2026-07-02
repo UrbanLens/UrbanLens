@@ -1,18 +1,64 @@
 <div id="pin-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %} data-pin-version="{{ client_version }}">
 
-    {# ── Private-page notice ─────────────────────────────────────────────── #}
-    <div class="page-scope-notice page-scope-notice--private">
-        <i class="material-icons">lock</i>
-        <span>Your private pin - notes, photos, and visits here are only visible to you.</span>
-        {% if not pin.is_private and pin.location and pin.location.slug %}
-        <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="page-scope-notice-link">
-            Community wiki <i class="material-icons">open_in_new</i>
-        </a>
+    {# ── Title + community wiki box ───────────────────────────────────────── #}
+    <div class="pin-overview-title-row">
+        <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
+
+        {% if pin.is_private %}
+        <div class="pin-wiki-box pin-wiki-box--private">
+            <i class="material-icons">lock</i>
+            <span>Private pin - no community wiki entry.</span>
+        </div>
+        {% elif pin.location and pin.location.slug %}
+        <div class="pin-wiki-box" id="pin-location-section">
+            <i class="material-icons">public</i>
+            <div class="pin-wiki-box-info">
+                <span class="pin-wiki-box-label">Community Wiki</span>
+                <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
+                   data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
+                    {{ pin.location.name }}
+                    <i class="material-icons">open_in_new</i>
+                </a>
+            </div>
+            <div class="pin-wiki-box-actions">
+                {% if overlapping_location_count > 1 %}
+                <button type="button" class="btn pin-loc-change-btn"
+                        hx-get="{% url 'pin.link' pin.slug %}"
+                        hx-target="#pin-location-picker"
+                        hx-swap="innerHTML"
+                        data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
+                        title="Switch to a different shared location">
+                    <i class="material-icons">swap_horiz</i>
+                </button>
+                {% endif %}
+                <button type="button" class="btn pin-loc-detach-btn"
+                        hx-post="{% url 'pin.link' pin.slug %}"
+                        hx-target="#pin-overview"
+                        hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                        hx-confirm="Detach from this location? Your pin will get its own independent community wiki."
+                        data-tooltip="Unlink this pin from the shared location. Your pin will get its own private wiki page that only you can edit."
+                        title="Detach from this shared location">
+                    <i class="material-icons">link_off</i>
+                </button>
+            </div>
+            {# Picker panel drops down from here when "Change" is clicked #}
+            <div id="pin-location-picker"></div>
+        </div>
+        {% elif pin.effective_latitude %}
+        <div class="pin-wiki-box pin-wiki-box--unlinked">
+            <i class="material-icons">link_off</i>
+            <span>Not linked to a shared location.</span>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-get="{% url 'pin.link' pin.slug %}"
+                    hx-target="#pin-location-picker"
+                    hx-swap="innerHTML">
+                <i class="material-icons">search</i> Find
+            </button>
+            <div id="pin-location-picker"></div>
+        </div>
         {% endif %}
     </div>
-
-    {# ── Title ──────────────────────────────────────────────────────────── #}
-    <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
 
     {# ── Details card ───────────────────────────────────────────────────── #}
     <div class="pin-details location-details card"
@@ -89,64 +135,6 @@
                 {% if pin.locked != "unknown" %}<span class="security-chip security-chip--{{ pin.locked }}">Locked: {{ pin.get_locked_display }}</span>{% endif %}
             </div>
         </div>
-        {% endif %}
-
-        {% if pin.is_private %}
-        {# Private pins are intentionally unlinked from the community wiki. #}
-        <div class="pin-wiki-row pin-wiki-row--message">
-            <i class="material-icons">lock</i>
-            <span>Private pin - no community wiki entry.</span>
-        </div>
-        {% elif pin.location and pin.location.slug %}
-        <div class="pin-wiki-row" id="pin-location-section"
-             data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
-            <i class="material-icons">public</i>
-            <div class="pin-wiki-row-info">
-                <span class="pin-wiki-row-label">Community Wiki</span>
-                <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-row-link">
-                    {{ pin.location.name }}
-                    <i class="material-icons">open_in_new</i>
-                </a>
-            </div>
-            <div class="pin-wiki-row-actions">
-                {% if overlapping_location_count > 1 %}
-                <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
-                        hx-get="{% url 'pin.link' pin.slug %}"
-                        hx-target="#pin-location-picker"
-                        hx-swap="innerHTML"
-                        data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
-                        title="Switch to a different shared location">
-                    <i class="material-icons">swap_horiz</i>
-                    Change
-                </button>
-                {% endif %}
-                <button type="button" class="btn btn--ghost btn--sm pin-loc-detach-btn"
-                        hx-post="{% url 'pin.link' pin.slug %}"
-                        hx-target="#pin-overview"
-                        hx-swap="outerHTML"
-                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                        hx-confirm="Detach from this location? Your pin will get its own independent community wiki."
-                        data-tooltip="Unlink this pin from the shared location. Your pin will get its own private wiki page that only you can edit."
-                        title="Detach from this shared location">
-                    <i class="material-icons">link_off</i>
-                    Detach
-                </button>
-            </div>
-        </div>
-        {# Picker panel is loaded here when "Change" is clicked #}
-        <div id="pin-location-picker"></div>
-        {% elif pin.effective_latitude %}
-        <div class="pin-wiki-row pin-wiki-row--unlinked">
-            <i class="material-icons">link_off</i>
-            <span>Not linked to a shared location.</span>
-            <button type="button" class="btn btn--ghost btn--sm pin-loc-change-btn"
-                    hx-get="{% url 'pin.link' pin.slug %}"
-                    hx-target="#pin-location-picker"
-                    hx-swap="innerHTML">
-                <i class="material-icons">search</i> Find a location
-            </button>
-        </div>
-        <div id="pin-location-picker"></div>
         {% endif %}
     </div>
 </div>

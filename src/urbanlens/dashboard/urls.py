@@ -319,14 +319,14 @@ urlpatterns = [
                                 name="pin.nominatim",
                             ),
                             path(
-                                "<slug:pin_slug>/loc/",
-                                pin.PinController.as_view({"get": "loc_info"}),
-                                name="pin.loc",
-                            ),
-                            path(
                                 "<slug:pin_slug>/usgs-topo/",
                                 pin.PinController.as_view({"get": "usgs_topo_info"}),
                                 name="pin.usgs_topo",
+                            ),
+                            path(
+                                "<slug:pin_slug>/debug/clear-cache/",
+                                pin.PinController.as_view({"post": "clear_debug_cache"}),
+                                name="pin.debug.clear_cache",
                             ),
                             path(
                                 "<slug:pin_slug>/gallery/",

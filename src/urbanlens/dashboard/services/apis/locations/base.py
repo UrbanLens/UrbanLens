@@ -66,10 +66,10 @@ class SatelliteViewProvider(Gateway, ABC):
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]:
         ...
     
-    def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> list[SatelliteSlide]:
+    def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> tuple[list[SatelliteSlide], bool]:
         cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         if slides := cache.get(cache_key):
-            return slides
+            return slides, True
 
         slides = []
         for slide in self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height):
@@ -78,7 +78,7 @@ class SatelliteViewProvider(Gateway, ABC):
                 break
 
         cache.set(cache_key, slides, 24 * 3600)
-        return slides
+        return slides, False
 
 
 class StreetViewProvider(Gateway, ABC):
@@ -86,10 +86,10 @@ class StreetViewProvider(Gateway, ABC):
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         ...
 
-    def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> list[StreetViewSlide]:
+    def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> tuple[list[StreetViewSlide], bool]:
         cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         if slides := cache.get(cache_key):
-            return slides
+            return slides, True
 
         slides = []
         for slide in self._generate_street_view_slides(latitude, longitude, radius=radius):
@@ -97,7 +97,8 @@ class StreetViewProvider(Gateway, ABC):
             if limit > 0 and len(slides) >= limit:
                 break
 
-        return slides
+        cache.set(cache_key, slides, 24 * 3600)
+        return slides, False
 
 
 class BoundaryProvider(Service, ABC):

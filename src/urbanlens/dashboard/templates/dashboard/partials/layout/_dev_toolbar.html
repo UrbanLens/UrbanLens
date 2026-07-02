@@ -49,6 +49,22 @@
             <span class="dev-toolbar__tool-label">Refresh pin cache</span>
         </button>
         <button type="button"
+                class="dev-toolbar__tool"
+                id="dev-toolbar-toggle-debug-overlay"
+                title="Show/hide API debug info (search terms & cache status) for this pin"
+                aria-label="Toggle API debug info">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">bug_report</i>
+            <span class="dev-toolbar__tool-label">API debug info</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-clear-page-cache"
+                title="Clear cached external-API results shown on this page"
+                aria-label="Clear page API cache">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">layers_clear</i>
+            <span class="dev-toolbar__tool-label">Clear page API cache</span>
+        </button>
+        <button type="button"
                 class="dev-toolbar__tool dev-toolbar__tool--danger"
                 id="dev-toolbar-reset-onboarding"
                 title="Show onboarding tips and hints again"
@@ -578,6 +594,29 @@
                     pinCacheBtn.disabled = false;
                     pinCacheBtn.classList.remove('is-busy');
                 });
+        });
+    }
+
+    var debugToggleBtn = document.getElementById('dev-toolbar-toggle-debug-overlay');
+    if (debugToggleBtn) {
+        debugToggleBtn.addEventListener('click', function () {
+            if (typeof window.togglePinDebugOverlay !== 'function') {
+                if (window.toastr) toastr.warning('Open a pin detail page to use API debug info.');
+                return;
+            }
+            window.togglePinDebugOverlay();
+        });
+    }
+
+    var clearPageCacheBtn = document.getElementById('dev-toolbar-clear-page-cache');
+    if (clearPageCacheBtn) {
+        clearPageCacheBtn.addEventListener('click', function () {
+            if (typeof window.clearPinResultCache !== 'function') {
+                if (window.toastr) toastr.warning('Open a pin detail page to clear its API cache.');
+                return;
+            }
+            if (!window.confirm('Clear cached API results for this pin and reload?')) return;
+            window.clearPinResultCache();
         });
     }
 

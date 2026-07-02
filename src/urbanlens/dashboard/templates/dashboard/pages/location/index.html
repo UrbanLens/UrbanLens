@@ -9,6 +9,82 @@
 {% endblock %}
 
 {% block content %}
+{% if can_view_debug_overlay %}
+<div id="pin-debug-overlay" class="pin-debug-overlay" hidden>
+    <div class="pin-debug-overlay__header">
+        <i class="material-icons">bug_report</i>
+        <span>API Debug Info</span>
+        <button type="button" class="pin-debug-overlay__close" onclick="window.togglePinDebugOverlay()" aria-label="Close">
+            <i class="material-icons">close</i>
+        </button>
+    </div>
+    <div class="pin-debug-overlay__list" id="pin-debug-overlay-list"></div>
+</div>
+<script>
+(function () {
+    var overlay = document.getElementById('pin-debug-overlay');
+    var listEl = document.getElementById('pin-debug-overlay-list');
+    if (!overlay || !listEl) return;
+    var STORAGE_KEY = 'ul_pin_debug_overlay_visible';
+
+    function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function renderOverlay() {
+        var entries = Array.prototype.slice.call(document.querySelectorAll('[data-debug-source]'));
+        if (!entries.length) {
+            listEl.innerHTML = '<div class="pin-debug-overlay__empty">No external API results loaded yet.</div>';
+            return;
+        }
+        listEl.innerHTML = entries.map(function (el) {
+            var hit = el.dataset.debugCache === 'hit';
+            return '<div class="pin-debug-overlay__row">'
+                + '<span class="pin-debug-overlay__source">' + escapeHtml(el.dataset.debugSource || '') + '</span>'
+                + '<span class="pin-debug-overlay__query">' + escapeHtml(el.dataset.debugQuery || '(none)') + '</span>'
+                + '<span class="pin-debug-overlay__badge pin-debug-overlay__badge--' + (hit ? 'hit' : 'miss') + '">'
+                + (hit ? 'CACHE' : 'FRESH') + '</span>'
+                + '</div>';
+        }).join('');
+    }
+
+    function setVisible(visible) {
+        overlay.hidden = !visible;
+        try { sessionStorage.setItem(STORAGE_KEY, visible ? '1' : '0'); } catch (_) {}
+        if (visible) renderOverlay();
+    }
+
+    window.togglePinDebugOverlay = function () {
+        setVisible(overlay.hidden);
+    };
+
+    window.clearPinResultCache = function () {
+        fetch('{% url "pin.debug.clear_cache" pin.slug %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': window.csrftoken, 'HX-Request': 'true' },
+            credentials: 'same-origin',
+        }).then(function (resp) {
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            if (window.toastr) toastr.success('Page API cache cleared. Reloading...');
+            window.setTimeout(function () { window.location.reload(); }, 350);
+        }).catch(function (err) {
+            console.warn('[Pin debug] Clear cache failed:', err);
+            if (window.toastr) toastr.error('Could not clear page API cache.');
+        });
+    };
+
+    document.body.addEventListener('htmx:afterSwap', function () {
+        if (!overlay.hidden) renderOverlay();
+    });
+
+    try {
+        if (sessionStorage.getItem(STORAGE_KEY) === '1') setVisible(true);
+    } catch (_) {}
+}());
+</script>
+{% endif %}
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
@@ -62,7 +138,7 @@
             {# ── Bottom-left map controls ── #}
             <div class="map-bottom-controls">
                 <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
-                        data-tooltip="Draw or resize the boundary polygon for this location. Pins dropped inside this boundary are automatically linked to this wiki entry."
+                        data-tooltip="Change the boundary polygon for this location."
                         data-tooltip-pos="below">
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
@@ -435,21 +511,6 @@
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
-
-        {% if pin.meaningful_name %}
-        <div id="loc-section"
-            hx-get="{% url 'pin.loc' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-icons">account_balance</i>
-                    <h3>Library of Congress</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-            </div>
-        </div>
-        {% endif %}
     </div>{# end .pin-aux-grid #}
 
     {# ── Comments: always present ───────────────────────────────────────── #}
@@ -2449,6 +2510,7 @@
 
         function measureVisiblePageSize(card, list, items) {
             if (!items.length) return 1;
+            var minPageSize = parseInt(list.dataset.adaptivePaginationMinPageSize || '1', 10) || 1;
 
             var previousMaxHeight = list.style.maxHeight;
             var previousOverflow = list.style.overflow;
@@ -2478,7 +2540,7 @@
             list.style.maxHeight = previousMaxHeight;
             list.style.overflow = previousOverflow;
             if (controls) controls.hidden = false;
-            return Math.max(1, shown);
+            return Math.max(minPageSize, shown);
         }
 
         function renderControls(card, controls, page, pageSize, totalItems) {
@@ -2566,7 +2628,7 @@
         var _extSections = new Set([
             'wikipedia-section', 'nominatim-section', 'nps-section',
             'loopnet-section', 'usgs-topo-section',
-            'web-search-section', 'loc-section',
+            'web-search-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
@@ -2605,6 +2667,17 @@
             }
         }, true);
     }());
+
+    // Swap a broken/missing media thumbnail <img> for an icon tile instead of
+    // hiding the whole card - keeps text-only records (e.g. LOC book/survey
+    // entries with no preview image) visible rather than dropping them.
+    window.urbanlensMediaThumbFallback = function (img, icon) {
+        var span = document.createElement('span');
+        span.className = 'media-item-thumb media-item-thumb-fallback';
+        span.setAttribute('aria-hidden', 'true');
+        span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
+        img.replaceWith(span);
+    };
 
     // ── Media gallery: combines Smithsonian / Wikimedia Commons / Library of ──
     // Congress results as each provider's own HTMX request completes, so one

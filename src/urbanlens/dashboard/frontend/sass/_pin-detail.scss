@@ -1286,27 +1286,32 @@ body.page-location-details {
     }
 }
 
-// ── Community wiki row ──────────────────────────────────────────────────────────
-// A single compact row appended to the bottom of the Details card (not its own
-// .card) - it's metadata about the pin, not a first-class page section.
+// ── Community wiki box ────────────────────────────────────────────────────────
+// A floating info box that sits in the title row, to the right of the pin's
+// name - it's metadata about the pin (link + detach action), not a first-class
+// page section, so it stays out of the Details card entirely.
 
-.pin-wiki-row {
+.pin-wiki-box {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: .65rem;
-    padding: .65rem 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    gap: .6rem;
+    padding: .55rem .85rem;
+    @include surface($radius-md);
+    box-shadow: var(--ul-shadow-md);
+    font-size: .85rem;
+    max-width: 100%;
 
     > .material-icons {
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         color: $color-indigo-500;
         flex-shrink: 0;
     }
 
-    &--message,
+    &--private,
     &--unlinked {
         color: var(--ul-grey-6);
-        font-size: .84rem;
+        font-size: .82rem;
 
         > .material-icons {
             font-size: 1.05rem;
@@ -1314,31 +1319,28 @@ body.page-location-details {
         }
 
         > span {
-            flex: 1;
             min-width: 0;
         }
     }
 }
 
-.pin-wiki-row-info {
-    flex: 1;
-    min-width: 0;
+.pin-wiki-box-info {
     display: flex;
-    align-items: baseline;
-    gap: .5rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+    line-height: 1.2;
 }
 
-.pin-wiki-row-label {
-    font-size: .68rem;
+.pin-wiki-box-label {
+    font-size: .64rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--ul-grey-4);
-    flex-shrink: 0;
 }
 
-.pin-wiki-row-link {
+.pin-wiki-box-link {
     font-size: .88rem;
     font-weight: 600;
     color: $color-blue-800;
@@ -1347,6 +1349,7 @@ body.page-location-details {
     align-items: center;
     gap: .25rem;
     min-width: 0;
+    max-width: 240px;
     @include truncate;
 
     .material-icons {
@@ -1360,36 +1363,65 @@ body.page-location-details {
     }
 }
 
-.pin-wiki-row-actions {
+.pin-wiki-box-actions {
     display: flex;
     align-items: center;
-    gap: .35rem;
+    gap: .2rem;
     flex-shrink: 0;
+    padding-left: .5rem;
+    border-left: 1px solid var(--ul-grey-1a);
 }
 
-.pin-loc-change-btn {
-    font-size: .75rem;
-    padding: .2rem .5rem;
-}
-
+.pin-loc-change-btn,
 .pin-loc-detach-btn {
-    font-size: .75rem;
-    padding: .2rem .5rem;
-    color: $color-red-600;
-    border-color: $color-red-300;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ul-grey-6);
 
-    &:hover {
-        background: var(--ul-grey-0);
-        border-color: $color-red-600;
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover,
+    &:focus {
+        box-shadow: none;
+        background: var(--ul-grey-0a);
+        color: var(--ul-grey-8);
     }
 }
 
-// ── Location picker panel (inline in pin overview) ────────────────────────────
+.pin-loc-detach-btn {
+    color: $color-red-600;
+
+    &:hover,
+    &:focus {
+        background: rgba($color-red-600, .1);
+        color: $color-red-600;
+    }
+}
+
+// ── Location picker panel ──────────────────────────────────────────────────────
+// Drops down from the wiki box like a menu (anchored via .pin-wiki-box's
+// position:relative) rather than living inline in the Details card.
 
 .pin-loc-picker {
-    border-top: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
-    border-radius: 0 0 10px 10px;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, 90vw);
+    background: var(--ul-grey-1b);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    box-shadow: var(--ul-shadow-lg);
+    z-index: 30;
+    overflow: hidden;
 }
 
 .pin-loc-picker-header {
@@ -1648,22 +1680,24 @@ body.page-location-details {
         background: rgba(255, 255, 255, .08);
     }
 
-    .pin-wiki-row-link {
+    .pin-wiki-box-link {
         color: $color-blue-300;
     }
 
     .pin-loc-change-btn {
-        color: var(--ul-grey-8);
-        border-color: var(--ul-grey-1a);
+        &:hover,
+        &:focus {
+            color: var(--ul-grey-8);
+        }
     }
 
     .pin-loc-detach-btn {
         color: $color-red-400;
-        border-color: rgba($color-red-400, .3);
 
-        &:hover {
-            background: rgba(220, 38, 38, .1);
-            border-color: $color-red-400;
+        &:hover,
+        &:focus {
+            background: rgba(220, 38, 38, .15);
+            color: $color-red-400;
         }
     }
 
@@ -1933,6 +1967,17 @@ body.page-location-details .pin-detail-grid {
             background: linear-gradient(145deg, var(--ul-grey-1, #f1f5f9) 0%, var(--ul-grey-0, #fff) 100%);
         }
 
+        .media-item-thumb-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ul-grey-4, #94a3b8);
+
+            .material-icons {
+                font-size: 2rem;
+            }
+        }
+
         .media-item-caption {
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -2191,4 +2236,113 @@ body.page-location-details .pin-detail-grid {
     > .card {
         align-self: stretch;
     }
+}
+
+// Admin-only floating panel (toggled via the Dev Tools toolbar) listing the
+// search term/coordinates and cache status behind every external-API result
+// currently loaded on the pin detail page.
+.pin-debug-overlay {
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    z-index: 10040;
+    width: min(24rem, calc(100vw - 2rem));
+    max-height: min(28rem, calc(100vh - 6rem));
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-9);
+    box-shadow: var(--ul-shadow-lg);
+    font-family: 'Roboto Mono', 'Consolas', monospace;
+    font-size: 0.75rem;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.pin-debug-overlay__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    font-family: var(--ul-font-family, sans-serif);
+    font-weight: 600;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    .pin-debug-overlay__close {
+        margin-left: auto;
+        display: inline-flex;
+        border: none;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+        padding: 0.125rem;
+        line-height: 0;
+
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
+}
+
+.pin-debug-overlay__list {
+    overflow-y: auto;
+    padding: 0.375rem 0;
+}
+
+.pin-debug-overlay__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+
+    &:hover {
+        background: var(--ul-grey-1a);
+    }
+}
+
+.pin-debug-overlay__source {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pin-debug-overlay__query {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+.pin-debug-overlay__badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 999px;
+    white-space: nowrap;
+
+    &--hit {
+        color: #43a047;
+        background: rgba(67, 160, 71, 0.15);
+    }
+
+    &--miss {
+        color: #fb8c00;
+        background: rgba(251, 140, 0, 0.15);
+    }
+}
+
+.pin-debug-overlay__empty {
+    padding: 0.5rem 0.75rem;
+    opacity: 0.7;
+    font-family: var(--ul-font-family, sans-serif);
 }

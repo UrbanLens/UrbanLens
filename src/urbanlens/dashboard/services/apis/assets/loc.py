@@ -70,13 +70,17 @@ class LOCJsonGateway(MediaProvider):
         if not search_term:
             return
         for item in self.search(search_term):
-            thumbnail = item.get("thumbnail")
-            if not thumbnail:
+            url = item.get("url") or ""
+            if not url:
                 continue
+            # Many LOC records (books, HABS/HAER surveys, ...) have no preview
+            # image at all - still yield them with an empty thumb_url rather
+            # than dropping them, so they show up as a fallback tile in the
+            # Media gallery instead of disappearing entirely.
             yield MediaItem(
-                url=item.get("url") or thumbnail,
-                thumb_url=thumbnail,
+                url=url,
+                thumb_url=item.get("thumbnail") or "",
                 caption=item.get("title") or "",
                 source=self.display_name,
-                page_url=item.get("url") or "",
+                page_url=url,
             )
