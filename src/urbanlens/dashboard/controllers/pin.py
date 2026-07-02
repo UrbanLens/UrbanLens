@@ -263,15 +263,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not search_term:
             return HttpResponse(status=204)
 
+        # Some search engines (e.g. Wikimedia Commons) return nothing for an
+        # overly specific query like a full street address, but do match a
+        # broader name + city/state query -- give those providers a second,
+        # narrower candidate to widen recall (see MediaProvider.get_media).
+        search_terms = [search_term]
+        if gateway.multi_query:
+            narrow_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=False)
+            if narrow_term and narrow_term not in search_terms:
+                search_terms.append(narrow_term)
+
         items, from_cache = call_with_deadline(
-            lambda: gateway.get_media(location, search_term),
+            lambda: gateway.get_media(location, search_terms),
             timeout=20,
             default=([], False),
         )
         if not items:
             return HttpResponse(status=204)
 
-        context = {"items": items, "debug": self._debug_entry(request, source, search_term, from_cache=from_cache)}
+        debug_query = " | ".join(search_terms)
+        context = {"items": items, "debug": self._debug_entry(request, source, debug_query, from_cache=from_cache)}
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 
     def web_search(self, request: HttpRequest, pin_slug):

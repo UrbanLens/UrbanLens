@@ -70,7 +70,7 @@ class SmithsonianGateway(MediaProvider):
             images.append(image_data)
         return images
 
-    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         if not search_term:
             return
         for image in self.get_data(search_term):

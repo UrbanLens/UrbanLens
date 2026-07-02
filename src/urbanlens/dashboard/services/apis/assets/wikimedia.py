@@ -32,6 +32,7 @@ class WikimediaGateway(MediaProvider):
     service_key: ClassVar[str] = "wikimedia"
     display_name: ClassVar[str] = "Wikimedia Commons"
     paid_service: ClassVar[bool] = False
+    multi_query: ClassVar[bool] = True
 
     base_url: str = _API_URL
 
@@ -121,7 +122,7 @@ class WikimediaGateway(MediaProvider):
             )
         return results
 
-    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         if not search_term:
             return
         for img in self.search_images(search_term):

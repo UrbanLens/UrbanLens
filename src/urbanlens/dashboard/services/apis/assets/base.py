@@ -59,18 +59,35 @@ class MediaProvider(Gateway, ABC):
     usa_only: ClassVar[bool] = False
     search_with_country: ClassVar[bool] = True
     quote_name: ClassVar[bool] = False
+    multi_query: ClassVar[bool] = False
 
     @abstractmethod
-    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
-        """Yield MediaItems for ``search_term``. Implementations should not raise."""
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
+        """Yield MediaItems for ``search_term``.
+
+        Args:
+            search_term: The search term to use to find media.
+            address: The address of the location, if any. Some media providers
+                may use this, or quote it, differently than others.
+
+        Returns:
+            Generator of ``MediaItem``s.
+        """
         ...
 
-    def get_media(self, location: Location, search_term: str, *, limit: int = 24) -> tuple[list[MediaItem], bool]:
+    def get_media(self, location: Location, search_terms: list[str], *, address: str | None = None, limit: int = 24) -> tuple[list[MediaItem], bool]:
         """Return captioned media for ``location``, using the 7-day LocationCache.
 
         Args:
             location: The shared Location to cache results against.
-            search_term: Human-readable query passed to ``_generate_media``.
+            search_terms: Ordered queries passed to ``_generate_media``, most
+                specific first. Every term is tried and results are merged
+                (deduped by URL) up to ``limit`` -- some search engines return
+                nothing for an overly specific query (e.g. a full street
+                address) but do match a broader one, so a single provider may
+                be given more than one candidate query to widen recall.
+            address: The address of the location, if any. Some media providers
+                may use this, or quote it, differently than others.
             limit: Maximum number of items to return.
 
         Returns:
@@ -84,19 +101,26 @@ class MediaProvider(Gateway, ABC):
             return [MediaItem(**item) for item in (cached.data or {}).get("items", [])], True
 
         items: list[MediaItem] = []
-        try:
-            for item in self._generate_media(search_term):
-                items.append(item)
-                if limit > 0 and len(items) >= limit:
-                    break
-        except Exception:
-            logger.exception("%s media lookup failed for %r", self.service_key, search_term)
-            items = []
+        seen_urls: set[str] = set()
+        for search_term in search_terms:
+            if not search_term or (limit > 0 and len(items) >= limit):
+                continue
+            try:
+                for item in self._generate_media(search_term, address):
+                    if item.url in seen_urls:
+                        continue
+                    seen_urls.add(item.url)
+                    items.append(item)
+                    if limit > 0 and len(items) >= limit:
+                        break
+            except Exception:
+                # TODO: Catch specific exceptions
+                logger.exception("%s media lookup failed for %r", self.service_key, search_term)
 
         LocationCache.set(
             location,
             self.service_key,
             {"items": [asdict(item) for item in items]},
-            query_key=search_term,
+            query_key=" | ".join(term for term in search_terms if term),
         )
         return items, False

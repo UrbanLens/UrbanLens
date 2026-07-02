@@ -22,7 +22,11 @@ class LOCJsonGateway(MediaProvider):
     paid_service: ClassVar[bool] = False
     usa_only: ClassVar[bool] = True
     search_with_country: ClassVar[bool] = False
-    quote_name: ClassVar[bool] = True
+    # NOTE: quoting the name (quote_name=True) was tried and reverted -- LOC's
+    # /search/ endpoint returned wildly unrelated results (e.g. out-of-state
+    # newspaper archives) once the name was wrapped in quotes, likely because
+    # its query parser doesn't handle a quoted phrase containing punctuation
+    # (apostrophes, periods) the way a phrase-search operator normally would.
 
     base_url: str = "https://www.loc.gov"
 
@@ -67,7 +71,7 @@ class LOCJsonGateway(MediaProvider):
             )
         return results
 
-    def _generate_media(self, search_term: str) -> Generator[MediaItem]:
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         if not search_term:
             return
         for item in self.search(search_term):

@@ -177,7 +177,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             return self.location.address
         return f"{self.effective_latitude}, {self.effective_longitude}"
     
-    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False) -> str | None:
+    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True) -> str | None:
         """Name to use when searching for this location in external APIs.
 
         Address components fall back to the linked Location's geocoded address
@@ -187,6 +187,10 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         Args:
             include_country: Whether to append the country to the query.
             quote_name: Whether to wrap the name in quotes for an exact-phrase search.
+            include_address: Whether to include the street address. Some search
+                engines (e.g. Wikimedia Commons) return nothing for a full
+                street address but do match on name + city/state -- callers
+                needing a narrower fallback query should pass False here.
         """
         name = self.meaningful_official_name or self.meaningful_name
         if not name:
@@ -199,7 +203,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         country = self.country or (self.location.country if self.location else None)
 
         parts = [f'"{name}"' if quote_name else name]
-        if address_basic and address_basic != name:
+        if include_address and address_basic and address_basic != name:
             parts.append(address_basic)
 
         if city:
