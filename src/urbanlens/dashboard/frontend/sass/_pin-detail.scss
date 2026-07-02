@@ -2246,13 +2246,13 @@ body.page-location-details .pin-detail-grid {
     top: 4.5rem;
     right: 1rem;
     z-index: 10040;
-    width: min(24rem, calc(100vw - 2rem));
+    min-width: min(24rem, calc(100vw - 2rem));
     max-height: min(28rem, calc(100vh - 6rem));
     display: flex;
     flex-direction: column;
     border-radius: 10px;
     border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-9);
+    background: var(--ul-grey-0);
     box-shadow: var(--ul-shadow-lg);
     font-family: 'Roboto Mono', 'Consolas', monospace;
     font-size: 0.75rem;

@@ -285,7 +285,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        search_name = pin.get_unique_search_name()
+        search_name = pin.get_unique_search_name(quote_name=True)
         if not search_name:
             return HttpResponse("", status=204)
 
@@ -318,7 +318,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         try:
             search_gateway = get_search_gateway()
-            if query := pin.get_unique_search_name():
+            if query := pin.get_unique_search_name(quote_name=True):
                 search_results = search_gateway.search(query)
             else:
                 return render(

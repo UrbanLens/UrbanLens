@@ -22,6 +22,8 @@ DEFAULT_BBOX_DEGREES = 0.00045
 BOUNDARY_LOOKUP_BBOX_DEGREES = 0.001
 MAX_DEFAULT_BOUNDARY_AREA_DEGREES = 0.02
 
+_CACHE_MISS = object()
+
 
 @dataclass(frozen=True)
 class SatelliteSlide:
@@ -68,8 +70,9 @@ class SatelliteViewProvider(Gateway, ABC):
     
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> tuple[list[SatelliteSlide], bool]:
         cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
-        if slides := cache.get(cache_key):
-            return slides, True
+        cached = cache.get(cache_key, _CACHE_MISS)
+        if cached is not _CACHE_MISS:
+            return cached, True
 
         slides = []
         for slide in self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height):
@@ -88,8 +91,9 @@ class StreetViewProvider(Gateway, ABC):
 
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> tuple[list[StreetViewSlide], bool]:
         cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
-        if slides := cache.get(cache_key):
-            return slides, True
+        cached = cache.get(cache_key, _CACHE_MISS)
+        if cached is not _CACHE_MISS:
+            return cached, True
 
         slides = []
         for slide in self._generate_street_view_slides(latitude, longitude, radius=radius):

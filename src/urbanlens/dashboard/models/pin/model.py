@@ -177,24 +177,39 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             return self.location.address
         return f"{self.effective_latitude}, {self.effective_longitude}"
     
-    def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
-        """Name to use when searching for this location in external APIs."""
+    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False) -> str | None:
+        """Name to use when searching for this location in external APIs.
+
+        Address components fall back to the linked Location's geocoded address
+        when the pin has none of its own, since a Location-linked pin's own
+        address fields are typically blank (see ``effective_latitude``).
+
+        Args:
+            include_country: Whether to append the country to the query.
+            quote_name: Whether to wrap the name in quotes for an exact-phrase search.
+        """
         name = self.meaningful_official_name or self.meaningful_name
         if not name:
             return None
-        
-        parts = [name]
-        if self.address_basic and self.address_basic != name:
-            parts.append(self.address_basic)
 
-        if self.city:
-            parts.append(self.city)
-        elif self.county:
-            parts.append(self.county)
-        if self.state:
-            parts.append(self.state)
-        if include_country and self.country:
-            parts.append(self.country)
+        address_basic = self.address_basic or (self.location.address_basic if self.location else None)
+        city = self.city or (self.location.city if self.location else None)
+        county = self.county or (self.location.county if self.location else None)
+        state = self.state or (self.location.state if self.location else None)
+        country = self.country or (self.location.country if self.location else None)
+
+        parts = [f'"{name}"' if quote_name else name]
+        if address_basic and address_basic != name:
+            parts.append(address_basic)
+
+        if city:
+            parts.append(city)
+        elif county:
+            parts.append(county)
+        if state:
+            parts.append(state)
+        if include_country and country:
+            parts.append(country)
         return " ".join(parts)
     
     @property
