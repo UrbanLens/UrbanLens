@@ -10,7 +10,7 @@ from typing import Any, ClassVar, Literal, Protocol
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
 import requests
 
-from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _best_polygon_from_geometry, _is_reasonable_default
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _polygon_from_ring(coords: list[tuple[float, float]]) -> Polygon | None:
         return None
     if not geom.valid:
         geom = geom.buffer(0)
-    return _best_polygon_from_geometry(geom)
+    return best_polygon_from_geometry(geom)
 
 
 def _coords_from_geometry(geometry: list) -> list[tuple[float, float]]:

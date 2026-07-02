@@ -243,10 +243,10 @@ def _polygon_from_feature(feature: dict) -> Polygon | None:
         geom = GEOSGeometry(json.dumps(geometry), srid=4326)
     except (TypeError, ValueError):
         return None
-    return _best_polygon_from_geometry(geom)
+    return best_polygon_from_geometry(geom)
 
 
-def _best_polygon_from_geometry(geom: GEOSGeometry) -> Polygon | None:
+def best_polygon_from_geometry(geom: GEOSGeometry) -> Polygon | None:
     if geom.empty:
         return None
     if not geom.valid:
