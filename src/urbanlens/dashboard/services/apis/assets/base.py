@@ -58,6 +58,7 @@ class MediaProvider(Gateway, ABC):
     display_name: ClassVar[str] = "Media"
     usa_only: ClassVar[bool] = False
     search_with_country: ClassVar[bool] = True
+    quote_name: ClassVar[bool] = False
 
     @abstractmethod
     def _generate_media(self, search_term: str) -> Generator[MediaItem]:

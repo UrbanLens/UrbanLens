@@ -259,7 +259,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
             return HttpResponse(status=204)
 
-        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country)
+        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name)
         if not search_term:
             return HttpResponse(status=204)
 
@@ -653,15 +653,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikipedia_info: pin %s has no coordinates, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        query_key = location.official_name or ""
+        address_components = {
+            "locality": location.locality or "",
+            "route": location.route or "",
+            "street_number": location.street_number or "",
+            "administrative_area_level_1": location.administrative_area_level_1 or "",
+        }
+        query_key = ", ".join(filter(None, [location.official_name, location.route, location.locality, location.administrative_area_level_1])) or f"{lat:.5f}, {lng:.5f}"
         cached = LocationCache.get_fresh(location, "wikipedia")
         if cached is None:
-            address_components = {
-                "locality": location.locality or "",
-                "route": location.route or "",
-                "street_number": location.street_number or "",
-                "administrative_area_level_1": location.administrative_area_level_1 or "",
-            }
             # Bounded to a hard wall-clock deadline: WikipediaGateway can chain up to
             # five sequential candidate lookups, and requests' own timeout= only bounds
             # inactivity between reads, not total call duration -- without this, a slow
@@ -768,6 +768,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s missing lat/lng or state_code, skipping", pin_slug)
             return HttpResponse(status=204)
 
+        location_name = pin.effective_official_name or ""
+        query_key = f"{location_name} ({state_code})" if location_name else state_code
+
         cached = LocationCache.get_fresh(location, "nps")
         if cached is None:
             try:
@@ -775,12 +778,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     float(lat),
                     float(lng),
                     state_code=state_code,
-                    location_name=pin.effective_official_name or "",
+                    location_name=location_name,
                 )
             except Exception:
                 logger.exception("NPS lookup failed for pin %s", pin_slug)
                 park = None
-            LocationCache.set(location, "nps", park or {}, query_key=state_code)
+            LocationCache.set(location, "nps", park or {}, query_key=query_key)
             data = park
         else:
             data = cached.data or None
@@ -789,7 +792,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
             return HttpResponse(status=204)
 
-        context = {"park": data, "debug": self._debug_entry(request, "nps", state_code, from_cache=cached is not None)}
+        context = {"park": data, "debug": self._debug_entry(request, "nps", query_key, from_cache=cached is not None)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):

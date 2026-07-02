@@ -18,6 +18,9 @@
             <i class="material-icons">close</i>
         </button>
     </div>
+    {% if pin.effective_official_name %}
+    <div class="pin-debug-overlay__meta">Official name: {{ pin.effective_official_name }}</div>
+    {% endif %}
     <div class="pin-debug-overlay__list" id="pin-debug-overlay-list"></div>
 </div>
 <script>
@@ -2689,9 +2692,38 @@
         var loaders = document.querySelectorAll('.media-provider-loader');
         if (!loaders.length) return;
         var pending = loaders.length;
+        var MEDIA_PAGE_SIZE = 12;
 
         function isMediaLoader(el) {
             return !!(el && el.classList && el.classList.contains('media-provider-loader'));
+        }
+
+        // Every provider's results are already in the DOM at this point (fetched,
+        // not paginated server-side) - this just reveals them a page at a time so
+        // the grid doesn't render 50+ tiles in one unbroken wall.
+        function paginateMediaGallery(grid) {
+            var items = Array.prototype.slice.call(grid.querySelectorAll('.media-item'));
+            if (items.length <= MEDIA_PAGE_SIZE) return;
+
+            var shown = 0;
+            var moreBtn = document.createElement('button');
+            moreBtn.type = 'button';
+            moreBtn.className = 'btn btn--ghost media-gallery-more';
+            grid.insertAdjacentElement('afterend', moreBtn);
+
+            function showNextPage() {
+                items.slice(shown, shown + MEDIA_PAGE_SIZE).forEach(function (item) { item.hidden = false; });
+                shown += MEDIA_PAGE_SIZE;
+                if (shown >= items.length) {
+                    moreBtn.remove();
+                    return;
+                }
+                moreBtn.textContent = 'Show more (' + (items.length - shown) + ' remaining)';
+            }
+
+            items.forEach(function (item) { item.hidden = true; });
+            moreBtn.addEventListener('click', showNextPage);
+            showNextPage();
         }
 
         function finishLoader(el) {
@@ -2702,7 +2734,11 @@
             if (loading) loading.remove();
             var grid = document.getElementById('media-gallery-grid');
             var section = document.getElementById('media-gallery-section');
-            if (section && (!grid || !grid.children.length)) section.remove();
+            if (!grid || !grid.children.length) {
+                if (section) section.remove();
+                return;
+            }
+            paginateMediaGallery(grid);
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {

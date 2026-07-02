@@ -22,6 +22,7 @@ class LOCJsonGateway(MediaProvider):
     paid_service: ClassVar[bool] = False
     usa_only: ClassVar[bool] = True
     search_with_country: ClassVar[bool] = False
+    quote_name: ClassVar[bool] = True
 
     base_url: str = "https://www.loc.gov"
 
