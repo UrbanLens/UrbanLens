@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
@@ -13,7 +12,7 @@ from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.gateway import Gateway
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterable
 
 BBox = tuple[float, float, float, float]
 
