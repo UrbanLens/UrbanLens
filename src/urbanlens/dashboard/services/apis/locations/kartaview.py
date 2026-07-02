@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.rate_limiter import ServiceDisabledError
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -94,6 +95,9 @@ class KartaViewGateway(StreetViewProvider):
         """
         try:
             data = self.search_sequences_near_coordinates(latitude, longitude, radius=radius, items_per_page=limit)
+        except ServiceDisabledError:
+            logger.debug("KartaView service is disabled")
+            return
         except Exception as exc:
             # TODO: Catch specific exception
             logger.warning("KartaView search failed for %s, %s: %s", latitude, longitude, exc)
