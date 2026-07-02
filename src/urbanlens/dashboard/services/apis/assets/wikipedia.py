@@ -16,6 +16,18 @@ _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
+# The REST summary endpoint (`_fetch_summary`) truncates well below the
+# article's actual lead section - e.g. it returns ~550 characters for
+# "Cincinnati" while the full lead section is ~2000. When a summary comes
+# back shorter than this, it's worth a couple more requests to give the
+# frontend enough text to fill whatever space its card ends up with (see
+# the client-side clamp in dashboard/pages/location/index.html).
+_SHORT_EXTRACT_CHARS = 400
+# MediaWiki's TextExtracts prop hard-caps `exchars` at 1200 regardless of the
+# value requested - used as a last-resort fallback to pull a bit of body text
+# for genuine stub articles whose lead section alone is still short.
+_EXCHARS_LIMIT = 1200
+
 
 @dataclass(slots=True, kw_only=True)
 class WikipediaGateway(Gateway):
@@ -124,10 +136,63 @@ class WikipediaGateway(Gateway):
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
             if summary and self._address_matches(summary, address_components, name):
-                return self._normalise(summary)
+                article = self._normalise(summary)
+                self._fill_short_extract(article, candidate["title"])
+                return article
         return None
 
     # ── private ────────────────────────────────────────────────────────────────
+
+    def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
+        """Mutate ``article["extract"]`` in place with more text when it's short.
+
+        Tries progressively broader (and more expensive) sources: first the
+        article's full lead section (uncapped, but naturally bounded - see
+        ``_SHORT_EXTRACT_CHARS``), then a capped slice starting from the top
+        of the whole article if the lead itself is still short (a genuine stub).
+        Each step only runs if the previous one didn't produce enough text.
+        """
+        if len(article["extract"]) >= _SHORT_EXTRACT_CHARS:
+            return
+        if (intro := self._fetch_extract(title, intro_only=True)) and len(intro) > len(article["extract"]):
+            article["extract"] = intro
+        if len(article["extract"]) >= _SHORT_EXTRACT_CHARS:
+            return
+        if (extended := self._fetch_extract(title, intro_only=False)) and len(extended) > len(article["extract"]):
+            article["extract"] = extended
+
+    def _fetch_extract(self, title: str, *, intro_only: bool) -> str | None:
+        """Fetch a plain-text extract via the action API's TextExtracts prop.
+
+        Args:
+            title: Article title.
+            intro_only: When True, return the full lead section (see the
+                module docstring on ``_SHORT_EXTRACT_CHARS`` for why this is
+                already more than ``_fetch_summary`` provides). When False,
+                return up to ``_EXCHARS_LIMIT`` characters starting from the
+                top of the whole article, for stubs with a short lead too.
+        """
+        params: dict[str, str | int] = {
+            "action": "query",
+            "prop": "extracts",
+            "titles": title,
+            "explaintext": 1,
+            "format": "json",
+        }
+        if intro_only:
+            params["exintro"] = 1
+        else:
+            params["exchars"] = _EXCHARS_LIMIT
+        try:
+            resp = self.session.get(self.base_url, params=params, timeout=10)
+            resp.raise_for_status()
+            pages = resp.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                if extract := (page.get("extract") or "").strip():
+                    return extract
+        except Exception:
+            logger.warning("Wikipedia extract fetch failed for %r (intro_only=%s)", title, intro_only)
+        return None
 
     def _geo_search(self, lat: float, lng: float) -> list[dict]:
         """Return up to _MAX_CANDIDATES article stubs near the coordinates."""

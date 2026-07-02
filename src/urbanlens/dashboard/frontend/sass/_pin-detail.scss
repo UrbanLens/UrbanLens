@@ -2049,7 +2049,6 @@ body.page-location-details .pin-detail-grid {
             height: 54px;
             border-radius: 6px;
             overflow: hidden;
-            border: 1px solid var(--ul-grey-1a);
         }
 
         .search-result-thumb {
@@ -2057,18 +2056,15 @@ body.page-location-details .pin-detail-grid {
             height: 100%;
             object-fit: cover;
             display: block;
+            border: 1px solid var(--ul-grey-1a);
         }
 
         .search-result-thumb-fallback {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--ul-grey-4, #94a3b8);
-            background: linear-gradient(145deg, var(--ul-grey-1, #f1f5f9) 0%, var(--ul-grey-0, #fff) 100%);
-
-            .material-icons {
-                font-size: 1.35rem;
-            }
+            background: transparent;
+            opacity: 0;
         }
 
         .search-result-body {

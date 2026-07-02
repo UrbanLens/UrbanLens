@@ -60,7 +60,17 @@
       "Bash(xargs ls -la)",
       "Bash(xargs grep -liE \"satellite|wikimedia|smithsonian|htmx|pin.detail|pin-detail\")",
       "PowerShell(.venv_windows\\\\Scripts\\\\python.exe -m py_compile src\\\\urbanlens\\\\dashboard\\\\services\\\\apis\\\\real_estate\\\\loopnet.py)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src\\\\urbanlens\\\\dashboard\\\\services\\\\apis\\\\real_estate\\\\loopnet.py)"
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src\\\\urbanlens\\\\dashboard\\\\services\\\\apis\\\\real_estate\\\\loopnet.py)",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Old%20St.%20Mark%27s%20Catholic%20Church%2C%20Evanston%2C%20Cincinnati%2C%20OH&explaintext=1&exchars=1200&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=St.%20Mark%20Catholic%20Church%20\\(Cincinnati\\)&explaintext=1&exchars=1200&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Cincinnati&explaintext=1&exchars=5000&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Cincinnati&explaintext=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=St%20Mark%20Episcopal%20Church%20small%20town&srlimit=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(curl -s \"https://en.wikipedia.org/api/rest_v1/page/summary/Cincinnati\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Cincinnati&explaintext=1&exintro=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
+      "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/services/apis/assets/wikipedia.py)"
     ]
   }
 }
