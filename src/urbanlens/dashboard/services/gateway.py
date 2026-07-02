@@ -8,7 +8,7 @@ every request and writes an ``ApiCallLog`` row after.
 
 Subclasses that override ``__post_init__`` **must** call
 ``Gateway.__post_init__(self)`` so the session swap takes effect.
-Do not use zero-argument ``super()`` — it fails in ``slots=True`` dataclasses
+Do not use zero-argument ``super()`` - it fails in ``slots=True`` dataclasses
 when the ``__class__`` cell references the pre-slots class object.
 """
 
@@ -49,7 +49,7 @@ class ServiceMeta(ABCMeta):
 
 
 @dataclass(slots=True, kw_only=True)
-class Service(ABC, metaclass=ServiceMeta):  # noqa: B024- Abstract so it cannot be instantiated directly
+class Service(ABC, metaclass=ServiceMeta):
     """An abstract class to serve as a template for our services.
 
     Class variables (set on subclasses, not dataclass fields):

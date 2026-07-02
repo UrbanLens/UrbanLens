@@ -203,7 +203,7 @@
                     {% if style_form.instance.guidance_level == "all" %}
                     Walkthrough cards on key pages, plus short hover hints on buttons.
                     {% elif style_form.instance.guidance_level == "tooltips" %}
-                    Hover hints on buttons only — no walkthrough cards.
+                    Hover hints on buttons only - no walkthrough cards.
                     {% else %}
                     No walkthroughs or hover hints anywhere on the site.
                     {% endif %}
@@ -604,7 +604,7 @@
             <div hx-get="{% url 'notifications.preferences' %}"
                  hx-trigger="load"
                  hx-swap="outerHTML">
-                <p class="loading-text">Loading…</p>
+                <p class="loading-text">Loading...</p>
             </div>
         </div>
     </section>
@@ -644,7 +644,7 @@ function applyMapDarkPreview(mode) {
 
 var _guidanceHelpText = {
     all: 'Walkthrough cards on key pages, plus short hover hints on buttons.',
-    tooltips: 'Hover hints on buttons only — no walkthrough cards.',
+    tooltips: 'Hover hints on buttons only - no walkthrough cards.',
     none: 'No walkthroughs or hover hints anywhere on the site.',
 };
 

@@ -33,7 +33,7 @@ class BingMapsGateway(SatelliteViewProvider):
     ``SatelliteSlide`` objects.  Images are fetched server-side so the API
     key is never exposed to the client.
 
-    Requires: ``UL_BING_MAPS_API_KEY`` — a Bing Maps key from the Azure portal
+    Requires: ``UL_BING_MAPS_API_KEY`` - a Bing Maps key from the Azure portal
     or https://www.bingmapsportal.com/.
     """
 

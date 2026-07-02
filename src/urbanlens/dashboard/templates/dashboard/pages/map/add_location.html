@@ -1,7 +1,7 @@
 
         <div class="dialog-overlay" id="addPinScreen"></div>
         <div class="dialog" id="addPinModal">
-            <button class="btn-close" id="closeDialog" aria-label="Close">×</button>
+            <button class="btn-close" id="closeDialog" aria-label="Close">x</button>
             <h2>Add Location</h2>
             <form id="addPinForm" method="POST" action="{% url 'pin.add' %}" hx-post="{% url 'pin.add' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 			    <label for="name">Name</label>

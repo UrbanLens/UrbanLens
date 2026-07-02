@@ -20,7 +20,7 @@
         <div class="pin-overview-title-row">
             <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
         </div>
-        <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
     {# ── Map (full width) ─────────────────────────────────────────────── #}
@@ -247,7 +247,7 @@
         </div>
         <div class="view-loading">
             <i class="material-icons spin">autorenew</i>
-            Loading…
+            Loading...
         </div>
     </div>
 
@@ -261,7 +261,7 @@
         </div>
         <div class="view-loading">
             <i class="material-icons spin">autorenew</i>
-            Loading…
+            Loading...
         </div>
     </div>
 
@@ -275,7 +275,7 @@
                 <i class="material-icons">photo_library</i>
                 <span>Photos</span>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
     </div>
 
@@ -288,7 +288,7 @@
             <i class="material-icons">history</i>
             <span>Visit History</span>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
     <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
@@ -299,7 +299,7 @@
             <i class="material-icons">category</i>
             <span>Badges</span>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
     <div hx-get="{% url 'pin.aliases' pin.slug %}"
@@ -311,7 +311,7 @@
             <i class="material-icons">label_important</i>
             <span>Aliases</span>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading…</div>
+        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
     {# ── Auxiliary cards: a single adaptive grid that reflows to fill the ──── #}
@@ -326,7 +326,7 @@
             </div>
             <div class="view-loading" id="media-gallery-loading">
                 <i class="material-icons spin">autorenew</i>
-                Loading…
+                Loading...
             </div>
             <div class="media-gallery-grid" id="media-gallery-grid"></div>
         </div>
@@ -363,7 +363,7 @@
             </div>
             <div class="view-loading">
                 <i class="material-icons spin">autorenew</i>
-                Loading…
+                Loading...
             </div>
         </div>
         {% endif %}
@@ -378,7 +378,7 @@
                     <i class="material-icons">menu_book</i>
                     <h3>Wikipedia</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -392,7 +392,7 @@
                     <i class="material-icons">map</i>
                     <h3>OpenStreetMap</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -405,7 +405,7 @@
                     <i class="material-icons">park</i>
                     <h3>National Park Service</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -418,7 +418,7 @@
                     <i class="material-icons">business_center</i>
                     <h3>LoopNet Listings</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -432,7 +432,7 @@
                     <i class="material-icons">terrain</i>
                     <h3>USGS Historical Topo Maps</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -446,7 +446,7 @@
                     <i class="material-icons">account_balance</i>
                     <h3>Library of Congress</h3>
                 </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
         {% endif %}
@@ -462,7 +462,7 @@
                 <i class="material-icons">chat</i>
                 <span>Comments</span>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
     </div>
 </div>{# end .pin-detail-grid #}
@@ -489,7 +489,7 @@
         <div class="form-row">
             <label for="pe-description">Description / Notes</label>
             <textarea name="description" id="pe-description" rows="4"
-                      placeholder="Your personal notes about this location…">{{ pin.description|default:'' }}</textarea>
+                      placeholder="Your personal notes about this location...">{{ pin.description|default:'' }}</textarea>
         </div>
 
         <div class="form-row">
@@ -621,7 +621,7 @@
         <div class="form-row">
             <label for="dp-description">Notes <span class="form-optional">(optional)</span></label>
             <textarea id="dp-description" name="description" rows="2"
-                      placeholder="Any useful details…"></textarea>
+                      placeholder="Any useful details..."></textarea>
         </div>
         <input type="hidden" id="dp-lat" name="latitude">
         <input type="hidden" id="dp-lon" name="longitude">
@@ -703,7 +703,7 @@
             <div class="form-row">
                 <label for="dp-edit-description">Notes <span class="form-optional">(optional)</span></label>
                 <textarea id="dp-edit-description" name="description" rows="2"
-                          placeholder="Any useful details…"></textarea>
+                          placeholder="Any useful details..."></textarea>
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>
@@ -2099,7 +2099,7 @@
             {
                 id: 'photos', icon: 'add_photo_alternate', target: '#pin-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
                 eyebrow: 'Evidence & memories', title: 'Attach photos without leaving the detail page',
-                body: 'Drag photos into the gallery or use the upload button — GPS-tagged photos can be positioned on your location map.',
+                body: 'Drag photos into the gallery or use the upload button - GPS-tagged photos can be positioned on your location map.',
                 button: 'Upload a photo', watchSelector: '#pin-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn',
                 action: function () {
                     var btn = document.querySelector('#pin-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn');
@@ -2132,38 +2132,38 @@
                 ready: function () { return !!document.querySelector('.pin-location-name'); },
             },
         ];
-        function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
-        function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
-        function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
-        function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
+        function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+        function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+        function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+        function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
         function clear() {
-            document.getElementById(‘pin-detail-onboarding’)?.replaceChildren();
-            document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’));
+            document.getElementById('pin-detail-onboarding')?.replaceChildren();
+            document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus'));
         }
         function registerAutoDismiss(card) {
             if (dismissed(card.id) || !card.watchSelector) return;
             document.querySelectorAll(card.watchSelector).forEach(function (el) {
-                el.addEventListener(‘click’, function () { dismiss(card.id); }, { once: true });
+                el.addEventListener('click', function () { dismiss(card.id); }, { once: true });
             });
         }
         function show(card) {
-            const host = document.getElementById(‘pin-detail-onboarding’);
+            const host = document.getElementById('pin-detail-onboarding');
             if (!host) return;
             clear();
-            document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
-            const el = document.createElement(‘section’);
-            el.className = ‘page-onboarding-card’;
-            el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
-                ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
-                ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
-                ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
-                ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
-                ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
-                ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
+            document.querySelector(card.target)?.classList.add('onboarding-focus');
+            const el = document.createElement('section');
+            el.className = 'page-onboarding-card';
+            el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+                '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+                '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+                '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+                '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+                '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
             host.appendChild(el);
-            el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
-            el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
-            el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
+            el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+            el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+            el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
         }
         function tryShow() {
             if (laterSet()) return;
@@ -2172,7 +2172,7 @@
         }
         cards.forEach(registerAutoDismiss);
         setTimeout(tryShow, 900);
-        document.body.addEventListener(‘htmx:afterSettle’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
+        document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
     }());
 
     // ── Campus boundary: click to open editor ────────────────────────────────
@@ -2349,7 +2349,7 @@
             if (!lat || !lon) { toastr.warning('Click a point on the map to set the location first.'); return; }
             _submitting = true;
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Saving…';
+            submitBtn.textContent = 'Saving...';
             const data = {};
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
             fetch("{% url 'pin.detail_pins' pin.slug %}", {
@@ -2570,7 +2570,7 @@
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
-        // "Loading…" placeholder stays visible forever.  Remove it explicitly.
+        // "Loading..." placeholder stays visible forever.  Remove it explicitly.
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (el && _extSections.has(el.id) && evt.detail.xhr.status === 204) {

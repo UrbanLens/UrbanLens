@@ -28,7 +28,7 @@
     <div class="comment-compose-field">
       <div class="comment-input-wrap">
         <textarea name="text" rows="2"
-                  placeholder="{% if is_reply %}Write a reply…{% else %}Add a comment…{% endif %}"
+                  placeholder="{% if is_reply %}Write a reply...{% else %}Add a comment...{% endif %}"
                   class="comment-input mention-input"
                   data-context-type="{{ context_type }}"
                   {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}></textarea>

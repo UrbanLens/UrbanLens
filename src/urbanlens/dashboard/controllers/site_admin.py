@@ -580,7 +580,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             if is_htmx:
                 response = HttpResponse(status=404)
                 response["HX-Trigger"] = json.dumps({
-                    "showToast": {"level": "error", "message": "Service not found — no changes saved."},
+                    "showToast": {"level": "error", "message": "Service not found - no changes saved."},
                 })
                 return response
             return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=error")

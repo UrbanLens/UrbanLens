@@ -70,7 +70,7 @@ class CampusManager(abstract.Manager.from_queryset(CampusQuerySet)):
         Resolution order:
         1. Pin-scoped campus for this pin (if one exists).
         2. Location-default campus (profile=None, pin=None) for pin.location.
-        3. None — caller should fall back to a generated circle.
+        3. None - caller should fall back to a generated circle.
 
         Args:
             pin: Pin instance (must have location_id accessible).

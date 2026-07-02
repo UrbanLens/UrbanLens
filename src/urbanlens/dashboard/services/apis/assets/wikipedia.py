@@ -1,4 +1,4 @@
-"""Wikipedia service — finds and verifies articles for a pin's location."""
+"""Wikipedia service - finds and verifies articles for a pin's location."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ class WikipediaGateway(Gateway):
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``,
-            ``description``, ``page_id`` — or None if no matching article found.
+            ``description``, ``page_id`` - or None if no matching article found.
         """
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
@@ -159,12 +159,12 @@ class WikipediaGateway(Gateway):
         """
         Returns True if at least one address component appears in the article text.
 
-        We check the extract (first few paragraphs) for the city/locality — the
+        We check the extract (first few paragraphs) for the city/locality - the
         most reliable signal.  A street address match is stronger but optional.
         """
         text = (summary.get("extract") or "").lower()
         if not text:
-            return True  # no extract — accept the article, let the user judge
+            return True  # no extract - accept the article, let the user judge
 
         locality = (components.get("locality") or "").lower()
         route = (components.get("route") or "").lower()

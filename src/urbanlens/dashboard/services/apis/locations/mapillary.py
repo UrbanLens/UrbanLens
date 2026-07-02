@@ -27,7 +27,7 @@ class MapillaryGateway(StreetViewProvider):
     including many areas not reached by Google Street View.  Images are
     georeferenced and compass-headed.
 
-    Requires: ``UL_MAPILLARY_ACCESS_TOKEN`` — a client access token from
+    Requires: ``UL_MAPILLARY_ACCESS_TOKEN`` - a client access token from
     https://www.mapillary.com/dashboard/developers.  The free tier supports
     reasonable read-only usage.
     """

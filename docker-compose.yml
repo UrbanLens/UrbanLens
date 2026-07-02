@@ -1,4 +1,4 @@
-# Shared build configuration — all three app containers use the same image.
+# Shared build configuration - all three app containers use the same image.
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
@@ -32,7 +32,7 @@ x-app-env: &app-env
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
 
-# Minimal environment for celery-beat — only needs DB + broker to schedule tasks.
+# Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
 x-beat-env: &beat-env
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}

@@ -29,7 +29,7 @@
         <div class="wiki-banner-right">
             <div class="wiki-notice">
                 <i class="material-icons">public</i>
-                <span>Community wiki — everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
+                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
             </div>
             <div class="wiki-banner-actions">
                 <button type="button" class="wiki-edit-btn btn btn--primary"
@@ -226,7 +226,7 @@
                 <i class="material-icons">label_important</i>
                 <span>Aliases</span>
             </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         {# ── Photo gallery ────────────────────────────────────────────────── #}
@@ -239,7 +239,7 @@
                     <i class="material-icons">photo_library</i>
                     <span>Photos</span>
                 </div>
-                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -253,7 +253,7 @@
                 <i class="material-icons">chat</i>
                 <h2>Discussion</h2>
             </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         {# ── Tabs: Details / Edit history ────────────────────────────────── #}
@@ -269,7 +269,7 @@
             </div>
             <div id="wiki-tab-content" class="card__body wiki-tab-content">
                 <div class="wiki-loading">
-                    <i class="material-icons spin">autorenew</i> Loading…
+                    <i class="material-icons spin">autorenew</i> Loading...
                 </div>
             </div>
         </div>
@@ -391,7 +391,7 @@
         <div class="form-row">
             <label for="wdp-description">Notes <span class="form-optional">(optional)</span></label>
             <textarea id="wdp-description" name="description" rows="2"
-                      placeholder="Any useful details…"></textarea>
+                      placeholder="Any useful details..."></textarea>
         </div>
         <input type="hidden" id="wdp-lat" name="latitude">
         <input type="hidden" id="wdp-lon" name="longitude">
@@ -885,7 +885,7 @@
             {
                 id: 'shared-edits', icon: 'edit_note', target: '.wiki-edit-btn',
                 eyebrow: 'Community page', title: 'Suggest improvements that everyone can use',
-                body: 'Names, descriptions, dates, coordinates, and security indicators here are shared with other users who pinned this location — your edits help everyone.',
+                body: 'Names, descriptions, dates, coordinates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
                 button: 'Suggest an edit', watchSelector: '.wiki-edit-btn',
                 action: function () { document.querySelector('.wiki-edit-btn')?.click(); },
                 ready: function () { return !!document.querySelector('.wiki-edit-btn'); },
@@ -910,38 +910,38 @@
                 ready: function () { return !!document.getElementById('wiki-gallery-panel'); },
             },
         ];
-        function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
-        function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
-        function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
-        function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
+        function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+        function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+        function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+        function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
         function clear() {
-            document.getElementById(‘wiki-onboarding’)?.replaceChildren();
-            document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’));
+            document.getElementById('wiki-onboarding')?.replaceChildren();
+            document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus'));
         }
         function registerAutoDismiss(card) {
             if (dismissed(card.id) || !card.watchSelector) return;
             document.querySelectorAll(card.watchSelector).forEach(function (el) {
-                el.addEventListener(card.watchEvent || ‘click’, function () { dismiss(card.id); }, { once: true });
+                el.addEventListener(card.watchEvent || 'click', function () { dismiss(card.id); }, { once: true });
             });
         }
         function show(card) {
-            const host = document.getElementById(‘wiki-onboarding’);
+            const host = document.getElementById('wiki-onboarding');
             if (!host) return;
             clear();
-            document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
-            const el = document.createElement(‘section’);
-            el.className = ‘page-onboarding-card’;
-            el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
-                ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
-                ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
-                ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
-                ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
-                ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
-                ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
+            document.querySelector(card.target)?.classList.add('onboarding-focus');
+            const el = document.createElement('section');
+            el.className = 'page-onboarding-card';
+            el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+                '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+                '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+                '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+                '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+                '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
             host.appendChild(el);
-            el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
-            el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
-            el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
+            el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+            el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+            el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
         }
         function tryShow() {
             if (laterSet()) return;
@@ -950,7 +950,7 @@
         }
         cards.forEach(registerAutoDismiss);
         setTimeout(tryShow, 900);
-        document.body.addEventListener(‘htmx:afterSettle’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
+        document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
     }());
 
     // ── Wiki detail-pin add dialog ───────────────────────────────────────────
@@ -1038,7 +1038,7 @@
             }
             _submitting = true;
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Saving…';
+            submitBtn.textContent = 'Saving...';
             const data = {};
             new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
             fetch("{% url 'location.wiki.detail_pins.panel' location.slug %}", {

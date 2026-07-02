@@ -1,7 +1,7 @@
 <div id="searchModal">
     <div class="dialog-overlay" id="searchScreen"></div>
     <div class="dialog">
-        <button class="btn-close" id="closeDialog" aria-label="Close">×</button>
+        <button class="btn-close" id="closeDialog" aria-label="Close">x</button>
         <h2>Search</h2>
         <form id="searchMapForm" method="POST" action="{% url 'map.search' %}"
               hx-post="{% url 'map.search' %}" hx-trigger="submit" hx-target="#map-body" hx-swap="outerHTML">

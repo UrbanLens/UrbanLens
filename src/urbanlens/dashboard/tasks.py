@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def create_location_for_pin(self, pin_id: int) -> int | None:
     """Create or find a shared Location for a pin, then link the pin to it."""
     logger.info("Creating background location for pin %s", pin_id)
-    update_task_progress(self, current=0, total=1, message="Creating location…")
+    update_task_progress(self, current=0, total=1, message="Creating location...")
     location = LocationCreationService().create_for_pin(pin_id)
     update_task_progress(self, current=1, total=1, message="Location ready")
     if location:
@@ -32,7 +32,7 @@ def run_user_data_export(self, user_id: int, export_types: list[str], export_dir
     from urbanlens.dashboard.services.export import run_export
 
     logger.info("Starting data export for user %s", user_id)
-    update_task_progress(self, current=0, total=1, message="Preparing export…")
+    update_task_progress(self, current=0, total=1, message="Preparing export...")
     success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
     if success:
         update_task_progress(self, current=1, total=1, message="Export ready")
@@ -58,7 +58,7 @@ def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool
     from urbanlens.dashboard.services.import_data import run_import
 
     logger.info("Starting data import for user %s, job %s", user_id, job_id)
-    update_task_progress(self, current=0, total=1, message="Preparing import…")
+    update_task_progress(self, current=0, total=1, message="Preparing import...")
     success = run_import(user_id, zip_path, job_id)
     if success:
         update_task_progress(self, current=1, total=1, message="Import complete")
@@ -99,7 +99,7 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
     from urbanlens.dashboard.services.map_pins import MapPinCache
 
     logger.info("Rebuilding map pin cache for profile %s", profile_id)
-    update_task_progress(self, current=0, total=1, message="Rebuilding map cache…")
+    update_task_progress(self, current=0, total=1, message="Rebuilding map cache...")
     profile = Profile.objects.get(pk=profile_id)
     query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
     cache = MapPinCache(profile)
@@ -114,7 +114,7 @@ def suggest_location_category(self, location_id: int) -> list[str]:
     from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
-    update_task_progress(self, current=0, total=1, message="Suggesting location category…")
+    update_task_progress(self, current=0, total=1, message="Suggesting location category...")
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
         logger.info("Location %s no longer exists; skipping auto-tagging", location_id)
@@ -130,7 +130,7 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
-    update_task_progress(self, current=0, total=1, message="Suggesting pin category…")
+    update_task_progress(self, current=0, total=1, message="Suggesting pin category...")
     pin = Pin.objects.filter(pk=pin_id).select_related("profile").first()
     if pin is None:
         logger.info("Pin %s no longer exists; skipping auto-tagging", pin_id)
@@ -207,7 +207,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
 
-    # Google Places — migrate from Django request cache into LocationCache so the
+    # Google Places - migrate from Django request cache into LocationCache so the
     # pin detail page can display it without a fresh API call.
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
@@ -239,7 +239,7 @@ def process_image_upload(self, image_id: int) -> bool:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.images import extract_gps_coords
 
-    update_task_progress(self, current=0, total=1, message="Processing image metadata…")
+    update_task_progress(self, current=0, total=1, message="Processing image metadata...")
     image = Image.objects.filter(pk=image_id).first()
     if image is None or not image.image:
         return False
@@ -263,7 +263,7 @@ def _run_database_backup(task=None) -> bool:
 
     site_settings = SiteSettings.get_current()
     if task is not None:
-        update_task_progress(task, current=0, total=1, message="Running database backup…")
+        update_task_progress(task, current=0, total=1, message="Running database backup...")
     backup = DatabaseBackup(auto_schedule=False)
     backup.backup_retention = site_settings.backup_retention
     backup.create_backup_dir()
@@ -306,7 +306,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
     if pin is None or not pin.get_unique_search_name():
         return 0
-    update_task_progress(self, current=0, total=1, message="Refreshing web search…")
+    update_task_progress(self, current=0, total=1, message="Refreshing web search...")
     results = get_search_gateway().search(pin.get_unique_search_name())
     for result in results:
         try:

@@ -257,37 +257,37 @@
             ready: function () { return !!document.getElementById('org-header-sel-all'); },
         },
     ];
-    function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
-    function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
-    function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
-    function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
-    function clear() { document.getElementById(‘organize-onboarding’)?.replaceChildren(); document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’)); }
+    function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+    function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+    function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+    function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
+    function clear() { document.getElementById('organize-onboarding')?.replaceChildren(); document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus')); }
     function registerAutoDismiss(card) {
         if (dismissed(card.id) || !card.watchSelector) return;
         document.querySelectorAll(card.watchSelector).forEach(function (el) {
-            el.addEventListener(card.watchEvent || ‘click’, function () { dismiss(card.id); }, { once: true });
+            el.addEventListener(card.watchEvent || 'click', function () { dismiss(card.id); }, { once: true });
         });
     }
     function show(card) {
-        const host = document.getElementById(‘organize-onboarding’); if (!host) return;
-        clear(); document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
-        const el = document.createElement(‘section’); el.className = ‘page-onboarding-card’;
-        el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
-            ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
-            ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
-            ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
-            ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
-            ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
-            ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
+        const host = document.getElementById('organize-onboarding'); if (!host) return;
+        clear(); document.querySelector(card.target)?.classList.add('onboarding-focus');
+        const el = document.createElement('section'); el.className = 'page-onboarding-card';
+        el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+            '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+            '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+            '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+            '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+            '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
         host.appendChild(el);
-        el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
-        el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
-        el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
+        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+        el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+        el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
     }
     function tryShow() { if (laterSet()) return; const card = cards.find(c => c.ready() && !dismissed(c.id)); if (card) show(card); }
     cards.forEach(registerAutoDismiss);
     setTimeout(tryShow, 900);
-    document.addEventListener(‘org:tab-changed’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
+    document.addEventListener('org:tab-changed', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
 }());
 </script>
 {% endblock %}
@@ -821,7 +821,7 @@ function _updateCrossTabCounts() {
             if (tabBtn) {
                 return '<button class="org-cross-tab-link" type="button" data-org-tab="' + tabKey + '">' + p.n + ' ' + p.label + '</button>';
             }
-            return p.n + ' ' + p.label;
+            return p.n + ' ' + p.label;
         });
 
         // Join with oxford-style commas
@@ -1453,7 +1453,7 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('tag-merge-confirm-btn').addEventListener('click', function() {
         var ids = Array.from(_tagSelected);
         var src = ids.filter(function(id){return id!==_tagMergeTargetId;});
-        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
         var editName = ((document.getElementById('tag-merge-edit-name')||{}).value||'').trim();
         var editIcon = (document.getElementById('tag-merge-edit-icon')||{}).value||'';
         var editColor = (document.getElementById('tag-merge-edit-color')||{}).value||'';
@@ -1608,7 +1608,7 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('tag-bulk-edit-confirm').addEventListener('click', function() {
         var ids = Array.from(_tagSelected).map(function(id){return parseInt(id,10);});
         var converting = !!_tagBulkConvertTarget;
-        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting...':'Saving...');
         var body = {ids:ids};
         if (!document.getElementById('tag-bulk-order-nochange').checked) { var ov=document.getElementById('tag-bulk-order-value'); body.order=ov?ov.value:''; }
         if (!document.getElementById('tag-bulk-description-nochange').checked) { var dv=document.getElementById('tag-bulk-description-value'); body.description=dv?dv.value:''; }
@@ -1883,7 +1883,7 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('cat-merge-confirm-btn').addEventListener('click', function(){
         var ids=Array.from(_catSelected);
         var src=ids.filter(function(id){return id!==_catMergeTargetId;});
-        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Merging…';
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> Merging...';
         var editName=((document.getElementById('cat-merge-edit-name')||{}).value||'').trim();
         var editIcon=(document.getElementById('cat-merge-edit-icon')||{}).value||'';
         var editColor=(document.getElementById('cat-merge-edit-color')||{}).value||'';
@@ -2020,7 +2020,7 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('cat-bulk-edit-confirm').addEventListener('click', function(){
         var ids=Array.from(_catSelected).map(function(id){return parseInt(id,10);});
         var converting=!!_catBulkConvertTarget;
-        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting…':'Saving…');
+        var btn=this; var saved=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="cat-merge-spinner"></span> '+(converting?'Converting...':'Saving...');
         var body={ids:ids};
         if(!document.getElementById('cat-bulk-order-nochange').checked){var ov=document.getElementById('cat-bulk-order-value'); body.order=ov?ov.value:'';}
         if(!document.getElementById('cat-bulk-description-nochange').checked){var dv=document.getElementById('cat-bulk-description-value'); body.description=dv?dv.value:'';}
@@ -2252,7 +2252,7 @@ window._orgBulkSync = function(n, opts) {
     document.getElementById('status-bulk-edit-confirm').addEventListener('click', function() {
         var ids = Array.from(_statusSelected).map(function(id) { return parseInt(id, 10); });
         var converting = !!_statusBulkConvertTarget;
-        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> ' + (converting ? 'Converting…' : 'Saving…');
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> ' + (converting ? 'Converting...' : 'Saving...');
         var body = { ids: ids };
         if (!document.getElementById('status-bulk-order-nochange').checked) { var ov = document.getElementById('status-bulk-order-value'); body.order = ov ? ov.value : ''; }
         if (!document.getElementById('status-bulk-description-nochange').checked) { var dv = document.getElementById('status-bulk-description-value'); body.description = dv ? dv.value : ''; }
@@ -2413,7 +2413,7 @@ window._orgBulkSync = function(n, opts) {
     if (_statusMergeConfirmBtn) _statusMergeConfirmBtn.addEventListener('click', function() {
         var ids = Array.from(_statusSelected);
         var src = ids.filter(function(id) { return id !== _statusMergeTargetId; });
-        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+        var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
         var editName = ((document.getElementById('status-merge-edit-name')||{}).value||'').trim();
         var editIcon = (document.getElementById('status-merge-edit-icon')||{}).value||'';
         var editColor = (document.getElementById('status-merge-edit-color')||{}).value||'';
@@ -2932,7 +2932,7 @@ window._orgBulkSync = function(n, opts) {
         var btn = this;
         var saved = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving…';
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving...';
         var body = { ids: ids };
         if (!document.getElementById('people-bulk-description-nochange').checked) {
             var dv = document.getElementById('people-bulk-description-value');
@@ -3073,7 +3073,7 @@ window._orgBulkSync = function(n, opts) {
         _peopleMergeConfirmBtn.addEventListener('click', function () {
             var ids = Array.from(_peopleSelected);
             var src = ids.filter(function (id) { return id !== _peopleMergeTargetId; });
-            var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging…';
+            var btn = this; var saved = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
             fetch(_mergeUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },

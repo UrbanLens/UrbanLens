@@ -98,7 +98,7 @@ class Campus(abstract.Model):
         """User-drawn polygon, API-generated fallback, or a circle from location coords.
 
         Requires self.location to be loaded (use select_related("location")).
-        The circle buffers in degrees (WGS84) — adequate for map display.
+        The circle buffers in degrees (WGS84) - adequate for map display.
         """
         if self.polygon:
             return self.polygon

@@ -543,13 +543,13 @@
 
     document.body.addEventListener('devOnboardingReset', function () {
         clearOnboardingStorage();
-        if (window.toastr) toastr.success('Onboarding reset. Reloading…');
+        if (window.toastr) toastr.success('Onboarding reset. Reloading...');
         window.setTimeout(function () { window.location.reload(); }, 350);
     });
 
     document.body.addEventListener('devSessionCleared', function () {
         try { sessionStorage.clear(); } catch (_) {}
-        if (window.toastr) toastr.info('Session cleared. Reloading…');
+        if (window.toastr) toastr.info('Session cleared. Reloading...');
         window.setTimeout(function () { window.location.reload(); }, 350);
     });
 

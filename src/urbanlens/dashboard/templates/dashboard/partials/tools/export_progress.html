@@ -46,7 +46,7 @@ Includes hx-get polling while status is pending/running; removes itself when don
 </div>
 
 {% else %}
-{# pending or running — keep polling every second #}
+{# pending or running - keep polling every second #}
 <div
     class="export-progress-wrap"
     id="export-status-poll"
@@ -56,7 +56,7 @@ Includes hx-get polling while status is pending/running; removes itself when don
     hx-target="#export-status-poll"
 >
     <div class="export-progress-label">
-        <span>{{ message|default:"Working…" }}</span>
+        <span>{{ message|default:"Working..." }}</span>
         <span class="export-progress-pct">{{ progress|default:0 }}%</span>
     </div>
     <div class="export-progress-track">
@@ -64,7 +64,7 @@ Includes hx-get polling while status is pending/running; removes itself when don
     </div>
     <div class="export-status-msg">
         <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
-        <span>This may take a moment…</span>
+        <span>This may take a moment...</span>
     </div>
 </div>
 <style>

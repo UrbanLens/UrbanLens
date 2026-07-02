@@ -3,7 +3,7 @@
     {# ── Private-page notice ─────────────────────────────────────────────── #}
     <div class="page-scope-notice page-scope-notice--private">
         <i class="material-icons">lock</i>
-        <span>Your private pin — notes, photos, and visits here are only visible to you.</span>
+        <span>Your private pin - notes, photos, and visits here are only visible to you.</span>
         {% if not pin.is_private and pin.location and pin.location.slug %}
         <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="page-scope-notice-link">
             Community wiki <i class="material-icons">open_in_new</i>
@@ -47,7 +47,7 @@
                 </div>
                 {% endif %}
                 
-                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
 
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
 
@@ -95,11 +95,11 @@
         {# Private pins are intentionally unlinked from the community wiki. #}
         <div class="pin-wiki-row pin-wiki-row--message">
             <i class="material-icons">lock</i>
-            <span>Private pin — no community wiki entry.</span>
+            <span>Private pin - no community wiki entry.</span>
         </div>
         {% elif pin.location and pin.location.slug %}
         <div class="pin-wiki-row" id="pin-location-section"
-             data-tooltip="Shared with everyone who has this location pinned — details and photos added here are visible to the whole community.">
+             data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
             <i class="material-icons">public</i>
             <div class="pin-wiki-row-info">
                 <span class="pin-wiki-row-label">Community Wiki</span>

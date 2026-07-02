@@ -128,7 +128,7 @@
     btn.addEventListener('click', function () {
         var result = document.getElementById('manual-backup-result');
         btn.disabled = true;
-        result.textContent = 'Queueing backup…';
+        result.textContent = 'Queueing backup...';
         fetch(btn.dataset.url, {
             method: 'POST',
             headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}

@@ -1,4 +1,4 @@
-"""Data import service — parse and apply a UrbanLens export archive."""
+"""Data import service - parse and apply a UrbanLens export archive."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
     result = ImportResult()
 
     try:
-        job_status.write("running", 5, "Validating archive…")
+        job_status.write("running", 5, "Validating archive...")
         data_dir = _extract_and_validate(zip_path, extract_dir, job_id)
 
         manifest = _read_json(data_dir, "manifest.json") or {}
@@ -155,7 +155,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
 
         for i, key in enumerate(steps):
             progress = 10 + int((i / total) * 80)
-            job_status.write("running", progress, _STEP_MESSAGES.get(key, f"Importing {key}…"))
+            job_status.write("running", progress, _STEP_MESSAGES.get(key, f"Importing {key}..."))
 
             importer = _IMPORTERS.get(key)
             if importer is None:
@@ -623,9 +623,9 @@ _IMPORTERS: dict[str, Any] = {
 }
 
 _STEP_MESSAGES = {
-    "badges": "Importing badges…",
-    "pins": "Importing pins and locations…",
-    "visit_history": "Importing visit history…",
-    "connections": "Importing connections…",
-    "settings": "Applying settings…",
+    "badges": "Importing badges...",
+    "pins": "Importing pins and locations...",
+    "visit_history": "Importing visit history...",
+    "connections": "Importing connections...",
+    "settings": "Applying settings...",
 }

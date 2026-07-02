@@ -18,9 +18,9 @@ class SearchForm(forms.Form):
 
         [{"op": "and"|"or"|"not", "ids": [<badge_id>, ...]}, ...]
 
-    ``and``  — pin must have ALL badges in the group.
-    ``or``   — pin must have AT LEAST ONE badge in the group.
-    ``not``  — pin must have NONE of the badges in the group.
+    ``and``  - pin must have ALL badges in the group.
+    ``or``   - pin must have AT LEAST ONE badge in the group.
+    ``not``  - pin must have NONE of the badges in the group.
     """
 
     name = forms.CharField(required=False)
@@ -36,7 +36,7 @@ class SearchForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
-    # Structured badge query from the formula bar — supersedes tags/exclude_tags when set.
+    # Structured badge query from the formula bar - supersedes tags/exclude_tags when set.
     badge_groups = forms.CharField(required=False)
     has_visits = forms.ChoiceField(
         choices=[("", ""), ("yes", "yes"), ("no", "no")],

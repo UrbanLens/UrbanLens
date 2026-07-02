@@ -102,7 +102,7 @@
                     <div class="form-row form-row--notes">
                         <label for="notes-{{ cfg.service }}">Notes</label>
                         <textarea id="notes-{{ cfg.service }}" name="notes" rows="2"
-                                  placeholder="Free-tier limits, billing info…">{{ cfg.notes }}</textarea>
+                                  placeholder="Free-tier limits, billing info...">{{ cfg.notes }}</textarea>
                     </div>
                 </div>
             </div>
@@ -161,7 +161,7 @@
         if (!form) return;
         var card = getCard(form);
         if (card) card.classList.add('is-saving');
-        setStatus(card, 'saving', 'Saving…');
+        setStatus(card, 'saving', 'Saving...');
     });
 
     document.body.addEventListener('htmx:afterRequest', function (evt) {

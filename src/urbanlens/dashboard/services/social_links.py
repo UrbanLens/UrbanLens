@@ -7,7 +7,7 @@ Security contract
   handles outside the allowed character set or length range are rejected, preventing
   HTML injection and path-traversal payloads.
 * For ``website`` links the full canonicalized URL is stored, but fragments
-  (``#…``) are stripped and length is capped at 500 characters.
+  (``#...``) are stripped and length is capped at 500 characters.
 * Discord has no public profile-URL format; its handle is accepted via a
   dedicated form field and validated separately.
 """
@@ -66,7 +66,7 @@ PLATFORM_FA_ICON: dict[str, str] = {
 KNOWN_PLATFORMS: frozenset[str] = frozenset(PLATFORM_URL_TEMPLATE)
 
 # Ordered display labels shown in the "Supported:" hint beneath the URL input.
-# Discord is intentionally absent — it uses a dedicated username form, not URL parsing.
+# Discord is intentionally absent - it uses a dedicated username form, not URL parsing.
 # "website" gets a friendlier label here instead of just "Website".
 # When adding a new URL-parseable platform, append its key to this tuple and the label
 # will appear automatically everywhere the hint is rendered.

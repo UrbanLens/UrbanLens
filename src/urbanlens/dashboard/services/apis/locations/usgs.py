@@ -175,7 +175,7 @@ class UsgsGateway(Gateway):
     ) -> dict[str, Any]:
         """Return The National Map products intersecting coordinates.
 
-        No authentication required — TNM is a public endpoint.
+        No authentication required - TNM is a public endpoint.
 
         Args:
             latitude: WGS-84 latitude.

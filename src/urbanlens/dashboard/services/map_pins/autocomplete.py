@@ -157,7 +157,7 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
     pin_name = (pin.name or "").lower()
     loc_name = (pin.location.name if pin.location else "").lower()
 
-    # Direct name match — use location as context
+    # Direct name match - use location as context
     if q_lower in pin_name:
         return pin.location.name if pin.location else "Your pin"
 
@@ -166,16 +166,16 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
         if q_lower in alias.name.lower():
             return f'Also known as "{alias.name}"'
 
-    # Description / notes match — show a short excerpt
+    # Description / notes match - show a short excerpt
     if pin.description and q_lower in pin.description.lower():
         desc = pin.description
         idx = desc.lower().find(q_lower)
         start = max(0, idx - 20)
         snippet = desc[start : idx + 40].strip()
         if start > 0:
-            snippet = "…" + snippet
+            snippet = "..." + snippet
         if idx + 40 < len(desc):
-            snippet += "…"
+            snippet += "..."
         return snippet
 
     # Badge / tag match
@@ -316,7 +316,7 @@ def resolve_google_place(
         api_key: Google Maps / Places API key.
 
     Returns:
-        (latitude, longitude, name) — all may be None on failure.
+        (latitude, longitude, name) - all may be None on failure.
     """
     from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 

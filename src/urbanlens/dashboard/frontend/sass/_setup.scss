@@ -351,7 +351,7 @@
 	background: rgba($color-amber-500, 0.08);
 	color: var(--ul-grey-8);
 
-	// display:flex overrides the HTML [hidden] attribute — be explicit
+	// display:flex overrides the HTML [hidden] attribute - be explicit
 	&[hidden] {
 		display: none !important;
 	}

@@ -14,7 +14,7 @@ This document inventories external APIs implemented under `dashboard/services/ap
 | **Low cost** | Paid or metered, but usable on a free tier, modest subscription, or pay-per-call that stays affordable at UrbanLens scale. |
 | **High cost** | Enterprise pricing, expensive per-seat/per-call rates, or imagery/data licensing that only makes sense for pro/ commercial tiers. |
 
-Costs change — verify current pricing before integrating.
+Costs change - verify current pricing before integrating.
 
 ### License / model
 
@@ -62,7 +62,7 @@ Many entries are **Open data** served via a **Proprietary** platform (e.g. Esri-
 | | Digital Commonwealth | Free | Open data | Massachusetts archive |
 | **Search** | Google Custom Search | Low cost | Proprietary | 100 queries/day free tier |
 | | Brave Search | Low cost | Proprietary | ~2k queries/month free |
-| | News (stub) | — | — | Not fully implemented |
+| | News (stub) | - | - | Not fully implemented |
 | **Weather** | OpenWeatherMap | Free / Low cost | Proprietary | 1k calls/day free tier |
 | **Parks / civic** | NPS API | Free | Open data | US national parks |
 | | NPS ArcGIS boundaries | Free | Open data | FeatureServer queries |
@@ -190,7 +190,7 @@ Grouped by capability. **Cost** and **License** columns added for every entry.
 | [Socrata demolition/permit APIs](https://dev.socrata.com/) | Free | Open data | City open data portals |
 | [FCC ASR (towers)](https://www.fcc.gov/general/antenna-structure-registration-asr) | Free | Open data | Antenna/tower registrations |
 | Municipal vacancy registries | Free | Open data | Detroit, Baltimore, etc. |
-| [OpenInfraMap](https://openinframap.org/) | Free | Open source + Open data | Power lines, pipelines, telecom — industrial context |
+| [OpenInfraMap](https://openinframap.org/) | Free | Open source + Open data | Power lines, pipelines, telecom - industrial context |
 | [OpenRailwayMap](https://www.openrailwaymap.org/) | Free | Open source + Open data | Abandoned rail corridors and yards |
 
 ---
@@ -242,7 +242,7 @@ Grouped by capability. **Cost** and **License** columns added for every entry.
 |---|---|---|---|
 | [Recreation.gov RIDB](https://ridb.recreation.gov/) | Free | Open data | Campgrounds, permits, closures |
 | [USFS Recreation](https://www.fs.usda.gov/) | Free | Open data | Trails, cabins, fire lookouts |
-| AllTrails | — | Proprietary | No public API |
+| AllTrails | - | Proprietary | No public API |
 | OSM trails via Overpass | Free | Open source + Open data | Hiking/forest access paths |
 | State park GIS REST endpoints | Free | Open data | Same pattern as NPS ArcGIS gateway |
 | [Peakbagger](https://www.peakbagger.com/) | Free | Proprietary | Peak lists and coordinates (scrape/export) |
@@ -309,7 +309,7 @@ Grouped by capability. **Cost** and **License** columns added for every entry.
 | [ATTOM Property API](https://api.developer.attomdata.com/docs) | Low cost / High cost | Proprietary | Foreclosure, ownership |
 | [Estated](https://estated.com/) | Low cost | Proprietary | Property records |
 | [Crexi](https://www.crexi.com/) | Free (browse) | Proprietary | Commercial RE; no clean API |
-| Zillow / Redfin | — | Proprietary | No open API for listings |
+| Zillow / Redfin | - | Proprietary | No open API for listings |
 | [Realtor.com API](https://developer.realtor.com/) | Low cost | Proprietary | Listing history |
 | County assessor GIS REST | Free | Open data | Owner, year built, last sale |
 | Overture / Microsoft `year_built` enrichment | Free | Open data | Extend existing footprint pipeline |
@@ -372,7 +372,7 @@ Extra candidates that are **Free** cost and **Open source** and/or **Open data**
 | [HLS (Harmonized Landsat Sentinel-2)](https://hls.gsfc.nasa.gov/) | Free | Open data | Consistent 30 m time series |
 | [OpenTopography REST API](https://opentopography.org/developers) | Free | Open data | Global lidar and DEM |
 | [GMTED2010 / SRTM 1 arc-sec](https://www.usgs.gov/coastal-changes-and-impacts/gmted2010) | Free | Open data | Offline elevation bulk files |
-| [OpenLandMap](https://openlandmap.org/) | Free | Open data | Land cover, soil — rural/industrial site context |
+| [OpenLandMap](https://openlandmap.org/) | Free | Open data | Land cover, soil - rural/industrial site context |
 | [FIRMS (NASA fire)](https://firms.modaps.eosdis.nasa.gov/) | Free | Open data | Active fire near exploration sites |
 | [Global Surface Water (JRC)](https://global-surface-water.appspot.com/) | Free | Open data | Flooded or seasonal access changes |
 
@@ -449,25 +449,25 @@ Extra candidates that are **Free** cost and **Open source** and/or **Open data**
 
 Best ROI relative to existing architecture, with cost bias toward **Free** options first.
 
-1. **Wire up existing free gateways** — OpenHistoricalMap, Wayback Machine, Google Earth web links, LOC, Digital Commonwealth. Zero new vendors.
+1. **Wire up existing free gateways** - OpenHistoricalMap, Wayback Machine, Google Earth web links, LOC, Digital Commonwealth. Zero new vendors.
 
-2. **Free geocoding headroom** — Self-hosted Nominatim or Photon, or free LocationIQ/OpenRouteService geocode tier before another paid Google alternative.
+2. **Free geocoding headroom** - Self-hosted Nominatim or Photon, or free LocationIQ/OpenRouteService geocode tier before another paid Google alternative.
 
-3. **Open-Meteo + NOAA + Meteostat** — All free/open; weather redundancy and historical shooting conditions.
+3. **Open-Meteo + NOAA + Meteostat** - All free/open; weather redundancy and historical shooting conditions.
 
-4. **Copernicus Data Space + Planetary Computer + NAIP** — Free temporal and high-res US aerial beyond Esri Wayback.
+4. **Copernicus Data Space + Planetary Computer + NAIP** - Free temporal and high-res US aerial beyond Esri Wayback.
 
-5. **DPLA + Openverse + NYPL** — Free/open archive discovery at scale.
+5. **DPLA + Openverse + NYPL** - Free/open archive discovery at scale.
 
-6. **EPA ECHO + NRHP + MRDS + OpenInfraMap** — Free structured urbex/heritage/industrial context for location wikis.
+6. **EPA ECHO + NRHP + MRDS + OpenInfraMap** - Free structured urbex/heritage/industrial context for location wikis.
 
-7. **OpenRouteService or self-hosted OSRM/Valhalla** — Free routing; replace or supplement RouteXL.
+7. **OpenRouteService or self-hosted OSRM/Valhalla** - Free routing; replace or supplement RouteXL.
 
-8. **County assessor GIS + TIGER** — Free US parcel fallback vs. LoopNet scraping and paid Regrid.
+8. **County assessor GIS + TIGER** - Free US parcel fallback vs. LoopNet scraping and paid Regrid.
 
-9. **Wikidata + OpenPlaques** — Free structured enrichment on Wikipedia.
+9. **Wikidata + OpenPlaques** - Free structured enrichment on Wikipedia.
 
-10. **Panoramax + Bing Streetside** — Low-cost or free street-view redundancy.
+10. **Panoramax + Bing Streetside** - Low-cost or free street-view redundancy.
 
 ### Best free + open source quick wins
 
@@ -488,7 +488,7 @@ Best ROI relative to existing architecture, with cost bias toward **Free** optio
 
 ## Integration Pattern
 
-New APIs should plug into existing `Gateway` subclasses with `service_key`, `SERVICE_REGISTRY` rate limits, and provider chains (boundaries, satellite slides, street view) — not one-off controller calls.
+New APIs should plug into existing `Gateway` subclasses with `service_key`, `SERVICE_REGISTRY` rate limits, and provider chains (boundaries, satellite slides, street view) - not one-off controller calls.
 
 For each candidate, ask:
 

@@ -293,11 +293,11 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * User list (with privacy settings).
 * Ability to view other user profiles by clicking on comments, etc.
 
-### UI — General
+### UI - General
 * Allow user to reorder pin details sections.
 * Change default pin details sections order.
 
-### UI — Pin Detail Page
+### UI - Pin Detail Page
 * Map sometimes double scrolls (latency?).
 * Fix satellite view (street view may also be broken?).
 * Fix web results (web results filtering through AI?).
@@ -306,7 +306,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Sections need stronger borders or colors.
 * When adding tags: the search bar needs padding.
 
-### UI — Trip Details Page
+### UI - Trip Details Page
 * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
 * Delete should probably not delete for everyone?
 * Main trip page: use the whitespace. Calendar? etc?

@@ -46,9 +46,29 @@
                         <i class="material-icons">open_in_new</i>
                     </a>
                     {% endif %}
+
+                    {% if listing.property_details %}
+                    <dl class="loopnet-property-details">
+                        {% for key, value in listing.property_details.items %}
+                        <div class="loopnet-property-detail">
+                            <dt>{{ key }}</dt>
+                            <dd>{{ value }}</dd>
+                        </div>
+                        {% endfor %}
+                    </dl>
+                    {% endif %}
                 </div>
             </li>
             {% endfor %}
         </ul>
+
+        {% if result.duplicate_links %}
+        <div class="loopnet-duplicate-links">
+            {% for link in result.duplicate_links %}
+            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+               class="loopnet-duplicate-link">{{ link.label }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </div>

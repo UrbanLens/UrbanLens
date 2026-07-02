@@ -15,7 +15,7 @@
             {% csrf_token %}
             <input type="hidden" name="badge_id" value="{{ badge.id }}">
             <input type="hidden" name="action" value="remove">
-            <button type="submit" class="tag-chip-remove" title="Remove">×</button>
+            <button type="submit" class="tag-chip-remove" title="Remove">x</button>
         </form>
     </span>
     {% endif %}

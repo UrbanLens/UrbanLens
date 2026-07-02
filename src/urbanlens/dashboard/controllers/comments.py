@@ -418,7 +418,7 @@ def _parse_map_data(request) -> dict | None:
 
 
 class CommentMapPinsView(LoginRequiredMixin, View):
-    """GET /comments/map-pins/?q=… - return user's pins for the comment map center picker."""
+    """GET /comments/map-pins/?q=... - return user's pins for the comment map center picker."""
 
     def get(self, request):
         from urbanlens.dashboard.models.pin.model import Pin

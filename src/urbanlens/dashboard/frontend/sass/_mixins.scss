@@ -2,8 +2,8 @@
 @use 'sass:color';
 
 // ── Responsive ────────────────────────────────────────────────────────────────
-// up()   — mobile-first: apply styles at $breakpoint and wider (preferred).
-// down() — use only to override desktop-first legacy rules; prefer up() for new code.
+// up()   - mobile-first: apply styles at $breakpoint and wider (preferred).
+// down() - use only to override desktop-first legacy rules; prefer up() for new code.
 
 @mixin up($breakpoint) {
 	@media (min-width: $breakpoint) {

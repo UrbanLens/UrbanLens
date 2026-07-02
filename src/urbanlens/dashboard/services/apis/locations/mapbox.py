@@ -33,7 +33,7 @@ class MapboxGateway(SatelliteViewProvider):
     objects.  Images are fetched server-side so the access token is never
     exposed to the client.
 
-    Requires: ``UL_MAPBOX_API_KEY`` — a Mapbox public access token (starts
+    Requires: ``UL_MAPBOX_API_KEY`` - a Mapbox public access token (starts
     with ``pk.``).  Obtain one at https://account.mapbox.com/access-tokens/.
     """
 

@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 
 @admin.register(ApiRateLimit)
 class ApiRateLimitAdmin(admin.ModelAdmin):
-    """Admin for ApiRateLimit — per-service rate limiting configuration."""
+    """Admin for ApiRateLimit - per-service rate limiting configuration."""
 
     list_display = ["display_name", "service", "enabled", "calls_per_minute", "calls_per_day", "usa_only"]
     list_editable = ["enabled", "calls_per_minute", "calls_per_day", "usa_only"]
@@ -21,7 +21,7 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 
 @admin.register(ApiCallLog)
 class ApiCallLogAdmin(admin.ModelAdmin):
-    """Admin for ApiCallLog — read-only view of API call history."""
+    """Admin for ApiCallLog - read-only view of API call history."""
 
     list_display = ["service", "created", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
     list_filter = ["service", "success", "was_rate_limited", "was_geo_filtered"]
@@ -151,7 +151,7 @@ _delete_unedited_community_pins.short_description = "Delete unedited community d
 
 @admin.register(Pin)
 class PinAdmin(admin.ModelAdmin):
-    """Admin for Pin — primarily useful for bulk operations on community pins."""
+    """Admin for Pin - primarily useful for bulk operations on community pins."""
 
     list_display = ["__str__", "profile", "location", "parent_location", "created"]
     list_filter = ["profile"]

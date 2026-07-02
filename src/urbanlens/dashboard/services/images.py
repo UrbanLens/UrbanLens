@@ -1,4 +1,4 @@
-"""Image processing utilities — EXIF extraction and metadata helpers."""
+"""Image processing utilities - EXIF extraction and metadata helpers."""
 
 from __future__ import annotations
 

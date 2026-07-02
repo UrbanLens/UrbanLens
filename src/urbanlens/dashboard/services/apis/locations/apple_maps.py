@@ -20,7 +20,7 @@ class AppleMapsGateway(Gateway):
         ``api_key`` must be a signed JWT generated from your Apple Developer
         account credentials (private key ``.p8`` file, Team ID, Maps ID, Key ID).
 
-        JWTs can be valid for up to 6 months — generate a long-lived token for
+        JWTs can be valid for up to 6 months - generate a long-lived token for
         server-side use and store it as ``UL_APPLE_MAPS_API_KEY`` in ``.env``.
 
         Apple Developer docs:

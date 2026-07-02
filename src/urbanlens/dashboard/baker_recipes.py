@@ -113,7 +113,7 @@ badge_customization: Recipe[BadgeCustomization] = Recipe(
 
 # ── Campus ────────────────────────────────────────────────────────────────────
 
-# Location-level default campus (profile=None, pin=None) — community wiki boundary.
+# Location-level default campus (profile=None, pin=None) - community wiki boundary.
 campus: Recipe[Campus] = Recipe(
     "dashboard.Campus",
     location=foreign_key("dashboard.location"),

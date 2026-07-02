@@ -593,6 +593,11 @@
 .sv-carousel {
     display: flex;
     flex-direction: column;
+    height: calc(100% - 4rem);
+    
+    .sv-slides-wrapper, .sv-slide, .sv-embed {
+        height: 100%;
+    }
 
     .sv-slides-wrapper {
         position: relative;
@@ -619,7 +624,7 @@
         display: flex;
         align-items: center;
         gap: .5rem;
-        padding: .45rem .6rem;
+        padding: .5rem .6rem;
         border-top: 1px solid var(--ul-border);
     }
 
@@ -676,6 +681,10 @@
         flex-wrap: wrap;
         gap: .3rem;
         padding: .35rem .5rem;
+    }
+
+    .sv-embed {
+        width: 100%;
     }
 }
 
@@ -760,6 +769,61 @@
             .material-icons { font-size: .85rem; }
 
             &:hover { color: var(--ul-grey-8); }
+        }
+    }
+}
+
+// ── LoopNet commercial real-estate panel (pin details page) ────────────────────
+.loopnet-info {
+    .loopnet-property-details {
+        margin: .5rem 0 0;
+        padding: .5rem .6rem;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-grey-1);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: .3rem .75rem;
+    }
+
+    .loopnet-property-detail {
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        min-width: 0;
+
+        dt {
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            color: var(--ul-grey-5);
+        }
+
+        dd {
+            margin: 0;
+            font-size: .8rem;
+            color: var(--ul-grey-8);
+            overflow-wrap: break-word;
+        }
+    }
+
+    .loopnet-duplicate-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem .75rem;
+        padding: .5rem .75rem;
+        border-top: 1px solid var(--ul-border);
+        font-size: .75rem;
+    }
+
+    .loopnet-duplicate-link {
+        color: var(--ul-grey-5);
+        text-decoration: none;
+
+        &:hover {
+            color: var(--ul-grey-8);
+            text-decoration: underline;
         }
     }
 }

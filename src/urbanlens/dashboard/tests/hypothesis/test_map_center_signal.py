@@ -56,10 +56,10 @@ class InvalidateMapCenterOnCreateTests(TestCase):
         self.assertIsNone(self.profile.map_center_longitude)
 
     def test_second_pin_also_clears_cache(self) -> None:
-        # First pin clears it; then the cache is recomputed externally…
+        # First pin clears it; then the cache is recomputed externally...
         baker.make(Pin, profile=self.profile)
         _set_cached_centroid(self.profile)
-        # …and a second pin must clear it again.
+        # ...and a second pin must clear it again.
         baker.make(Pin, profile=self.profile)
         self.profile.refresh_from_db()
         self.assertIsNone(self.profile.map_center_latitude)

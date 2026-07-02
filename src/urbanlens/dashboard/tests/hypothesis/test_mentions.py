@@ -36,7 +36,7 @@ def _loc_mention(display: str, uid: uuid.UUID) -> str:
 # ── extract_location_uuids ────────────────────────────────────────────────────
 
 class ExtractLocationUuidsTests(TestCase):
-    """extract_location_uuids parses @[…](loc:UUID) tokens."""
+    """extract_location_uuids parses @[...](loc:UUID) tokens."""
 
     def test_empty_string_returns_empty_list(self) -> None:
         self.assertEqual(extract_location_uuids(""), [])

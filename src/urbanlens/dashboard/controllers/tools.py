@@ -123,7 +123,7 @@ class ExportStartView(LoginRequiredMixin, View):
         job_id = str(uuid.uuid4())
         exp_dir = _export_dir(job_id)
         os.makedirs(exp_dir, exist_ok=True)
-        ExportJobStatus(job_id).write("pending", 0, "Preparing export…", user_id=request.user.pk)
+        ExportJobStatus(job_id).write("pending", 0, "Preparing export...", user_id=request.user.pk)
 
         base_url = request.build_absolute_uri("/")
         from urbanlens.dashboard.services.celery import safely_enqueue_task
@@ -144,7 +144,7 @@ class ExportStartView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/tools/export_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing export…"},
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing export..."},
         )
 
 
@@ -222,7 +222,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
         today = date.today().isoformat()
-        fh = open(zip_path, "rb")  # noqa: SIM115 — FileResponse takes ownership and closes the handle
+        fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
         return response
@@ -271,7 +271,7 @@ class ImportStartView(LoginRequiredMixin, View):
             logger.exception("Failed to save import file for user %s", request.user.pk)
             return _import_error_partial(request, job_id, "Failed to save the uploaded file. Please try again.")
 
-        ImportJobStatus(job_id).write("pending", 0, "Preparing import…", user_id=request.user.pk)
+        ImportJobStatus(job_id).write("pending", 0, "Preparing import...", user_id=request.user.pk)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_import
@@ -290,7 +290,7 @@ class ImportStartView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/tools/import_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import…"},
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
         )
 
 

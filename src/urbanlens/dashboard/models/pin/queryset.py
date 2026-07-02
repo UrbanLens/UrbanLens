@@ -99,7 +99,7 @@ class PinQuerySet(abstract.QuerySet):
             groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``.
 
         Returns:
-            Filtered QuerySet (not yet distinct — caller must call ``.distinct()``).
+            Filtered QuerySet (not yet distinct - caller must call ``.distinct()``).
         """
         from urbanlens.dashboard.models.badges.model import Badge as _Badge
 

@@ -1,4 +1,4 @@
-"""Data export service — build and manage user data export archives."""
+"""Data export service - build and manage user data export archives."""
 
 from __future__ import annotations
 
@@ -140,16 +140,16 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
     step = 0
 
     exporters: dict[str, tuple[Any, str]] = {
-        "profile": (_export_profile, "Exporting profile…"),
-        "settings": (_export_settings, "Exporting settings…"),
-        "pins": (_export_pins, "Exporting pins…"),
-        "google_takeout": (_export_pins_google_takeout, "Exporting Google Takeout format…"),
-        "badges": (_export_badges, "Exporting badges…"),
-        "connections": (_export_connections, "Exporting connections…"),
-        "visit_history": (_export_visit_history, "Exporting visit history…"),
-        "comments": (_export_comments, "Exporting comments…"),
-        "photos": (_export_photos, "Exporting photos…"),
-        "trips": (_export_trips, "Exporting trips…"),
+        "profile": (_export_profile, "Exporting profile..."),
+        "settings": (_export_settings, "Exporting settings..."),
+        "pins": (_export_pins, "Exporting pins..."),
+        "google_takeout": (_export_pins_google_takeout, "Exporting Google Takeout format..."),
+        "badges": (_export_badges, "Exporting badges..."),
+        "connections": (_export_connections, "Exporting connections..."),
+        "visit_history": (_export_visit_history, "Exporting visit history..."),
+        "comments": (_export_comments, "Exporting comments..."),
+        "photos": (_export_photos, "Exporting photos..."),
+        "trips": (_export_trips, "Exporting trips..."),
     }
 
     try:
@@ -195,7 +195,7 @@ def _run_export_steps(
         fn(profile, temp_dir, base_url=base_url)
         step += 1
 
-    ExportJobStatus(job_id).write("running", 90, "Creating archive…")
+    ExportJobStatus(job_id).write("running", 90, "Creating archive...")
     _build_zip(export_dir_path, temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
     ExportJobStatus(job_id).write("done", 100, "Export ready!")

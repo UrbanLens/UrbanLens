@@ -1,4 +1,4 @@
-"""OpenStreetMap Nominatim service — free reverse geocoding with place metadata."""
+"""OpenStreetMap Nominatim service - free reverse geocoding with place metadata."""
 
 from __future__ import annotations
 

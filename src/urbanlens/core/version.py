@@ -350,7 +350,7 @@ def format_short_commit(commit: str | None, length: int = 7) -> str:
         Short hash, or an em dash when ``commit`` is missing.
     """
     if not commit:
-        return "—"
+        return "-"
     return commit[:length]
 
 

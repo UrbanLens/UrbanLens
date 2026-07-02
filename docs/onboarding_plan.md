@@ -1,6 +1,6 @@
 # UrbanLens onboarding plan
 
-UrbanLens onboarding should appear as contextual, dismissible guidance while people use the site normally. The implemented pattern is a set of coach cards that highlight the relevant control or section, offer one direct action, support a session-level “Later” choice, and persist “Don’t show again” in browser storage.
+UrbanLens onboarding should appear as contextual, dismissible guidance while people use the site normally. The implemented pattern is a set of coach cards that highlight the relevant control or section, offer one direct action, support a session-level "Later" choice, and persist "Don't show again" in browser storage.
 
 ## Implemented map nudges
 

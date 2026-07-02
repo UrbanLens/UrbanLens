@@ -153,7 +153,7 @@ class Db:
         """Build and run a pg_ctl command.
 
         Args:
-            command (str): The pg_ctl subcommand (start, stop, status, restart, …).
+            command (str): The pg_ctl subcommand (start, stop, status, restart, ...).
             with_server_opts (bool): When True, pass socket dir and port via -o so the
                 server process uses them.  Should be True for start/restart only.
             pg_wait (bool): When True, pass -w to pg_ctl so it blocks until the server

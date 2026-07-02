@@ -62,7 +62,7 @@ class WaybackMachineGateway(Gateway):
 
         Args:
             url: The URL to retrieve the TimeMap for.
-            output: Response format — ``"json"`` (default), ``"link"``, or ``"cdxj"``.
+            output: Response format - ``"json"`` (default), ``"link"``, or ``"cdxj"``.
             **params: Additional query parameters.
 
         Returns:

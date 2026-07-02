@@ -1,4 +1,4 @@
-"""ApiRateLimit model — per-service rate limiting configuration."""
+"""ApiRateLimit model - per-service rate limiting configuration."""
 
 from __future__ import annotations
 

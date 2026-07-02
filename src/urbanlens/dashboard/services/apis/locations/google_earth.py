@@ -24,7 +24,7 @@ class GoogleEarthGateway(Gateway):
     available.
 
     REST API methods (``list_assets``, ``get_asset``, ``compute_value_for_coordinates``)
-    require OAuth2 authentication — passing a plain Maps/Cloud API key is
+    require OAuth2 authentication - passing a plain Maps/Cloud API key is
     **not** sufficient.  Earth Engine uses service-account credentials or user
     OAuth2 tokens.  Supply an OAuth2 Bearer token as ``api_key`` (obtained via
     ``google-auth`` / Application Default Credentials).
@@ -53,7 +53,7 @@ class GoogleEarthGateway(Gateway):
         return {"Authorization": f"Bearer {self.api_key}"}
 
     # ------------------------------------------------------------------
-    # URL builders — no auth required
+    # URL builders - no auth required
     # ------------------------------------------------------------------
 
     def earth_web_url_for_coordinates(self, latitude: float, longitude: float, *, altitude: float = 500.0) -> str:
@@ -101,7 +101,7 @@ class GoogleEarthGateway(Gateway):
         return f"https://code.earthengine.google.com/?lon={longitude}&lat={latitude}&zoom={zoom}"
 
     # ------------------------------------------------------------------
-    # REST API methods — require OAuth2 Bearer token
+    # REST API methods - require OAuth2 Bearer token
     # ------------------------------------------------------------------
 
     def list_assets(self, parent: str, **params: Any) -> dict[str, Any]:

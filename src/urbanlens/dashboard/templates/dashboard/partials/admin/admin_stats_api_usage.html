@@ -30,11 +30,11 @@
                 <strong>{{ row.display_name }}</strong>
                 <span style="font-size:.75rem;color:var(--ul-text-muted,#6b7280);margin-left:.4rem">{{ row.service }}</span>
             </td>
-            <td style="text-align:right">{% if row.total %}{{ row.total }}{% else %}<span style="color:var(--ul-text-muted,#6b7280)">—</span>{% endif %}</td>
-            <td style="text-align:right">{% if row.blocked %}<span style="color:#b91c1c">{{ row.blocked }}</span>{% else %}—{% endif %}</td>
-            <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}—{% endif %}</td>
-            <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}—{% endif %}</td>
-            <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}—{% endif %}</td>
+            <td style="text-align:right">{% if row.total %}{{ row.total }}{% else %}<span style="color:var(--ul-text-muted,#6b7280)">-</span>{% endif %}</td>
+            <td style="text-align:right">{% if row.blocked %}<span style="color:#b91c1c">{{ row.blocked }}</span>{% else %}-{% endif %}</td>
+            <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}-{% endif %}</td>
+            <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}-{% endif %}</td>
+            <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}-{% endif %}</td>
             <td style="text-align:center">
                 {% if row.calls_per_day %}
                     <span title="{{ row.total }} of {{ row.calls_per_day }} daily limit used">

@@ -19,7 +19,7 @@ from urbanlens.dashboard.exceptions import DashboardError
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Service registry — default config for every known external API service.
+# Service registry - default config for every known external API service.
 # Rows are auto-created from these defaults the first time a service is seen.
 # ---------------------------------------------------------------------------
 
@@ -65,7 +65,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=500,
         usa_only=True,
-        notes="Free API. USA only — NPS covers US national parks exclusively.",
+        notes="Free API. USA only - NPS covers US national parks exclusively.",
     ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
@@ -77,7 +77,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Wikipedia",
         calls_per_minute=30,
         calls_per_day=2000,
-        notes="Free API. Be polite — set a descriptive User-Agent.",
+        notes="Free API. Be polite - set a descriptive User-Agent.",
     ),
     "wikimedia": ServiceDefaults(
         display_name="Wikimedia Commons",
@@ -97,7 +97,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=5,
         calls_per_day=100,
         usa_only=True,
-        notes="US commercial real estate. Scraped — be conservative to avoid blocking.",
+        notes="US commercial real estate. Scraped - be conservative to avoid blocking.",
     ),
     "nominatim": ServiceDefaults(
         display_name="Nominatim (OpenStreetMap)",
@@ -191,7 +191,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Internet Archive Wayback Machine",
         calls_per_minute=10,
         calls_per_day=500,
-        notes="Free, no key required. Be polite — the Archive is a public resource.",
+        notes="Free, no key required. Be polite - the Archive is a public resource.",
     ),
     "mapbox": ServiceDefaults(
         display_name="Mapbox",
@@ -287,7 +287,7 @@ def service_is_enabled(service: str) -> bool:
         config = get_limit_config(service)
     except Exception:
         # TODO: Catch specific exceptions
-        logger.exception("Failed to read rate limit config for %s — allowing call", service)
+        logger.exception("Failed to read rate limit config for %s - allowing call", service)
         return False
     return config.enabled
 
@@ -312,7 +312,7 @@ def check_rate_limit(service: str) -> bool:
         config = get_limit_config(service)
     except Exception:
         # TODO: Catch specific exceptions
-        logger.exception("Failed to read rate limit config for %s — allowing call", service)
+        logger.exception("Failed to read rate limit config for %s - allowing call", service)
         return True
 
     try:
@@ -345,7 +345,7 @@ def check_rate_limit(service: str) -> bool:
                 return False
     except Exception:
         # TODO: Catch specific exceptions
-        logger.exception("Failed to check rate limit counts for %s — allowing call", service)
+        logger.exception("Failed to check rate limit counts for %s - allowing call", service)
         return True
 
     return True
@@ -396,7 +396,7 @@ def log_api_call(
 class _RateLimitedSession:
     """Wraps ``requests.Session`` to enforce rate limits and log every call.
 
-    This is NOT a subclass of ``requests.Session`` — it delegates all
+    This is NOT a subclass of ``requests.Session`` - it delegates all
     attribute access to a real session so that caller code using
     ``self.session.get(...)`` continues to work unchanged.
     """

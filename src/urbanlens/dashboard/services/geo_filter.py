@@ -24,7 +24,7 @@ class _BBox:
 
 
 # Approximate bounding boxes for US territories.
-# These are intentionally generous — false *negatives* (blocking a US location)
+# These are intentionally generous - false *negatives* (blocking a US location)
 # are worse than false *positives* (allowing a near-miss).
 _USA_BBOXES: tuple[_BBox, ...] = (
     # Continental United States (conterminous)

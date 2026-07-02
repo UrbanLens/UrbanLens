@@ -135,7 +135,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
             google_place_id = request.POST.get("google_place_id") or None
             # Canonical name supplied by the client when adding from a Google Places or
-            # Wikipedia/NPS marker — avoids a synchronous geocoding API round-trip when
+            # Wikipedia/NPS marker - avoids a synchronous geocoding API round-trip when
             # creating a new Location.
             place_canonical_name = request.POST.get("place_canonical_name") or None
 
@@ -186,7 +186,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
             # Generate slug immediately so the "View Details" URL resolves without a
-            # separate lookup — Pin.slug is nullable and is not auto-populated by create().
+            # separate lookup - Pin.slug is nullable and is not auto-populated by create().
             pin.slug = pin.ensure_slug()
             pin.save(update_fields=["slug"])
 
@@ -323,7 +323,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def streetview_check(self, request, *args, **kwargs):
         """Check whether Google Street View imagery exists at a given lat/lng.
 
-        Uses the Street View Static API metadata endpoint — a lightweight call
+        Uses the Street View Static API metadata endpoint - a lightweight call
         that returns JSON without downloading any imagery.
 
         Returns JSON {"available": true/false}.  Falls back to {"available": false}
@@ -652,7 +652,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         cache_seconds = site.google_places_cache_days * 86400
         places: list[dict] = []
 
-        # ── Google historical landmarks (Places API v1 — supports historical_landmark type) ──
+        # ── Google historical landmarks (Places API v1 - supports historical_landmark type) ──
         if use_google:
             api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
             if not api_key:
@@ -690,7 +690,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     # TODO: Catch specific exception
                     if "403" in str(exc):
                         logger.warning(
-                            "Google Places API returned 403 Forbidden — enable 'Places API (New)' "
+                            "Google Places API returned 403 Forbidden - enable 'Places API (New)' "
                             "in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. "
                             "API key: %s...%s", api_key[:3], api_key[-3:],
                         )

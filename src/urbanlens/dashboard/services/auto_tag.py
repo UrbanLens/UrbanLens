@@ -1,8 +1,8 @@
 """Auto-tagging service: keyword and AI-based badge suggestion for pins and locations.
 
 Pipeline per badge kind:
-  1. Keyword match — badge name patterns (CATEGORY_PATTERNS) + badge.keywords field.
-  2. AI match     — remaining eligible badges sent to LLM as a constrained list.
+  1. Keyword match - badge name patterns (CATEGORY_PATTERNS) + badge.keywords field.
+  2. AI match     - remaining eligible badges sent to LLM as a constrained list.
 
 Callers use AutoTagService.suggest_for_pin / suggest_for_location; both return
 the matched Badge instances and optionally apply them immediately.
@@ -44,9 +44,9 @@ class AutoTagService:
 
     Uses a two-stage pipeline:
 
-    1. **Keyword matching** — checks CATEGORY_PATTERNS (built-in regex patterns keyed
+    1. **Keyword matching** - checks CATEGORY_PATTERNS (built-in regex patterns keyed
        by badge name) and each badge's custom ``keywords`` field.  No API call.
-    2. **AI matching** — sends a constrained list of remaining eligible badge names to
+    2. **AI matching** - sends a constrained list of remaining eligible badge names to
        the configured LLM gateway and validates the returned names against the list.
 
     Args:

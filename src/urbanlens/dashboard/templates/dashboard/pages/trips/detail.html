@@ -45,7 +45,7 @@
                      hx-swap="outerHTML">
                     <div class="trip-panel-loading">
                         <i class="material-icons rotating">refresh</i>
-                        Loading activities…
+                        Loading activities...
                     </div>
                 </div>
             </section>
@@ -62,7 +62,7 @@
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
                     <i class="material-icons rotating">refresh</i>
-                    Loading members…
+                    Loading members...
                 </div>
             </div>
         </div>
@@ -78,7 +78,7 @@
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
                     <i class="material-icons rotating">refresh</i>
-                    Loading comments…
+                    Loading comments...
                 </div>
             </div>
         </div>
@@ -94,7 +94,7 @@
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
                     <i class="material-icons rotating">refresh</i>
-                    Loading weather…
+                    Loading weather...
                 </div>
             </div>
         </div>
@@ -172,7 +172,7 @@
             <label>Location <small>(optional - search existing or enter an address)</small></label>
             <div class="activity-location-search-wrap">
                 <input type="text" id="activity-location-search"
-                       placeholder="Search by name or address…" autocomplete="off">
+                       placeholder="Search by name or address..." autocomplete="off">
                 <input type="hidden" name="location_uuid" id="activity-location-uuid">
                 <input type="hidden" name="pin_uuid" id="activity-pin-uuid">
                 <input type="hidden" name="geocoded_lat" id="activity-geocoded-lat">
@@ -204,7 +204,7 @@
             <label>Child Trip <small>(optional - link another trip as an activity)</small></label>
             <div class="activity-child-trip-wrap">
                 <input type="text" id="activity-child-trip-search"
-                       placeholder="Search your trips…" autocomplete="off">
+                       placeholder="Search your trips..." autocomplete="off">
                 <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
                 <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="activity-child-trip-display" class="activity-location-display"></span>
@@ -219,7 +219,7 @@
         <div class="form-row">
             <label for="activity-notes">Notes</label>
             <textarea name="notes" id="activity-notes" rows="3"
-                      placeholder="Any notes about this stop…"></textarea>
+                      placeholder="Any notes about this stop..."></textarea>
         </div>
         <div class="form-row">
             <label>Status</label>
@@ -280,7 +280,7 @@
             <label>Location <small>(optional)</small></label>
             <div class="activity-location-search-wrap">
                 <input type="text" id="edit-activity-location-search"
-                       placeholder="Search by name or address…" autocomplete="off">
+                       placeholder="Search by name or address..." autocomplete="off">
                 <input type="hidden" name="location_uuid" id="edit-activity-location-uuid">
                 <input type="hidden" name="pin_uuid" id="edit-activity-pin-uuid">
                 <input type="hidden" name="geocoded_lat" id="edit-activity-geocoded-lat">
@@ -325,7 +325,7 @@
             <label>Child Trip <small>(optional)</small></label>
             <div class="activity-child-trip-wrap">
                 <input type="text" id="edit-activity-child-trip-search"
-                       placeholder="Search your trips…" autocomplete="off">
+                       placeholder="Search your trips..." autocomplete="off">
                 <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
                 <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
@@ -340,7 +340,7 @@
         <div class="form-row">
             <label for="edit-activity-notes">Notes</label>
             <textarea name="notes" id="edit-activity-notes" rows="3"
-                      placeholder="Any notes about this stop…"></textarea>
+                      placeholder="Any notes about this stop..."></textarea>
         </div>
         <div class="form-row">
             <label>Status</label>
@@ -476,37 +476,37 @@
             ready: function () { return !!document.getElementById('trip-sections'); },
         },
     ];
-    function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
-    function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
-    function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
-    function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
-    function clear() { document.getElementById(‘trip-onboarding’)?.replaceChildren(); document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’)); }
+    function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+    function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+    function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+    function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
+    function clear() { document.getElementById('trip-onboarding')?.replaceChildren(); document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus')); }
     function registerAutoDismiss(card) {
         if (dismissed(card.id) || !card.watchSelector) return;
         document.querySelectorAll(card.watchSelector).forEach(function (el) {
-            el.addEventListener(card.watchEvent || ‘click’, function () { dismiss(card.id); }, { once: true });
+            el.addEventListener(card.watchEvent || 'click', function () { dismiss(card.id); }, { once: true });
         });
     }
     function show(card) {
-        const host = document.getElementById(‘trip-onboarding’); if (!host) return;
-        clear(); document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
-        const el = document.createElement(‘section’); el.className = ‘page-onboarding-card’;
-        el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
-            ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
-            ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
-            ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
-            ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
-            ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
-            ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
+        const host = document.getElementById('trip-onboarding'); if (!host) return;
+        clear(); document.querySelector(card.target)?.classList.add('onboarding-focus');
+        const el = document.createElement('section'); el.className = 'page-onboarding-card';
+        el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+            '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+            '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+            '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+            '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+            '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
         host.appendChild(el);
-        el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
-        el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
-        el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
+        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+        el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+        el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
     }
     function tryShow() { if (laterSet()) return; const card = cards.find(c => c.ready() && !dismissed(c.id)); if (card) show(card); }
     cards.forEach(registerAutoDismiss);
     setTimeout(tryShow, 900);
-    document.body.addEventListener(‘htmx:afterSettle’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
+    document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
 }());
 
 

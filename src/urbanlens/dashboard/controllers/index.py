@@ -18,5 +18,5 @@ class IndexController(ListController):
 
     @staticmethod
     def page_not_found(request, _exception=None):
-        """Project-wide 404 handler — renders the standard error page."""
+        """Project-wide 404 handler - renders the standard error page."""
         return render(request, "dashboard/pages/errors/404.html", status=404)

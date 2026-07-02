@@ -45,7 +45,7 @@ def migrate_campus_pin_scoping(apps, schema_editor):
             campus.pin = matching[0]
             campus.save(update_fields=["pin"])
         else:
-            # Ambiguous (multiple pins) or orphaned (no pin) — discard.
+            # Ambiguous (multiple pins) or orphaned (no pin) - discard.
             to_delete.append(campus.pk)
 
     Campus.objects.filter(pk__in=to_delete).delete()

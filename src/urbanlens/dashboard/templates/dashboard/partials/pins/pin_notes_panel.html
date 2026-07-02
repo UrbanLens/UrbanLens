@@ -39,7 +39,7 @@
           hx-on::after-request="if(event.detail.successful){this.reset()}"
           class="pin-note-form">
         {% csrf_token %}
-        <textarea name="text" rows="2" placeholder="Add a note…" required
+        <textarea name="text" rows="2" placeholder="Add a note..." required
                   class="pin-note-input"></textarea>
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Note</button>

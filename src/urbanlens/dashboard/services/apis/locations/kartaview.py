@@ -81,7 +81,7 @@ class KartaViewGateway(StreetViewProvider):
     ) -> Generator[StreetViewSlide]:
         """Return KartaView photos near coordinates as StreetViewSlides.
 
-        Images are loaded directly by the browser — no server-side fetch.
+        Images are loaded directly by the browser - no server-side fetch.
 
         Args:
             latitude: WGS-84 latitude.

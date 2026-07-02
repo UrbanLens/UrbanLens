@@ -631,7 +631,7 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
             status_code = resp.status_code
         except RequestException:
             # Network error, DNS failure, timeout, SSL problem, etc.
-            # Don't alarm the user — we simply cannot confirm either way.
+            # Don't alarm the user - we simply cannot confirm either way.
             return HttpResponse(status=204)
 
         if status_code == 404:

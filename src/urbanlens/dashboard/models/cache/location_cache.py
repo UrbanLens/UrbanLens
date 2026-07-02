@@ -1,4 +1,4 @@
-"""LocationCache model — stores external API responses keyed to a shared Location."""
+"""LocationCache model - stores external API responses keyed to a shared Location."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class LocationCache(abstract.Model):
     """
     Caches responses from external data sources keyed to a shared Location.
 
-    An empty-dict ``data`` field means "we searched and found nothing" — this
+    An empty-dict ``data`` field means "we searched and found nothing" - this
     is still a valid cached result so we don't hammer the upstream API again.
     A missing row means the source has never been queried for this location.
     """

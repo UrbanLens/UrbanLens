@@ -5,7 +5,7 @@
 {% if date_errors %}
 <div class="dialog-overlay" id="date-error-overlay"></div>
 <div class="dialog" id="date-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="date-error-title">
-    <button class="btn-close" id="date-error-close" aria-label="Close">×</button>
+    <button class="btn-close" id="date-error-close" aria-label="Close">x</button>
     <h2 id="date-error-title"><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>
     <ul class="date-error-list">
         {% for error in form.birth_date.errors %}<li>{{ error }}</li>{% endfor %}
@@ -294,7 +294,7 @@ function closeDateErrorDialog() {
         dialog.id = 'date-error-dialog';
         dialog.setAttribute('role', 'alertdialog');
         dialog.innerHTML =
-            '<button class="btn-close" aria-label="Close" onclick="closeDateErrorDialog()">×</button>' +
+            '<button class="btn-close" aria-label="Close" onclick="closeDateErrorDialog()">x</button>' +
             '<h2><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>' +
             '<ul class="date-error-list"><li>' + message + '</li></ul>' +
             '<p class="date-error-hint">Please choose a different date.</p>' +
@@ -318,7 +318,7 @@ function closeDateErrorDialog() {
     // ── core save ─────────────────────────────────────────────────────────────
     function saveField(field, value, isFile) {
         if (window.autosaveGuard) window.autosaveGuard.markDirty();
-        setStatus(field, 'saving', 'Saving…');
+        setStatus(field, 'saving', 'Saving...');
         var guard = window.autosaveGuard;
         if (guard) guard.saveStarted();
         var fd = new FormData();
@@ -424,7 +424,7 @@ function closeDateErrorDialog() {
     var gravatarBtn = document.getElementById('avatar-gravatar-btn');
     if (gravatarBtn) {
         gravatarBtn.addEventListener('click', function () {
-            setStatus('avatar', 'saving', 'Saving…');
+            setStatus('avatar', 'saving', 'Saving...');
             var fd = new FormData();
             fd.append('csrfmiddlewaretoken', csrftoken);
             fd.append('field', 'avatar_gravatar');
@@ -448,7 +448,7 @@ function closeDateErrorDialog() {
         btn.addEventListener('click', function () {
             var animal = btn.dataset.animal;
             var color  = btn.dataset.color;
-            setStatus('avatar', 'saving', 'Saving…');
+            setStatus('avatar', 'saving', 'Saving...');
             var fd = new FormData();
             fd.append('csrfmiddlewaretoken', csrftoken);
             fd.append('field', 'avatar_emoji');

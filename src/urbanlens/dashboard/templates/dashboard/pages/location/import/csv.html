@@ -474,7 +474,7 @@
         <div class="iw-body">
             <div class="iw-parsing">
                 <div class="iw-spinner"></div>
-                <span>Reading files…</span>
+                <span>Reading files...</span>
             </div>
         </div>
     </div>
@@ -508,13 +508,13 @@
     <!-- ── Step 3: Progress ──────────────────────────────────────── -->
     <div id="iw-step-3" hidden>
         <div class="iw-body">
-            <div class="iw-progress-header" id="iw-progress-header">Importing…</div>
+            <div class="iw-progress-header" id="iw-progress-header">Importing...</div>
             <div class="iw-progress-bar-track">
                 <div class="iw-progress-bar-fill" id="iw-bar"></div>
             </div>
             <div class="iw-progress-meta">
                 <strong class="iw-progress-pct" id="iw-pct">0%</strong>
-                <span class="iw-progress-count" id="iw-count">Preparing…</span>
+                <span class="iw-progress-count" id="iw-count">Preparing...</span>
             </div>
             <div class="iw-current-name" id="iw-current-name"></div>
             <div class="iw-stats">
@@ -564,7 +564,7 @@ function showStep(name, dotIdx) {
         upload: 'Import Pins',
         parsing: 'Import Pins',
         preview: 'Review Import',
-        progress: 'Importing…',
+        progress: 'Importing...',
     }[name];
 }
 
@@ -639,7 +639,7 @@ function renderFileChips() {
         chip.innerHTML =
             '<i class="material-icons">insert_drive_file</i>' +
             '<span class="iw-file-chip-name">' + escHtml(f.name) + '</span>' +
-            '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">×</button>';
+            '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
         container.appendChild(chip);
     });
     container.querySelectorAll('.iw-file-chip-remove').forEach(function (btn) {
@@ -1061,7 +1061,7 @@ function addLogRow(name, iconClass, statusLabel) {
     row.className = 'iw-log-row';
     row.innerHTML =
         '<i class="material-icons iw-log-icon ' + iconClass + '">' + iconForClass(iconClass) + '</i>' +
-        '<span class="iw-log-name">' + escHtml(name || '…') + '</span>' +
+        '<span class="iw-log-name">' + escHtml(name || '...') + '</span>' +
         '<span class="iw-log-status">' + statusLabel + '</span>';
     log.appendChild(row);
     logRows.push(row);

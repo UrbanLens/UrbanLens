@@ -48,7 +48,7 @@ def _pin_version(pin: Pin) -> str:
 STAT_FIELD_META = {
     "danger": {
         "label": "Danger",
-        "help": "How hazardous this site feels — structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme).",
+        "help": "How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme).",
         "modifier": "danger",
         "wide": True,
     },

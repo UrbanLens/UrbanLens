@@ -232,7 +232,7 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
 
 
 _CELERY_STATS_CACHE_KEY = "dashboard:infra:celery_stats"
-_CELERY_STATS_TTL = 30  # seconds — limits blocking RPCs to at most once per 30s
+_CELERY_STATS_TTL = 30  # seconds - limits blocking RPCs to at most once per 30s
 
 
 def collect_celery_stats() -> InfrastructureServiceStat:

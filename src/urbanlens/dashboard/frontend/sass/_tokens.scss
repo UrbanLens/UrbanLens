@@ -256,7 +256,7 @@ $color-grey-10b: #000000;
 // TODO: This is deprecated. Use the Material Design scale instead, and replace these references over time.
 
 // ── Map filter-panel & cluster-marker colours ────────────────────────────────
-// Intentionally static — filter panel and map clusters always render on dark
+// Intentionally static - filter panel and map clusters always render on dark
 // backdrops and must not invert in dark mode.
 $ui-fp-active:   $color-indigo-500;   // filter panel active accent / range-slider fill
 $ui-fp-spinner:  $color-indigo-300;   // progress spinner / dot glow

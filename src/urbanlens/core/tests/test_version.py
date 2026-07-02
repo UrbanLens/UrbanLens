@@ -38,7 +38,7 @@ class FormatShortCommitTests(TestCase):
         self.assertEqual(format_short_commit(commit), "abcdef1")
 
     def test_missing_commit_returns_em_dash(self) -> None:
-        self.assertEqual(format_short_commit(None), "—")
+        self.assertEqual(format_short_commit(None), "-")
 
 
 class GetCurrentGitBranchTests(TestCase):

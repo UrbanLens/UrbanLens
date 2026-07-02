@@ -16,7 +16,7 @@ Context:
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
   </div>
 
-  {# Hidden file input — triggered by clicking the empty state or the add-photos item #}
+  {# Hidden file input - triggered by clicking the empty state or the add-photos item #}
   <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
          onchange="galleryHandleFiles(this.files)">
 
@@ -53,11 +53,11 @@ Context:
     <li class="gallery-empty" id="gallery-empty">
       <label for="gallery-file-input" class="gallery-empty-label">
         <i class="material-icons">cloud_upload</i>
-        <p>No photos yet — click to upload, or drag files here.</p>
+        <p>No photos yet - click to upload, or drag files here.</p>
       </label>
     </li>
     {% endfor %}
-    {# "Add photos" tile — always appended after real items so users can add more #}
+    {# "Add photos" tile - always appended after real items so users can add more #}
     {% if images %}
     <li class="gallery-add-item" id="gallery-add-btn">
       <label for="gallery-file-input" class="gallery-add-label" title="Add more photos">

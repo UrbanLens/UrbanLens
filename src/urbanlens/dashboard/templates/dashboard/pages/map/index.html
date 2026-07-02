@@ -134,7 +134,7 @@
     <div id="addr-search-bar">
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input"
-               placeholder="Search pins, addresses, coordinates…"
+               placeholder="Search pins, addresses, coordinates..."
                autocomplete="off" spellcheck="false">
         <button type="button" class="addr-search-history" id="addr-search-history"
                 aria-label="Previous searches">
@@ -263,7 +263,7 @@
                     {# Badge query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
                     <input type="hidden" name="badge_groups" id="fp-badge-groups">
 
-                    {# Selected badges area — two columns, shown only when something selected #}
+                    {# Selected badges area - two columns, shown only when something selected #}
                     <div class="fp-badge-selected" id="fp-badge-selected" style="display:none">
                         <div class="fp-badge-col fp-badge-col--incl" id="fp-badge-col-incl"
                              ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
@@ -285,7 +285,7 @@
                         </div>
                     </div>
 
-                    {# Complex formula display — shown instead of 2-column chips for mixed AND/OR expressions #}
+                    {# Complex formula display - shown instead of 2-column chips for mixed AND/OR expressions #}
                     <div class="fp-formula-display" id="fp-formula-display" style="display:none">
                         <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
                         <button type="button" class="fp-formula-display-clear" onclick="_clearAllBadgeSelections()" title="Clear filter">
@@ -293,7 +293,7 @@
                         </button>
                     </div>
 
-                    {# Formula bar — replaces old search input. Supports plain search + formula operators. #}
+                    {# Formula bar - replaces old search input. Supports plain search + formula operators. #}
                     <div class="fp-formula-wrap" id="fp-formula-wrap">
                         <input type="text" class="fp-formula-bar" id="fp-badge-formula"
                                placeholder="(Visited / Want To Go) - Demolished"
@@ -303,7 +303,7 @@
                         <div class="fp-formula-errors" id="fp-formula-errors" hidden></div>
                     </div>
 
-                    {# Available badge list — still clickable as before #}
+                    {# Available badge list - still clickable as before #}
                     <div class="fp-tag-list" id="fp-badge-list">
                         {% for badge in filter_badges %}
                         <button type="button"
@@ -346,14 +346,14 @@
 
     <div id="tile-fetch-indicator" aria-hidden="true">
         <span class="tfi-dot"></span>
-        <span id="tfi-text">Loading pins…</span>
+        <span id="tfi-text">Loading pins...</span>
     </div>
 
     {# Full-map overlay shown during cold start (no cache). Hidden immediately on cache hit. #}
     <div id="pin-load-overlay" aria-hidden="true">
         <div class="plo-card">
             <div class="plo-spinner"></div>
-            <span class="plo-text" id="plo-text">Loading your pins…</span>
+            <span class="plo-text" id="plo-text">Loading your pins...</span>
         </div>
     </div>
 
@@ -373,7 +373,7 @@
 <dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
-        <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">×</button>
+        <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">x</button>
     </div>
     <div class="apdlg-body">
 
@@ -383,12 +383,12 @@
             <input type="text" id="apdlg-name" class="form-input" placeholder="Location name" autocomplete="off">
         </div>
 
-        {# Location — combined address/coordinates smart input #}
+        {# Location - combined address/coordinates smart input #}
         <div class="form-field">
             <label class="form-label">Location</label>
             <div class="apdlg-addr-wrap" id="apdlg-addr-wrap">
                 <input type="text" id="apdlg-addr" class="form-input" autocomplete="off"
-                       placeholder="Address or coordinates (42.65, −73.75)…">
+                       placeholder="Address or coordinates (42.65, -73.75)...">
                 <div id="apdlg-addr-suggestions" class="apdlg-addr-suggestions" hidden></div>
             </div>
             <div class="apdlg-location-selected" id="apdlg-location-selected" hidden>
@@ -406,7 +406,7 @@
             <input type="hidden" id="apdlg-lng">
         </div>
 
-        {# Badges — unified search across tags, categories, and statuses #}
+        {# Badges - unified search across tags, categories, and statuses #}
         {% if filter_badges %}
         <div class="form-field">
             <label class="form-label">Badges</label>
@@ -414,7 +414,7 @@
                 <div class="apdlg-badge-chips" id="apdlg-badge-chips"></div>
                 <div class="apdlg-badge-input-wrap">
                     <input type="text" id="apdlg-badge-search" class="form-input apdlg-badge-input"
-                           placeholder="Search or add badges…" autocomplete="off" autocorrect="off">
+                           placeholder="Search or add badges..." autocomplete="off" autocorrect="off">
                     <div id="apdlg-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
                 </div>
             </div>
@@ -422,7 +422,7 @@
         <script id="apdlg-badge-data" type="application/json">{{ filter_badges_json|safe }}</script>
         {% endif %}
 
-        {# Icon & color — optional per-pin override, collapsed by default #}
+        {# Icon & color - optional per-pin override, collapsed by default #}
         <details class="apdlg-customize" id="apdlg-customize">
             <summary class="apdlg-customize-toggle">
                 <i class="material-icons">tune</i>
@@ -950,7 +950,7 @@
         _totalPins = 0;
         updatePinCounter();
         const csi = document.getElementById('cache-status');
-        if (csi) csi.textContent = 'cache: refreshing…';
+        if (csi) csi.textContent = 'cache: refreshing...';
         await _refreshAllPins();
         await _pollForUpdates();
         if (_cacheTid) { clearTimeout(_cacheTid); _cacheTid = null; }
@@ -1001,9 +1001,9 @@
         console.log('[UL] Pin data changed on server - running full background refresh');
         const csi = document.getElementById('cache-status');
         if (csi) csi.classList.add('refreshing');
-        _setFetching(true, 'Refreshing pins…');
+        _setFetching(true, 'Refreshing pins...');
         try {
-            const data = await _fetchAllPinPages('Refreshing pins…');
+            const data = await _fetchAllPinPages('Refreshing pins...');
 
             if (Number.isFinite(data.total)) _totalPins = data.total;
             const freshUuids = new Set((data.pins || []).map(p => p.uuid));
@@ -1462,7 +1462,7 @@
                 <div class="map-onboarding-card__actions">
                     <button type="button" class="btn btn--primary map-onboarding-primary">${_escapeHtml(card.button)}</button>
                     <button type="button" class="btn btn--ghost map-onboarding-later">Later</button>
-                    <button type="button" class="map-onboarding-dismiss">Don’t show again</button>
+                    <button type="button" class="map-onboarding-dismiss">Don't show again</button>
                 </div>
             </div>
             <button type="button" class="map-onboarding-x" aria-label="Close onboarding tip"><i class="material-icons">close</i></button>`;
@@ -1517,7 +1517,7 @@
             cursor = data.next_cursor || null;
             total = Number.isFinite(data.total) ? data.total : total;
             page += 1;
-            const text = total ? `${message || 'Loading pins…'} ${Math.min(pins.length, total)} / ${total}` : `${message || 'Loading pins…'} ${pins.length}`;
+            const text = total ? `${message || 'Loading pins...'} ${Math.min(pins.length, total)} / ${total}` : `${message || 'Loading pins...'} ${pins.length}`;
             const overlayText = document.getElementById('plo-text');
             if (overlayText && !document.getElementById('pin-load-overlay')?.classList.contains('hidden')) overlayText.textContent = text;
             const tfiText = document.getElementById('tfi-text');
@@ -1531,11 +1531,11 @@
         if (!tileKeys.length) return 0;
         console.log('[UL] Fetching %d tile(s) from server: %s', tileKeys.length, tileKeys.join(', '));
         tileKeys.forEach(k => _fetchedTiles.add(k));
-        const msg = (tileKeys.length === 1 && tileKeys[0] === '*') ? 'Loading pins…' : 'Loading pins…';
+        const msg = (tileKeys.length === 1 && tileKeys[0] === '*') ? 'Loading pins...' : 'Loading pins...';
         _setFetching(true, msg);
         try {
             const data = (tileKeys.length === 1 && tileKeys[0] === '*')
-                ? await _fetchAllPinPages('Loading pins…')
+                ? await _fetchAllPinPages('Loading pins...')
                 : await _fetchJson(
                     `{% url "map.pins" %}?bbox=${encodeURIComponent((() => { const b = _bboxFromKeys(tileKeys); return `${b.s},${b.w},${b.n},${b.e}`; })())}`,
                     { headers: { 'X-Requested-With': 'XMLHttpRequest' } },
@@ -2438,7 +2438,7 @@
                 .then(data => {
                     if (data && document.body.contains(detailsWrap)) {
                         const extract = data.extract || '';
-                        const short = extract.length > 400 ? extract.slice(0, 397) + '…' : extract;
+                        const short = extract.length > 400 ? extract.slice(0, 397) + '...' : extract;
                         detailsWrap.innerHTML = _buildPlaceDetailRows(place, {
                             description: short,
                             vicinity: data.description || place.vicinity || '',
@@ -2527,7 +2527,7 @@
         panel.removeAttribute('hidden');
         panel.classList.add('is-open');
 
-        // NPS and Wikipedia carry all detail data inline — no extra fetch needed.
+        // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
         if (place.source === 'nps' || place.source === 'wikipedia') {
             const parts = [];
             if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${place.vicinity}</div>`);
@@ -2537,8 +2537,8 @@
             return;
         }
 
-        // Google Places — fetch details from the server.
-        if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading…</span>';
+        // Google Places - fetch details from the server.
+        if (bodyEl) bodyEl.innerHTML = '<span class="place-info-loading">Loading...</span>';
         try {
             const resp = await fetch(`{% url "map.places.details" %}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) throw new Error();
@@ -2726,11 +2726,11 @@
         if (rect.width === 0 || rect.height === 0) return;
 
         const key = e.key.toLowerCase();
-        // Cmd/Ctrl combos reserved for browser — don't intercept
+        // Cmd/Ctrl combos reserved for browser - don't intercept
         if (e.metaKey || e.ctrlKey) return;
 
         switch (key) {
-            case 'f': {                                              // F — toggle filter panel; focus name search when opening
+            case 'f': {                                              // F - toggle filter panel; focus name search when opening
                 const fp = document.getElementById('filter-panel');
                 if (fp.classList.contains('open')) {
                     toggleFilterPanel();
@@ -2740,15 +2740,15 @@
                 }
                 break;
             }
-            case 'j':                                                // J — Jump to location
+            case 'j':                                                // J - Jump to location
                 document.getElementById('address-search-input')?.focus();
                 break;
-            case 'p': togglePins(); break;                           // P — Toggle pins
-            case 'l': _toggleLayersPanel(); break;                   // L — Layers
-            case 's': toggleSatelliteView(); break;                  // S — Satellite view
-            case 't': toggleTopographyView(); break;                 // T — Topography view
-            case 'w': toggleWeatherView(); break;                    // W — Weather view
-            case 'd': toggleDarkMode(); break;                       // D — Dark mode
+            case 'p': togglePins(); break;                           // P - Toggle pins
+            case 'l': _toggleLayersPanel(); break;                   // L - Layers
+            case 's': toggleSatelliteView(); break;                  // S - Satellite view
+            case 't': toggleTopographyView(); break;                 // T - Topography view
+            case 'w': toggleWeatherView(); break;                    // W - Weather view
+            case 'd': toggleDarkMode(); break;                       // D - Dark mode
             case 'escape':
                 if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
@@ -2931,7 +2931,7 @@
         const radio = e.target.closest('input[type=radio]');
         if (!radio || radio.value === '') return;
         if (radio.dataset.wasChecked === 'true') {
-            // Was already selected — reset to the blank (Any) option
+            // Was already selected - reset to the blank (Any) option
             const anyRadio = document.querySelector(`#filter-form input[type=radio][name="${radio.name}"][value=""]`);
             if (anyRadio) {
                 anyRadio.checked = true;
@@ -2943,7 +2943,7 @@
 
     // ── Filter refresh indicator (subtle bottom pill, same as pin fetch) ───────
     function _showFilterFetchIndicator() {
-        _setFetching(true, 'Updating map…');
+        _setFetching(true, 'Updating map...');
     }
     function _hideFilterFetchIndicator() {
         _setFetching(false);
@@ -2963,7 +2963,7 @@
 
     // ── Auto-expand filter accordion sections based on importance and screen height ──
     // Panels carry data-importance="high|medium|low"; collapse least important first on
-    // shorter screens.  New panels added to the sidebar just need the attribute — no code change.
+    // shorter screens.  New panels added to the sidebar just need the attribute - no code change.
     (function _autoExpandSections() {
         const h = window.innerHeight;
         // importance thresholds: only open panels whose importance <= maxImportance
@@ -3206,7 +3206,7 @@
         overlay.innerHTML = `<div class="addr-no-results-card">
             <i class="material-icons">search_off</i>
             <p>${_escHtml(message)}</p>
-            <button type="button">×</button>
+            <button type="button">x</button>
         </div>`;
         overlay.querySelector('button').addEventListener('click', () => overlay.remove());
         mapEl.appendChild(overlay);
@@ -3283,7 +3283,7 @@
                 document.getElementById('addr-search-clear').classList.add('addr-search-clear--visible');
                 if (_updateHistoryBtn) _updateHistoryBtn();
                 _addToSearchHistory(result.geocodeQuery);
-                _setFetching(true, 'Searching…');
+                _setFetching(true, 'Searching...');
                 try {
                     const nearMatch = result.geocodeQuery.match(/^(.+?) near (.+)$/i);
                     if (nearMatch) {
@@ -3362,13 +3362,13 @@
                             }
                             if (searchData.length > 1) toastr.info(`Found ${searchData.length} results for "${searchTerm}"`);
                         } else if (anchorLat != null) {
-                            // No hits — still center on the anchor so the user sees where they searched
+                            // No hits - still center on the anchor so the user sees where they searched
                             _programmaticMove = true;
                             map.setView([anchorLat, anchorLon], 13);
                             _showSearchMarker(anchorLat, anchorLon, anchorText);
                             _showNoResultsOverlay(`No "${searchTerm}" found near ${anchorText}`);
                         } else {
-                            _showNoResultsOverlay(`Couldn't find "${anchorText}" — try a more specific location`);
+                            _showNoResultsOverlay(`Couldn't find "${anchorText}" - try a more specific location`);
                         }
                     } else {
                         const gResp = await fetch(
@@ -3386,7 +3386,7 @@
                         }
                     }
                 } catch (_e) {
-                    toastr.error('Search failed — check your connection.');
+                    toastr.error('Search failed - check your connection.');
                 } finally {
                     _setFetching(false);
                 }
@@ -3447,10 +3447,10 @@
                             _showSearchMarker(d.lat, d.lng, d.name || result.title);
                         }
                     } else {
-                        toastr.error('Could not resolve location — try searching again.');
+                        toastr.error('Could not resolve location - try searching again.');
                     }
                 } catch (_) {
-                    toastr.error('Could not resolve location — check your connection.');
+                    toastr.error('Could not resolve location - check your connection.');
                 }
             }
         });
@@ -3477,7 +3477,7 @@
 
     async function _fetchAddrSourceIntoSlot(seq, label, url, parser, inputEl, boxEl, slot, onDone, fetchOpts) {
         slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
-            <span class="addr-spinner"></span><span class="addr-source-loading-label">${_escHtml(label)}…</span>
+            <span class="addr-spinner"></span><span class="addr-source-loading-label">${_escHtml(label)}...</span>
         </div>`;
         boxEl.hidden = false;
         try {
@@ -3541,12 +3541,12 @@
         document.getElementById('addr-search-suggestions').hidden = true;
         const cached = _getCachedUserLocation();
         if (cached) {
-            // Immediately center on cached position — no visible wait
+            // Immediately center on cached position - no visible wait
             _programmaticMove = true;
             map.setView([cached.lat, cached.lng], _defaultZoom);
         } else {
-            // No cache — show a loading indicator so user knows we're working
-            _setFetching(true, 'Getting your location…');
+            // No cache - show a loading indicator so user knows we're working
+            _setFetching(true, 'Getting your location...');
         }
         navigator.geolocation.getCurrentPosition(
             (pos) => {
@@ -3586,14 +3586,14 @@
         }
 
         if (_isPlusCode(q)) {
-            _setFetching(true, 'Resolving Plus Code…');
+            _setFetching(true, 'Resolving Plus Code...');
             _resolvePlusCode(q).then(resolved => {
                 _setFetching(false);
                 if (resolved) {
                     _programmaticMove = true;
                     map.setView([resolved.lat, resolved.lng], 16);
                 } else {
-                    toastr.warning('Could not resolve Plus Code — try adding a city name.');
+                    toastr.warning('Could not resolve Plus Code - try adding a city name.');
                 }
             }).catch(() => { _setFetching(false); toastr.error('Plus Code resolution failed.'); });
             return;
@@ -3609,7 +3609,7 @@
             _programmaticMove = true;
             map.setView([parseFloat(results[0].lat), parseFloat(results[0].lon)], 16);
         })
-        .catch(() => toastr.error('Geocoding failed — check your connection.'));
+        .catch(() => toastr.error('Geocoding failed - check your connection.'));
     }
 
     function clearAddrSearch() {
@@ -3654,7 +3654,7 @@
             }
         }
 
-        // 1. Coordinates (instant — no network call) or Plus Code
+        // 1. Coordinates (instant - no network call) or Plus Code
         const coords = _parseCoordinates(query);
         if (coords) {
             coordSlot.appendChild(_makeCollapsibleHdr('Coordinates', 'coordinates', coordSlot));
@@ -3679,14 +3679,14 @@
                 e.stopImmediatePropagation();
                 box.hidden = true;
                 _addrActiveIdx = -1;
-                _setFetching(true, 'Resolving Plus Code…');
+                _setFetching(true, 'Resolving Plus Code...');
                 try {
                     const resolved = await _resolvePlusCode(query);
                     if (resolved) {
                         _programmaticMove = true;
                         map.setView([resolved.lat, resolved.lng], 16);
                     } else {
-                        toastr.warning('Could not resolve Plus Code — try adding a city name.');
+                        toastr.warning('Could not resolve Plus Code - try adding a city name.');
                     }
                 } catch (_) {
                     toastr.error('Plus Code resolution failed.');
@@ -3698,7 +3698,7 @@
             box.hidden = false;
         }
 
-        // 2. Local DB — pins always shown before any external source
+        // 2. Local DB - pins always shown before any external source
         _fetchAddrSourceIntoSlot(
             seq, 'Your Pins & Locations',
             `{% url "map.autocomplete.local" %}?q=${encodeURIComponent(query)}`,
@@ -3729,7 +3729,7 @@
             (hasResults) => {
                 _onPrimaryDone(hasResults);
                 // Google Places already found the place, so the "Search Google Maps for..."
-                // entry would be redundant — remove it to avoid showing the same result twice.
+                // entry would be redundant - remove it to avoid showing the same result twice.
                 if (hasResults) {
                     derivedSlot.querySelectorAll('.addr-suggestion--external').forEach(el => el.remove());
                     if (!derivedSlot.querySelector('.addr-suggestion')) {
@@ -3739,7 +3739,7 @@
             },
         );
 
-        // 5. Derived suggestions — always present so there is always something actionable
+        // 5. Derived suggestions - always present so there is always something actionable
         const derived = _generateDerivedSuggestions(query);
         derivedSlot.appendChild(_makeCollapsibleHdr('Search Suggestions', 'suggestions', derivedSlot));
         for (const r of derived) derivedSlot.appendChild(_buildSuggestionItem(r, input, box));
@@ -3818,7 +3818,7 @@
             }
         }
 
-        // Top cities by pin count — loaded from backend async
+        // Top cities by pin count - loaded from backend async
         const citySlot = _makeSlot(box);
         _fetchAddrSourceIntoSlot(
             seq, 'Your Top Cities',
@@ -3900,7 +3900,7 @@
             }, 200);
         }
 
-        // Keep focus on input when clicking bar chrome (icon, padding) — not buttons.
+        // Keep focus on input when clicking bar chrome (icon, padding) - not buttons.
         bar.addEventListener('mousedown', function (e) {
             if (e.target.closest('.addr-search-history, .addr-search-clear, .addr-suggestion')) return;
             if (e.target !== input) {
@@ -4001,7 +4001,7 @@
 
     // ── Combined badge filter section ─────────────────────────────────────────
     // _badgeState: Map of badgeId(string) → 'incl' | 'excl'
-    // _inclMode:   'and' | 'or'  — how included badges are combined
+    // _inclMode:   'and' | 'or'  - how included badges are combined
     const _badgeState = new Map();
     let _inclMode = 'and';
     let _badgeDragId = null;
@@ -4337,7 +4337,7 @@
 
         let _activeSuggIdx = -1;
 
-        // Returns true if no badge name starts with `partial` — typing more cannot fix it
+        // Returns true if no badge name starts with `partial` - typing more cannot fix it
         function _isDeadEnd(partial) {
             if (!partial) return false;
             const lo = partial.toLowerCase();
@@ -4536,7 +4536,7 @@
         }
 
         // On each keystroke: update suggestions, filter badge list, show dead-end errors only.
-        // Groups are NOT applied until Enter — prevents premature chip updates mid-formula.
+        // Groups are NOT applied until Enter - prevents premature chip updates mid-formula.
         function _onFormulaChange() {
             const text = bar.value;
             const cursor = bar.selectionStart ?? text.length;
@@ -5018,7 +5018,7 @@
 
     document.getElementById('apdlg-location-clear').addEventListener('click', _clearAddPinLocation);
 
-    // Clicking the location pill (not the × button) switches the input back to edit mode
+    // Clicking the location pill (not the x button) switches the input back to edit mode
     // with the existing location text pre-filled so the user can refine it.
     function _switchToEditLocation() {
         const currentText = document.getElementById('apdlg-location-text').textContent;
@@ -5062,7 +5062,7 @@
             chip.className = 'apdlg-badge-chip-item';
             chip.dataset.id = b.id;
             const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : '';
-            chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">×</button>`;
+            chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
             chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
                 _apdlgSelectedBadges = _apdlgSelectedBadges.filter(x => x.id !== b.id);
                 _apdlgRenderSelectedChips();
@@ -5253,7 +5253,7 @@
 
             const uuid = _editPinUuid;
             this.disabled = true;
-            this.textContent = 'Saving…';
+            this.textContent = 'Saving...';
             fetch(`/dashboard/map/quick-edit/${uuid}/`, {
                 method: 'POST',
                 body: formData,
@@ -5305,12 +5305,12 @@
             if (_addPinGooglePlaceId) formData.append('google_place_id', _addPinGooglePlaceId);
             if (_addPinCanonicalName) formData.append('place_canonical_name', _addPinCanonicalName);
 
-            // Capture the place_id now — it will be cleared by _resetAddPinDialog inside
+            // Capture the place_id now - it will be cleared by _resetAddPinDialog inside
             // closeAddPinDialog, so we need a local copy for the success handler.
             const submittedPlaceId = _addPinGooglePlaceId;
 
             this.disabled = true;
-            this.textContent = 'Saving…';
+            this.textContent = 'Saving...';
             const pinLat = parseFloat(lat);
             const pinLng = parseFloat(lng);
             const pinName = formData.get('name') || 'New Pin';
@@ -5326,7 +5326,7 @@
                 // Fetch just the new pin's data and inject it into the store/map -
                 // avoids a full reload of all pins on every add.
                 const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
-                tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving…</em>`);
+                tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving...</em>`);
                 if (data && data.pin_slug) {
                     _refreshPinInStore(data.pin_slug, () => map.removeLayer(tempMarker));
                 } else {
@@ -5337,7 +5337,7 @@
                 if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                     _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
                 }
-                // Remove the external-source marker that the user pinned — the user's
+                // Remove the external-source marker that the user pinned - the user's
                 // own pin now represents this place, so showing both would be redundant.
                 if (submittedPlaceId) {
                     const gpm = _placesMarkerMap.get(submittedPlaceId);
@@ -5381,7 +5381,7 @@
                 var locSlug = btn.dataset.slug;
                 var locName = btn.dataset.name;
                 btn.disabled = true;
-                btn.textContent = 'Switching…';
+                btn.textContent = 'Switching...';
                 fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' },

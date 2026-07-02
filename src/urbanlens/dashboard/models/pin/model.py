@@ -57,7 +57,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     # Optional per-user marker override. When unset, coordinates fall back to the
     # linked Location's canonical latitude/longitude.
-    # TODO: LSP violation — AddressableModel.latitude is non-nullable but Pin needs nullable
+    # TODO: LSP violation - AddressableModel.latitude is non-nullable but Pin needs nullable
     # for its coordinate-override feature. Proper fix: make AddressableModel.latitude nullable
     # (requires a migration for Location and other subclasses).
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]

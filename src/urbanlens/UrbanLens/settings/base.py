@@ -18,7 +18,7 @@ load_dotenv(find_dotenv())
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
 
-# Detect the current environment early — other settings branch on it.
+# Detect the current environment early - other settings branch on it.
 ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
@@ -337,9 +337,9 @@ NPS_API_KEY = os.getenv("UL_NPS_API_KEY", "")
 
 TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
 
-# DRF global throttle limits — authenticated users get generous burst/day limits;
+# DRF global throttle limits - authenticated users get generous burst/day limits;
 # anonymous requests (e.g. public API endpoints) are tightly constrained.
-# Requires Valkey cache to be configured — no-ops gracefully when cache is absent.
+# Requires Valkey cache to be configured - no-ops gracefully when cache is absent.
 REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",

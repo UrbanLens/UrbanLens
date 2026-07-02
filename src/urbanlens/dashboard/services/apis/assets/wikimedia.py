@@ -1,4 +1,4 @@
-"""Wikimedia Commons service — searches for freely licensed media by name."""
+"""Wikimedia Commons service - searches for freely licensed media by name."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class WikimediaGateway(MediaProvider):
     """
     Searches Wikimedia Commons for freely licensed images.
 
-    Only call this when the pin has a meaningful name — coordinate-only names
+    Only call this when the pin has a meaningful name - coordinate-only names
     produce low-quality Commons results.
     """
 

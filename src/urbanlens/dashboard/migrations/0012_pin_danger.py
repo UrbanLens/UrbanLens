@@ -1,4 +1,4 @@
-# Generated manually — add per-pin danger rating (1-5 stars, 0 = unset).
+# Generated manually - add per-pin danger rating (1-5 stars, 0 = unset).
 
 from __future__ import annotations
 

@@ -581,7 +581,7 @@
     if (setupAvatarUpload) {
         setupAvatarUpload.addEventListener('change', function () {
             if (!setupAvatarUpload.files.length) return;
-            setAvatarStatus('Saving…', '#9aa0a6');
+            setAvatarStatus('Saving...', '#9aa0a6');
             saveProfileField('avatar', setupAvatarUpload.files[0], true)
                 .then(function (d) {
                     if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
@@ -594,7 +594,7 @@
     var setupGravatarBtn = document.getElementById('setup-avatar-gravatar-btn');
     if (setupGravatarBtn) {
         setupGravatarBtn.addEventListener('click', function () {
-            setAvatarStatus('Saving…', '#9aa0a6');
+            setAvatarStatus('Saving...', '#9aa0a6');
             var fd = new FormData();
             fd.append('csrfmiddlewaretoken', CSRF);
             fd.append('field', 'avatar_gravatar');
@@ -610,7 +610,7 @@
     // Avatar: emoji options
     document.querySelectorAll('.setup-avatar-emoji-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            setAvatarStatus('Saving…', '#9aa0a6');
+            setAvatarStatus('Saving...', '#9aa0a6');
             var fd = new FormData();
             fd.append('csrfmiddlewaretoken', CSRF);
             fd.append('field', 'avatar_emoji');

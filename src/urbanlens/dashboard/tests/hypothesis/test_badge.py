@@ -67,7 +67,7 @@ class BadgeDescendantSeedTests(TestCase):
     @given(depth=st.integers(min_value=2, max_value=5))
     @_db_settings
     def test_multi_level_chain_all_included(self, depth: int) -> None:
-        """A linear chain root → child → grandchild → … must all appear."""
+        """A linear chain root → child → grandchild → ... must all appear."""
         nodes = [_make_tag(name=f"node_{i}") for i in range(depth)]
         # link as a chain: nodes[i+1].parents.add(nodes[i])
         for i in range(depth - 1):

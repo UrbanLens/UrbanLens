@@ -21,7 +21,7 @@ class HasSlug(Model):
     from which the slug is derived, and may override ``_slugify_qs()`` to
     scope uniqueness checks (e.g. per-user instead of globally).
 
-    The ``slug`` field intentionally has no ``unique=True`` here — models that
+    The ``slug`` field intentionally has no ``unique=True`` here - models that
     need global uniqueness (Location, Profile) should override the field.
     Models that need scoped uniqueness (Pin, unique per-profile) rely on a
     ``UniqueConstraint`` in their Meta instead.
@@ -29,7 +29,7 @@ class HasSlug(Model):
 
     # Public-facing identifier. Non-sequential so users cannot enumerate records.
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
-    # URL slug — uniqueness constraints are set on each concrete model.
+    # URL slug - uniqueness constraints are set on each concrete model.
     slug = SlugField(max_length=_DEFAULT_MAX_LENGTH, null=True, blank=True)
 
     def _slug_max_length(self) -> int:
@@ -89,7 +89,7 @@ class HasSlug(Model):
 
         Persists the slug immediately when the instance already exists in the
         database (``self.pk`` is set). For unsaved instances, only sets the
-        attribute — the caller is responsible for saving.
+        attribute - the caller is responsible for saving.
 
         Returns:
             The instance slug (never empty).

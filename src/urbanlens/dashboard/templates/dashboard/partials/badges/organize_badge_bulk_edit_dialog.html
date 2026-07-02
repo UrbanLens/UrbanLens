@@ -68,7 +68,7 @@
                 <p class="form-hint badge-rel-hint badge-rel-hint--parent" id="{{ ns }}-bulk-rel-hint-parent">Checked badges will be <strong>added</strong> as parents of the selected badges. Existing parents are not removed.</p>
                 <p class="form-hint badge-rel-hint badge-rel-hint--child" id="{{ ns }}-bulk-rel-hint-child" hidden>The selected badges will be <strong>added</strong> as parents of the checked badges. Existing parents are not removed.</p>
                 <input type="hidden" id="{{ ns }}-bulk-rel-type" value="parent">
-                <input type="text" class="form-input tag-parent-search" placeholder="Search badges…" oninput="filterParentOptions(this,'{{ ns }}-bulk-parent-select')" autocomplete="off">
+                <input type="text" class="form-input tag-parent-search" placeholder="Search badges..." oninput="filterParentOptions(this,'{{ ns }}-bulk-parent-select')" autocomplete="off">
                 <div class="tag-parent-select" id="{{ ns }}-bulk-parent-select">
                     {% for b in parent_items|default:priority_items %}
                     <label class="tag-parent-option"><input type="checkbox" class="{{ ns }}-bulk-parent-cb" value="{{ b.id }}">{% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %} {{ b.name }} <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span></label>

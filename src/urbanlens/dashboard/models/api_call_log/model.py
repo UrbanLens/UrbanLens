@@ -1,4 +1,4 @@
-"""ApiCallLog model — records every external API call for rate limiting and observability."""
+"""ApiCallLog model - records every external API call for rate limiting and observability."""
 
 from __future__ import annotations
 
