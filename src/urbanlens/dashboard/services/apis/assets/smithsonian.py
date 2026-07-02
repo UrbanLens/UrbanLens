@@ -44,7 +44,7 @@ class SmithsonianGateway(Gateway):
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
         # Get the place name from the coordinates
-        google_gateway = GoogleGeocodingGateway(api_key=settings.google_domain_restricted_api_key)
+        google_gateway = GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key)
         place_name = google_gateway.get_place_name(latitude, longitude)
 
         # Get the images from the Smithsonian API

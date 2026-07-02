@@ -14,11 +14,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--query", default="UrbanLens", help="Query to test with Google Custom Search")
-        parser.add_argument("--api-key", default=None, help="Override UL_GOOGLE_SEARCH_API_KEY")
+        parser.add_argument("--api-key", default=None, help="Override UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY")
         parser.add_argument("--cx", default=None, help="Override UL_GOOGLE_SEARCH_TENANT/UL_GOOGLE_SEARCH_CX")
 
     def handle(self, *args, **options):
-        api_key = options["api_key"] or settings.google_unrestricted_api_key
+        api_key = options["api_key"] or settings.google_domain_restricted_api_key
         cx = options["cx"] or settings.google_search_tenant
         query = options["query"]
 

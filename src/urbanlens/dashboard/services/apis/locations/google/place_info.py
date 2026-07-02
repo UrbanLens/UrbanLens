@@ -218,7 +218,7 @@ class GooglePlaceService:
         if is_meaningful_name(name):
             return name
         try:
-            return GoogleGeocodingGateway(api_key=settings.google_domain_restricted_api_key).get_place_name(latitude, longitude)
+            return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
         except (OSError, ValueError) as exc:
             logger.debug("Google place-name lookup failed for %s,%s: %s", latitude, longitude, exc)
             return None

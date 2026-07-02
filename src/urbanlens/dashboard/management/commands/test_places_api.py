@@ -65,7 +65,7 @@ class Command(BaseCommand):
             "--key",
             type=str,
             default=None,
-            help="Override the API key (default: UL_GOOGLE_PLACES_API_KEY from settings)",
+            help="Override the API key (default: UL_GOOGLE_UNRESTRICTED_API_KEY from settings)",
         )
         parser.add_argument(
             "--url",
@@ -84,13 +84,13 @@ class Command(BaseCommand):
         print("  Google Places API Diagnostic")
         print("=" * 60)
         print(f"  google_places_api_key : {_mask(app_settings.google_unrestricted_api_key)}")
-        print(f"  google_maps_api_key   : {_mask(app_settings.google_domain_restricted_api_key)}")
+        print(f"  google_maps_api_key   : {_mask(app_settings.google_unrestricted_api_key)}")
         print(f"  Using key             : {_mask(key)}")
         print(f"  Test CID              : {cid}")
         print()
 
         if not key:
-            print("ERROR: No API key configured. Set UL_GOOGLE_PLACES_API_KEY in your .env file.")
+            print("ERROR: No API key configured. Set UL_GOOGLE_UNRESTRICTED_API_KEY in your .env file.")
             return
 
         session = requests.Session()
@@ -175,7 +175,7 @@ class Command(BaseCommand):
         # ------------------------------------------------------------------
         # Test 6: CID lookup with maps_api_key instead (in case wrong key is configured)
         # ------------------------------------------------------------------
-        maps_key = app_settings.google_domain_restricted_api_key
+        maps_key = app_settings.google_unrestricted_api_key
         if maps_key and maps_key != key:
             print("--- Test 6: CID lookup with google_maps_api_key instead ---")
             print("  (Testing in case your CID lookups should use the Maps key)")
@@ -194,11 +194,11 @@ class Command(BaseCommand):
         # Test 7: Exercise the real GoogleGeocodingGateway code paths
         # ------------------------------------------------------------------
         print("--- Test 7: App code - GoogleGeocodingGateway ---")
-        print(f"  Note: gateway uses google_maps_api_key ({_mask(app_settings.google_domain_restricted_api_key)})")
+        print(f"  Note: gateway uses google_maps_api_key ({_mask(app_settings.google_unrestricted_api_key)})")
         print("        (not google_places_api_key - CID lookups go through the Maps key)")
         print()
 
-        gateway_key = app_settings.google_domain_restricted_api_key
+        gateway_key = app_settings.google_unrestricted_api_key
         if not gateway_key:
             print("  [SKIP] google_maps_api_key is not set - cannot instantiate GoogleGeocodingGateway\n")
         else:

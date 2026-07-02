@@ -54,7 +54,7 @@ class GoogleGeocodingNameResolver:
 
     def resolve(self, latitude: float, longitude: float) -> str | None:
         try:
-            return GoogleGeocodingGateway(api_key=settings.google_domain_restricted_api_key).get_place_name(latitude, longitude)
+            return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
         except (OSError, ValueError, requests.RequestException) as exc:
             logger.debug("Google Geocoding name lookup failed for %s,%s: %s", latitude, longitude, exc)
             return None

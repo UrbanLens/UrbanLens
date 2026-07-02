@@ -30,7 +30,7 @@ def test_search_rejects_missing_configuration_before_request() -> None:
     session = Mock()
     gateway = GoogleCustomSearchGateway(api_key="", cx="", session=session)
 
-    with pytest.raises(GoogleCustomSearchError, match="UL_GOOGLE_SEARCH_API_KEY"):
+    with pytest.raises(GoogleCustomSearchError, match="UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY"):
         gateway.search("UrbanLens")
 
     session.get.assert_not_called()

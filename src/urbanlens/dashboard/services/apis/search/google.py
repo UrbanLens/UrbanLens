@@ -39,7 +39,7 @@ class GoogleCustomSearchGateway(Gateway):
     service_key: ClassVar[str] = "google_search"
     paid_service: ClassVar[bool] = True
 
-    api_key: str | None = settings.google_unrestricted_api_key
+    api_key: str | None = settings.google_domain_restricted_api_key
     cx: str | None = settings.google_search_tenant
     base_url: str = "https://customsearch.googleapis.com/customsearch/v1"
 
@@ -82,7 +82,7 @@ class GoogleCustomSearchGateway(Gateway):
     def validate_configuration(self) -> None:
         """Fail before issuing a request when required credentials are missing."""
         if not self.api_key:
-            raise GoogleCustomSearchError("UL_GOOGLE_SEARCH_API_KEY is not configured.")
+            raise GoogleCustomSearchError("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY is not configured.")
         if not self.cx:
             raise GoogleCustomSearchError("UL_GOOGLE_SEARCH_TENANT/UL_GOOGLE_SEARCH_CX is not configured.")
 

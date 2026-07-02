@@ -125,7 +125,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "dashboard/pages/location/index.html",
             {
                 "pin": pin,
-                "google_maps_api_key": settings.google_domain_restricted_api_key,
+                "google_maps_api_key": settings.google_unrestricted_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "page_name": "location-details",
                 "pin_type_choices": PinType.choices,
@@ -377,7 +377,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         slides: list[StreetViewSlide] = []
         providers: list[StreetViewProvider] = [
-            GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
+            GoogleMapsGateway(api_key=settings.google_domain_restricted_api_key or ""),
             MapillaryGateway(),
             KartaViewGateway(),
         ]
@@ -387,7 +387,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/street_view.html",
-            {"slides": slides, "pin": pin, "google_maps_api_key": settings.google_domain_restricted_api_key},
+            {"slides": slides, "pin": pin, "google_maps_api_key": settings.google_unrestricted_api_key},
         )
 
     @action(detail=True, methods=["get"])

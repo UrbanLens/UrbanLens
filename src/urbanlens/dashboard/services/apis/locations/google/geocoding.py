@@ -27,7 +27,7 @@ class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
     paid_service: ClassVar[bool] = True
 
-    api_key: str | None = settings.google_domain_restricted_api_key
+    api_key: str | None = settings.google_unrestricted_api_key
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def __post_init__(self) -> None:

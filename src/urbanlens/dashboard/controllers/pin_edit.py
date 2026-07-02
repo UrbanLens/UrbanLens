@@ -141,7 +141,7 @@ def _ensure_location_address(location) -> None:
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-        if not app_settings.google_domain_restricted_api_key:
+        if not app_settings.google_unrestricted_api_key:
             return
 
         data = GoogleGeocodingGateway().geocode_coordinates(lat, lng)

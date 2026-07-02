@@ -278,7 +278,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if len(q) < 2:
             return JsonResponse({"results": [], "source": "places"})
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
@@ -310,7 +310,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
@@ -335,7 +335,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key or settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 
@@ -654,7 +654,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         # ── Google historical landmarks (Places API v1 — supports historical_landmark type) ──
         if use_google:
-            api_key = settings.google_unrestricted_api_key or settings.google_domain_restricted_api_key
+            api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
             if not api_key:
                 logger.info("Google Places skipped: no API key configured.")
             else:
@@ -778,7 +778,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
