@@ -189,9 +189,6 @@
                         <i class="material-icons">pentagon</i> Edit Boundary
                     </button>
                     <div id="bbox-save-controls" class="map-overlay-btn-group" style="display:none">
-                        <button class="map-overlay-btn map-overlay-btn--save" onclick="saveBbox()">
-                            <i class="material-icons">save</i> Save
-                        </button>
                         <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearBbox()">
                             <i class="material-icons">delete_outline</i> Clear
                         </button>
@@ -470,16 +467,28 @@
             edit: { featureGroup: bboxItems },
         });
         bboxMap.addControl(bboxDrawControl);
+        setTimeout(() => document.querySelectorAll('#bbox-map .leaflet-draw-actions').forEach(el => { el.style.display = 'none'; }), 0);
         bboxMap.on(L.Draw.Event.CREATED, function (e) {
             bboxItems.clearLayers();
             bboxItems.addLayer(e.layer);
-            toastr.info('Boundary drawn. Click Save to confirm or Cancel to restore.');
+            saveBbox({ exitEdit: false });
         });
+        bboxMap.on(L.Draw.Event.EDITED, () => saveBbox({ exitEdit: false }));
+        bboxMap.on(L.Draw.Event.DELETED, () => saveBbox({ exitEdit: false }));
+        bboxItems.eachLayer(layer => layer.on('edit', _scheduleBboxAutoSave));
         document.getElementById('bbox-edit-btn').style.display = 'none';
         document.getElementById('bbox-save-controls').style.display = '';
     }
 
-    function saveBbox() {
+    let _bboxAutoSaveTimer = null;
+
+    function _scheduleBboxAutoSave() {
+        if (!bboxDrawControl) return;
+        clearTimeout(_bboxAutoSaveTimer);
+        _bboxAutoSaveTimer = setTimeout(() => saveBbox({ exitEdit: false, quiet: true }), 600);
+    }
+
+    function saveBbox(options = {}) {
         const layers = bboxItems.getLayers();
         const geometry = layers.length ? layers[0].toGeoJSON().geometry : null;
         fetch(bboxApiUrl, {
@@ -488,23 +497,28 @@
             body: JSON.stringify({ polygon: geometry }),
         })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(() => {
-            _savedBboxGeoJSON = geometry;
+        .then(data => {
+            _savedBboxGeoJSON = data.polygon || geometry || null;
+            if (!geometry && data.polygon) _loadSavedBbox(data.polygon);
             if (_savedBboxGeoJSON) { _centerMarker.remove(); } else { _centerMarker.addTo(bboxMap); }
-            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared.');
-            _exitBboxEdit();
+            if (!options.quiet) toastr.success(geometry ? 'Boundary saved.' : 'Boundary reset to the default.');
+            if (options.exitEdit !== false) _exitBboxEdit();
         })
         .catch(() => toastr.error('Failed to save boundary.'));
     }
 
-    function clearBbox() {
+    async function clearBbox() {
+        if (!await confirmDialog({title:'Clear Boundary', message:'Reset this location boundary to its default?', confirmLabel:'Clear'})) return;
         bboxItems.clearLayers();
-        toastr.info('Boundary cleared. Click Save to confirm or Cancel to restore.');
+        saveBbox();
     }
 
     function _exitBboxEdit() {
         if (bboxDrawControl) { bboxMap.removeControl(bboxDrawControl); bboxDrawControl = null; }
         bboxMap.off(L.Draw.Event.CREATED);
+        bboxMap.off(L.Draw.Event.EDITED);
+        bboxMap.off(L.Draw.Event.DELETED);
+        bboxItems.eachLayer(layer => layer.off('edit', _scheduleBboxAutoSave));
         document.getElementById('bbox-edit-btn').style.display = '';
         document.getElementById('bbox-save-controls').style.display = 'none';
     }

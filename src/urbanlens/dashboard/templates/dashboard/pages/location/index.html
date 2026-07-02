@@ -67,9 +67,6 @@
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
                 <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
-                    <button class="map-overlay-btn map-overlay-btn--save" onclick="saveCampus()">
-                        <i class="material-icons">save</i> Save
-                    </button>
                     <button class="map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
                         <i class="material-icons">delete_outline</i> Clear
                     </button>
@@ -1851,17 +1848,18 @@
             edit: { featureGroup: campusItems },
         });
         map.addControl(campusDrawControl);
+        setTimeout(() => document.querySelectorAll('#map .leaflet-draw-actions').forEach(el => { el.style.display = 'none'; }), 0);
         map.on(L.Draw.Event.CREATED, function (e) {
             // Add the new polygon to the existing set - never clear others.
             campusItems.addLayer(e.layer);
             _setPinMarkerVisible(false);
-            const n = campusItems.getLayers().length;
-            toastr.info(n === 1
-                ? 'Boundary drawn. Click Save to confirm.'
-                : `Polygon added (${n} total). Click Save to confirm.`);
+            saveCampus({ exitEdit: false });
         });
         // Re-attach right-click delete whenever edit mode is activated by toolbar click
         map.on(L.Draw.Event.EDITSTART, _attachEditRightClickDelete);
+        map.on(L.Draw.Event.EDITED, () => saveCampus({ exitEdit: false }));
+        map.on(L.Draw.Event.DELETED, () => saveCampus({ exitEdit: false }));
+        campusItems.eachLayer(layer => layer.on('edit', _scheduleCampusAutoSave));
 
         // Auto-activate the right tool immediately after the control renders
         setTimeout(() => {
@@ -1878,9 +1876,16 @@
         document.getElementById('campus-save-controls').style.display = '';
     }
 
-    function saveCampus() {
+    let _campusAutoSaveTimer = null;
+
+    function _scheduleCampusAutoSave() {
+        if (!campusDrawControl) return;
+        clearTimeout(_campusAutoSaveTimer);
+        _campusAutoSaveTimer = setTimeout(() => saveCampus({ exitEdit: false, quiet: true }), 600);
+    }
+
+    function saveCampus(options = {}) {
         const layers = campusItems.getLayers();
-        // null polygon = clear boundary and fall back to the default radius.
         const geometry = layers.length === 0 ? null : {
             type: 'MultiPolygon',
             coordinates: layers.map(l => l.toGeoJSON().geometry.coordinates),
@@ -1891,24 +1896,28 @@
             body: JSON.stringify({ polygon: geometry }),
         })
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(() => {
-            _savedCampusGeoJSON = geometry;
-            toastr.success(geometry ? 'Boundary saved.' : 'Boundary cleared - default radius will be used.');
-            _exitCampusEdit();
+        .then(data => {
+            _savedCampusGeoJSON = data.polygon || geometry || null;
+            if (!geometry && data.polygon) _loadSavedCampus(data.polygon);
+            if (!options.quiet) toastr.success(geometry ? 'Boundary saved.' : 'Boundary reset to the default.');
+            if (options.exitEdit !== false) _exitCampusEdit();
         })
         .catch(() => toastr.error('Failed to save campus boundary.'));
     }
 
     async function clearCampus() {
-        if (!await confirmDialog({title:'Clear Boundary', message:'Remove all boundary polygons from the map? Click Save afterwards to confirm.', confirmLabel:'Clear'})) return;
+        if (!await confirmDialog({title:'Clear Boundary', message:'Reset this pin boundary to its default?', confirmLabel:'Clear'})) return;
         campusItems.clearLayers();
         _setPinMarkerVisible(true);
-        toastr.info('All polygons removed. Click Save to save the empty boundary, or Cancel to restore.');
+        saveCampus();
     }
 
     function _exitCampusEdit() {
         if (campusDrawControl) { map.removeControl(campusDrawControl); campusDrawControl = null; }
         map.off(L.Draw.Event.CREATED);
+        map.off(L.Draw.Event.EDITED);
+        map.off(L.Draw.Event.DELETED);
+        campusItems.eachLayer(layer => layer.off('edit', _scheduleCampusAutoSave));
         document.getElementById('edit-campus-btn').style.display = '';
         document.getElementById('campus-save-controls').style.display = 'none';
         _attachCampusClickHandlers();

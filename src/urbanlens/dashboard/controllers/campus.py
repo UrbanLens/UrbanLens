@@ -14,11 +14,18 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
+
+
+def _default_campus_polygon(latitude: float, longitude: float, *, name: str | None = None) -> MultiPolygon:
+    """Resolve the default boundary and normalize it for Campus.polygon."""
+    geom = BoundaryProviderChain().boundary_for_point(float(latitude), float(longitude), name=name)
+    return MultiPolygon(geom, srid=geom.srid) if isinstance(geom, Polygon) else geom
 
 
 class CampusController(LoginRequiredMixin, GenericViewSet):
@@ -29,45 +36,51 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
     """
 
     def get_campus(self, request: HttpRequest, pin_slug):
-        """Return the effective campus for a pin's location.
+        """Return this user's effective pin-detail campus boundary.
 
-        Resolution order: user's personal campus → admin default → null.
-        The client should render a circle with default_radius_meters when polygon is null.
+        Pin detail boundaries are stored as user-scoped Campus rows
+        (profile=<request.user.profile>). Location/wiki boundaries use the same
+        Campus model with profile=None, so the two boundaries stay separate.
         """
         try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug)
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
         lat = float(pin.location.latitude) if pin.location_id else pin.effective_latitude
         lon = float(pin.location.longitude) if pin.location_id else pin.effective_longitude
-
+        if lat is None or lon is None:
+            return JsonResponse({"polygon": None, "default_radius_meters": 50, "latitude": lat, "longitude": lon})
         if not pin.location_id:
             return JsonResponse({"polygon": None, "default_radius_meters": 50, "latitude": lat, "longitude": lon})
 
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
         try:
             profile: Profile | None = request.user.profile
         except Profile.DoesNotExist:
             profile = None
+        if profile is None:
+            return JsonResponse({"error": "User has no profile"}, status=403)
 
-        campus = Campus.objects.effective_for(pin.location, profile)
+        campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
+        if campus.polygon is None:
+            campus.polygon = _default_campus_polygon(lat, lon, name=pin.effective_name)
+            campus.save(update_fields=["polygon", "updated"])
+
         return JsonResponse(
             {
-                "polygon": json.loads(campus.polygon.geojson) if campus and campus.polygon else None,
-                "default_radius_meters": campus.default_radius_meters if campus else 50,
+                "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None,
+                "default_radius_meters": campus.default_radius_meters,
                 "latitude": lat,
                 "longitude": lon,
             },
         )
 
     def save_campus(self, request: Request, pin_slug):
-        """Create or update the current user's campus boundary for a pin's location."""
+        """Create or update the current user's pin-detail boundary."""
         from urbanlens.dashboard.models.location.model import Location
 
         try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug)
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
@@ -91,8 +104,6 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         if not isinstance(data, dict):
             return JsonResponse({"error": "Invalid request body"}, status=400)
 
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
         try:
             profile: Profile | None = request.user.profile
         except Profile.DoesNotExist:
@@ -103,16 +114,19 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         polygon_geojson = data.get("polygon")
         campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
         if polygon_geojson:
-            geom = GEOSGeometry(json.dumps(polygon_geojson))
-            # Normalize legacy single Polygon to MultiPolygon so the field type is always consistent.
+            geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
             if isinstance(geom, Polygon):
                 geom = MultiPolygon(geom, srid=geom.srid)
             campus.polygon = geom
         else:
-            campus.polygon = None
-        campus.save()
+            campus.polygon = _default_campus_polygon(
+                float(pin.effective_latitude),
+                float(pin.effective_longitude),
+                name=pin.effective_name,
+            )
+        campus.save(update_fields=["polygon", "updated"])
 
-        return JsonResponse({"status": "ok"})
+        return JsonResponse({"status": "ok", "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
     def list_campuses(self, request: HttpRequest):
         """Return all campus boundaries visible to the current user for the main map overlay.
