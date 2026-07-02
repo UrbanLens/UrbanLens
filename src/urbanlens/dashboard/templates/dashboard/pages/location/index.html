@@ -407,7 +407,10 @@
                 <i class="material-icons spin">autorenew</i>
                 Loading...
             </div>
-            <div class="media-gallery-grid" id="media-gallery-grid"></div>
+            <div class="media-gallery-grid" id="media-gallery-grid"
+                 data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
+            <div class="pagination-bar" data-adaptive-pagination-controls
+                 data-server-page="1" data-server-pages="1" hidden></div>
         </div>
         <div class="media-provider-loader"
             hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
@@ -2619,6 +2622,13 @@
             });
         }
 
+        // Exposed for panels that assemble their item list from multiple async
+        // sources (e.g. the media gallery's per-provider loaders) and must defer
+        // pagination until every source has reported in, rather than relying on
+        // the automatic htmx:afterSwap trigger below, which would measure and
+        // lock in a page size against a still-partial list.
+        window.initAdaptivePagination = initAdaptivePagination;
+
         window.addEventListener('resize', function () { initAdaptivePagination(document, true); });
         // For outerHTML swaps, evt.detail.target is the replaced (now-detached) element, not the
         // newly inserted content. Scan document instead so the fresh card is found and paginated.
@@ -2692,38 +2702,9 @@
         var loaders = document.querySelectorAll('.media-provider-loader');
         if (!loaders.length) return;
         var pending = loaders.length;
-        var MEDIA_PAGE_SIZE = 12;
 
         function isMediaLoader(el) {
             return !!(el && el.classList && el.classList.contains('media-provider-loader'));
-        }
-
-        // Every provider's results are already in the DOM at this point (fetched,
-        // not paginated server-side) - this just reveals them a page at a time so
-        // the grid doesn't render 50+ tiles in one unbroken wall.
-        function paginateMediaGallery(grid) {
-            var items = Array.prototype.slice.call(grid.querySelectorAll('.media-item'));
-            if (items.length <= MEDIA_PAGE_SIZE) return;
-
-            var shown = 0;
-            var moreBtn = document.createElement('button');
-            moreBtn.type = 'button';
-            moreBtn.className = 'btn btn--ghost media-gallery-more';
-            grid.insertAdjacentElement('afterend', moreBtn);
-
-            function showNextPage() {
-                items.slice(shown, shown + MEDIA_PAGE_SIZE).forEach(function (item) { item.hidden = false; });
-                shown += MEDIA_PAGE_SIZE;
-                if (shown >= items.length) {
-                    moreBtn.remove();
-                    return;
-                }
-                moreBtn.textContent = 'Show more (' + (items.length - shown) + ' remaining)';
-            }
-
-            items.forEach(function (item) { item.hidden = true; });
-            moreBtn.addEventListener('click', showNextPage);
-            showNextPage();
         }
 
         function finishLoader(el) {
@@ -2738,7 +2719,15 @@
                 if (section) section.remove();
                 return;
             }
-            paginateMediaGallery(grid);
+            // All three providers have reported in - only now do items get the
+            // adaptive-pagination marker, so the same overflow-detecting paginator
+            // used by the web-search results measures against the final, complete
+            // set instead of re-triggering (and under-measuring) after each partial
+            // hx-swap="beforeend" append.
+            grid.querySelectorAll('.media-item').forEach(function (item) {
+                item.setAttribute('data-adaptive-pagination-item', '');
+            });
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {

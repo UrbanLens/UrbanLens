@@ -659,7 +659,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "street_number": location.street_number or "",
             "administrative_area_level_1": location.administrative_area_level_1 or "",
         }
-        query_key = ", ".join(filter(None, [location.official_name, location.route, location.locality, location.administrative_area_level_1])) or f"{lat:.5f}, {lng:.5f}"
+        name = pin.meaningful_official_name or pin.meaningful_name or ""
+        address_bits = ", ".join(filter(None, [
+            " ".join(filter(None, [location.street_number, location.route])),
+            location.locality,
+            location.administrative_area_level_1,
+        ]))
+        query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
         cached = LocationCache.get_fresh(location, "wikipedia")
         if cached is None:
             # Bounded to a hard wall-clock deadline: WikipediaGateway can chain up to
@@ -667,7 +673,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             # inactivity between reads, not total call duration -- without this, a slow
             # upstream can hold the request open far longer than any single timeout implies.
             article = call_with_deadline(
-                lambda: WikipediaGateway().get_article_for_location(lat, lng, address_components),
+                lambda: WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name),
                 timeout=20,
                 default=None,
             )
@@ -768,7 +774,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s missing lat/lng or state_code, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        location_name = pin.effective_official_name or ""
+        location_name = pin.meaningful_official_name or pin.meaningful_name or ""
         query_key = f"{location_name} ({state_code})" if location_name else state_code
 
         cached = LocationCache.get_fresh(location, "nps")

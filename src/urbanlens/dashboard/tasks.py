@@ -179,8 +179,9 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 "street_number": location.street_number or "",
                 "administrative_area_level_1": location.administrative_area_level_1 or "",
             }
-            article = WikipediaGateway().get_article_for_location(lat, lng, address_components)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=location.official_name or "")
+            name = location.official_name or location.name or ""
+            article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
+            LocationCache.set(location, "wikipedia", article or {}, query_key=name)
             update_location_name_from_external_sources(
                 location,
                 extra_candidates=[("wikipedia", (article or {}).get("title"))],

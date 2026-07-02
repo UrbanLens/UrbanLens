@@ -100,15 +100,21 @@ class WikipediaGateway(Gateway):
         latitude: float,
         longitude: float,
         address_components: dict[str, str],
+        name: str = "",
     ) -> dict[str, Any] | None:
         """
-        Find a Wikipedia article near the coordinates that mentions the address.
+        Find a Wikipedia article near the coordinates that matches the place.
 
         Args:
             latitude: WGS-84 latitude of the location.
             longitude: WGS-84 longitude of the location.
             address_components: Dict with optional keys 'locality', 'route',
                 'street_number', 'administrative_area_level_1'.
+            name: The place's own name (e.g. pin/location name), when known.
+                Checked against each candidate's title first, since a title
+                match is a far stronger signal than an address mention -- a
+                same-block article that happens to reference the street or
+                city is not necessarily the article for this specific place.
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``,
@@ -117,7 +123,7 @@ class WikipediaGateway(Gateway):
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
-            if summary and self._address_matches(summary, address_components):
+            if summary and self._address_matches(summary, address_components, name):
                 return self._normalise(summary)
         return None
 
@@ -155,13 +161,22 @@ class WikipediaGateway(Gateway):
             return None
 
     @staticmethod
-    def _address_matches(summary: dict, components: dict[str, str]) -> bool:
+    def _address_matches(summary: dict, components: dict[str, str], name: str = "") -> bool:
         """
-        Returns True if at least one address component appears in the article text.
+        Returns True if the candidate's title matches ``name``, or at least one
+        address component appears in the article text.
 
-        We check the extract (first few paragraphs) for the city/locality - the
-        most reliable signal.  A street address match is stronger but optional.
+        A title match on the place's own name is checked first since it is the
+        strongest signal available - stronger than any address mention, which
+        can also be true of unrelated articles about nearby places. We check
+        the extract (first few paragraphs) for the city/locality as a fallback
+        signal.  A street address match is stronger but optional.
         """
+        title = (summary.get("title") or "").strip().lower()
+        name = name.strip().lower()
+        if name and title and (name in title or title in name):
+            return True
+
         text = (summary.get("extract") or "").lower()
         if not text:
             return True  # no extract - accept the article, let the user judge
