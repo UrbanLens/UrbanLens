@@ -33,6 +33,13 @@ class WikimediaGateway(MediaProvider):
     display_name: ClassVar[str] = "Wikimedia Commons"
     paid_service: ClassVar[bool] = False
     multi_query: ClassVar[bool] = True
+    # Commons' full-text search over individual file description pages appears
+    # to do (near-)strict AND matching across query tokens - every extra
+    # qualifying term shrinks the candidate set, and a country name rarely
+    # appears in a single file's own title/description text. Confirmed by hand:
+    # "<name> <city> <state>" returns hits; the same query plus "United States"
+    # or a full street address does not.
+    search_with_country: ClassVar[bool] = False
 
     base_url: str = _API_URL
 

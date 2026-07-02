@@ -278,9 +278,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             timeout=20,
             default=([], False),
         )
-        if not items:
-            return HttpResponse(status=204)
 
+        # Render even when a provider found nothing, so admins can see what was
+        # searched (including every candidate query tried) in the debug overlay
+        # rather than the request silently vanishing as a 204. The template only
+        # emits the hidden debug marker plus zero <a class="media-item"> tags in
+        # that case, so it's a no-op for regular users and doesn't add a visible
+        # empty tile to the gallery (see the media-item-count check that hides
+        # the whole section when no provider found anything, in index.html).
         debug_query = " | ".join(search_terms)
         context = {"items": items, "debug": self._debug_entry(request, source, debug_query, from_cache=from_cache)}
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)

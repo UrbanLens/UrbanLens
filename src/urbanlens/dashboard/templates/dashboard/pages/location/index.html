@@ -2715,7 +2715,11 @@
             if (loading) loading.remove();
             var grid = document.getElementById('media-gallery-grid');
             var section = document.getElementById('media-gallery-section');
-            if (!grid || !grid.children.length) {
+            // Count actual media tiles, not the hidden debug-marker spans each
+            // provider response also appends (even when it found nothing, so
+            // its query still shows up in the admin debug overlay) - otherwise
+            // an all-providers-empty pin would leave a header-only empty card.
+            if (!grid || !grid.querySelectorAll('.media-item').length) {
                 if (section) section.remove();
                 return;
             }
