@@ -1,8 +1,9 @@
-"""Campus model - defines the spatial region for a Location."""
+"""Campus model - defines the spatial region for a Location or Pin."""
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
 from django.contrib.gis.geos import Point
@@ -18,33 +19,57 @@ _DEFAULT_RADIUS_METERS = 50
 
 
 class Campus(abstract.Model):
-    """Spatial region for a Location, optionally scoped to a specific user.
-
-    Campus defines *how much of the map* a Location occupies - its boundary
-    polygon.  It is a separate concern from:
-    - Location: canonical address, coordinates, and Google Maps metadata.
-    - Pin: a user's personal record for visiting or tracking a place.
+    """Spatial boundary for a Location or a user's Pin.
 
     Two kinds of Campus rows exist:
-    - Admin default (profile=None): one per Location, set by an admin to define
-      the canonical boundary polygon.  Enforced by campus_unique_default_location.
-    - User override (profile=<Profile>): one per (Location, Profile) pair.
-      Visible only to that user; replaces the admin default for display purposes.
-      Enforced by campus_unique_user_location.
 
-    If no Campus row exists for a Location at all, callers should fall back to a
-    generated circle centred on Location.latitude / Location.longitude.
-    Use CampusManager.effective_for(location, profile) to resolve this chain.
+    Location default (pin=None, profile=None):
+        One per Location, describing its canonical boundary.  Set automatically
+        from external boundary APIs and editable via the community wiki.
+        Enforced by campus_unique_location_default.
+
+    Pin boundary (pin=<Pin>):
+        One per Pin, owned by pin.profile.  Replaces the location default for
+        that pin's map display.  Keyed by pin so boundaries survive reassigning
+        pin.location to a different Location.
+        Enforced by campus_unique_pin.
+
+    Each row stores two separate polygon layers:
+        generated_polygon: cached result from the boundary API chain (Overpass,
+            Regrid, Overture, etc.).  Written once on first access, never
+            overwritten by user actions.  Survives the user clearing their custom
+            drawing so we avoid a repeat API call on next load.
+        polygon: user-drawn boundary.  None means "display generated_polygon".
+
+    effective_polygon returns polygon → generated_polygon → circle fallback.
+    Use CampusManager.effective_for_pin(pin) or effective_for(location) to
+    resolve the correct Campus for display.
     """
 
-    # The place whose boundary this Campus describes.
+    # User-drawn boundary (clearable). None = fall back to generated_polygon.
+    polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
+    # API-fetched boundary (cached). Written on first generate, never cleared by users.
+    generated_polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
+    # Radius (metres) used when both polygons are None (circle fallback).
+    default_radius_meters = IntegerField(default=_DEFAULT_RADIUS_METERS)
+
+    # The place whose boundary this Campus describes.  Required on all rows.
+    # For pin campuses: always matches pin.location (synced lazily by controller).
     location = ForeignKey(
         "dashboard.Location",
         on_delete=CASCADE,
         related_name="campuses",
     )
-    # None → admin-defined default, visible to all users who have no personal override.
-    # Set → personal override, visible only to this profile.
+    # Set for pin-scoped boundaries; None for location wiki/default boundaries.
+    pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="campus",
+    )
+    # Mirrors pin.profile for fast profile-based queries without joining through pin.
+    # Always None on location default campuses.
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -52,15 +77,12 @@ class Campus(abstract.Model):
         blank=True,
         related_name="campuses",
     )
-    # The region boundary.  Stored as MultiPolygon to allow campuses that span
-    # disjoint areas (e.g. two buildings separated by a road).  None means
-    # "generate a circle fallback" (see effective_polygon).
-    polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
-    # Radius (metres) used to generate the circle when polygon is None.
-    # Irrelevant when polygon is set.
-    default_radius_meters = IntegerField(default=_DEFAULT_RADIUS_METERS)
-
     objects = CampusManager()
+
+    if TYPE_CHECKING:
+        pin_id: int | None
+        profile_id: int | None
+        location_id: int
 
     # ------------------------------------------------------------------
     # Derived properties
@@ -68,25 +90,23 @@ class Campus(abstract.Model):
 
     @property
     def is_default(self) -> bool:
-        """True if this is the admin-defined default (profile=None)."""
-        return self.profile_id is None
+        """True if this is the location-level default (no profile, no pin)."""
+        return self.profile_id is None and self.pin_id is None
 
     @property
     def effective_polygon(self):
-        """The stored polygon, or a generated circle if polygon is None.
-
-        The circle buffers in degrees (WGS84), which is approximate - it
-        slightly distorts shape at high latitudes.  Adequate for map display;
-        for metric-accurate buffering use PostGIS ST_Buffer on the server side.
+        """User-drawn polygon, API-generated fallback, or a circle from location coords.
 
         Requires self.location to be loaded (use select_related("location")).
+        The circle buffers in degrees (WGS84) — adequate for map display.
         """
         if self.polygon:
             return self.polygon
+        if self.generated_polygon:
+            return self.generated_polygon
         lat = float(self.location.latitude)
         lon = float(self.location.longitude)
         center = Point(lon, lat, srid=4326)
-        # 1 degree latitude ≈ 111 km; this approximation is sufficient for display.
         radius_deg = self.default_radius_meters / 111_000
         return center.buffer(radius_deg)
 
@@ -95,6 +115,8 @@ class Campus(abstract.Model):
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
+        if self.pin_id:
+            return f"Campus(pin={self.pin_id}, profile={self.profile_id})"
         owner = f"profile {self.profile_id}" if self.profile_id else "default"
         return f"Campus(location={self.location_id}, {owner})"
 
@@ -102,16 +124,16 @@ class Campus(abstract.Model):
         db_table = "dashboard_campuses"
         get_latest_by = "updated"
         constraints = [
-            # One personal campus per (user, location) pair.
-            UniqueConstraint(
-                fields=["location", "profile"],
-                condition=Q(profile__isnull=False),
-                name="campus_unique_user_location",
-            ),
-            # One admin-default campus per location (partial index avoids NULL != NULL pitfall).
+            # One wiki/default boundary per location.
             UniqueConstraint(
                 fields=["location"],
-                condition=Q(profile__isnull=True),
-                name="campus_unique_default_location",
+                condition=Q(profile__isnull=True, pin__isnull=True),
+                name="campus_unique_location_default",
+            ),
+            # One boundary per pin (pin already encodes location + profile).
+            UniqueConstraint(
+                fields=["pin"],
+                condition=Q(pin__isnull=False),
+                name="campus_unique_pin",
             ),
         ]

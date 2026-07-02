@@ -55,13 +55,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
     # External-source name for this location. User edits must never write this field.
     official_name = CharField(max_length=255, null=True, blank=True)
     description = TextField(null=True, blank=True)
-
-    # Boundary for this location. Used to auto-link new pins whose coordinates
-    # fall within this polygon. Defaults are supplied by the location boundary
-    # provider chain during creation, with a small local bbox fallback on save.
-    # Users can expand this to cover a campus or multi-building site via the wiki.
-    bounding_box = PolygonField(geography=True, null=True, blank=True, srid=4326)
-
+    
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
@@ -132,8 +126,6 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
             lon = float(self.longitude)
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
-            if self.bounding_box is None:
-                self.bounding_box = default_bbox(lat, lon)
         super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):

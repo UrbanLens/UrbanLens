@@ -32,37 +32,45 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
     def get_campus(self, request: HttpRequest, pin_slug):
         """Return this user's effective pin-detail campus boundary.
 
-        Pin detail boundaries are stored as user-scoped Campus rows
-        (profile=<request.user.profile>). Location/wiki boundaries use the same
-        Campus model with profile=None, so the two boundaries stay separate.
+        Pin boundaries are stored as pin-scoped Campus rows (pin=<pin>).
+        Location/wiki boundaries use profile=None, pin=None rows, so the two
+        boundary types stay strictly separate.
+
+        On first access the boundary is auto-generated from the BoundaryProviderChain
+        and cached in generated_polygon.  Subsequent loads hit the DB only.
         """
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
-        lat = float(pin.location.latitude) if pin.location_id else pin.effective_latitude
-        lon = float(pin.location.longitude) if pin.location_id else pin.effective_longitude
-        if lat is None or lon is None:
-            return JsonResponse({"polygon": None, "default_radius_meters": 50, "latitude": lat, "longitude": lon})
-        if not pin.location_id:
+        lat = pin.effective_latitude
+        lon = pin.effective_longitude
+        if lat is None or lon is None or not pin.location_id:
             return JsonResponse({"polygon": None, "default_radius_meters": 50, "latitude": lat, "longitude": lon})
 
         try:
-            profile: Profile | None = request.user.profile
+            profile: Profile = request.user.profile
         except Profile.DoesNotExist:
-            profile = None
-        if profile is None:
             return JsonResponse({"error": "User has no profile"}, status=403)
 
-        campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
-        if campus.polygon is None:
-            campus.polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
-            campus.save(update_fields=["polygon", "updated"])
+        campus, _ = Campus.objects.get_or_create(
+            pin=pin,
+            defaults={"location": pin.location, "profile": profile},
+        )
+        # Sync location in case pin.location was reassigned since this campus was created.
+        if campus.location_id != pin.location_id:
+            campus.location = pin.location
+            campus.save(update_fields=["location", "updated"])
 
+        if campus.generated_polygon is None:
+            campus.generated_polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
+            campus.save(update_fields=["generated_polygon", "updated"])
+
+        effective = campus.polygon or campus.generated_polygon
         return JsonResponse(
             {
-                "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None,
+                "polygon": json.loads(effective.geojson) if effective else None,
                 "default_radius_meters": campus.default_radius_meters,
                 "latitude": lat,
                 "longitude": lon,
@@ -70,7 +78,12 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         )
 
     def save_campus(self, request: Request, pin_slug):
-        """Create or update the current user's pin-detail boundary."""
+        """Create or update the current user's pin boundary.
+
+        Sending polygon=null clears the user-drawn polygon and resets to the
+        cached generated_polygon (generating it first if not yet cached).
+        Sending a GeoJSON polygon stores it as the user-drawn custom boundary.
+        """
         from urbanlens.dashboard.models.location.model import Location
 
         try:
@@ -104,27 +117,40 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "User has no profile"}, status=403)
 
         polygon_geojson = data.get("polygon")
-        campus, _ = Campus.objects.get_or_create(location=pin.location, profile=profile)
+        campus, _ = Campus.objects.get_or_create(
+            pin=pin,
+            defaults={"location": pin.location, "profile": profile},
+        )
+        # Sync stale location reference if pin.location was reassigned.
+        if campus.location_id != pin.location_id:
+            campus.location = pin.location
+
         if polygon_geojson:
             geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
             if isinstance(geom, Polygon):
                 geom = MultiPolygon(geom, srid=geom.srid)
             campus.polygon = geom
         else:
-            lat = pin.effective_latitude
-            lon = pin.effective_longitude
-            if lat is None or lon is None:
-                return JsonResponse({"error": "Pin has no coordinates"}, status=400)
-            campus.polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
-        campus.save(update_fields=["polygon", "updated"])
+            # Clear user drawing; ensure generated_polygon is cached so the
+            # fallback display doesn't require a fresh API call.
+            campus.polygon = None
+            if campus.generated_polygon is None:
+                lat = pin.effective_latitude
+                lon = pin.effective_longitude
+                if lat is None or lon is None:
+                    return JsonResponse({"error": "Pin has no coordinates"}, status=400)
+                campus.generated_polygon = boundary_as_multipolygon(lat, lon, name=pin.effective_name)
 
-        return JsonResponse({"status": "ok", "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
+        campus.save(update_fields=["polygon", "generated_polygon", "location", "updated"])
+
+        effective = campus.polygon or campus.generated_polygon
+        return JsonResponse({"status": "ok", "polygon": json.loads(effective.geojson) if effective else None})
 
     def list_campuses(self, request: HttpRequest):
         """Return all campus boundaries visible to the current user for the main map overlay.
 
-        Returns personal campuses for the user plus admin defaults for locations
-        where the user has no personal campus.
+        Returns pin-scoped campuses for the user's own pins, plus location-default
+        campuses for locations not already covered by a pin campus.
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -134,26 +160,34 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             profile = None
 
         if profile:
-            personal_location_ids = set(
-                Campus.objects.filter(profile=profile).values_list("location_id", flat=True),
-            )
-            campuses = list(Campus.objects.filter(profile=profile).select_related("location")) + list(
-                Campus.objects.filter(profile__isnull=True)
-                .exclude(location_id__in=personal_location_ids)
+            pin_campuses = list(
+                Campus.objects.filter(profile=profile, pin__isnull=False)
                 .select_related("location"),
             )
+            covered_location_ids = {c.location_id for c in pin_campuses}
+            location_defaults = list(
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
+                .exclude(location_id__in=covered_location_ids)
+                .select_related("location"),
+            )
+            campuses = pin_campuses + location_defaults
         else:
-            campuses = list(Campus.objects.filter(profile__isnull=True).select_related("location"))
+            campuses = list(
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
+                .select_related("location"),
+            )
 
-        result = [
-            {
-                "id": c.id,
-                "location_id": c.location_id,
-                "latitude": float(c.location.latitude),
-                "longitude": float(c.location.longitude),
-                "polygon": json.loads(c.polygon.geojson) if c.polygon else None,
-                "default_radius_meters": c.default_radius_meters,
-            }
-            for c in campuses
-        ]
+        result = []
+        for c in campuses:
+            effective = c.polygon or c.generated_polygon
+            result.append(
+                {
+                    "id": c.id,
+                    "location_id": c.location_id,
+                    "latitude": float(c.location.latitude),
+                    "longitude": float(c.location.longitude),
+                    "polygon": json.loads(effective.geojson) if effective else None,
+                    "default_radius_meters": c.default_radius_meters,
+                },
+            )
         return JsonResponse({"campuses": result})

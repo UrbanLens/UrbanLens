@@ -113,20 +113,28 @@ badge_customization: Recipe[BadgeCustomization] = Recipe(
 
 # ── Campus ────────────────────────────────────────────────────────────────────
 
+# Location-level default campus (profile=None, pin=None) — community wiki boundary.
 campus: Recipe[Campus] = Recipe(
     "dashboard.Campus",
     location=foreign_key("dashboard.location"),
-    profile=_make_profile,
+    profile=None,
+    pin=None,
     default_radius_meters=50,
 )
 
-# Admin campus: profile=None means this is the site-wide default for the location.
+# Alias kept for clarity in tests that explicitly want the location default.
 admin_campus: Recipe[Campus] = Recipe(
     "dashboard.Campus",
     location=foreign_key("dashboard.location"),
     profile=None,
+    pin=None,
     default_radius_meters=100,
 )
+
+# Pin-scoped campuses must be created via baker.make() directly so that
+# location and profile can be wired to match the pin:
+#   baker.make("dashboard.Campus", pin=my_pin, location=my_pin.location,
+#              profile=my_pin.profile)
 
 # ── Pin ───────────────────────────────────────────────────────────────────────
 

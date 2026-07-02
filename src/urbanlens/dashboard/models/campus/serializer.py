@@ -6,18 +6,21 @@ from urbanlens.dashboard.models.campus.model import Campus
 
 
 class CampusSerializer(serializers.ModelSerializer):
-    """Serializer for Campus - the spatial region boundary for a Location.
+    """Serializer for Campus - the spatial region boundary for a Location or Pin.
 
-    polygon is serialized as WKT.  When polygon is null, the client should
-    render a circle with radius default_radius_meters around the Location's
-    coordinates instead.
+    polygon and generated_polygon are serialized as WKT.  When both are null,
+    the client should render a circle with radius default_radius_meters around
+    the Location's coordinates instead.
     """
 
-    # Expose polygon as WKT string; null when no polygon is stored.
     polygon_wkt = serializers.SerializerMethodField()
+    generated_polygon_wkt = serializers.SerializerMethodField()
 
     def get_polygon_wkt(self, obj) -> str | None:
         return obj.polygon.wkt if obj.polygon else None
+
+    def get_generated_polygon_wkt(self, obj) -> str | None:
+        return obj.generated_polygon.wkt if obj.generated_polygon else None
 
     class Meta:
         model = Campus
@@ -25,7 +28,9 @@ class CampusSerializer(serializers.ModelSerializer):
             "id",
             "location",
             "profile",
+            "pin",
             "polygon_wkt",
+            "generated_polygon_wkt",
             "default_radius_meters",
             "created",
             "updated",
