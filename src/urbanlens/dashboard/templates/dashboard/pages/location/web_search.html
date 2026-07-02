@@ -18,12 +18,16 @@
         {% if result.title or result.link %}
         <li class="search-result" data-adaptive-pagination-item>
             <div class="search-result-inner">
-                {% if result.thumbnail %}
                 <div class="search-result-thumb-wrap">
+                    {% if result.thumbnail %}
                     <img class="search-result-thumb" src="{{ result.thumbnail }}" alt="" loading="lazy"
-                         onerror="this.closest('.search-result-thumb-wrap').style.display='none'">
+                         onerror="urbanlensMediaThumbFallback(this, 'public', 'search-result-thumb search-result-thumb-fallback')">
+                    {% else %}
+                    <span class="search-result-thumb search-result-thumb-fallback" aria-hidden="true">
+                        <i class="material-icons">public</i>
+                    </span>
+                    {% endif %}
                 </div>
-                {% endif %}
                 <div class="search-result-body">
                     <div class="search-result-source-row">
                         {% if result.domain %}

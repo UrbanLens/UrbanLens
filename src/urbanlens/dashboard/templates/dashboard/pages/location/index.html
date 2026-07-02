@@ -2572,9 +2572,9 @@
             prev.setAttribute('aria-label', 'Previous page');
             prev.innerHTML = '<i class="material-icons">chevron_left</i>';
             if (page > 1) {
-                prev.addEventListener('click', function () { showPage(card, page - 1, pageSize); });
+                prev.addEventListener('click', function () { card.dataset.userPaginated = '1'; showPage(card, page - 1, pageSize); });
             } else if (prevUrl && window.htmx) {
-                prev.addEventListener('click', function () { window.htmx.ajax('GET', prevUrl, { target: card, swap: 'outerHTML' }); });
+                prev.addEventListener('click', function () { card.dataset.userPaginated = '1'; window.htmx.ajax('GET', prevUrl, { target: card, swap: 'outerHTML' }); });
             }
 
             var label = document.createElement('span');
@@ -2587,9 +2587,9 @@
             next.setAttribute('aria-label', 'Next page');
             next.innerHTML = '<i class="material-icons">chevron_right</i>';
             if (page < totalClientPages) {
-                next.addEventListener('click', function () { showPage(card, page + 1, pageSize); });
+                next.addEventListener('click', function () { card.dataset.userPaginated = '1'; showPage(card, page + 1, pageSize); });
             } else if (nextUrl && window.htmx) {
-                next.addEventListener('click', function () { window.htmx.ajax('GET', nextUrl, { target: card, swap: 'outerHTML' }); });
+                next.addEventListener('click', function () { card.dataset.userPaginated = '1'; window.htmx.ajax('GET', nextUrl, { target: card, swap: 'outerHTML' }); });
             } else {
                 next.disabled = true;
             }
@@ -2602,6 +2602,7 @@
             var start = (page - 1) * pageSize;
             var end = start + pageSize;
             items.forEach(function (item, index) { item.hidden = index < start || index >= end; });
+            card.dataset.adaptivePaginationCurrentPage = page;
             if (controls) renderControls(card, controls, page, pageSize, items.length);
         }
 
@@ -2609,14 +2610,22 @@
             (root || document).querySelectorAll('[data-adaptive-pagination-list]').forEach(function (list) {
                 var card = list.closest('.card');
                 if (!card) return;
+                var alreadyReady = card.dataset.adaptivePaginationReady === '1';
                 // Skip already-initialized cards unless explicitly asked to reinit (e.g. on resize).
-                if (!forceReinit && card.dataset.adaptivePaginationReady === '1') return;
+                if (!forceReinit && alreadyReady) return;
                 var items = getItems(card);
                 if (!items.length) return;
                 var pageSize = measureVisiblePageSize(card, list, items);
+                var totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+                // A forced reinit (a lazy thumbnail finishing load, window resize,
+                // more items streaming in later) must not yank the user back to
+                // page 1 while they're actively browsing - resume on whichever
+                // page they were viewing, clamped in case the page count shrank.
+                // Only a genuinely first-time init starts at page 1.
+                var page = alreadyReady ? Math.min(parseInt(card.dataset.adaptivePaginationCurrentPage || '1', 10) || 1, totalPages) : 1;
                 card.dataset.adaptivePaginationPageSize = pageSize;
                 card.dataset.adaptivePaginationReady = '1';
-                showPage(card, 1, pageSize);
+                showPage(card, page, pageSize);
                 card.querySelectorAll('img').forEach(function (img) {
                     if (img.dataset.adaptivePaginationObserved) return;
                     img.dataset.adaptivePaginationObserved = '1';
@@ -2684,12 +2693,81 @@
         }, true);
     }());
 
-    // Swap a broken/missing media thumbnail <img> for an icon tile instead of
-    // hiding the whole card - keeps text-only records (e.g. LOC book/survey
-    // entries with no preview image) visible rather than dropping them.
-    window.urbanlensMediaThumbFallback = function (img, icon) {
+    // ── Wikipedia summary: fill whatever height the card's row already ────────
+    // gave it, rather than a fixed character count. `.pin-aux-grid > .card`
+    // stretches every card in a row to match its tallest sibling, so a fixed
+    // truncation length often leaves blank space below the text (short excerpt,
+    // tall row) or could in principle overflow it (long excerpt, short row).
+    // This clamps by line count instead, recomputed against the card's actual
+    // rendered height - it only ever fits content into space the card already
+    // has, so it can't itself grow the row and create a stretch feedback loop.
+    // No pagination controls: overflow is simply hidden behind "Read more".
+    (function () {
+        function clampExtract(section) {
+            var extract = section.querySelector('.wikipedia-extract');
+            var body = section.querySelector('.wikipedia-body');
+            var readMore = section.querySelector('.wikipedia-read-more');
+            if (!extract || !body || !readMore) return;
+
+            extract.style.webkitLineClamp = '';
+
+            var readMoreStyle = getComputedStyle(readMore);
+            var readMoreSpace = readMore.getBoundingClientRect().height
+                + (parseFloat(readMoreStyle.marginTop) || 0)
+                + (parseFloat(readMoreStyle.marginBottom) || 0);
+            // .wikipedia-body reuses .card__body, which has its own bottom padding -
+            // exclude it so text doesn't run flush to the card's border.
+            var bodyPaddingBottom = parseFloat(getComputedStyle(body).paddingBottom) || 0;
+            var bodyBottom = body.getBoundingClientRect().bottom - bodyPaddingBottom;
+            var available = bodyBottom - extract.getBoundingClientRect().top - readMoreSpace;
+
+            var lineHeight = parseFloat(getComputedStyle(extract).lineHeight);
+            if (!lineHeight) return;
+
+            if (extract.getBoundingClientRect().height > available) {
+                extract.style.webkitLineClamp = String(Math.max(1, Math.floor(available / lineHeight)));
+            }
+        }
+
+        function scheduleClamp(section) {
+            // Let this frame's layout (including any grid stretch driven by
+            // sibling cards) settle before measuring.
+            requestAnimationFrame(function () { clampExtract(section); });
+        }
+
+        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!el || el.id !== 'wikipedia-section') return;
+            var section = document.getElementById('wikipedia-section');
+            if (!section || !section.querySelector('.wikipedia-extract')) return;
+
+            scheduleClamp(section);
+
+            var thumb = section.querySelector('.wikipedia-thumb');
+            if (thumb) thumb.addEventListener('load', function () { scheduleClamp(section); }, { once: true });
+
+            // Re-measure whenever the card's own rendered height changes for
+            // any reason - most commonly a sibling .pin-aux-grid card loading
+            // in and changing the row's stretched height. Our own clamp writes
+            // never grow the card past that height, so this can't self-trigger.
+            if (window.ResizeObserver) {
+                new ResizeObserver(function () { scheduleClamp(section); }).observe(section);
+            }
+        });
+
+        window.addEventListener('resize', function () {
+            var section = document.getElementById('wikipedia-section');
+            if (section) scheduleClamp(section);
+        });
+    }());
+
+    // Swap a broken/missing thumbnail <img> for an icon tile instead of
+    // hiding its wrapper - keeps records with no (or a dead) preview image
+    // visible, and their row/tile the same size as ones that have an image,
+    // instead of collapsing and breaking the grid/row's consistent styling.
+    window.urbanlensMediaThumbFallback = function (img, icon, className) {
         var span = document.createElement('span');
-        span.className = 'media-item-thumb media-item-thumb-fallback';
+        span.className = className || 'media-item-thumb media-item-thumb-fallback';
         span.setAttribute('aria-hidden', 'true');
         span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
         img.replaceWith(span);
@@ -2698,9 +2776,15 @@
     // ── Media gallery: combines Smithsonian / Wikimedia Commons / Library of ──
     // Congress results as each provider's own HTMX request completes, so one
     // slow provider never blocks the others from appearing. Each loader is a
-    // tiny hidden element that appends its results into the shared grid; once
-    // every loader has reported in, the section is removed if the grid is
-    // still empty (no provider found anything for this pin).
+    // tiny hidden element that appends its results into the shared grid.
+    // Pagination is (re)computed after every single provider response, not
+    // just once all three are in, so the user sees paginated results as soon
+    // as the first (fastest) provider replies rather than waiting on the
+    // slowest one. Until the user actually clicks a pagination button
+    // (card.dataset.userPaginated, set in the prev/next handlers above),
+    // later-arriving results are still folded into the images-first sort; once
+    // they've started browsing, later results only ever append at the end
+    // (more pages) so their current page never gets reshuffled under them.
     (function () {
         var loaders = document.querySelectorAll('.media-provider-loader');
         if (!loaders.length) return;
@@ -2708,6 +2792,33 @@
 
         function isMediaLoader(el) {
             return !!(el && el.classList && el.classList.contains('media-provider-loader'));
+        }
+
+        // Items with a real thumbnail image are more useful at a glance than
+        // text-only records (e.g. LOC book/survey entries) - move them first.
+        // Stable within each group: relative arrival order from each provider
+        // is otherwise preserved.
+        function sortMediaGalleryByThumbnail(grid) {
+            var items = Array.prototype.slice.call(grid.querySelectorAll('.media-item'));
+            var withImage = items.filter(function (item) { return !!item.querySelector('img.media-item-thumb'); });
+            var withoutImage = items.filter(function (item) { return !item.querySelector('img.media-item-thumb'); });
+            withImage.concat(withoutImage).forEach(function (item) { grid.appendChild(item); });
+        }
+
+        function refreshMediaGallery() {
+            var grid = document.getElementById('media-gallery-grid');
+            if (!grid || !grid.querySelectorAll('.media-item').length) return;
+            var card = grid.closest('.card');
+            var userPaginated = !!(card && card.dataset.userPaginated === '1');
+            if (!userPaginated) {
+                sortMediaGalleryByThumbnail(grid);
+            }
+            // New items (from this or a later provider) join pagination too;
+            // already-marked items are unaffected by re-setting the attribute.
+            grid.querySelectorAll('.media-item').forEach(function (item) {
+                item.setAttribute('data-adaptive-pagination-item', '');
+            });
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 
         function finishLoader(el) {
@@ -2724,17 +2835,7 @@
             // an all-providers-empty pin would leave a header-only empty card.
             if (!grid || !grid.querySelectorAll('.media-item').length) {
                 if (section) section.remove();
-                return;
             }
-            // All three providers have reported in - only now do items get the
-            // adaptive-pagination marker, so the same overflow-detecting paginator
-            // used by the web-search results measures against the final, complete
-            // set instead of re-triggering (and under-measuring) after each partial
-            // hx-swap="beforeend" append.
-            grid.querySelectorAll('.media-item').forEach(function (item) {
-                item.setAttribute('data-adaptive-pagination-item', '');
-            });
-            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
@@ -2743,6 +2844,7 @@
             if (evt.detail.xhr.status === 200) {
                 var section = document.getElementById('media-gallery-section');
                 if (section) section.hidden = false;
+                refreshMediaGallery();
             }
             finishLoader(el);
         });

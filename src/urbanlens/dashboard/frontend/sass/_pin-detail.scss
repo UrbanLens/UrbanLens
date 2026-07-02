@@ -688,6 +688,22 @@
     }
 }
 
+// ── Wikipedia summary panel ────────────────────────────────────────────────
+.wikipedia-info {
+    .wikipedia-body {
+        display: flex;
+        flex-direction: column;
+    }
+
+    // Line count is set dynamically in JS to fill whatever height the card was
+    // stretched to (see index.html) rather than a fixed number of lines.
+    .wikipedia-extract {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+}
+
 // ── USGS Historical Topographic Maps panel ────────────────────────────────────
 .usgs-topo {
     .usgs-topo-grid {
@@ -2041,6 +2057,18 @@ body.page-location-details .pin-detail-grid {
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+
+        .search-result-thumb-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ul-grey-4, #94a3b8);
+            background: linear-gradient(145deg, var(--ul-grey-1, #f1f5f9) 0%, var(--ul-grey-0, #fff) 100%);
+
+            .material-icons {
+                font-size: 1.35rem;
+            }
         }
 
         .search-result-body {

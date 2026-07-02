@@ -100,6 +100,19 @@ def is_coordinate_name(name: str) -> bool:
     )
 
 
+def normalize_name_for_comparison(name: str | None) -> str:
+    """Casefold and strip everything but letters/digits, for "is this really the same name" checks.
+
+    Two names that only differ by case, spacing, or punctuation (e.g. "St. Mark's"
+    vs "st marks") normalize to the same string, so a straight string comparison
+    can be used to catch near-duplicates that would otherwise pass an exact or
+    even a case-insensitive equality check.
+    """
+    if not name:
+        return ""
+    return _STRIP_NAME_PATTERN.sub("", name).casefold()
+
+
 def is_meaningful_name(name: str | None) -> bool:
     """Return True when a place or pin name is worth including in external queries."""
     if not name:

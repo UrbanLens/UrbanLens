@@ -176,7 +176,28 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         if self.location and self.location.address:
             return self.location.address
         return f"{self.effective_latitude}, {self.effective_longitude}"
-    
+
+    @property
+    def effective_address(self) -> str | None:
+        """Formatted "street, city, state" address, falling back to the location's.
+
+        A Location-linked pin's own address fields are typically blank (see
+        ``effective_latitude``), so this reads from ``self.location`` whenever
+        the pin doesn't have its own override.
+        """
+        address_basic = self.address_basic or (self.location.address_basic if self.location else None)
+        if not address_basic:
+            return None
+
+        city = self.city or (self.location.city if self.location else None)
+        state = self.state or (self.location.state if self.location else None)
+        parts = [address_basic]
+        if city:
+            parts.append(city)
+        if state:
+            parts.append(state)
+        return ", ".join(parts)
+
     def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True) -> str | None:
         """Name to use when searching for this location in external APIs.
 

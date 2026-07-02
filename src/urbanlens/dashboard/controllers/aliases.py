@@ -15,6 +15,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +36,15 @@ class PinAliasView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         name = (request.POST.get("name") or "").strip()
         if not name:
-            return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
+            return HttpResponse("Name is required.", status=400)
+        # An alias that only differs from the pin's own name by case, spacing, or
+        # punctuation can't add any search value the name doesn't already provide.
+        if normalize_name_for_comparison(name) == normalize_name_for_comparison(pin.effective_name):
+            return HttpResponse("That alias is too close to the pin's name to improve search results.", status=400)
         try:
             PinAlias.objects.create(pin=pin, name=name)
         except IntegrityError:
-            return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
+            return HttpResponse("That alias already exists.", status=409)
         aliases = pin.aliases.order_by("name")
         return render(
             request,

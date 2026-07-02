@@ -34,7 +34,11 @@
             <p class="wikipedia-description">{{ article.description }}</p>
             {% endif %}
             {% if article.extract %}
-            <p class="wikipedia-extract">{{ article.extract|truncatechars:600 }}</p>
+            {# Truncated only as a defensive cap against an unexpectedly huge extract - the #}
+            {# real, space-aware truncation is done client-side (see index.html), since a #}
+            {# fixed character count either wastes room or overflows depending on how tall #}
+            {# this card's row siblings stretch it. #}
+            <p class="wikipedia-extract">{{ article.extract|truncatechars:3000 }}</p>
             {% endif %}
             <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer"
                class="wikipedia-read-more">
