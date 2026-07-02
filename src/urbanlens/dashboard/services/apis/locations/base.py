@@ -216,7 +216,7 @@ def feature_intersects_bbox(feature: dict, bbox: BBox) -> bool:
     return bbox_intersects(feature_bbox, bbox)
 
 
-def _best_containing_polygon(features: list[dict], latitude: float, longitude: float) -> Polygon | None:
+def best_containing_polygon(features: list[dict], latitude: float, longitude: float) -> Polygon | None:
     point = Point(float(longitude), float(latitude), srid=4326)
     candidates: list[Polygon] = []
     for feature in features:

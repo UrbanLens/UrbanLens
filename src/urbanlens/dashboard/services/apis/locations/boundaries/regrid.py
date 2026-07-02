@@ -22,7 +22,7 @@ import json
 import os
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BBox, BoundaryProvider, _best_containing_polygon, bbox_to_polygon_geojson, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BBox, BoundaryProvider, bbox_to_polygon_geojson, best_containing_polygon, validate_bbox
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:
@@ -185,4 +185,4 @@ class RegridGateway(Gateway, BoundaryProvider):
             limit=5,
             return_matched_buildings=True,
         )
-        return _best_containing_polygon(_features_from_payload(payload), latitude, longitude)
+        return best_containing_polygon(_features_from_payload(payload), latitude, longitude)

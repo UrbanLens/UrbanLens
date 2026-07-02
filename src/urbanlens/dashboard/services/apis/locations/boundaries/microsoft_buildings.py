@@ -30,7 +30,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, create_bbox, feature_intersects_bbox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, feature_intersects_bbox, validate_bbox
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -136,7 +136,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
         return features
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
-        return _best_containing_polygon(
+        return best_containing_polygon(
             self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta)),
             latitude,
             longitude,
