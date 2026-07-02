@@ -70,7 +70,8 @@
       "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=St%20Mark%20Episcopal%20Church%20small%20town&srlimit=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
       "Bash(curl -s \"https://en.wikipedia.org/api/rest_v1/page/summary/Cincinnati\" -H \"User-Agent: UrbanLens/1.0 test\")",
       "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Cincinnati&explaintext=1&exintro=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
-      "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/services/apis/assets/wikipedia.py)"
+      "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/services/apis/assets/wikipedia.py)",
+      "Bash(python3 -)"
     ]
   }
 }

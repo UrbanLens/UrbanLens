@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
@@ -17,16 +18,28 @@ _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
 # The REST summary endpoint (`_fetch_summary`) truncates well below the
-# article's actual lead section - e.g. it returns ~550 characters for
-# "Cincinnati" while the full lead section is ~2000. When a summary comes
-# back shorter than this, it's worth a couple more requests to give the
-# frontend enough text to fill whatever space its card ends up with (see
-# the client-side clamp in dashboard/pages/location/index.html).
-_SHORT_EXTRACT_CHARS = 400
-# MediaWiki's TextExtracts prop hard-caps `exchars` at 1200 regardless of the
-# value requested - used as a last-resort fallback to pull a bit of body text
-# for genuine stub articles whose lead section alone is still short.
-_EXCHARS_LIMIT = 1200
+# article's actual lead section, and the lead section itself is often not
+# enough to fill the card's available space either (e.g. a cemetery article
+# whose lead is a couple hundred words but whose body has several more
+# sections of real content). Below this length, pull a much bigger slice of
+# the whole article body instead of just the lead, so the frontend has real
+# margin to work with regardless of how tall its card ends up (see the
+# client-side clamp in dashboard/pages/location/index.html).
+_SHORT_EXTRACT_CHARS = 1200
+# Server-side cap on the extended extract - generous, but bounded so a single
+# huge article (some run 50k+ characters) doesn't get pulled in wholesale.
+_EXTENDED_EXTRACT_CHARS = 5000
+# Plain-text extracts keep MediaWiki section markers ("== Heading ==") as
+# literal text - meaningless (and ugly) once flattened into one inline
+# paragraph client-side, so they're stripped out.
+_SECTION_HEADING_PATTERN = re.compile(r"^\s*=+\s*.+?\s*=+\s*$", re.MULTILINE)
+# Sections whose content reads poorly as prose (bibliography entries, bare
+# citation text, etc.) - the extended extract is truncated before the first
+# one of these rather than including them.
+_STOP_SECTION_PATTERN = re.compile(
+    r"^\s*=+\s*(references|external links|see also|notes|bibliography|further reading|sources|gallery|footnotes)\s*=+\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -146,31 +159,23 @@ class WikipediaGateway(Gateway):
     def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
         """Mutate ``article["extract"]`` in place with more text when it's short.
 
-        Tries progressively broader (and more expensive) sources: first the
-        article's full lead section (uncapped, but naturally bounded - see
-        ``_SHORT_EXTRACT_CHARS``), then a capped slice starting from the top
-        of the whole article if the lead itself is still short (a genuine stub).
-        Each step only runs if the previous one didn't produce enough text.
+        The lead section alone is frequently not enough content to fill a
+        card's available space, so this pulls from later sections of the
+        article body too rather than stopping at the lead.
         """
         if len(article["extract"]) >= _SHORT_EXTRACT_CHARS:
             return
-        if (intro := self._fetch_extract(title, intro_only=True)) and len(intro) > len(article["extract"]):
-            article["extract"] = intro
-        if len(article["extract"]) >= _SHORT_EXTRACT_CHARS:
-            return
-        if (extended := self._fetch_extract(title, intro_only=False)) and len(extended) > len(article["extract"]):
+        if (extended := self._fetch_extended_extract(title)) and len(extended) > len(article["extract"]):
             article["extract"] = extended
 
-    def _fetch_extract(self, title: str, *, intro_only: bool) -> str | None:
-        """Fetch a plain-text extract via the action API's TextExtracts prop.
+    def _fetch_extended_extract(self, title: str) -> str | None:
+        """Fetch a longer plain-text extract spanning the whole article body.
 
-        Args:
-            title: Article title.
-            intro_only: When True, return the full lead section (see the
-                module docstring on ``_SHORT_EXTRACT_CHARS`` for why this is
-                already more than ``_fetch_summary`` provides). When False,
-                return up to ``_EXCHARS_LIMIT`` characters starting from the
-                top of the whole article, for stubs with a short lead too.
+        Unlike ``_fetch_summary``, this isn't limited to the lead section -
+        the full article text is requested and then trimmed to
+        ``_EXTENDED_EXTRACT_CHARS`` on our end (MediaWiki's own ``exchars``
+        param maxes out at 1200 regardless of what's requested, which isn't
+        enough headroom here), cut on a sentence boundary where possible.
         """
         params: dict[str, str | int] = {
             "action": "query",
@@ -179,20 +184,31 @@ class WikipediaGateway(Gateway):
             "explaintext": 1,
             "format": "json",
         }
-        if intro_only:
-            params["exintro"] = 1
-        else:
-            params["exchars"] = _EXCHARS_LIMIT
         try:
             resp = self.session.get(self.base_url, params=params, timeout=10)
             resp.raise_for_status()
             pages = resp.json().get("query", {}).get("pages", {})
             for page in pages.values():
-                if extract := (page.get("extract") or "").strip():
-                    return extract
+                if raw := (page.get("extract") or "").strip():
+                    return self._clean_and_trim_extract(raw)
         except Exception:
-            logger.warning("Wikipedia extract fetch failed for %r (intro_only=%s)", title, intro_only)
+            logger.warning("Wikipedia extended extract fetch failed for %r", title)
         return None
+
+    @staticmethod
+    def _clean_and_trim_extract(text: str) -> str:
+        """Drop trailing reference-style sections, strip heading markers, and cap length."""
+        if stop := _STOP_SECTION_PATTERN.search(text):
+            text = text[: stop.start()]
+        text = _SECTION_HEADING_PATTERN.sub("", text)
+        text = re.sub(r"\n{2,}", "\n\n", text).strip()
+        if len(text) <= _EXTENDED_EXTRACT_CHARS:
+            return text
+        truncated = text[:_EXTENDED_EXTRACT_CHARS]
+        cut = max(truncated.rfind(". "), truncated.rfind(".\n"))
+        if cut > 0:
+            truncated = truncated[: cut + 1]
+        return truncated.rstrip()
 
     def _geo_search(self, lat: float, lng: float) -> list[dict]:
         """Return up to _MAX_CANDIDATES article stubs near the coordinates."""

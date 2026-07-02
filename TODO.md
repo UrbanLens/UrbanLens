@@ -208,6 +208,7 @@ Features planned for future releases.
 * Reorganize template partials
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc.
 * Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them)
+* Automatically mark nearby PD, public parking, etc.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
