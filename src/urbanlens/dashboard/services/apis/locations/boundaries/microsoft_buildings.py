@@ -27,17 +27,15 @@ import gzip
 import io
 import json
 import math
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, _best_containing_polygon, _lookup_bbox, feature_intersects_bbox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, feature_intersects_bbox, validate_bbox
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
-
-DATASET_LINKS_URL = (
-    "https://raw.githubusercontent.com/microsoft/GlobalMLBuildingFootprints/main/dataset-links.csv"
-)
 
 
 def _lonlat_to_tile(lon: float, lat: float, zoom: int) -> tuple[int, int]:
@@ -92,9 +90,9 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
     
     def _load_dataset_links(self) -> list[dict[str, str]]:
         if self._dataset_links is None:
-            response = self.session.get(DATASET_LINKS_URL, timeout=60)
-            response.raise_for_status()
-            self._dataset_links = list(csv.DictReader(io.StringIO(response.text)))
+            # Load from {PROJECT_ROOT}/data/dataset-links.csv
+            dataset_file = settings.project_root / "data" / "dataset-links.csv"
+            self._dataset_links = list(csv.DictReader(io.StringIO(dataset_file.read_text())))
         return self._dataset_links
 
     def list_available_locations(self) -> set[str]:

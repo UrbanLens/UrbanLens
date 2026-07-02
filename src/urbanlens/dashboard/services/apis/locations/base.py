@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import json
 from typing import TYPE_CHECKING, ClassVar
 
-from django.contrib.gis.geos import Polygon
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
 from django.core.cache import cache
 
 from urbanlens.core.cache_keys import make_cache_key
@@ -168,6 +169,10 @@ def bbox_intersects(a: BBox, b: BBox) -> bool:
     )
 
 
+def _is_reasonable_default(polygon: Polygon) -> bool:
+    return 0 < polygon.area <= MAX_DEFAULT_BOUNDARY_AREA_DEGREES
+
+
 def _iter_positions(coords) -> Iterable[tuple[float, float]]:
     """Recursively walk a GeoJSON ``coordinates`` array, yielding (lon, lat) pairs."""
     if not coords:
@@ -205,3 +210,48 @@ def feature_intersects_bbox(feature: dict, bbox: BBox) -> bool:
     if feature_bbox is None:
         return False
     return bbox_intersects(feature_bbox, bbox)
+
+
+def _best_containing_polygon(features: list[dict], latitude: float, longitude: float) -> Polygon | None:
+    point = Point(float(longitude), float(latitude), srid=4326)
+    candidates: list[Polygon] = []
+    for feature in features:
+        polygon = _polygon_from_feature(feature)
+        if polygon is None or not _is_reasonable_default(polygon):
+            continue
+        if polygon.contains(point) or polygon.touches(point):
+            candidates.append(polygon)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda polygon: polygon.area)
+
+
+def _polygon_from_feature(feature: dict) -> Polygon | None:
+    geometry = feature.get("geometry") if isinstance(feature, dict) else None
+    if geometry is None and hasattr(feature, "__geo_interface__"):
+        geometry = getattr(feature, "__geo_interface__", None)
+    if hasattr(geometry, "__geo_interface__"):
+        geometry = getattr(geometry, "__geo_interface__", None)
+    if not geometry:
+        return None
+    
+    try:
+        geom = GEOSGeometry(json.dumps(geometry), srid=4326)
+    except (TypeError, ValueError):
+        return None
+    return _best_polygon_from_geometry(geom)
+
+
+def _best_polygon_from_geometry(geom: GEOSGeometry) -> Polygon | None:
+    if geom.empty:
+        return None
+    if not geom.valid:
+        geom = geom.buffer(0)
+    if isinstance(geom, Polygon):
+        return geom if geom.valid and not geom.empty else None
+    if isinstance(geom, MultiPolygon):
+        polygons = [polygon for polygon in geom if polygon.valid and not polygon.empty]
+        geos_geometry = max(polygons, key=lambda polygon: polygon.area) if polygons else None
+        if geos_geometry is not None:
+            return Polygon(geos_geometry)
+    return None
