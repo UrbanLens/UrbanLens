@@ -51,7 +51,11 @@
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check src/urbanlens/dashboard/services/apis/locations/usgs.py src/urbanlens/dashboard/controllers/pin.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/services/apis/locations/kartaview.py)",
       "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/campus.py src/urbanlens/dashboard/controllers/location_wiki.py src/urbanlens/dashboard/services/locations/boundaries.py 2>&1)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/models/campus/ src/urbanlens/dashboard/controllers/campus.py src/urbanlens/dashboard/migrations/0026_campus_pin_scoping.py src/urbanlens/dashboard/tests/hypothesis/test_campus.py src/urbanlens/dashboard/baker_recipes.py 2>&1)"
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/models/campus/ src/urbanlens/dashboard/controllers/campus.py src/urbanlens/dashboard/migrations/0026_campus_pin_scoping.py src/urbanlens/dashboard/tests/hypothesis/test_campus.py src/urbanlens/dashboard/baker_recipes.py 2>&1)",
+      "Bash(xargs grep -l \"profile_setup_complete\\\\|show_onboarding\\\\|show_hover\")",
+      "Bash(xargs grep -l \"map-onboarding\\\\|page-onboarding\")",
+      "Bash(xargs grep -l \"onboarding\\\\|guide\")",
+      "PowerShell(.venv_windows\\\\Scripts\\\\ruff.exe check --fix src/urbanlens/dashboard/controllers/pin.py src/urbanlens/dashboard/models/pin/model.py src/urbanlens/dashboard/services/apis/assets/loc.py src/urbanlens/dashboard/urls.py 2>&1)"
     ]
   }
 }

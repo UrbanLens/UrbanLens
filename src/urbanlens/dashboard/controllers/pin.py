@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGatewa
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
+from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -215,14 +215,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.meaningful_official_name:
+        search_name = pin.get_unique_search_name()
+        if not search_name:
             return HttpResponse(status=204)
 
         # Instantiate the SmithsonianGateway with the API key
         smithsonian_gateway = SmithsonianGateway(api_key=settings.smithsonian_api_key or "")
 
         # Get historic images from the Smithsonian's API; discard entries without a usable URL
-        smithsonian_images = [img for img in smithsonian_gateway.get_data(pin.effective_official_name) if img.get("url")]
+        smithsonian_images = [img for img in smithsonian_gateway.get_data(search_name) if img.get("url")]
         page_obj = get_page(request, smithsonian_images, _SMITHSONIAN_PAGE_SIZE)
 
         return render(
@@ -250,7 +251,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.meaningful_official_name:
+        search_name = pin.get_unique_search_name()
+        if not search_name:
             return HttpResponse("", status=204)
 
         if not user_has_feature(request.user, SiteFeature.SEARCH):
@@ -277,8 +279,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         try:
             search_gateway = get_search_gateway()
-            query = build_pin_search_query(pin)
-            search_results = search_gateway.search(query)
+            if query := pin.get_unique_search_name():
+                search_results = search_gateway.search(query)
+            else:
+                return render(
+                    request,
+                    "dashboard/pages/location/web_search.html",
+                    {"error": "This pin does not have a descriptive name to search for."},
+                )
         except (OSError, ValueError, RuntimeError) as e:
             logger.exception("Unable to contact web search API: %s", e)
             return render(
@@ -379,7 +387,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             "dashboard/pages/location/street_view.html",
-            {"slides": slides, "pin": pin},
+            {"slides": slides, "pin": pin, "google_maps_api_key": settings.google_maps_api_key},
         )
 
     @action(detail=True, methods=["get"])
@@ -788,6 +796,55 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         return render(request, "dashboard/partials/pins/pin_nominatim.html", {"place": data})
+
+    def loc_info(self, request: HttpRequest, pin_slug: str):
+        """HTMX partial: Library of Congress records for the pin's location.
+
+        Only queries USA-based locations. Returns 204 when the pin has no
+        meaningful name, is outside the USA, or when no results are found.
+        Results are cached in LocationCache for 7 days.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
+        from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        if not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
+            return HttpResponse(status=204)
+
+        query = pin.get_unique_search_name(include_country=False)
+        if not query:
+            return HttpResponse(status=204)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "loc")
+        if cached is None:
+            try:
+                results = LOCJsonGateway().search(query)
+            except Exception:
+                logger.exception("LOC search failed for pin %s", pin_slug)
+                results = []
+            LocationCache.set(location, "loc", {"results": results}, query_key=query)
+            data = results
+        else:
+            data = (cached.data or {}).get("results", [])
+
+        if not data:
+            return HttpResponse(status=204)
+
+        page_obj = get_page(request, data, 8)
+        return render(
+            request,
+            "dashboard/partials/pins/pin_loc.html",
+            {"results": page_obj.object_list, "page_obj": page_obj, "query": query, "adaptive_pagination": True},
+        )
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin.

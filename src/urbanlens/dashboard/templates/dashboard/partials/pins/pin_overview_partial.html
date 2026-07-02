@@ -1,5 +1,16 @@
 <div id="pin-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %} data-pin-version="{{ client_version }}">
 
+    {# ── Private-page notice ─────────────────────────────────────────────── #}
+    <div class="page-scope-notice page-scope-notice--private">
+        <i class="material-icons">lock</i>
+        <span>Your private pin — notes, photos, and visits here are only visible to you.</span>
+        {% if not pin.is_private and pin.location and pin.location.slug %}
+        <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="page-scope-notice-link">
+            Community wiki <i class="material-icons">open_in_new</i>
+        </a>
+        {% endif %}
+    </div>
+
     {# ── Title ──────────────────────────────────────────────────────────── #}
     <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
 

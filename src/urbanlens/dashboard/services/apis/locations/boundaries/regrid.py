@@ -1,6 +1,6 @@
 """Gateway for Regrid's Parcel API (https://support.regrid.com/api).
 
-Regrid is the one service in this set of four that's a genuine token-authed
+Regrid is a genuine token-authed
 REST/JSON API, so it maps directly onto ``Gateway``: every call goes
 through ``self.session`` and gets rate limited via ``service_key``.
 
@@ -11,6 +11,10 @@ building footprints tied to that parcel. That's controlled per-request with
 ``return_matched_buildings`` (default True when the account supports it), so
 for the "building + property boundary" use case this single API can answer
 both questions at once.
+
+NOTE: Regrid is fairly expensive, so we are not currently using it. This code can be 
+left here for the time being, but we have no current plans to integrate with
+it at this time.
 
 Docs used to write this: https://support.regrid.com/api/parcel-api-endpoints
 """

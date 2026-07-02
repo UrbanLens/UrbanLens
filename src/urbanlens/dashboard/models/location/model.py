@@ -68,6 +68,26 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
 
     objects = LocationManager()
 
+    def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
+        """Name to use when searching for this location in external APIs."""
+        name = self.official_name
+        if not name:
+            return None
+        
+        parts = [name]
+        if self.address_basic and self.address_basic != name:
+            parts.append(self.address_basic)
+
+        if self.city:
+            parts.append(self.city)
+        elif self.county:
+            parts.append(self.county)
+        if self.state:
+            parts.append(self.state)
+        if include_country and self.country:
+            parts.append(self.country)
+        return " ".join(parts)
+    
     @property
     def effective_date_last_active(self):
         """Date the place was last active, inferred from date_abandoned if not set explicitly."""

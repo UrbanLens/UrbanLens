@@ -1382,7 +1382,8 @@
             body: 'Import pins from Google Takeout so your map feels useful immediately.',
             button: 'Import pins',
             target: 'import-pins-button',
-            shouldShow: () => _totalPins < 100,
+            shouldShow: () => _totalPins < 20,
+            watchSelector: '#import-pins-button',
             action: () => document.getElementById('import-pins-button')?.click(),
         },
         {
@@ -1394,6 +1395,7 @@
             button: 'Add a pin',
             target: 'add-pin-button',
             shouldShow: () => _totalPins === 0,
+            watchSelector: '#add-pin-button',
             action: () => openAddPinDialog(),
         },
         {
@@ -1405,6 +1407,7 @@
             button: 'Open filters',
             target: 'search-pins-button',
             shouldShow: () => _totalPins >= 5,
+            watchSelector: '#search-pins-button',
             action: () => { if (!document.getElementById('filter-panel')?.classList.contains('open')) toggleFilterPanel(); },
         },
         {
@@ -1415,7 +1418,8 @@
             body: 'Topographic, satellite, and weather overlays can reveal access, terrain, and conditions.',
             button: 'Show satellite',
             target: 'satellite-button',
-            shouldShow: () => true,
+            shouldShow: () => !map.hasLayer(satelliteLayer),
+            watchSelector: '#satellite-button',
             action: () => { if (!map.hasLayer(satelliteLayer)) toggleSatelliteView(); },
         },
     ];
@@ -1468,8 +1472,16 @@
         el.querySelector('.map-onboarding-dismiss')?.addEventListener('click', () => { _setOnboardingDismissed(card.id); _clearOnboarding(); });
         el.querySelector('.map-onboarding-x')?.addEventListener('click', () => { _setOnboardingLater(); _clearOnboarding(); });
     }
+    function _registerAutoDissmiss(card) {
+        if (_onboardingDismissed(card.id) || !card.watchSelector) return;
+        document.querySelectorAll(card.watchSelector).forEach(el => {
+            el.addEventListener('click', () => _setOnboardingDismissed(card.id), { once: true });
+        });
+    }
+
     function initMapOnboarding() {
         if (!{% if request.user.profile.show_onboarding_tips %}true{% else %}false{% endif %}) return;
+        _onboardingCards.forEach(_registerAutoDissmiss);
         if (_onboardingLater()) return;
         const card = _onboardingCards.find(c => c.shouldShow() && !_onboardingDismissed(c.id));
         if (card) setTimeout(() => _showOnboardingCard(card), 450);

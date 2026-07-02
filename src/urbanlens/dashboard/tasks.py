@@ -301,13 +301,13 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     from urbanlens.core.cache_keys import make_cache_key
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.services.search import build_pin_search_query, format_search_date, get_search_gateway
+    from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    if pin is None or not pin.meaningful_official_name:
+    if pin is None or not pin.get_unique_search_name():
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search…")
-    results = get_search_gateway().search(build_pin_search_query(pin))
+    results = get_search_gateway().search(pin.get_unique_search_name())
     for result in results:
         try:
             result["domain"] = urlparse(result.get("link", "")).netloc.removeprefix("www.")

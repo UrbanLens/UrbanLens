@@ -324,6 +324,11 @@ urlpatterns = [
                                 name="pin.nominatim",
                             ),
                             path(
+                                "<slug:pin_slug>/loc/",
+                                pin.PinController.as_view({"get": "loc_info"}),
+                                name="pin.loc",
+                            ),
+                            path(
                                 "<slug:pin_slug>/usgs-topo/",
                                 pin.PinController.as_view({"get": "usgs_topo_info"}),
                                 name="pin.usgs_topo",

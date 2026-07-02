@@ -1,0 +1,34 @@
+{% if results %}
+<div class="loc-results card" id="loc-section"
+     data-collapse-scope="pin" data-collapse-section="loc">
+    <div class="card-header">
+        <i class="material-icons">account_balance</i>
+        <h3>Library of Congress</h3>
+        {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+    </div>
+    <div class="loc-grid" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="8">
+        {% for item in results %}
+        <a class="loc-item" href="{{ item.url }}" target="_blank" rel="noopener noreferrer"
+           data-adaptive-pagination-item>
+            {% if item.thumbnail %}
+            <div class="loc-item-thumb-wrap">
+                <img src="{{ item.thumbnail }}" alt="{{ item.title }}" loading="lazy"
+                     class="loc-item-thumb"
+                     onerror="this.closest('.loc-item-thumb-wrap').style.display='none'">
+            </div>
+            {% endif %}
+            <div class="loc-item-body">
+                <span class="loc-item-title">{{ item.title }}</span>
+                {% if item.date %}<span class="loc-item-date">{{ item.date }}</span>{% endif %}
+                {% if item.description %}
+                <p class="loc-item-description">{{ item.description|truncatewords:20 }}</p>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% include "dashboard/partials/ui/_pagination_controls.html" %}
+</div>
+{% else %}
+<span hidden id="loc-section"></span>
+{% endif %}

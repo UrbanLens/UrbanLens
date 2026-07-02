@@ -235,56 +235,59 @@
         {
             id: 'priority-order', icon: 'low_priority', target: '#priority-explainer',
             eyebrow: 'Map display', title: 'Display order decides which label wins on the map',
-            body: 'If a pin has multiple tags, categories, or statuses, the highest item in this list provides the most important icon/color signal first.',
-            button: 'Display Order', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-explainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            body: 'If a pin has multiple tags, categories, or statuses, the highest item in this list provides the icon/color that appears on the map.',
+            button: 'Open display order', watchSelector: '[data-tab="priority"]',
+            action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-explainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('priority-explainer'); },
         },
         {
             id: 'drag-priority', icon: 'drag_indicator', target: '#priority-list .priority-drag-handle, #priority-list',
             eyebrow: 'Reorder visually', title: 'Drag important labels upward',
-            body: 'Put more specific labels near the top, and less specific labels near the bottom, so the map stays readable at a glance.',
-            button: 'Open Display Order', action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            body: 'Put more specific labels near the top so the map shows the most meaningful icon when a pin has multiple tags.',
+            button: 'Go to display order', watchSelector: '.priority-drag-handle', watchEvent: 'pointerdown',
+            action: function () { document.querySelector('[data-tab="priority"]')?.click(); document.getElementById('priority-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('priority-list'); },
-        },
-        {
-            id: 'view-modes', icon: 'grid_view', target: '#org-view-toggle',
-            eyebrow: 'Work your way', title: 'Switch views depending on the cleanup job',
-            body: 'List is fast for editing, gallery is visual, and tree view helps understand parent/child relationships.',
-            button: 'Show views', action: function () { document.getElementById('org-view-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
-            ready: function () { return !!document.getElementById('org-view-toggle'); },
         },
         {
             id: 'bulk-actions', icon: 'checklist', target: '#org-header-sel-all',
             eyebrow: 'Cleanup tools', title: 'Select multiple labels to merge, edit, or delete in batches',
             body: 'Bulk selection is useful when consolidating duplicate tags or applying the same icon/color to a group.',
-            button: 'Show selector', action: function () { document.getElementById('org-header-sel-all')?.focus(); },
+            button: 'Try bulk select', watchSelector: '#org-header-sel-all',
+            action: function () { document.getElementById('org-header-sel-all')?.click(); document.getElementById('org-header-sel-all')?.focus(); },
             ready: function () { return !!document.getElementById('org-header-sel-all'); },
         },
     ];
-    function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
-    function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
-    function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
-    function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
-    function clear() { document.getElementById('organize-onboarding')?.replaceChildren(); document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus')); }
+    function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
+    function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
+    function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
+    function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
+    function clear() { document.getElementById(‘organize-onboarding’)?.replaceChildren(); document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’)); }
+    function registerAutoDismiss(card) {
+        if (dismissed(card.id) || !card.watchSelector) return;
+        document.querySelectorAll(card.watchSelector).forEach(function (el) {
+            el.addEventListener(card.watchEvent || ‘click’, function () { dismiss(card.id); }, { once: true });
+        });
+    }
     function show(card) {
-        const host = document.getElementById('organize-onboarding'); if (!host) return;
-        clear(); document.querySelector(card.target)?.classList.add('onboarding-focus');
-        const el = document.createElement('section'); el.className = 'page-onboarding-card';
-        el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
-            '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
-            '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
-            '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
-            '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
-            '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don’t show again</button></div></div>' +
-            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+        const host = document.getElementById(‘organize-onboarding’); if (!host) return;
+        clear(); document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
+        const el = document.createElement(‘section’); el.className = ‘page-onboarding-card’;
+        el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
+            ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
+            ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
+            ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
+            ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
+            ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
+            ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
         host.appendChild(el);
-        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
-        el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
-        el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
+        el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
+        el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
+        el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
     }
     function tryShow() { if (laterSet()) return; const card = cards.find(c => c.ready() && !dismissed(c.id)); if (card) show(card); }
+    cards.forEach(registerAutoDismiss);
     setTimeout(tryShow, 900);
-    document.addEventListener('org:tab-changed', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
+    document.addEventListener(‘org:tab-changed’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
 }());
 </script>
 {% endblock %}

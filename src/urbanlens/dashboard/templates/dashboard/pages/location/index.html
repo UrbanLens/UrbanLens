@@ -429,6 +429,21 @@
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
             </div>
         </div>
+
+        {% if pin.meaningful_name %}
+        <div id="loc-section"
+            hx-get="{% url 'pin.loc' pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML">
+            <div class="card card--secondary">
+                <div class="card-header">
+                    <i class="material-icons">account_balance</i>
+                    <h3>Library of Congress</h3>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading…</div>
+            </div>
+        </div>
+        {% endif %}
     </div>{# end .pin-aux-grid #}
 
     {# ── Comments: always present ───────────────────────────────────────── #}
@@ -2071,65 +2086,87 @@
                 id: 'personal-detail-map', icon: 'add_location_alt', target: '#add-detail-btn',
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
                 body: 'Add Detail lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
-                button: 'Add a detail', action: function () { document.getElementById('add-detail-btn')?.click(); },
+                button: 'Add a detail', watchSelector: '#add-detail-btn',
+                action: function () { document.getElementById('add-detail-btn')?.click(); },
                 ready: function () { return !!document.getElementById('add-detail-btn'); },
             },
             {
                 id: 'photos', icon: 'add_photo_alternate', target: '#pin-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
                 eyebrow: 'Evidence & memories', title: 'Attach photos without leaving the detail page',
-                body: 'Drag photos into the gallery or use the upload button; GPS-tagged photos can appear on the map.',
-                button: 'Go to photos', action: function () { document.getElementById('pin-gallery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+                body: 'Drag photos into the gallery or use the upload button — GPS-tagged photos can be positioned on your location map.',
+                button: 'Upload a photo', watchSelector: '#pin-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn',
+                action: function () {
+                    var btn = document.querySelector('#pin-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn');
+                    if (btn) btn.click(); else document.getElementById('pin-gallery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                },
                 ready: function () { return !!document.getElementById('pin-gallery-panel'); },
             },
             {
                 id: 'aliases', icon: 'label_important', target: '#pin-aliases-panel',
                 eyebrow: 'Your naming system', title: 'Save private alternate names for this pin',
-                body: 'Aliases help you find places by names, historic names, or project labels without changing the community wiki.',
-                button: 'Show aliases', action: function () { document.getElementById('pin-aliases-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+                body: 'Aliases help you find places by local names, historic names, or project labels without changing the community wiki.',
+                button: 'Add an alias', watchSelector: '#pin-aliases-panel',
+                action: function () {
+                    var panel = document.getElementById('pin-aliases-panel');
+                    if (!panel) return;
+                    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    panel.querySelector('input[type="text"], button')?.focus();
+                },
                 ready: function () { return !!document.getElementById('pin-aliases-panel'); },
             },
             {
                 id: 'community-wiki', icon: 'public', target: '.pin-location-name, .wiki-back-link',
                 eyebrow: 'Shared knowledge', title: 'Open the community wiki when facts should help everyone',
-                body: 'The wiki is for shared history, access notes, security indicators, photos, aliases, and discussion tied to the location.',
-                button: 'Find wiki link', action: function () { document.querySelector('.pin-location-name')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+                body: 'The wiki holds shared history, access notes, security indicators, photos, and aliases visible to all users who pinned this location.',
+                button: 'Open community wiki', watchSelector: '.pin-location-name a, .wiki-back-link',
+                action: function () {
+                    var link = document.querySelector('.wiki-back-link') || document.querySelector('.pin-location-name a');
+                    if (link) link.click(); else document.querySelector('.pin-location-name')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                },
                 ready: function () { return !!document.querySelector('.pin-location-name'); },
             },
         ];
-        function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
-        function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
-        function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
-        function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
+        function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
+        function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
+        function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
+        function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
         function clear() {
-            document.getElementById('pin-detail-onboarding')?.replaceChildren();
-            document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus'));
+            document.getElementById(‘pin-detail-onboarding’)?.replaceChildren();
+            document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’));
+        }
+        function registerAutoDismiss(card) {
+            if (dismissed(card.id) || !card.watchSelector) return;
+            document.querySelectorAll(card.watchSelector).forEach(function (el) {
+                el.addEventListener(‘click’, function () { dismiss(card.id); }, { once: true });
+            });
         }
         function show(card) {
-            const host = document.getElementById('pin-detail-onboarding');
+            const host = document.getElementById(‘pin-detail-onboarding’);
             if (!host) return;
             clear();
-            document.querySelector(card.target)?.classList.add('onboarding-focus');
-            const el = document.createElement('section');
-            el.className = 'page-onboarding-card';
-            el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
-                '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
-                '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
-                '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
-                '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
-                '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don’t show again</button></div></div>' +
-                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+            document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
+            const el = document.createElement(‘section’);
+            el.className = ‘page-onboarding-card’;
+            el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
+                ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
+                ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
+                ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
+                ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
+                ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
+                ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
             host.appendChild(el);
-            el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
-            el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
-            el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
+            el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
+            el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
+            el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
         }
         function tryShow() {
             if (laterSet()) return;
             const card = cards.find(c => c.ready() && !dismissed(c.id));
             if (card) show(card);
         }
+        cards.forEach(registerAutoDismiss);
         setTimeout(tryShow, 900);
-        document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
+        document.body.addEventListener(‘htmx:afterSettle’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
     }());
 
     // ── Campus boundary: click to open editor ────────────────────────────────

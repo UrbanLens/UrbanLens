@@ -12,7 +12,6 @@ from urbanlens.dashboard.services.apis.locations.boundaries.google_open_building
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
-from urbanlens.dashboard.services.apis.locations.boundaries.regrid import RegridGateway
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,6 @@ class BoundaryProviderChain:
     providers: tuple[BoundaryProvider, ...] = field(
         default_factory=lambda: (
             OverpassGateway(),
-            RegridGateway(),
             OvertureMapsGateway(),
             MicrosoftBuildingFootprintsGateway(),
             GoogleOpenBuildingsGateway(),

@@ -15,10 +15,29 @@
                  {% if slide.heading is not None %}data-heading="{{ slide.heading|floatformat:0 }}"{% endif %}
                  {% if slide.latitude is not None %}data-lat="{{ slide.latitude|floatformat:5 }}"{% endif %}
                  {% if slide.longitude is not None %}data-lng="{{ slide.longitude|floatformat:5 }}"{% endif %}>
+                {% if forloop.first and google_maps_api_key %}
+                {# First slide: interactive embed so the user can pan/look around. #}
+                {% with sv_lat=slide.latitude|default:pin.effective_latitude sv_lng=slide.longitude|default:pin.effective_longitude %}
+                {% if sv_lat and sv_lng %}
+                <iframe class="sv-embed"
+                        src="https://www.google.com/maps/embed/v1/streetview?key={{ google_maps_api_key }}&location={{ sv_lat }},{{ sv_lng }}{% if slide.heading is not None %}&heading={{ slide.heading|floatformat:0 }}{% endif %}&pitch=0&fov=80"
+                        allowfullscreen
+                        loading="eager"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        title="Interactive Street View"></iframe>
+                {% else %}
                 <img src="{{ slide.img_src }}"
                      class="sv-img"
                      alt="{{ slide.source }} - {{ slide.date }}"
                      onerror="_svRemoveSlide(this)">
+                {% endif %}
+                {% endwith %}
+                {% else %}
+                <img src="{{ slide.img_src }}"
+                     class="sv-img"
+                     alt="{{ slide.source }} - {{ slide.date }}"
+                     onerror="_svRemoveSlide(this)">
+                {% endif %}
             </div>
             {% endfor %}
         </div>

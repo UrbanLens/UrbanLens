@@ -14,13 +14,11 @@ Context:
     <i class="material-icons">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
-    {# Compact upload button - always visible in the header #}
-    <label class="gallery-upload-compact-btn" title="Upload photos">
-      <i class="material-icons">add_photo_alternate</i>
-      <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
-             onchange="galleryHandleFiles(this.files)">
-    </label>
   </div>
+
+  {# Hidden file input — triggered by clicking the empty state or the add-photos item #}
+  <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
+         onchange="galleryHandleFiles(this.files)">
 
   {# ── Gallery grid ────────────────────────────────────────────────────────── #}
   <ul class="gallery-grid" id="gallery-grid">
@@ -53,10 +51,20 @@ Context:
     </li>
     {% empty %}
     <li class="gallery-empty" id="gallery-empty">
-      <i class="material-icons">photo_camera</i>
-      <p>No photos yet. Drag files here or click <i class="material-icons" style="font-size:1em;vertical-align:middle">add_photo_alternate</i> above.</p>
+      <label for="gallery-file-input" class="gallery-empty-label">
+        <i class="material-icons">cloud_upload</i>
+        <p>No photos yet — click to upload, or drag files here.</p>
+      </label>
     </li>
     {% endfor %}
+    {# "Add photos" tile — always appended after real items so users can add more #}
+    {% if images %}
+    <li class="gallery-add-item" id="gallery-add-btn">
+      <label for="gallery-file-input" class="gallery-add-label" title="Add more photos">
+        <i class="material-icons">add_photo_alternate</i>
+      </label>
+    </li>
+    {% endif %}
   </ul>
   {% include "dashboard/partials/ui/_pagination_controls.html" %}
 </div>
@@ -212,7 +220,20 @@ Context:
       '<img src="' + img.url + '" alt="" class="gallery-thumb">' + coordIcon + '</button>' +
       '<button type="button" class="gallery-delete-btn" title="Delete photo" onclick="galleryDelete(' + img.id + ')">' +
       '<i class="material-icons">delete</i></button>';
-    grid.appendChild(li);
+
+    // Insert before the add-photos button if it exists; append otherwise.
+    var addBtn = document.getElementById('gallery-add-btn');
+    if (addBtn) {
+      grid.insertBefore(li, addBtn);
+    } else {
+      grid.appendChild(li);
+      // First upload: swap the empty state for the add-photos button.
+      var addLi = document.createElement('li');
+      addLi.className = 'gallery-add-item';
+      addLi.id = 'gallery-add-btn';
+      addLi.innerHTML = '<label for="gallery-file-input" class="gallery-add-label" title="Add more photos"><i class="material-icons">add_photo_alternate</i></label>';
+      grid.appendChild(addLi);
+    }
 
     // Keep internal list in sync.
     _items.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });

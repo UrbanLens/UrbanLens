@@ -449,65 +449,64 @@
     const sessionKey = prefix + '_later';
     const cards = [
         {
-            id: 'trip-map', icon: 'route', target: '#trip-map-wrap',
-            eyebrow: 'Route overview', title: 'The map turns activities into a trip route',
-            body: 'Numbered markers show the activity order. Completed stops can be hidden or shown with the history button.',
-            button: 'Show map', action: function () { document.getElementById('trip-map-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
-            ready: function () { return !!document.getElementById('trip-map-wrap'); },
-        },
-        {
             id: 'activities', icon: 'playlist_add', target: '#trip-activities-panel, .trip-detail-activities',
             eyebrow: 'Itinerary', title: 'Activities are proposed or confirmed stops',
-            body: 'Add locations, times, notes, secret stops, or even a child trip. Votes help the group decide what belongs on the plan.',
-            button: 'Show activities', action: function () { document.getElementById('trip-activities-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            body: 'Add locations, times, notes, secret stops, or even a child trip. Votes let the group weigh in on what makes the final plan.',
+            button: 'Add an activity', watchSelector: '#trip-activities-panel [type="button"]',
+            action: function () {
+                var addBtn = document.querySelector('#trip-activities-panel .add-activity-btn, #trip-activities-panel [data-action="add"]');
+                if (addBtn) addBtn.click(); else document.getElementById('trip-activities-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            },
             ready: function () { return !!document.getElementById('trip-activities-panel'); },
         },
         {
             id: 'members-rsvp', icon: 'groups', target: '#trip-members-panel',
             eyebrow: 'Coordination', title: 'Members can RSVP and organizers can manage planning permissions',
             body: 'Use the Members panel to see who is coming, promote organizers, or invite the right collaborators.',
-            button: 'Show members', action: function () { document.getElementById('trip-members-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            button: 'View members', watchSelector: '#trip-members-panel [type="button"]',
+            action: function () { document.getElementById('trip-members-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
             ready: function () { return !!document.getElementById('trip-members-panel'); },
         },
         {
             id: 'section-layout', icon: 'drag_indicator', target: '#trip-sections .trip-section-grip, #trip-sections',
             eyebrow: 'Personal layout', title: 'Reorder trip sections for the way you plan',
-            body: 'Drag section handles to put activities, members, comments, or weather where you need them. The order is saved for you.',
-            button: 'Show sections', action: function () { document.getElementById('trip-sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+            body: 'Drag the grip handles to put activities, members, comments, or weather where you need them. The order saves automatically.',
+            button: 'Show sections', watchSelector: '.trip-section-grip', watchEvent: 'pointerdown',
+            action: function () { document.getElementById('trip-sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
             ready: function () { return !!document.getElementById('trip-sections'); },
         },
-        {
-            id: 'weather-comments', icon: 'forum', target: '#trip-comments-panel, #trip-weather-panel',
-            eyebrow: 'Field planning', title: 'Use weather and comments to make the plan practical',
-            body: 'Weather helps pick safe days and comments keep group decisions attached to the trip.',
-            button: 'Show comments', action: function () { document.getElementById('trip-comments-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
-            ready: function () { return !!document.getElementById('trip-comments-panel'); },
-        },
     ];
-    function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
-    function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
-    function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
-    function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
-    function clear() { document.getElementById('trip-onboarding')?.replaceChildren(); document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus')); }
+    function dismissed(id) { try { return localStorage.getItem(prefix + ‘_’ + id + ‘_dismissed’) === ‘1’; } catch (_) { return false; } }
+    function dismiss(id) { try { localStorage.setItem(prefix + ‘_’ + id + ‘_dismissed’, ‘1’); } catch (_) {} }
+    function later() { try { sessionStorage.setItem(sessionKey, ‘1’); } catch (_) {} }
+    function laterSet() { try { return sessionStorage.getItem(sessionKey) === ‘1’; } catch (_) { return false; } }
+    function clear() { document.getElementById(‘trip-onboarding’)?.replaceChildren(); document.querySelectorAll(‘.onboarding-focus’).forEach(el => el.classList.remove(‘onboarding-focus’)); }
+    function registerAutoDismiss(card) {
+        if (dismissed(card.id) || !card.watchSelector) return;
+        document.querySelectorAll(card.watchSelector).forEach(function (el) {
+            el.addEventListener(card.watchEvent || ‘click’, function () { dismiss(card.id); }, { once: true });
+        });
+    }
     function show(card) {
-        const host = document.getElementById('trip-onboarding'); if (!host) return;
-        clear(); document.querySelector(card.target)?.classList.add('onboarding-focus');
-        const el = document.createElement('section'); el.className = 'page-onboarding-card';
-        el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
-            '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
-            '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
-            '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
-            '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
-            '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don’t show again</button></div></div>' +
-            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+        const host = document.getElementById(‘trip-onboarding’); if (!host) return;
+        clear(); document.querySelector(card.target)?.classList.add(‘onboarding-focus’);
+        const el = document.createElement(‘section’); el.className = ‘page-onboarding-card’;
+        el.innerHTML = ‘<div class="page-onboarding-card__icon"><i class="material-icons">’ + card.icon + ‘</i></div>’ +
+            ‘<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">’ + card.eyebrow + ‘</div>’ +
+            ‘<h2>’ + card.title + ‘</h2><p>’ + card.body + ‘</p><div class="page-onboarding-card__actions">’ +
+            ‘<button type="button" class="btn btn--primary js-onboarding-action">’ + card.button + ‘</button>’ +
+            ‘<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>’ +
+            ‘<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\’t show again</button></div></div>’ +
+            ‘<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>’;
         host.appendChild(el);
-        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
-        el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
-        el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
+        el.querySelector(‘.js-onboarding-action’).addEventListener(‘click’, function () { dismiss(card.id); clear(); card.action(); });
+        el.querySelectorAll(‘.js-onboarding-later’).forEach(btn => btn.addEventListener(‘click’, function () { later(); clear(); }));
+        el.querySelector(‘.js-onboarding-dismiss’).addEventListener(‘click’, function () { dismiss(card.id); clear(); });
     }
     function tryShow() { if (laterSet()) return; const card = cards.find(c => c.ready() && !dismissed(c.id)); if (card) show(card); }
+    cards.forEach(registerAutoDismiss);
     setTimeout(tryShow, 900);
-    document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
+    document.body.addEventListener(‘htmx:afterSettle’, function () { if (!document.querySelector(‘.page-onboarding-card’)) setTimeout(tryShow, 250); });
 }());
 
 

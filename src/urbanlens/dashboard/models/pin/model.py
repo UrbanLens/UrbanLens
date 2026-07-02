@@ -177,6 +177,26 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             return self.location.address
         return f"{self.effective_latitude}, {self.effective_longitude}"
     
+    def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
+        """Name to use when searching for this location in external APIs."""
+        name = self.meaningful_official_name or self.meaningful_name
+        if not name:
+            return None
+        
+        parts = [name]
+        if self.address_basic and self.address_basic != name:
+            parts.append(self.address_basic)
+
+        if self.city:
+            parts.append(self.city)
+        elif self.county:
+            parts.append(self.county)
+        if self.state:
+            parts.append(self.state)
+        if include_country and self.country:
+            parts.append(self.country)
+        return " ".join(parts)
+    
     @property
     def effective_icon(self) -> str | None:
         """Icon to display for this pin following the priority chain."""
