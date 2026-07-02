@@ -52,9 +52,9 @@ def _google_maps_api_key() -> str:
     """
     Enforces that the Google Maps API key is set.
     """
-    if not settings.google_maps_api_key:
+    if not settings.google_domain_restricted_api_key:
         raise ValueError("Google Maps API key is not set")
-    return settings.google_maps_api_key
+    return settings.google_domain_restricted_api_key
 
 
 @dataclass(kw_only=True)
@@ -62,7 +62,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
     Gateway for the Google Maps API.
     
-    Defaults to the settings.google_maps_api_key, but the app
+    Defaults to the settings.google_domain_restricted_api_key, but the app
     occasionally passes a different api key (e.g. street_view_api_key)
     """
 

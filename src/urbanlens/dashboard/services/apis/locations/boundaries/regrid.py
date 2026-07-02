@@ -12,7 +12,7 @@ building footprints tied to that parcel. That's controlled per-request with
 for the "building + property boundary" use case this single API can answer
 both questions at once.
 
-NOTE: Regrid is fairly expensive, so we are not currently using it. This code can be 
+NOTE: Regrid is fairly expensive, so we are not currently using it. This code can be
 left here for the time being, but we have no current plans to integrate with
 it at this time.
 

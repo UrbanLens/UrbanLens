@@ -283,7 +283,7 @@ class SmithsonianGetImagesByCoordinatesTests(TestCase):
             patch("urbanlens.dashboard.services.apis.assets.smithsonian.settings") as mock_settings,
             patch.object(SmithsonianGateway, "get_data", return_value=[]),
         ):
-            mock_settings.google_maps_api_key = "google-key-xyz"
+            mock_settings.google_domain_restricted_api_key = "google-key-xyz"
             mock_geo_instance = MockGeocoder.return_value
             mock_geo_instance.get_place_name.return_value = "Place"
 

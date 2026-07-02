@@ -18,7 +18,7 @@ class Command(BaseCommand):
         parser.add_argument("--cx", default=None, help="Override UL_GOOGLE_SEARCH_TENANT/UL_GOOGLE_SEARCH_CX")
 
     def handle(self, *args, **options):
-        api_key = options["api_key"] or settings.google_search_api_key
+        api_key = options["api_key"] or settings.google_unrestricted_api_key
         cx = options["cx"] or settings.google_search_tenant
         query = options["query"]
 
