@@ -65,11 +65,14 @@ class LocationQuerySet(abstract.QuerySet):
         return self.filter(distance__lte=distance)
 
     def within_bounding_box(self, latitude: float, longitude: float):
-        """Return Locations whose bounding_box contains this coordinate."""
+        """Return Locations whose default Campus polygon contains this coordinate."""
         from django.contrib.gis.geos import Point as GEOSPoint
 
         pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
-        return self.filter(bounding_box__contains=pt)
+        return self.filter(
+            Q(campuses__pin__isnull=True)
+            & (Q(campuses__polygon__contains=pt) | Q(campuses__generated_polygon__contains=pt)),
+        ).distinct()
 
     def filter_by_criteria(self, criteria):
         query = Q()
@@ -83,32 +86,46 @@ class LocationQuerySet(abstract.QuerySet):
 
 
 class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_for_point to find a Location whose bounding box contains a coordinate."""
+    """Manager for Location. Use get_for_point to find a Location whose Campus polygon contains a coordinate."""
+
+    def _campus_polygon_q(self, pt) -> Q:
+        """Q expression matching Locations whose default Campus polygon contains pt."""
+        return Q(campuses__pin__isnull=True) & (
+            Q(campuses__polygon__contains=pt) | Q(campuses__generated_polygon__contains=pt)
+        )
+
+    def _locations_without_campus_polygon(self):
+        """Return pk__in subquery of location IDs that have no default campus polygon."""
+        from django.db.models import Subquery
+
+        from urbanlens.dashboard.models.campus.model import Campus
+
+        with_polygon = Campus.objects.filter(pin__isnull=True).filter(
+            Q(polygon__isnull=False) | Q(generated_polygon__isnull=False),
+        ).values("location_id")
+        return self.exclude(pk__in=Subquery(with_polygon))
 
     def get_for_point(self, latitude: float, longitude: float):
-        """Return the first Location whose bounding_box contains (lat, lon), or None.
+        """Return the first Location whose default Campus polygon contains (lat, lon), or None.
 
-        Falls back to a 50 m proximity check for any Locations that have no
-        bounding_box set (e.g. rows created before migration 0021).
+        Falls back to a 50 m proximity check for Locations that have no campus polygon.
         """
         from django.contrib.gis.geos import Point as GEOSPoint
         from django.contrib.gis.measure import D
 
         pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
-        # Primary: bounding-box containment
-        match = self.filter(bounding_box__contains=pt).first()
+        match = self.filter(self._campus_polygon_q(pt)).first()
         if match:
             return match
-        # Fallback: proximity for legacy rows without bounding_box
-        return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).first()
+        return self._locations_without_campus_polygon().filter(point__distance_lte=(pt, D(m=50))).first()
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
-        """Return ALL Locations whose bounding_box contains (lat, lon) as a QuerySet.
+        """Return ALL Locations whose default Campus polygon contains (lat, lon) as a QuerySet.
 
         Unlike get_for_point, this returns every match so callers can detect when a
-        coordinate falls inside multiple bounding boxes (ambiguous location).  Falls
-        back to 50 m proximity for legacy rows without a bounding_box only when there
-        are no bbox matches at all.
+        coordinate falls inside multiple campus polygons (ambiguous location).  Falls
+        back to 50 m proximity for Locations without a campus polygon only when there
+        are no polygon matches at all.
 
         Args:
             latitude: WGS-84 latitude of the point to test.
@@ -121,10 +138,10 @@ class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
         from django.contrib.gis.measure import D
 
         pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
-        in_bbox = self.filter(bounding_box__contains=pt).order_by("name")
+        in_bbox = self.filter(self._campus_polygon_q(pt)).distinct().order_by("name")
         if in_bbox.exists():
             return in_bbox
-        return self.filter(bounding_box__isnull=True, point__distance_lte=(pt, D(m=50))).order_by("name")
+        return self._locations_without_campus_polygon().filter(point__distance_lte=(pt, D(m=50))).order_by("name")
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
         """

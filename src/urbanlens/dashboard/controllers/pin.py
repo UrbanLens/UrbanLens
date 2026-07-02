@@ -341,7 +341,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         slides: list[SatelliteSlide] = []
         gateways: list[SatelliteViewProvider] = [
-            GoogleMapsGateway(),
+            GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
             EsriGateway(),
             NasaGibsGateway(),
             MapboxGateway(),
@@ -377,12 +377,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         slides: list[StreetViewSlide] = []
         providers: list[StreetViewProvider] = [
-            GoogleMapsGateway(api_key=settings.google_domain_restricted_api_key or ""),
+            GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
             MapillaryGateway(),
             KartaViewGateway(),
         ]
         for provider in providers:
-            slides.extend(provider.get_street_view_slides(lat, lng))
+            try:
+                slides.extend(provider.get_street_view_slides(lat, lng))
+            except Exception:
+                logger.warning("Street view provider %s failed", provider.__class__.__name__, exc_info=True)
 
         return render(
             request,
