@@ -45,6 +45,10 @@ class ApiCallLogQuerySet(abstract.QuerySet):
     def geo_filtered(self) -> Self:
         """Filter to calls that were skipped due to geo filtering."""
         return self.filter(was_geo_filtered=True)
+    
+    def service_disabled(self) -> Self:
+        """Filter to calls that were skipped due to service being disabled."""
+        return self.filter(was_service_disabled=True)
 
     def summary_by_service(self) -> list[dict]:
         """Return per-service usage summary for the last 30 days."""

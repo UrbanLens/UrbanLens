@@ -42,6 +42,10 @@ class ApiCallLog(abstract.Model):
         default=False,
         help_text="True if this entry records a call that was skipped due to geography filtering.",
     )
+    was_service_disabled = BooleanField(
+        default=False,
+        help_text="True if this entry records a call that was skipped due to service being disabled.",
+    )
 
     objects = ApiCallLogManager()
 

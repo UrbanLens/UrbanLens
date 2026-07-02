@@ -14,6 +14,8 @@ import logging
 import time
 from typing import Any
 
+from urbanlens.dashboard.exceptions import DashboardError
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -259,6 +261,37 @@ def get_limit_config(service: str) -> Any:
     return row
 
 
+def service_is_permitted(service: str) -> bool:
+    """
+    Check if the service is enabled and not rate limited.
+    
+    Args:
+        service: The service key.
+
+    Returns:
+        ``True`` if the service is enabled and not rate limited, ``False`` otherwise.
+    """
+    return service_is_enabled(service) and check_rate_limit(service)
+
+
+def service_is_enabled(service: str) -> bool:
+    """Check if the service is enabled.
+    
+    Args:
+        service: The service key.
+
+    Returns:
+        ``True`` if the service is enabled, ``False`` otherwise.
+    """
+    try:
+        config = get_limit_config(service)
+    except Exception:
+        # TODO: Catch specific exceptions
+        logger.exception("Failed to read rate limit config for %s — allowing call", service)
+        return False
+    return config.enabled
+
+
 def check_rate_limit(service: str) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
 
@@ -278,11 +311,9 @@ def check_rate_limit(service: str) -> bool:
     try:
         config = get_limit_config(service)
     except Exception:
+        # TODO: Catch specific exceptions
         logger.exception("Failed to read rate limit config for %s — allowing call", service)
         return True
-
-    if not config.enabled:
-        return False
 
     try:
         if config.calls_per_minute is not None:
@@ -313,6 +344,7 @@ def check_rate_limit(service: str) -> bool:
                 )
                 return False
     except Exception:
+        # TODO: Catch specific exceptions
         logger.exception("Failed to check rate limit counts for %s — allowing call", service)
         return True
 
@@ -327,6 +359,7 @@ def log_api_call(
     endpoint: str = "",
     was_rate_limited: bool = False,
     was_geo_filtered: bool = False,
+    was_service_disabled: bool = False,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
 
@@ -350,6 +383,7 @@ def log_api_call(
             endpoint=endpoint[:500] if endpoint else "",
             was_rate_limited=was_rate_limited,
             was_geo_filtered=was_geo_filtered,
+            was_service_disabled=was_service_disabled,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -409,6 +443,15 @@ class _RateLimitedSession:
                 was_rate_limited=True,
             )
             raise RateLimitExceededError(self._service_key)
+        
+        if not service_is_enabled(self._service_key):
+            log_api_call(
+                self._service_key,
+                success=False,
+                endpoint=str(url),
+                was_service_disabled=True,
+            )
+            raise ServiceDisabledError(self._service_key)
 
         t0 = time.monotonic()
         try:
@@ -422,6 +465,12 @@ class _RateLimitedSession:
             )
             return resp
         except RateLimitExceededError:
+            log_api_call(
+                self._service_key,
+                success=False,
+                endpoint=str(url),
+                was_rate_limited=True,
+            )
             raise
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -434,9 +483,25 @@ class _RateLimitedSession:
             raise
 
 
-class RateLimitExceededError(Exception):
+class RequestCancelledError(DashboardError):
+    """Raised when a request is cancelled."""
+
+    def __init__(self, service: str) -> None:
+        super().__init__(f"Request cancelled for service '{service}'")
+        self.service = service
+
+
+class RateLimitExceededError(RequestCancelledError):
     """Raised when a rate limit prevents an API call from proceeding."""
 
     def __init__(self, service: str) -> None:
         super().__init__(f"Rate limit exceeded for service '{service}'")
+        self.service = service
+
+
+class ServiceDisabledError(RequestCancelledError):
+    """Raised when a service is disabled."""
+
+    def __init__(self, service: str) -> None:
+        super().__init__(f"Service '{service}' is disabled")
         self.service = service

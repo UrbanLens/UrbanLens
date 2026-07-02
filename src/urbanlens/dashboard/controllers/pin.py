@@ -4,14 +4,14 @@ import base64
 from datetime import datetime
 import logging
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
-from requests.exceptions import HTTPError
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.core.cache_keys import make_cache_key
@@ -21,7 +21,6 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
 from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
 from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -32,6 +31,7 @@ from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGatewa
 from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError
 from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -240,10 +240,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the web search results for a pin.
         """
-        from urllib.parse import urlparse
-
-        from django.core.cache import cache
-
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         try:
@@ -349,7 +345,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             OpenAerialMapGateway(),
         ]
         for gateway in gateways:
-            slides.extend(gateway.get_satellite_slides(lat, lng))
+            try:
+                slides.extend(gateway.get_satellite_slides(lat, lng))
+            except RequestCancelledError as rce:
+                logger.debug("Satellite view provider %s request cancelled -> %s", gateway.service_key, rce)
+            except Exception as e:
+                # TODO: Catch specific exceptions
+                logger.warning("Satellite view provider %s failed -> %s", gateway.service_key, e)
 
         return render(
             request,
@@ -384,6 +386,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for provider in providers:
             try:
                 slides.extend(provider.get_street_view_slides(lat, lng))
+            except RequestCancelledError as rce:
+                logger.debug("Street view provider %s request cancelled -> %s", provider.service_key, rce)
             except Exception:
                 # TODO: Catch specific exceptions
                 logger.warning("Street view provider %s failed", provider.__class__.__name__, exc_info=True)
