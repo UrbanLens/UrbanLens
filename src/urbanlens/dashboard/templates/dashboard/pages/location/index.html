@@ -1893,6 +1893,10 @@
 
     function startEditCampus() {
         if (campusDrawControl) return;
+        // Editing the boundary is its own exclusive map-interaction mode - close
+        // whichever side panel happens to be open first (autosave makes this safe).
+        if (typeof closeMarkupPanel === 'function') closeMarkupPanel();
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
         // While actively editing the boundary, campus polygons need to catch clicks/drags
         // ahead of markup shapes - temporarily swap the pane stacking order for that.
         map.getPane('campusPane').style.zIndex = 560;
@@ -2352,6 +2356,13 @@
     // handler under the real event name instead.
     function _onBoundaryLayerClick(e) {
         if (campusDrawControl) return;
+        // Don't hijack a click that's actually meant to draw a shape onto (or drop
+        // a detail pin inside) this boundary - without this, clicking a boundary
+        // while a tool is armed always opened the context menu instead of placing
+        // the point, making it impossible to draw into a boundary polygon at all.
+        // Not stopping propagation here lets the click keep bubbling to the map's
+        // own click handler (the draw session / detail-pin placement listener).
+        if ((_drawSession && _drawSession.getCurrentTool()) || _dpMode === 'add') return;
         L.DomEvent.stopPropagation(e);
         _openBoundaryCtxMenu(e.target, e.latlng);
     }
@@ -2362,7 +2373,18 @@
         });
     }
 
+    // Outside-click handler for the currently-open boundary context menu, so it
+    // behaves like a normal context menu: any interaction elsewhere on the page
+    // (another shape, a toolbar button, a plain map click) dismisses it. Tracked
+    // so a re-opened menu doesn't pile up duplicate listeners.
+    let _boundaryCtxOutsideHandler = null;
+
     function _openBoundaryCtxMenu(layer, latlng) {
+        if (_boundaryCtxOutsideHandler) {
+            document.removeEventListener('click', _boundaryCtxOutsideHandler, true);
+            _boundaryCtxOutsideHandler = null;
+        }
+
         const content = document.createElement('div');
         content.className = 'boundary-ctx-menu';
 
@@ -2389,6 +2411,17 @@
             .setLatLng(latlng)
             .setContent(content)
             .openOn(map);
+
+        // The click that opened this menu already had propagation stopped (see
+        // _onBoundaryLayerClick), so it's safe to attach this immediately - it
+        // only fires on the *next* click anywhere in the document.
+        _boundaryCtxOutsideHandler = function (e) {
+            document.removeEventListener('click', _boundaryCtxOutsideHandler, true);
+            _boundaryCtxOutsideHandler = null;
+            if (content.contains(e.target)) return;  // the button's own handler drives this close
+            map.closePopup();
+        };
+        document.addEventListener('click', _boundaryCtxOutsideHandler, true);
     }
 
     // -- Photo map layer -------------------------------------------------------
