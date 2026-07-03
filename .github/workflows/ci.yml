@@ -150,7 +150,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            ENVIRONMENT=testing
             UL_DATABASE_USER=postgres
             UL_DATABASE_NAME=urbanlens_ci
             UL_DATABASE_PASS=postgres

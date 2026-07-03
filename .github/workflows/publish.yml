@@ -102,7 +102,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            ENVIRONMENT=production
             UL_DATABASE_USER=postgres
             UL_DATABASE_NAME=postgres
             UL_DATABASE_PASS=postgres

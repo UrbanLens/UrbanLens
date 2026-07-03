@@ -2,8 +2,6 @@
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
-  args:
-    - ENVIRONMENT=${ENVIRONMENT:-production}
 
 # Full environment for the app server and celery workers (need all API keys).
 # UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
@@ -16,7 +14,7 @@ x-app-env: &app-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
-  ENVIRONMENT: ${ENVIRONMENT:-production}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
@@ -40,13 +38,18 @@ x-beat-env: &beat-env
   UL_DB_PASS: ${UL_DB_PASS:-postgres}
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
-  ENVIRONMENT: ${ENVIRONMENT:-production}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
 
+# Project name is derived from the environment so each of prod/dev/test/staging
+# gets its own Compose namespace - this prefixes default (unnamed) networks and
+# volumes automatically, in addition to the explicit container_names below.
+name: urbanlens-${UL_ENVIRONMENT:-production}
+
 services:
   app:
-    container_name: urbanlens_app
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app
     build:
       <<: *app-build
 
@@ -80,7 +83,7 @@ services:
       start_period: 15s
 
   nginx:
-    container_name: urbanlens_nginx
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_nginx
     image: nginxinc/nginx-unprivileged:alpine
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
@@ -105,7 +108,7 @@ services:
       start_period: 15s
 
   db:
-    container_name: urbanlens_db
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_db
     # Pin to the same major version as postgresql-client-17 in the Dockerfile so
     # the pg_dump binary and server protocol stay in sync.
     image: postgis/postgis:17-3.5
@@ -136,7 +139,7 @@ services:
         max-file: "10"
 
   celery-worker:
-    container_name: urbanlens_celery_worker
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_worker
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
@@ -162,7 +165,7 @@ services:
         max-file: "10"
 
   celery-beat:
-    container_name: urbanlens_celery_beat
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_beat
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
@@ -186,7 +189,7 @@ services:
         max-file: "10"
 
   valkey:
-    container_name: urbanlens_valkey
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_valkey
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped

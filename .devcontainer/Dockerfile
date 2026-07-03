@@ -12,7 +12,7 @@ ARG GIT_NAME
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
-    ENVIRONMENT=development \
+    UL_ENVIRONMENT=development \
     NODE_ENV=development \
     UL_DB_HOST=urbanlens_db \
     UL_DB_PORT=5432 \

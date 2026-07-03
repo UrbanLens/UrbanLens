@@ -123,7 +123,7 @@ class DjangoProjectInitializer:
     @environment.setter
     def environment(self, value: str):
         # Ensure environment is a known option
-        if value not in {"development", "testing", "production"}:
+        if value not in {"local", "development", "testing", "production", "staging"}:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
             logger.error("Invalid environment: %s", safe_value)
             raise UnrecoverableError(f"Invalid environment: {safe_value}")
@@ -536,7 +536,7 @@ def main():
     parser.add_argument(
         "--environment",
         "-e",
-        choices=["development", "testing", "production"],
+        choices=["local", "development", "testing", "production", "staging"],
         help="Set the environment",
     )
     args = parser.parse_args()
