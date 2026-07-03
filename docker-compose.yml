@@ -1,7 +1,12 @@
 # Shared build configuration - all three app containers use the same image.
+# UL_ENVIRONMENT is passed as a build arg (not just a runtime env var) so the
+# Dockerfile can install requirements/prod.txt for staging/production builds
+# instead of requirements/dev.txt (which pulls in linters, mypy, pytest, etc).
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
+  args:
+    UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
 
 # Full environment for the app server and celery workers (need all API keys).
 # UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned

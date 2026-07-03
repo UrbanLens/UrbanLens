@@ -3,6 +3,12 @@ ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 
 FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
+# Controls which requirements file gets installed below. staging/production
+# install only prod.txt (no linters/test tools/debug toolbar); everything
+# else (local, development, testing) installs dev.txt, which pulls in prod.txt
+# via -r plus the dev-only tooling.
+ARG UL_ENVIRONMENT=production
+
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
@@ -49,19 +55,28 @@ COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 
 # Handle Python requirements
 COPY requirements /tmp/pip-tmp/requirements/
-RUN pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
-
-# Copy all source files into the container
-COPY . /app
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
+        pip install -r /tmp/pip-tmp/requirements/prod.txt; \
+    else \
+        pip install -r /tmp/pip-tmp/requirements/dev.txt; \
+    fi
 
 # Set the working directory
 WORKDIR /app
 
-# Install the package in editable mode
-RUN pip --no-cache-dir install -e .
+# Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
+# so this layer is cached independently of unrelated source changes below.
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
-# Install JS/TS dependencies (sass, typescript, etc.)
-RUN bun install
+# Copy all source files into the container
+COPY . /app
+
+# Install the package in editable mode
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e .
 
 # Create a non-root user. Pre-create every directory written to at runtime so
 # appuser never needs write access to root-owned parent dirs.
