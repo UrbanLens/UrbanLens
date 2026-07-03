@@ -1,6 +1,6 @@
 @use 'variables' as *;
 
-// ── App navigation bar ───────────────────────────────────────────────────────
+// -- App navigation bar -------------------------------------------------------
 
 $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
@@ -43,7 +43,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     letter-spacing: -0.01em;
 }
 
-// ── Mobile hamburger ─────────────────────────────────────────────────────────
+// -- Mobile hamburger ---------------------------------------------------------
 
 .app-nav-hamburger {
     display: none;
@@ -106,7 +106,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     margin-left: auto;
 }
 
-// ── User avatar component (reusable) ─────────────────────────────────────────
+// -- User avatar component (reusable) -----------------------------------------
 
 .nav-avatar {
     width: 32px;
@@ -145,7 +145,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     }
 }
 
-// ── User trigger button ───────────────────────────────────────────────────────
+// -- User trigger button -------------------------------------------------------
 
 .nav-user {
     position: relative;
@@ -191,7 +191,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     }
 }
 
-// ── Dropdown menu ─────────────────────────────────────────────────────────────
+// -- Dropdown menu -------------------------------------------------------------
 
 .nav-dropdown {
     position: absolute;
@@ -350,7 +350,7 @@ nav {
     }
 }
 
-// ── Site footer ──────────────────────────────────────────────────────────────
+// -- Site footer --------------------------------------------------------------
 // Mobile-first flex layout: version sits at the start, everything else
 // (GitHub link, and on the map page the live attribution text) sits at the
 // end, on every page - not just the map page.
@@ -418,7 +418,7 @@ nav {
         }
     }
 
-    // ── Map page modifier: adds a live tile-attribution slot between the
+    // -- Map page modifier: adds a live tile-attribution slot between the
     // version tag and the GitHub link. Alignment itself is shared above.
     &--map {
         .page-footer__meta {
@@ -476,7 +476,7 @@ nav .brand-logo img {
     border-radius: 50%;
 }
 
-// ── Notification bell ──────────────────────────────────────────────────────
+// -- Notification bell ------------------------------------------------------
 
 .nav-notif {
     position: relative;
@@ -609,7 +609,7 @@ nav .brand-logo img {
         background: var(--ul-grey-1);
     }
 
-    // ── Read state: quiet, receded ───────────────────────────────────────
+    // -- Read state: quiet, receded ---------------------------------------
     &__icon-wrap {
         flex-shrink: 0;
         width: 34px;
@@ -669,7 +669,7 @@ nav .brand-logo img {
         box-shadow: 0 0 0 3px rgba($primary-color, .18);
     }
 
-    // ── Unread state: clear emphasis ─────────────────────────────────────
+    // -- Unread state: clear emphasis -------------------------------------
     &--unread {
         cursor: pointer;
         background: linear-gradient(90deg, rgba($primary-color, .07) 0%, transparent 100%);
@@ -702,7 +702,7 @@ nav .brand-logo img {
         }
     }
 
-    // ── Icon colour variants by type (unread only) ───────────────────────
+    // -- Icon colour variants by type (unread only) -----------------------
     &--unread &__icon-wrap--friend_request,
     &--unread &__icon-wrap--friend_accepted {
         background: $color-green-100;
@@ -819,7 +819,7 @@ nav .brand-logo img {
     }
 }
 
-// ── Notification preferences (settings page section) ───────────────────────
+// -- Notification preferences (settings page section) -----------------------
 
 $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 
@@ -952,7 +952,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 }
 
-// ── Mobile nav drawer ─────────────────────────────────────────────────────────
+// -- Mobile nav drawer ---------------------------------------------------------
 
 .app-nav-drawer {
     display: none;
@@ -996,7 +996,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 }
 
-// ── Responsive: cap notification panel width, show hamburger on small screens ─
+// -- Responsive: cap notification panel width, show hamburger on small screens -
 
 .nav-notif-panel {
     width: min(340px, 90vw);

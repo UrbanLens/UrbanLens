@@ -254,7 +254,7 @@
   <p class="comment-empty">No comments yet.</p>
   {% endif %}
 
-  {# ── Compose ── #}
+  {# -- Compose -- #}
   <form class="comment-compose"
         hx-post="{% url 'trips.comments' trip.uuid %}"
         hx-target="#trip-comments-panel"

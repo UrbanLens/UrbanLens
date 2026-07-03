@@ -1,6 +1,6 @@
 @use 'variables' as *;
 
-// ── Location community wiki ────────────────────────────────────────────────────
+// -- Location community wiki ----------------------------------------------------
 // Responsive location wiki layout.
 // Reuses the shared card/card-header/card__body structure used by pin details.
 
@@ -8,7 +8,7 @@
     //width: 90em;
     //padding: 1.5rem 1rem 3rem;
 
-    // ── Banner ────────────────────────────────────────────────────────────
+    // -- Banner ------------------------------------------------------------
     .wiki-banner {
         display: flex;
         align-items: flex-start;
@@ -133,7 +133,7 @@
         }
     }
 
-    // ── Body grid ─────────────────────────────────────────────────────────
+    // -- Body grid ---------------------------------------------------------
     .wiki-body {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
@@ -176,7 +176,7 @@
         }
     }
 
-    // ── Card base ─────────────────────────────────────────────────────────
+    // -- Card base ---------------------------------------------------------
     .wiki-card {
         border: 1px solid var(--ul-grey-1a);
         border-radius: 14px;
@@ -215,7 +215,7 @@
         margin: 0 0 .85rem;
     }
 
-    // ── Details dl ────────────────────────────────────────────────────────
+    // -- Details dl --------------------------------------------------------
     .wiki-dl {
         margin: 0;
         padding: .5rem 0;
@@ -250,7 +250,7 @@
         }
     }
 
-    // ── Stats ─────────────────────────────────────────────────────────────
+    // -- Stats -------------------------------------------------------------
     .wiki-stats-grid {
         display: flex;
         flex-direction: column;
@@ -275,7 +275,7 @@
         color: var(--ul-grey-5);
     }
 
-    // ── Location map card ─────────────────────────────────────────────────
+    // -- Location map card -------------------------------------------------
     .location-map .map-wrapper {
         position: relative;
         width: 100%;
@@ -286,7 +286,7 @@
         height: clamp(320px, 52vw, 560px);
     }
 
-    // ── Action buttons ────────────────────────────────────────────────────
+    // -- Action buttons ----------------------------------------------------
     .wiki-action-btn {
         @include btn-ghost;
         padding: .45rem .9rem;
@@ -305,7 +305,7 @@
         }
     }
 
-    // ── Tabs ──────────────────────────────────────────────────────────────
+    // -- Tabs --------------------------------------------------------------
     .wiki-tabs {
         display: flex;
         gap: 0;
@@ -356,7 +356,7 @@
         }
     }
 
-    // ── Edit history ──────────────────────────────────────────────────────
+    // -- Edit history ------------------------------------------------------
     .wiki-history-empty {
         font-size: .85rem;
         color: var(--ul-grey-4);
@@ -501,7 +501,7 @@
         }
     }
 
-    // ── Suggest-edits dialog ──────────────────────────────────────────────
+    // -- Suggest-edits dialog ----------------------------------------------
     .wiki-edit-notice {
         display: flex;
         align-items: flex-start;

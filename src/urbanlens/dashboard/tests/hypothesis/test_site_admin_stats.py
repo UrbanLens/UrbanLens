@@ -30,7 +30,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
 from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
 
-# ── _monthly_series ───────────────────────────────────────────────────────────
+# -- _monthly_series -----------------------------------------------------------
 
 
 class MonthlySeriesLabelTests(TestCase):
@@ -83,7 +83,7 @@ class MonthlySeriesLabelTests(TestCase):
         self.assertEqual(sum(counts), 0)
 
 
-# ── _server_uptime ────────────────────────────────────────────────────────────
+# -- _server_uptime ------------------------------------------------------------
 
 
 class ServerUptimeTests(TestCase):
@@ -117,7 +117,7 @@ class ServerUptimeTests(TestCase):
         self.assertEqual(result, "0d 0h 0m")
 
 
-# ── _dir_size_mb ──────────────────────────────────────────────────────────────
+# -- _dir_size_mb --------------------------------------------------------------
 
 
 class DirSizeMbTests(TestCase):
@@ -153,7 +153,7 @@ class DirSizeMbTests(TestCase):
         self.assertIsInstance(result, float)
 
 
-# ── SiteAdminStatsView access control ─────────────────────────────────────────
+# -- SiteAdminStatsView access control -----------------------------------------
 
 
 class SiteAdminStatsViewAccessTests(TestCase):

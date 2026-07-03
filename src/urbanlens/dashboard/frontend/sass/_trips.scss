@@ -1,7 +1,7 @@
 @use "sass:color";
 @use 'variables' as *;
 
-// ── Trip planning ─────────────────────────────────────────────────────────
+// -- Trip planning ---------------------------------------------------------
 
 
 .trips-header {
@@ -364,7 +364,7 @@
     transition: color .15s, transform .15s;
 }
 
-// ── Trip detail page ──────────────────────────────────────────────────────
+// -- Trip detail page ------------------------------------------------------
 
 .trip-detail-page {
     //padding: 1.5rem 1rem 3rem;
@@ -457,7 +457,7 @@
     }
 }
 
-// ── Sortable sections ─────────────────────────────────────────────────────
+// -- Sortable sections -----------------------------------------------------
 
 .trip-sections {
     display: grid;
@@ -515,7 +515,7 @@
     }
 }
 
-// ── Trip panels (shared) ──────────────────────────────────────────────────
+// -- Trip panels (shared) --------------------------------------------------
 
 .trip-panel {
     &.card {
@@ -539,7 +539,7 @@
     }
 }
 
-// ── Activities view toggle ─────────────────────────────────────────────────
+// -- Activities view toggle -------------------------------------------------
 
 .view-toggle-group {
     display: flex;
@@ -578,7 +578,7 @@
     }
 }
 
-// ── Calendar view ─────────────────────────────────────────────────────────
+// -- Calendar view ---------------------------------------------------------
 
 .activity-view--calendar {
     padding: .75rem 1rem 1rem;
@@ -735,7 +735,7 @@
     animation: spin 1s linear infinite;
 }
 
-// ── Activities ────────────────────────────────────────────────────────────
+// -- Activities ------------------------------------------------------------
 
 .trip-activity-list {
     list-style: none;
@@ -859,7 +859,7 @@
     }
 }
 
-// ── Members ───────────────────────────────────────────────────────────────
+// -- Members ---------------------------------------------------------------
 
 .trip-member-list {
     list-style: none;
@@ -970,7 +970,7 @@
     }
 }
 
-// ── Comments ──────────────────────────────────────────────────────────────
+// -- Comments --------------------------------------------------------------
 
 .trip-comment-list {
     list-style: none;
@@ -1111,7 +1111,7 @@
     margin-top: .5rem;
 }
 
-// ── Create/edit trip dialog ───────────────────────────────────────────────
+// -- Create/edit trip dialog -----------------------------------------------
 
 .trip-create-dialog {
     @include dialog-base(32rem);
@@ -1138,7 +1138,7 @@
     }
 }
 
-// ── Location search autocomplete ──────────────────────────────────────────
+// -- Location search autocomplete ------------------------------------------
 
 .activity-location-search-wrap {
     position: relative;
@@ -1186,7 +1186,7 @@
     font-style: italic;
 }
 
-// ── Trip activity map ─────────────────────────────────────────────────────
+// -- Trip activity map -----------------------------------------------------
 
 .trip-map-wrap {
     margin: 0 0 1.5rem;
@@ -1252,7 +1252,7 @@
     }
 }
 
-// ── Activity status (proposed = grey, confirmed = blue) ───────────────────
+// -- Activity status (proposed = grey, confirmed = blue) -------------------
 
 .trip-activity-num--proposed {
     background: var(--ul-grey-6) !important;
@@ -1283,7 +1283,7 @@
     opacity: 1;
 }
 
-// ── Completed activity ────────────────────────────────────────────────────
+// -- Completed activity ----------------------------------------------------
 
 .trip-activity--completed {
     opacity: 0.65;
@@ -1319,7 +1319,7 @@
     }
 }
 
-// ── Activity tabs ─────────────────────────────────────────────────────────
+// -- Activity tabs ---------------------------------------------------------
 
 .activity-tabs {
     display: flex;
@@ -1350,7 +1350,7 @@
     }
 }
 
-// ── Calendar event status ─────────────────────────────────────────────────
+// -- Calendar event status -------------------------------------------------
 
 .cal-event--proposed {
     background: var(--ul-grey-6);
@@ -1370,7 +1370,7 @@
     outline: 2px dashed $color-blue-500;
 }
 
-// ── Member RSVP ───────────────────────────────────────────────────────────
+// -- Member RSVP -----------------------------------------------------------
 
 .trip-member-rsvp {
     font-size: .7rem;
@@ -1424,7 +1424,7 @@
     }
 }
 
-// ── RSVP inline popup (replaces the top banner) ───────────────────────────
+// -- RSVP inline popup (replaces the top banner) ---------------------------
 
 .trip-member-rsvp-wrap {
     position: relative;
@@ -1539,7 +1539,7 @@
     }
 }
 
-// ── Status pill toggle (replaces radio group) ─────────────────────────────
+// -- Status pill toggle (replaces radio group) -----------------------------
 
 .status-pill-toggle {
     display: inline-flex;
@@ -1588,7 +1588,7 @@
     }
 }
 
-// ── Your RSVP banner ──────────────────────────────────────────────────────
+// -- Your RSVP banner ------------------------------------------------------
 
 .trip-your-rsvp {
     display: flex;
@@ -1635,7 +1635,7 @@
     }
 }
 
-// ── Location suggestion enhancements ──────────────────────────────────────
+// -- Location suggestion enhancements --------------------------------------
 
 .location-suggestion-header {
     padding: .3rem .75rem;
@@ -1668,7 +1668,7 @@
     }
 }
 
-// ── RSVP pill buttons ─────────────────────────────────────────────────────
+// -- RSVP pill buttons -----------------------------------------------------
 
 .rsvp-pill-group {
     display: flex;
@@ -1720,7 +1720,7 @@
     }
 }
 
-// ── Trip settings form ────────────────────────────────────────────────────
+// -- Trip settings form ----------------------------------------------------
 
 .trip-setting-row {
     display: flex;
@@ -1790,7 +1790,7 @@
     }
 }
 
-// ── Multi-month calendar ──────────────────────────────────────────────────
+// -- Multi-month calendar --------------------------------------------------
 
 .cal-month-section-label {
     font-size: .78rem;
@@ -1808,7 +1808,7 @@
     margin: .75rem 0 .25rem;
 }
 
-// ── Trip weather panel ────────────────────────────────────────────────────────
+// -- Trip weather panel --------------------------------------------------------
 
 #trip-weather-panel.trip-panel.card {
     padding: 0;
@@ -1829,7 +1829,7 @@
     padding: .75rem 1rem 1rem;
 }
 
-// ── Per-day sections ──────────────────────────────────────────────────────────
+// -- Per-day sections ----------------------------------------------------------
 
 .trip-weather-days {
     display: flex;
@@ -1863,7 +1863,7 @@
     }
 }
 
-// ── Activity rows ─────────────────────────────────────────────────────────────
+// -- Activity rows -------------------------------------------------------------
 
 .trip-weather-activities {
     display: flex;
@@ -1908,7 +1908,7 @@
     }
 }
 
-// ── Inline weather slot ───────────────────────────────────────────────────────
+// -- Inline weather slot -------------------------------------------------------
 
 .trip-weather-slot-inline {
     display: flex;
@@ -1971,7 +1971,7 @@
     }
 }
 
-// ── N/A states ────────────────────────────────────────────────────────────────
+// -- N/A states ----------------------------------------------------------------
 
 .trip-weather-na {
     display: flex;
@@ -1986,7 +1986,7 @@
     }
 }
 
-// ── Activity datetime row (start/end fields side-by-side) ─────────────────────
+// -- Activity datetime row (start/end fields side-by-side) ---------------------
 
 .activity-datetime-row {
     display: flex;
@@ -2006,7 +2006,7 @@
     }
 }
 
-// ── Child trip search in activity dialogs ──────────────────────────────────────
+// -- Child trip search in activity dialogs --------------------------------------
 
 .activity-child-trip-wrap {
     position: relative;
@@ -2030,7 +2030,7 @@
     }
 }
 
-// ── Split form actions (delete left, save/cancel right) ───────────────────────
+// -- Split form actions (delete left, save/cancel right) -----------------------
 
 .form-actions--split {
     display: flex;
@@ -2061,7 +2061,7 @@
     }
 }
 
-// ── Activity voting ────────────────────────────────────────────────────────────
+// -- Activity voting ------------------------------------------------------------
 
 .activity-vote-row {
     display: flex;
@@ -2124,7 +2124,7 @@
     min-width: .75ch;
 }
 
-// ── Hide-location form toggle ──────────────────────────────────────────────────
+// -- Hide-location form toggle --------------------------------------------------
 
 .form-row--toggle {
     padding: .35rem 0 .1rem;
@@ -2158,7 +2158,7 @@
     color: $text-muted;
 }
 
-// ── Map right-click context menu ──────────────────────────────────────────────
+// -- Map right-click context menu ----------------------------------------------
 
 .trip-map-ctx-menu {
     position: absolute;
@@ -2196,7 +2196,7 @@
     }
 }
 
-// ── Child-trip ghost markers on the trip map ──────────────────────────────────
+// -- Child-trip ghost markers on the trip map ----------------------------------
 
 .trip-map-marker--child-trip {
     opacity: .65;
@@ -2209,7 +2209,7 @@
     }
 }
 
-// ── Settings radio pills for friend request visibility ────────────────────────
+// -- Settings radio pills for friend request visibility ------------------------
 
 .settings-friend-request-row {
     display: flex;

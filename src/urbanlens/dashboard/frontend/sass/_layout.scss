@@ -421,7 +421,7 @@
     animation: spin 1.2s linear infinite;
 }
 
-// ── Map toolbar: ensure 44px touch targets on mobile ─────────────────────────
+// -- Map toolbar: ensure 44px touch targets on mobile -------------------------
 
 @include down($breakpoint-sm) {
     .map-buttons {

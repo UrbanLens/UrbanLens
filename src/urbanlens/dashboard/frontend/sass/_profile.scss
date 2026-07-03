@@ -1,7 +1,7 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── Profile page ──────────────────────────────────────────────────────────────
+// -- Profile page --------------------------------------------------------------
 
 .profile-page {
     //margin: 2rem auto;
@@ -124,7 +124,7 @@
     margin: 0;
 }
 
-// ── Friendship actions bar ─────────────────────────────────────────────────────
+// -- Friendship actions bar -----------------------------------------------------
 .profile-friendship-actions {
     display: flex;
     align-items: center;
@@ -401,7 +401,7 @@
     }
 }
 
-// ── Settings page ────────────────────────────────────────────────────────────
+// -- Settings page ------------------------------------------------------------
 
 
 .settings-header {
@@ -654,7 +654,7 @@
     min-width: 4rem;
 }
 
-// ── Color + Opacity Picker widget ─────────────────────────────────────────────
+// -- Color + Opacity Picker widget ---------------------------------------------
 
 .cop-widget {
     display: flex;
@@ -842,8 +842,8 @@
 }
 
 
-// ── Profile supplements ────────────────────
-// ── Edit profile page ────────────────────────────────────────────────────────
+// -- Profile supplements --------------------
+// -- Edit profile page --------------------------------------------------------
 
 
 .edit-profile-header {
@@ -1055,7 +1055,7 @@ textarea.edit-textarea {
     font-weight: 600;
 }
 
-// ── Edit profile: setup / welcome banner ──────────────────────────────────────
+// -- Edit profile: setup / welcome banner --------------------------------------
 
 .edit-setup-banner {
     display: flex;
@@ -1095,7 +1095,7 @@ textarea.edit-textarea {
     &:hover { background: rgba(255, 255, 255, .25); }
 }
 
-// ── Edit profile: username input group ────────────────────────────────────────
+// -- Edit profile: username input group ----------------------------------------
 
 .edit-username-wrap {
     display: flex;
@@ -1143,7 +1143,7 @@ body .edit-profile-page .edit-username-input {
     margin: 4px 0 0;
 }
 
-// ── Edit profile: avatar source picker ────────────────────────────────────────
+// -- Edit profile: avatar source picker ----------------------------------------
 
 .edit-avatar-layout {
     display: flex;
@@ -1341,7 +1341,7 @@ body .edit-profile-page .edit-username-input {
     }
 }
 
-// ── Profile page modernization ────────────────────────────────────────────────
+// -- Profile page modernization ------------------------------------------------
 
 .profile-hero {
     background: linear-gradient(135deg, var(--ul-grey-0) 0%, var(--ul-grey-1) 100%);
@@ -1362,7 +1362,7 @@ body .edit-profile-page .edit-username-input {
     }
 }
 
-// ── Private profile annotation panel ─────────────────────────────────────────
+// -- Private profile annotation panel -----------------------------------------
 
 .profile-annotation-panel {
     background: var(--ul-grey-0);
@@ -1543,7 +1543,7 @@ body .edit-profile-page .edit-username-input {
     color: $color-green-500;
 }
 
-// ── Trust rating ──────────────────────────────────────────────────────────────
+// -- Trust rating --------------------------------------------------------------
 
 .profile-annotation-trust {
     display: flex;
@@ -1609,7 +1609,7 @@ body .edit-profile-page .edit-username-input {
     }
 }
 
-// ── Multi-note annotation system ──────────────────────────────────────────────
+// -- Multi-note annotation system ----------------------------------------------
 
 .profile-annotation-notes {
     display: flex;
@@ -1728,7 +1728,7 @@ body .edit-profile-page .edit-username-input {
     }
 }
 
-// ── Friends page: invite button + dialog ──────────────────────────────────────
+// -- Friends page: invite button + dialog --------------------------------------
 
 .friends-page-header {
     display: flex;
@@ -1889,7 +1889,7 @@ body .edit-profile-page .edit-username-input {
     margin: 0.75rem 0 0;
 }
 
-// ── External-link warning dialog ─────────────────────────────────────────────
+// -- External-link warning dialog ---------------------------------------------
 
 // Override overlay to centre its child (the dialog is position:fixed inside it)
 #ext-warn-overlay {
@@ -1957,7 +1957,7 @@ body .edit-profile-page .edit-username-input {
     font-size: .875rem;
 }
 
-// ── Pin Lists ────────────────────────────────────────────────────────────────
+// -- Pin Lists ----------------------------------------------------------------
 
 
 .pinlist-header {
@@ -2168,7 +2168,7 @@ textarea.form-input {
     margin: 1rem 0;
 }
 
-// ── Clickable stat link ───────────────────────────────────────────────────────
+// -- Clickable stat link -------------------------------------------------------
 
 a.profile-stat--link {
     text-decoration: none;
@@ -2186,7 +2186,7 @@ a.profile-stat--link {
     }
 }
 
-// ── Profile section header (title + "View all" link) ─────────────────────────
+// -- Profile section header (title + "View all" link) -------------------------
 
 .profile-section-header {
     display: flex;
@@ -2244,7 +2244,7 @@ a.profile-stat--link {
     margin: 0;
 }
 
-// ── Friend grid (partial + full page) ────────────────────────────────────────
+// -- Friend grid (partial + full page) ----------------------------------------
 
 .friend-grid {
     list-style: none;
@@ -2383,7 +2383,7 @@ a.profile-stat--link {
     }
 }
 
-// ── Friend requests section (partial) ────────────────────────────────────────
+// -- Friend requests section (partial) ----------------------------------------
 
 .friend-requests-section {
     background: var(--ul-grey-0);
@@ -2467,7 +2467,7 @@ a.profile-stat--link {
     gap: .35rem;
 }
 
-// ── Friend action buttons ─────────────────────────────────────────────────────
+// -- Friend action buttons -----------------------------------------------------
 
 .btn-friend {
     @include btn-base;
@@ -2569,7 +2569,7 @@ a.profile-stat--link {
     }
 }
 
-// ── Add friend button / status badge ─────────────────────────────────────────
+// -- Add friend button / status badge -----------------------------------------
 
 .friend-action-row {
     margin-top: .75rem;
@@ -2634,7 +2634,7 @@ a.profile-stat--link {
     }
 }
 
-// ── Full friends page ─────────────────────────────────────────────────────────
+// -- Full friends page ---------------------------------------------------------
 
 .friends-page {
     //margin: 2rem auto;
@@ -2722,7 +2722,7 @@ a.profile-stat--link {
     }
 }
 
-// ── Profile: mobile-responsive overrides ─────────────────────────────────────
+// -- Profile: mobile-responsive overrides -------------------------------------
 
 @include down($breakpoint-xs) {
     // Center friendship action chips/buttons on very narrow screens

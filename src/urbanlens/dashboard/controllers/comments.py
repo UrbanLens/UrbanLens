@@ -94,7 +94,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     }
 
 
-# ── Pin comments ──────────────────────────────────────────────────────────────
+# -- Pin comments --------------------------------------------------------------
 
 
 class PinCommentsView(LoginRequiredMixin, View):
@@ -147,7 +147,7 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
 
-# ── Wiki (Location) comments ──────────────────────────────────────────────────
+# -- Wiki (Location) comments --------------------------------------------------
 
 
 class WikiCommentsView(LoginRequiredMixin, View):
@@ -211,7 +211,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
 
-# ── Reactions ──────────────────────────────────────────────────────────────────
+# -- Reactions ------------------------------------------------------------------
 
 
 class CommentReactionView(LoginRequiredMixin, View):
@@ -414,7 +414,7 @@ def _parse_map_data(request) -> dict | None:
     return sanitized
 
 
-# ── Comment map pin autocomplete endpoint ────────────────────────────────────
+# -- Comment map pin autocomplete endpoint ------------------------------------
 
 
 class CommentMapPinsView(LoginRequiredMixin, View):
@@ -449,7 +449,7 @@ class CommentMapPinsView(LoginRequiredMixin, View):
         return JsonResponse({"pins": results})
 
 
-# ── Location autocomplete endpoint ───────────────────────────────────────────
+# -- Location autocomplete endpoint -------------------------------------------
 
 
 class PinnedLocationsJsonView(LoginRequiredMixin, View):
@@ -471,7 +471,7 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
         return HttpResponse(json.dumps(results), content_type="application/json")
 
 
-# ── Notification helpers ──────────────────────────────────────────────────────
+# -- Notification helpers ------------------------------------------------------
 
 
 def _comment_url(comment) -> str:

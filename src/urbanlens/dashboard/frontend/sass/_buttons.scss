@@ -1,7 +1,7 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── Standard button system ────────────────────────────────────────────────────
+// -- Standard button system ----------------------------------------------------
 // Prefer `.btn` + BEM modifiers for new markup. The button appearance is driven
 // by mixins in _mixins.scss so feature files can @include btn-primary/ghost/danger
 // without duplicating rules here.
@@ -162,7 +162,7 @@ input[type="submit"] {
 	@extend .btn--submit;
 }
 
-// ── Icon-only buttons ─────────────────────────────────────────────────────────
+// -- Icon-only buttons ---------------------------------------------------------
 // .btn-icon is canonical. .btn-icon is a legacy alias that shares the same
 // base styles so existing templates keep working without changes.
 .btn-icon,

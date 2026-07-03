@@ -1,5 +1,5 @@
 <style>
-/* ── Import wizard dialog ─────────────────────────────────────────────── */
+/* -- Import wizard dialog ----------------------------------------------- */
 #import-dialog {
     max-width: 620px;
     padding: 0;
@@ -88,7 +88,7 @@
 #closeImportDialog:hover { color: #1a1a1a; background: rgba(0,0,0,.06); }
 #closeImportDialog:disabled { opacity: .35; cursor: not-allowed; }
 
-/* ── Step 1: Upload ─────────────────────────────────────────────────── */
+/* -- Step 1: Upload --------------------------------------------------- */
 .iw-hint {
     color: #5f6368;
     font-size: .83rem;
@@ -157,7 +157,7 @@
 }
 @keyframes iw-spin { to { transform: rotate(360deg); } }
 
-/* ── Step 2: Preview ─────────────────────────────────────────────────── */
+/* -- Step 2: Preview --------------------------------------------------- */
 .iw-preview-summary {
     font-size: .85rem;
     color: var(--ul-grey-5);
@@ -363,7 +363,7 @@
 /* Preview footer count */
 #iw-selected-count { font-size: .85rem; color: #5f6368; }
 
-/* ── Step 3: Progress ─────────────────────────────────────────────────── */
+/* -- Step 3: Progress --------------------------------------------------- */
 .iw-progress-header {
     font-size: .92rem;
     font-weight: 600;
@@ -450,7 +450,7 @@
         </div>
     </div>
 
-    <!-- ── Step 1: Upload ────────────────────────────────────────── -->
+    <!-- -- Step 1: Upload ------------------------------------------ -->
     <div id="iw-step-1">
         <div class="iw-body">
             <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
@@ -469,7 +469,7 @@
         </div>
     </div>
 
-    <!-- ── Step 1b: Parsing spinner (inline) ─────────────────────── -->
+    <!-- -- Step 1b: Parsing spinner (inline) ----------------------- -->
     <div id="iw-step-parsing" hidden>
         <div class="iw-body">
             <div class="iw-parsing">
@@ -479,7 +479,7 @@
         </div>
     </div>
 
-    <!-- ── Step 2: Preview ───────────────────────────────────────── -->
+    <!-- -- Step 2: Preview ----------------------------------------- -->
     <div id="iw-step-2" hidden>
         <div class="iw-body" id="iw-preview-body">
             <div class="iw-preview-summary">
@@ -505,7 +505,7 @@
         </div>
     </div>
 
-    <!-- ── Step 3: Progress ──────────────────────────────────────── -->
+    <!-- -- Step 3: Progress ---------------------------------------- -->
     <div id="iw-step-3" hidden>
         <div class="iw-body">
             <div class="iw-progress-header" id="iw-progress-header">Importing...</div>
@@ -534,7 +534,7 @@
 (function () {
 'use strict';
 
-/* ── State ───────────────────────────────────────────────────────────── */
+/* -- State ------------------------------------------------------------- */
 var parsedData = null;   // {lists, total, badges} from server
 var selectedFiles = [];  // FileList-like array
 var abortCtrl = null;
@@ -542,7 +542,7 @@ var importing = false;
 var needsConfirm = false;
 var allSelected = true;
 
-/* ── DOM references ─────────────────────────────────────────────────── */
+/* -- DOM references --------------------------------------------------- */
 var $ = function (id) { return document.getElementById(id); };
 
 var steps = {
@@ -553,7 +553,7 @@ var steps = {
 };
 var dots = [$('iw-dot-1'), $('iw-dot-2'), $('iw-dot-3')];
 
-/* ── Utility ─────────────────────────────────────────────────────────── */
+/* -- Utility ----------------------------------------------------------- */
 function showStep(name, dotIdx) {
     Object.values(steps).forEach(function (el) { el.hidden = true; });
     steps[name].hidden = false;
@@ -575,7 +575,7 @@ function getCsrfToken() {
     return m ? m[1] : '';
 }
 
-/* ── Close dialog ────────────────────────────────────────────────────── */
+/* -- Close dialog ------------------------------------------------------ */
 function closeDialog() {
     if (importing) {
         if (!confirm('Import is still in progress. Leave and stop importing?')) return;
@@ -600,7 +600,7 @@ window.addEventListener('beforeunload', beforeUnloadHandler);
 $('import-screen').addEventListener('click', closeDialog);
 $('closeImportDialog').addEventListener('click', closeDialog);
 
-/* ── Step 1: File picking ────────────────────────────────────────────── */
+/* -- Step 1: File picking ---------------------------------------------- */
 var fileInput = $('iw-file-input');
 var fileZone  = $('iw-file-zone');
 
@@ -651,7 +651,7 @@ function renderFileChips() {
     $('iw-btn-upload').disabled = selectedFiles.length === 0;
 }
 
-/* ── Step 1 → Step 2: Parse ──────────────────────────────────────────── */
+/* -- Step 1 → Step 2: Parse -------------------------------------------- */
 $('iw-btn-upload').addEventListener('click', async function () {
     if (selectedFiles.length === 0) return;
     showStep('parsing', 0);
@@ -679,7 +679,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
     }
 });
 
-/* ── Step 2: Render preview ──────────────────────────────────────────── */
+/* -- Step 2: Render preview -------------------------------------------- */
 function renderPreview(data) {
     var lists = data.lists;
     var badges = data.badges || [];
@@ -927,7 +927,7 @@ function updatePrivateInfo() {
 
 $('iw-btn-back').addEventListener('click', function () { needsConfirm = false; showStep('upload', 0); });
 
-/* ── Step 2 → Step 3: Confirm import ────────────────────────────────── */
+/* -- Step 2 → Step 3: Confirm import ---------------------------------- */
 $('iw-btn-confirm').addEventListener('click', async function () {
     if (!parsedData) return;
 
@@ -1000,7 +1000,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
     }
 });
 
-/* ── Progress event handler ──────────────────────────────────────────── */
+/* -- Progress event handler -------------------------------------------- */
 var logRows = [];
 var MAX_LOG = 40;
 
@@ -1101,16 +1101,16 @@ function iconForClass(cls) {
     return cls === 'spin' ? 'sync' : cls === 'created' ? 'check_circle' : cls === 'existed' ? 'remove_circle_outline' : 'cancel';
 }
 
-/* ── Step 3: Done button ─────────────────────────────────────────────── */
+/* -- Step 3: Done button ----------------------------------------------- */
 $('iw-btn-done').addEventListener('click', closeDialog);
 
-/* ── Helpers ─────────────────────────────────────────────────────────── */
+/* -- Helpers ----------------------------------------------------------- */
 function escHtml(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function fmtCoord(n) { return typeof n === 'number' ? n.toFixed(4) : n; }
 
-/* ── Init ────────────────────────────────────────────────────────────── */
+/* -- Init -------------------------------------------------------------- */
 showStep('upload', 0);
 
 })();

@@ -1,13 +1,13 @@
 <nav class="app-nav">
     <div class="app-nav-inner">
 
-        {# ── Brand ──────────────────────────────────────────────────────────── #}
+        {# -- Brand ------------------------------------------------------------ #}
         <a href="{% url 'home' %}" class="app-nav-brand">
             <img src="/static/logo.png" alt="UrbanLens logo" class="app-nav-logo">
             <span class="app-nav-brand-name">UrbanLens</span>
         </a>
 
-        {# ── Primary links ───────────────────────────────────────────────────── #}
+        {# -- Primary links ----------------------------------------------------- #}
         <ul class="app-nav-links">
             {% if user.is_authenticated %}
             <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
@@ -18,17 +18,17 @@
             {% endif %}
         </ul>
 
-        {# ── Hamburger (mobile only) ──────────────────────────────────────────── #}
+        {# -- Hamburger (mobile only) -------------------------------------------- #}
         <button class="app-nav-hamburger" id="nav-hamburger-btn" type="button"
                 aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="app-nav-drawer">
             <i class="material-icons" id="nav-hamburger-icon">menu</i>
         </button>
 
-        {# ── Right: user menu or login ────────────────────────────────────────── #}
+        {# -- Right: user menu or login ------------------------------------------ #}
         <div class="app-nav-right">
             {% if user.is_authenticated %}
 
-            {# ── Notification bell ──────────────────────────────────────────── #}
+            {# -- Notification bell -------------------------------------------- #}
             <div class="nav-notif" id="nav-notif">
                 <button class="nav-notif-btn" id="nav-notif-btn" type="button"
                         aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
@@ -126,7 +126,7 @@
     </div>
 </nav>
 
-{# ── Mobile nav drawer (shown below nav bar on small screens) ──────────────── #}
+{# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
 <div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
     <ul class="app-nav-drawer-links">
         <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
@@ -221,7 +221,7 @@
         if (e.key === 'Escape') { closeMenu(); closeNotif(); closeDrawer(); }
     });
 
-    // ── Mobile hamburger drawer ───────────────────────────────────────────────
+    // -- Mobile hamburger drawer -----------------------------------------------
     var hamburgerBtn  = document.getElementById('nav-hamburger-btn');
     var hamburgerIcon = document.getElementById('nav-hamburger-icon');
     var navDrawer     = document.getElementById('app-nav-drawer');

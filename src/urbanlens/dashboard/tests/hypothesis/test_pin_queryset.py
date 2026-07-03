@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.reviews.model import Review
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-# ── root_pins / detail_pins / location_detail_pins ───────────────────────────
+# -- root_pins / detail_pins / location_detail_pins ---------------------------
 
 
 class PinQuerySetStructureTests(TestCase):
@@ -79,7 +79,7 @@ class PinQuerySetStructureTests(TestCase):
         self.assertNotIn(self.detail, self._qs().location_detail_pins())
 
 
-# ── never_visited ─────────────────────────────────────────────────────────────
+# -- never_visited -------------------------------------------------------------
 
 class PinQuerySetNeverVisitedTests(TestCase):
     """never_visited() returns only pins with last_visited == None."""
@@ -99,7 +99,7 @@ class PinQuerySetNeverVisitedTests(TestCase):
         self.assertNotIn(self.visited, self._qs().never_visited())
 
 
-# ── rated / rated_over / rated_under ─────────────────────────────────────────
+# -- rated / rated_over / rated_under -----------------------------------------
 
 class PinQuerySetRatingTests(TestCase):
     """rated() / rated_over() / rated_under() filter by linked review score."""
@@ -139,7 +139,7 @@ class PinQuerySetRatingTests(TestCase):
         self.assertNotIn(self.pin_5, self._qs().rated_under(3))
 
 
-# ── by_tag ────────────────────────────────────────────────────────────────────
+# -- by_tag --------------------------------------------------------------------
 
 class PinQuerySetByTagTests(TestCase):
     """by_tag() traverses the Badge parents M2M to include descendant tags."""
@@ -188,7 +188,7 @@ class PinQuerySetByTagTests(TestCase):
         self.assertNotIn(self.pin_parent, qs)
 
 
-# ── PinManager.get_nearby_or_create ───────────────────────────────────────────
+# -- PinManager.get_nearby_or_create -------------------------------------------
 
 class PinManagerGetNearbyOrCreateGuardTests(TestCase):
     """get_nearby_or_create() returns (None, False) for invalid inputs."""

@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.mentions import (
 )
 
 
-# ── Strategies ─────────────────────────────────────────────────────────────────
+# -- Strategies -----------------------------------------------------------------
 
 _uuid_st = st.uuids()
 _hyp = settings(max_examples=100, deadline=None)
@@ -33,7 +33,7 @@ def _loc_mention(display: str, uid: uuid.UUID) -> str:
     return f"@[{display}](loc:{uid})"
 
 
-# ── extract_location_uuids ────────────────────────────────────────────────────
+# -- extract_location_uuids ----------------------------------------------------
 
 class ExtractLocationUuidsTests(TestCase):
     """extract_location_uuids parses @[...](loc:UUID) tokens."""
@@ -86,7 +86,7 @@ class ExtractLocationUuidsTests(TestCase):
         self.assertEqual(len(result), len(uids))
 
 
-# ── is_visible_to ─────────────────────────────────────────────────────────────
+# -- is_visible_to -------------------------------------------------------------
 
 class IsVisibleToTests(TestCase):
     """is_visible_to hides comments when any mentioned location is not pinned."""
@@ -128,7 +128,7 @@ class IsVisibleToTests(TestCase):
         self.assertFalse(is_visible_to(text, set(pinned_without)))
 
 
-# ── render_comment_text ───────────────────────────────────────────────────────
+# -- render_comment_text -------------------------------------------------------
 
 class RenderCommentTextTests(TestCase):
     """render_comment_text returns None for hidden comments and HTML for visible ones."""
@@ -202,7 +202,7 @@ class RenderCommentTextTests(TestCase):
         self.assertEqual(str(result), "")
 
 
-# ── viewer_pinned_uuids and filter_visible_comments ───────────────────────────
+# -- viewer_pinned_uuids and filter_visible_comments ---------------------------
 
 try:
     from django.contrib.auth.models import User as _User

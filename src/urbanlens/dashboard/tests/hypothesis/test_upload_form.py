@@ -18,7 +18,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile, _MultipleFileField, _MultipleFileInput
 
 
-# ── _MultipleFileInput ────────────────────────────────────────────────────────
+# -- _MultipleFileInput --------------------------------------------------------
 
 class MultipleFileInputValueFromDatadictTests(TestCase):
     """value_from_datadict calls files.getlist(name) and returns the result."""
@@ -48,7 +48,7 @@ class MultipleFileInputValueFromDatadictTests(TestCase):
         self.assertTrue(_MultipleFileInput.allow_multiple_selected)
 
 
-# ── _MultipleFileField ────────────────────────────────────────────────────────
+# -- _MultipleFileField --------------------------------------------------------
 
 class MultipleFileFieldCleanTests(TestCase):
     """_MultipleFileField.clean validates each file individually."""
@@ -88,7 +88,7 @@ class MultipleFileFieldCleanTests(TestCase):
         self.assertIsInstance(self._field().widget, _MultipleFileInput)
 
 
-# ── UploadDataFile ────────────────────────────────────────────────────────────
+# -- UploadDataFile ------------------------------------------------------------
 
 class UploadDataFileFormTests(TestCase):
     """UploadDataFile validates that at least one file is provided."""
@@ -135,7 +135,7 @@ class UploadDataFileFormTests(TestCase):
         self.assertEqual(len(form.cleaned_data["upload_files"]), 2)
 
 
-# ── _MultipleFileField - falsy file filtering ─────────────────────────────────
+# -- _MultipleFileField - falsy file filtering ---------------------------------
 
 class MultipleFileFieldFalsyFilterTests(TestCase):
     """_MultipleFileField.clean skips falsy entries in the list (the `if f` guard)."""

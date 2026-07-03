@@ -36,7 +36,7 @@ def _profile() -> Profile:
     return baker.make("auth.User").profile
 
 
-# ── MapCenterForm.clean_map_default_zoom ──────────────────────────────────────
+# -- MapCenterForm.clean_map_default_zoom --------------------------------------
 
 class MapCenterFormZoomCleanTests(TestCase):
     """clean_map_default_zoom must default to 13 when the field is blank."""
@@ -84,7 +84,7 @@ class MapCenterFormZoomCleanTests(TestCase):
         self.assertIn("map_default_zoom", form.errors)
 
 
-# ── MapCenterForm - mode choices ──────────────────────────────────────────────
+# -- MapCenterForm - mode choices ----------------------------------------------
 
 class MapCenterFormModeTests(TestCase):
     """All three MapCenterMode values must be accepted by the form."""
@@ -118,7 +118,7 @@ class MapCenterFormModeTests(TestCase):
         self.assertIn("map_center_mode", form.errors)
 
 
-# ── MapDisplayForm.use_pin_cache ──────────────────────────────────────────────
+# -- MapDisplayForm.use_pin_cache ----------------------------------------------
 
 class MapDisplayFormUsePinCacheTests(TestCase):
     """use_pin_cache is optional; omitting it (unchecked) must be valid and produce False."""
@@ -166,7 +166,7 @@ class MapDisplayFormUsePinCacheTests(TestCase):
         self.assertTrue(profile.use_pin_cache)
 
 
-# ── MapCenterForm.save() ──────────────────────────────────────────────────────
+# -- MapCenterForm.save() ------------------------------------------------------
 
 class MapCenterFormSaveTests(TestCase):
     """MapCenterForm.save() preserves DB custom coordinates when mode is not CUSTOM."""
@@ -245,7 +245,7 @@ class MapCenterFormSaveTests(TestCase):
         self.assertEqual(db_profile.map_center_mode, original_mode)
 
 
-# ── StyleSettingsForm ─────────────────────────────────────────────────────────
+# -- StyleSettingsForm ---------------------------------------------------------
 
 class StyleSettingsFormTests(TestCase):
     """StyleSettingsForm persists theme_mode to the Profile.
@@ -309,7 +309,7 @@ class StyleSettingsFormTests(TestCase):
         self.assertFalse(profile.show_onboarding_tips)
 
 
-# ── ContactSettingsForm ───────────────────────────────────────────────────────
+# -- ContactSettingsForm -------------------------------------------------------
 
 class ContactSettingsFormTests(TestCase):
     """ContactSettingsForm validates an email address field (no DB access needed)."""
@@ -347,7 +347,7 @@ class ContactSettingsFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
 
-# ── MapDisplayForm - cluster_radius and default_map_view ─────────────────────
+# -- MapDisplayForm - cluster_radius and default_map_view ---------------------
 
 class MapDisplayFormClusterRadiusTests(TestCase):
     """MapDisplayForm.cluster_radius is optional and bounded 1-500."""

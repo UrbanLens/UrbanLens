@@ -31,7 +31,7 @@ def _make_friendship(from_profile, to_profile, **kwargs) -> Friendship:
     )
 
 
-# ── user() ────────────────────────────────────────────────────────────────────
+# -- user() --------------------------------------------------------------------
 
 class FriendshipQuerySetUserTests(TestCase):
     """user() returns friendships where the user is on either side."""
@@ -55,7 +55,7 @@ class FriendshipQuerySetUserTests(TestCase):
         self.assertNotIn(self.f_ab, qs)
 
 
-# ── status() ─────────────────────────────────────────────────────────────────
+# -- status() -----------------------------------------------------------------
 
 class FriendshipQuerySetStatusTests(TestCase):
     """status() filters by the named status value."""
@@ -82,7 +82,7 @@ class FriendshipQuerySetStatusTests(TestCase):
         self.assertNotIn(self.f_requested, qs)
 
 
-# ── relationship_type() ───────────────────────────────────────────────────────
+# -- relationship_type() -------------------------------------------------------
 
 class FriendshipQuerySetRelationshipTypeTests(TestCase):
     """relationship_type() filters by the named relationship type."""
@@ -111,7 +111,7 @@ class FriendshipQuerySetRelationshipTypeTests(TestCase):
         self.assertNotIn(self.f_friend, qs)
 
 
-# ── has_permission() ──────────────────────────────────────────────────────────
+# -- has_permission() ----------------------------------------------------------
 
 class FriendshipQuerySetHasPermissionTests(TestCase):
     """has_permission() filters friendships by the permissions field."""

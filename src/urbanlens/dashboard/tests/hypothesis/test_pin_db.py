@@ -38,7 +38,7 @@ def _make_location(lat: float = 40.0, lon: float = -74.0) -> Location:
     return baker.make(Location, latitude=lat, longitude=lon)
 
 
-# ── PinManager.get_nearby_or_create ───────────────────────────────────────────
+# -- PinManager.get_nearby_or_create -------------------------------------------
 
 class GetNearbyOrCreateNullGuardsTests(TestCase):
     """get_nearby_or_create must return (None, False) for degenerate inputs."""
@@ -159,7 +159,7 @@ class GetNearbyOrCreateCreationTests(TestCase):
         self.assertNotEqual(pin_a.pk, pin_b.pk)
 
 
-# ── PinQuerySet structural filters ────────────────────────────────────────────
+# -- PinQuerySet structural filters --------------------------------------------
 
 class PinQuerySetRootPinsTests(TestCase):
     """root_pins() must exclude all sub-pin variants."""
@@ -199,7 +199,7 @@ class PinQuerySetRootPinsTests(TestCase):
         self.assertEqual(detail_ids, children)
 
 
-# ── PinQuerySet visit filters ─────────────────────────────────────────────────
+# -- PinQuerySet visit filters -------------------------------------------------
 
 class PinQuerySetVisitFiltersTests(TestCase):
     """never_visited() and related visit filters."""
@@ -236,7 +236,7 @@ class PinQuerySetVisitFiltersTests(TestCase):
         self.assertFalse(qs.filter(last_visited__isnull=False).exists())
 
 
-# ── PinQuerySet name filter ───────────────────────────────────────────────────
+# -- PinQuerySet name filter ---------------------------------------------------
 
 class PinQuerySetByNameTests(TestCase):
     """by_name() performs a case-insensitive substring search on name."""
@@ -273,7 +273,7 @@ class PinQuerySetByNameTests(TestCase):
 
 
 
-# ── PinQuerySet priority filter ───────────────────────────────────────────────
+# -- PinQuerySet priority filter -----------------------------------------------
 
 class PinQuerySetPriorityTests(TestCase):
     """by_priority() is an exact-match filter."""

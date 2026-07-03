@@ -25,7 +25,7 @@ _word = st.text(
 _sentence = st.lists(_word, min_size=1, max_size=20).map(" ".join)
 
 
-# ── estimate_tokens ────────────────────────────────────────────────────────────
+# -- estimate_tokens ------------------------------------------------------------
 
 class EstimateTokensTests(TestCase):
     """estimate_tokens produces a non-negative integer approximation."""
@@ -77,7 +77,7 @@ class EstimateTokensTests(TestCase):
         self.assertLessEqual(estimate_tokens(shorter), estimate_tokens(longer))
 
 
-# ── estimate_combined_tokens ───────────────────────────────────────────────────
+# -- estimate_combined_tokens ---------------------------------------------------
 
 class EstimateCombinedTokensTests(TestCase):
     """estimate_combined_tokens sums token counts across all messages."""
@@ -111,7 +111,7 @@ class EstimateCombinedTokensTests(TestCase):
         self.assertEqual(estimate_combined_tokens(msgs), expected)
 
 
-# ── MessageQueue.__init__ and add_message ──────────────────────────────────────
+# -- MessageQueue.__init__ and add_message --------------------------------------
 
 class MessageQueueInitTests(TestCase):
     """MessageQueue initialises with an empty list and the given max_tokens."""
@@ -180,7 +180,7 @@ class MessageQueueAddMessageTests(TestCase):
         self.assertEqual(q.messages[0]["role"], role)
 
 
-# ── MessageQueue sequence protocol ────────────────────────────────────────────
+# -- MessageQueue sequence protocol --------------------------------------------
 
 class MessageQueueSequenceTests(TestCase):
     """MessageQueue supports __iter__, __len__, __getitem__, __setitem__, __delitem__."""
@@ -229,7 +229,7 @@ class MessageQueueSequenceTests(TestCase):
         self.assertTrue(repr(q))
 
 
-# ── MessageQueue.estimate_tokens ───────────────────────────────────────────────
+# -- MessageQueue.estimate_tokens -----------------------------------------------
 
 class MessageQueueEstimateTokensTests(TestCase):
     """estimate_tokens on the queue returns the combined token count."""

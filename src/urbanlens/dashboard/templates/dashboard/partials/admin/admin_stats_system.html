@@ -1,6 +1,6 @@
 {# Partial: Application info, infrastructure services, and server health. Loaded via HTMX. #}
 
-{# ── Application Section ──────────────────────────────────────────────────── #}
+{# -- Application Section ---------------------------------------------------- #}
 <div class="site-admin-card ul-section card">
     <div class="card-header">
         <i class="material-icons">apps</i>
@@ -94,7 +94,7 @@
     </div>
 </div>
 
-{# ── Infrastructure services ──────────────────────────────────────────────── #}
+{# -- Infrastructure services ------------------------------------------------ #}
 <div class="stats-services-grid">
     {% for service in infrastructure_services %}
     <div class="site-admin-card ul-section card stats-service-card">
@@ -132,7 +132,7 @@
     {% endfor %}
 </div>
 
-{# ── Server health ─────────────────────────────────────────────────────────── #}
+{# -- Server health ----------------------------------------------------------- #}
 <div class="site-admin-card ul-section card">
     <div class="card-header">
         <i class="material-icons">dns</i>

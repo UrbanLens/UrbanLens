@@ -94,7 +94,7 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
-    {# ── Title + details (swappable) ──────────────────────────────────── #}
+    {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
          hx-trigger="load"
@@ -105,7 +105,7 @@
         <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
-    {# ── Map (full width) ─────────────────────────────────────────────── #}
+    {# -- Map (full width) ----------------------------------------------- #}
     <div class="location-map pin-map card">
         <div class="card-header">
             <i class="material-icons">place</i>
@@ -113,8 +113,8 @@
         </div>
         <div class="map-wrapper">
 
-            {# ── Map sidebar panel (Details + Photos tabs) ── #}
-            <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
+            {# -- Map sidebar panel (Details + Photos tabs) -- #}
+            <div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
                 <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
                     <i class="material-icons">layers</i>
                     <span id="detail-pin-count-label">0 Layers</span>
@@ -140,7 +140,7 @@
 
             <div id="map"></div>
 
-            {# ── Bottom-left map controls ── #}
+            {# -- Bottom-left map controls -- #}
             <div class="map-bottom-controls">
                 <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
                     <i class="material-icons">pentagon</i> Edit Boundary
@@ -153,7 +153,7 @@
                         <i class="material-icons">close</i> Cancel
                     </button>
                 </div>
-                {# "Add Detail" dropdown ─────────────────────────────────── #}
+                {# "Add Detail" dropdown ----------------------------------- #}
                 <div class="map-add-detail-wrap" id="add-detail-wrap">
                     <div id="add-detail-menu" class="add-detail-menu" style="display:none">
                         <button type="button" class="add-detail-item" onclick="openAddPinDialog()">
@@ -186,8 +186,8 @@
                 </div>
             </div>
 
-            {# ── Line / Arrow drawing hint panel (shown while drawing) ── #}
-            <div id="markup-form-panel" class="markup-form-panel" style="display:none">
+            {# -- Line / Arrow drawing hint panel (shown while drawing) -- #}
+            <div id="markup-form-panel" class="map-dialog map-dialog--markup" style="display:none">
                 <div class="markup-form-header">
                     <span id="markup-form-title">Draw Arrow</span>
                     <button type="button" class="btn btn--icon-sm" onclick="cancelMarkupDraw()">
@@ -213,12 +213,12 @@
                                oninput="document.getElementById('markup-width-label').textContent=this.value">
                     </label>
                     <div class="form-actions">
-                        <button type="button" class="btn btn--ghost" onclick="_cancelCurrentDraw()">Cancel</button>
+                        <button type="button" class="btn btn--primary" onclick="_cancelCurrentDraw()">Cancel</button>
                     </div>
                 </div>
             </div>
 
-            {# ── Markup edit dialog (opens after drawing or clicking a saved item) ── #}
+            {# -- Markup edit dialog (opens after drawing or clicking a saved item) -- #}
             <dialog id="markup-edit-dialog" class="trip-create-dialog ul-dialog">
                 {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Annotation" %}
                 <div class="markup-form-body" style="padding:1rem 1.5rem 1.25rem">
@@ -273,8 +273,8 @@
                 </div>
             </dialog>
 
-            {# ── Text placement form ── #}
-            <div id="text-place-panel" class="markup-form-panel" style="display:none">
+            {# -- Text placement form -- #}
+            <div id="text-place-panel" class="map-dialog map-dialog--markup" style="display:none">
                 <div class="markup-form-header">
                     <span>Add Text Label</span>
                     <button type="button" class="btn btn--icon-sm" onclick="cancelTextPlacement()">
@@ -313,7 +313,7 @@
         </div>
     </div>{# end .location-map #}
 
-    {# ── Satellite / street view: always present, directly below the map ──── #}
+    {# -- Satellite / street view: always present, directly below the map ---- #}
     <div id="satellite-view-section" class="satellite-view card card--primary"
         hx-get="{% url 'pin.satellite_view' pin.slug %}"
         hx-trigger="load"
@@ -342,7 +342,7 @@
         </div>
     </div>
 
-    {# ── Gallery: alongside satellite / street view in the detail grid ──── #}
+    {# -- Gallery: alongside satellite / street view in the detail grid ---- #}
     <div id="pin-gallery-panel"
      hx-get="{% url 'pin.gallery' pin.slug %}"
      hx-trigger="load"
@@ -356,7 +356,7 @@
         </div>
     </div>
 
-    {# ── Visits / categories / aliases: always present ─────────────────── #}
+    {# -- Visits / categories / aliases: always present ------------------- #}
     <div hx-get="{% url 'pin.visits' pin.slug %}"
         hx-trigger="load"
         hx-swap="outerHTML"
@@ -391,10 +391,10 @@
         <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
-    {# ── Auxiliary cards: a single adaptive grid that reflows to fill the ──── #}
-    {# space left by any card that doesn't render (optional cards, or cards ── #}
-    {# removed at runtime when their HTMX request returns 204 - see the ────── #}
-    {# htmx:afterOnLoad handler near the bottom of this file). ──────────────── #}
+    {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
+    {# space left by any card that doesn't render (optional cards, or cards -- #}
+    {# removed at runtime when their HTMX request returns 204 - see the ------ #}
+    {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
     <div class="pin-aux-grid">
         <div id="media-gallery-section" class="media-gallery card card--secondary" hidden>
             <div class="card-header">
@@ -517,7 +517,7 @@
         </div>
     </div>{# end .pin-aux-grid #}
 
-    {# ── Comments: always present ───────────────────────────────────────── #}
+    {# -- Comments: always present ----------------------------------------- #}
     <div id="comment-panel"
      hx-get="{% url 'pin.comments' pin.slug %}"
      hx-trigger="load"
@@ -532,7 +532,7 @@
     </div>
 </div>{# end .pin-detail-grid #}
 
-{# ── Pin edit dialog ────────────────────────────────────────────────────── #}
+{# -- Pin edit dialog ------------------------------------------------------ #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Pin" %}
     <form id="pin-edit-form"
@@ -612,7 +612,7 @@
     </form>
 </dialog>
 
-{# ── Add detail-pin dialog ──────────────────────────────────────────────── #}
+{# -- Add detail-pin dialog ------------------------------------------------ #}
 <dialog id="detail-pin-add-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Detail Pin" %}
     <div class="detail-pin-add-body">
@@ -702,7 +702,7 @@
     </div>{# /detail-pin-add-body #}
 </dialog>
 
-{# ── Edit detail-pin dialog ──────────────────────────────────────────────── #}
+{# -- Edit detail-pin dialog ------------------------------------------------ #}
 <dialog id="detail-pin-edit-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Detail Pin" %}
     <div class="detail-pin-add-body">
@@ -781,7 +781,7 @@
 
 {% block scripts %}
 <script>
-    // ── Pin edit dialog: submit only the fields the user actually changed ──────
+    // -- Pin edit dialog: submit only the fields the user actually changed ------
     // Snapshots the form's values when the dialog opens. On submit, any field whose
     // value still matches its snapshot is dropped from the request - so a field another
     // tab changed in the meantime isn't silently overwritten with stale displayed data.
@@ -806,7 +806,7 @@
         });
     });
 
-    // ── Map setup ─────────────────────────────────────────────────────────────
+    // -- Map setup -------------------------------------------------------------
     const pinLat = {{ pin.effective_latitude|default:"42.6525" }};
     const pinLng = {{ pin.effective_longitude|default:"-73.7579" }};
     // Expose pin coordinates for the comment map composer default center.
@@ -894,7 +894,7 @@
         window.addEventListener('orientationchange', () => setTimeout(() => map.invalidateSize(), 300));
     }());
 
-    // ── Detail pins layer ─────────────────────────────────────────────────────
+    // -- Detail pins layer -----------------------------------------------------
     const _detailPinColors = {
         building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
         danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
@@ -994,7 +994,7 @@
         _refreshPanelHeader();
         ul.innerHTML = '';
 
-        // ── Pin items ──────────────────────────────────────────────────────
+        // -- Pin items ------------------------------------------------------
         _detailPins.forEach(dp => {
             const color = dp.color || _detailPinColors[dp.pin_type] || '#2563eb';
             const icon  = dp.icon  || _detailPinIcons[dp.pin_type]  || 'place';
@@ -1027,7 +1027,7 @@
             ul.appendChild(li);
         });
 
-        // ── Markup items ───────────────────────────────────────────────────
+        // -- Markup items ---------------------------------------------------
         const _markupIcon = { line: 'show_chart', arrow: 'arrow_forward', text: 'title', square: 'crop_square', circle: 'circle', polygon: 'format_shapes' };
         _markupItems.forEach(item => {
             const li = document.createElement('li');
@@ -1117,7 +1117,7 @@
     }
     loadDetailPins();
 
-    // ── Markup layer ──────────────────────────────────────────────────────────
+    // -- Markup layer ----------------------------------------------------------
     const _markupJsonUrl  = "{% url 'pin.markup.json' pin.slug %}";
     const _markupPostUrl  = "{% url 'pin.markup' pin.slug %}";
     const _markupEditBase = "{% url 'pin.markup.edit' pin.slug '00000000-0000-0000-0000-000000000000' %}"
@@ -1359,7 +1359,7 @@
     }
     loadMarkup();
 
-    // ── Markup draw session ───────────────────────────────────────────────────
+    // -- Markup draw session ---------------------------------------------------
     _drawSession = MarkupEngine.createDrawSession(map, {
         getColor:     () => document.getElementById('markup-form-color').value   || document.getElementById('text-form-color').value,
         getWidth:     () => parseInt(document.getElementById('markup-form-width').value || '3', 10),
@@ -1378,7 +1378,7 @@
         },
     });
 
-    // ── Photo panel ───────────────────────────────────────────────────────────
+    // -- Photo panel -----------------------------------------------------------
     function _makePhotoIcon(url, size, highlighted) {
         const shadow = highlighted
             ? '0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)'
@@ -1539,7 +1539,7 @@
         })
         .catch(err => console.warn('Could not load gallery photos for panel:', err));
 
-    // ── "Add Detail" dropdown ─────────────────────────────────────────────────
+    // -- "Add Detail" dropdown -------------------------------------------------
     let _addDetailOpen = false;
 
     function toggleAddDetailMenu() {
@@ -1562,7 +1562,7 @@
         document.getElementById('detail-pin-add-dialog').showModal();
     }
 
-    // ── Markup drawing - engine-backed ───────────────────────────────────────
+    // -- Markup drawing - engine-backed ---------------------------------------
     let _editingMarkupItem = null;
 
     function _onDrawCommit(type, latlngs, extras) {
@@ -1667,7 +1667,7 @@
         .catch(() => toastr.error('Failed to save markup.'));
     }
 
-    // ── Shape drawing (square, circle, polygon) ───────────────────────────────
+    // -- Shape drawing (square, circle, polygon) -------------------------------
 
     function startShapeDraw(type) {
         _closeAddDetailMenu();
@@ -1833,7 +1833,7 @@
         });
     });
 
-    // ── Text placement ────────────────────────────────────────────────────────
+    // -- Text placement --------------------------------------------------------
 
     function startTextPlacement() {
         _closeAddDetailMenu();
@@ -1847,7 +1847,7 @@
         _drawSession.deactivate();
     }
 
-    // ── Campus boundary editor ────────────────────────────────────────────────
+    // -- Campus boundary editor ------------------------------------------------
     const campusApiUrl = "{% url 'campus.pin' pin.slug %}";
     const campusItems = new L.FeatureGroup().addTo(map);
     const campusStyle = { color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
@@ -2025,7 +2025,7 @@
         _loadSavedCampus(_savedCampusGeoJSON);
     }
 
-    // ── Circle-style swatch builder (bg/border for detail pins) ──────────────
+    // -- Circle-style swatch builder (bg/border for detail pins) --------------
     const _circlePalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc', '#ffffff'];
 
     function _buildCircleSwatches(containerId, inputId, currentVal, onChange) {
@@ -2060,7 +2060,7 @@
         });
     }
 
-    // ── Edit detail-pin dialog ─────────────────────────────────────────────────
+    // -- Edit detail-pin dialog -------------------------------------------------
     let _editingDp = null;
 
     function openDetailPinEditDialog(dp) {
@@ -2158,7 +2158,7 @@
     });
 
 
-    // ── Pin detail onboarding ────────────────────────────────────────────────
+    // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
         const prefix = 'ul_onboarding_v1_pin_detail_{{ pin.uuid|default:pin.id }}';
@@ -2251,7 +2251,7 @@
         document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
     }());
 
-    // ── Campus boundary: click a polygon for an Edit/Delete context menu ─────
+    // -- Campus boundary: click a polygon for an Edit/Delete context menu -----
     function _attachCampusClickHandlers() {
         campusItems.eachLayer(layer => {
             layer.off('click.openEditor');
@@ -2292,7 +2292,7 @@
             .openOn(map);
     }
 
-    // ── Detail-pin add dialog ─────────────────────────────────────────────────
+    // -- Detail-pin add dialog -------------------------------------------------
     (function () {
         const dlg       = document.getElementById('detail-pin-add-dialog');
         const form      = document.getElementById('detail-pin-add-form');
@@ -2486,7 +2486,7 @@
         });
     }());
 
-    // ── Photo map layer ───────────────────────────────────────────────────────
+    // -- Photo map layer -------------------------------------------------------
     const _photoLayerMarkers = {};  // id → { marker, img }
     const _photoJsonUrl   = "{% url 'pin.gallery.json' pin.slug %}";
 
@@ -2540,7 +2540,7 @@
     };
 
 
-    // ── Adaptive client-side pagination for variable-height external panels ───
+    // -- Adaptive client-side pagination for variable-height external panels ---
     (function () {
         function getItems(card) {
             return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]'));
@@ -2685,7 +2685,7 @@
         document.addEventListener('DOMContentLoaded', function () { initAdaptivePagination(document, false); });
     }());
 
-    // ── External-data panels: handle 204 (no data) and request errors ────────
+    // -- External-data panels: handle 204 (no data) and request errors --------
     (function () {
         var _extSections = new Set([
             'wikipedia-section', 'nominatim-section', 'nps-section',
@@ -2730,15 +2730,24 @@
         }, true);
     }());
 
-    // ── Wikipedia summary: fill whatever height the card's row already ────────
+    // -- Wikipedia summary: fill whatever height the card's row already --------
     // gave it, rather than a fixed character count. `.pin-aux-grid > .card`
     // stretches every card in a row to match its tallest sibling, so a fixed
     // truncation length often leaves blank space below the text (short excerpt,
     // tall row) or could in principle overflow it (long excerpt, short row).
-    // This clamps by line count instead, recomputed against the card's actual
-    // rendered height - it only ever fits content into space the card already
-    // has, so it can't itself grow the row and create a stretch feedback loop.
-    // No pagination controls: overflow is simply hidden behind "Read more".
+    // This clamps by measured height instead, recomputed against the card's
+    // actual rendered height - it only ever fits content into space the card
+    // already has, so it can't itself grow the row and create a stretch
+    // feedback loop. No pagination controls: overflow is simply hidden behind
+    // "Read more".
+    //
+    // The extract is now real block markup (headings/paragraphs/lists), not
+    // one flat run of text, so it's clamped by hiding whichever trailing
+    // block-level children don't fit rather than a single -webkit-line-clamp
+    // on the container (unreliable once children are block-level rather than
+    // inline text). The one child straddling the cutoff gets its own
+    // line-clamp applied instead of being hidden outright, since it's just
+    // one element and clamping *that* works exactly like the old approach.
     (function () {
         function clampExtract(section) {
             var extract = section.querySelector('.wikipedia-extract');
@@ -2746,7 +2755,14 @@
             var readMore = section.querySelector('.wikipedia-read-more');
             if (!extract || !body || !readMore) return;
 
-            extract.style.webkitLineClamp = '';
+            var children = Array.prototype.slice.call(extract.children);
+            children.forEach(function (el) {
+                el.style.display = '';
+                el.style.webkitLineClamp = '';
+                el.style.webkitBoxOrient = '';
+                el.style.overflow = '';
+            });
+            if (!children.length) return;
 
             var readMoreStyle = getComputedStyle(readMore);
             var readMoreSpace = readMore.getBoundingClientRect().height
@@ -2758,11 +2774,28 @@
             var bodyBottom = body.getBoundingClientRect().bottom - bodyPaddingBottom;
             var available = bodyBottom - extract.getBoundingClientRect().top - readMoreSpace;
 
-            var lineHeight = parseFloat(getComputedStyle(extract).lineHeight);
-            if (!lineHeight) return;
+            if (extract.getBoundingClientRect().height <= available) return;
 
-            if (extract.getBoundingClientRect().height > available) {
-                extract.style.webkitLineClamp = String(Math.max(1, Math.floor(available / lineHeight)));
+            var extractTop = extract.getBoundingClientRect().top;
+            for (var i = 0; i < children.length; i++) {
+                var el = children[i];
+                var rect = el.getBoundingClientRect();
+                if (rect.bottom - extractTop <= available) continue;
+
+                var remaining = available - (rect.top - extractTop);
+                var lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+                if (remaining > 0 && lineHeight) {
+                    el.style.display = '-webkit-box';
+                    el.style.webkitBoxOrient = 'vertical';
+                    el.style.overflow = 'hidden';
+                    el.style.webkitLineClamp = String(Math.max(1, Math.floor(remaining / lineHeight)));
+                } else {
+                    el.style.display = 'none';
+                }
+                for (var j = i + 1; j < children.length; j++) {
+                    children[j].style.display = 'none';
+                }
+                break;
             }
         }
 
@@ -2810,7 +2843,7 @@
         img.replaceWith(span);
     };
 
-    // ── Media gallery: combines Smithsonian / Wikimedia Commons / Library of ──
+    // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one
     // slow provider never blocks the others from appearing. Each loader is a
     // tiny hidden element that appends its results into the shared grid.

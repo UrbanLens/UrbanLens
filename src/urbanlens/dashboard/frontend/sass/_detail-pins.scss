@@ -1,6 +1,6 @@
 @use 'variables' as *;
 
-// ── Detail Pins ────────────────────────────────────────────────────────────────
+// -- Detail Pins ----------------------------------------------------------------
 .detail-pins-panel {
     .detail-pin-empty {
         padding: 1rem 1.25rem;
@@ -170,7 +170,7 @@
     display: block;
 }
 
-// ── Detail-pin icon + color pickers (shared by both dialogs) ────────────────
+// -- Detail-pin icon + color pickers (shared by both dialogs) ----------------
 .dp-icon-picker {
     display: flex;
     flex-wrap: wrap;
@@ -235,7 +235,7 @@
     }
 }
 
-// ── Detail-pin delete animation ──────────────────────────────────────────────
+// -- Detail-pin delete animation ----------------------------------------------
 .detail-pin-item.is-deleting,
 .detail-pin-wiki-item.is-deleting {
     opacity: 0.25;
@@ -273,7 +273,7 @@
     font-size: .85rem;
 }
 
-// ── Aliases panel ────────────────────────────────────────────────────────────
+// -- Aliases panel ------------------------------------------------------------
 .aliases-panel {
     .aliases-description {
         padding: .5rem 1rem 0;
@@ -400,7 +400,7 @@
     }
 }
 
-// ── Circle-style bg/border opacity row ──────────────────────────────────────
+// -- Circle-style bg/border opacity row --------------------------------------
 .dp-opacity-row {
     display: flex;
     align-items: center;
@@ -432,7 +432,7 @@
     padding: .2rem 0;
 }
 
-// ── Marker tooltip (detail pins + markup items) ──────────────────────────────
+// -- Marker tooltip (detail pins + markup items) ------------------------------
 .detail-pin-tooltip.leaflet-tooltip {
     background: rgba(15, 23, 42, .88);
     border: none;

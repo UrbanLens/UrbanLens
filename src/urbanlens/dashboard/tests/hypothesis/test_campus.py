@@ -18,7 +18,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.location.model import Location
 
-# ── is_default ────────────────────────────────────────────────────────────────
+# -- is_default ----------------------------------------------------------------
 
 
 class CampusIsDefaultTests(TestCase):
@@ -43,7 +43,7 @@ class CampusIsDefaultTests(TestCase):
         self.assertFalse(self._campus(42, 7).is_default)
 
 
-# ── __str__ ───────────────────────────────────────────────────────────────────
+# -- __str__ -------------------------------------------------------------------
 
 class CampusStrTests(TestCase):
     """__str__ encodes the campus type (location default or pin-scoped)."""
@@ -66,7 +66,7 @@ class CampusStrTests(TestCase):
         self.assertIn("profile=3", result)
 
 
-# ── effective_polygon ─────────────────────────────────────────────────────────
+# -- effective_polygon ---------------------------------------------------------
 
 class CampusEffectivePolygonTests(TestCase):
     """effective_polygon returns polygon → generated_polygon → circle."""
@@ -115,7 +115,7 @@ class CampusEffectivePolygonTests(TestCase):
         self.assertEqual(campus.effective_polygon.wkt, mp_small.wkt)
 
 
-# ── CampusQuerySet.defaults ───────────────────────────────────────────────────
+# -- CampusQuerySet.defaults ---------------------------------------------------
 
 class CampusQuerySetDefaultsTests(TestCase):
     """defaults() returns only location-default campuses (profile=None, pin=None)."""
@@ -142,7 +142,7 @@ class CampusQuerySetDefaultsTests(TestCase):
         self.assertNotIn(self.pin_campus, Campus.objects.defaults())
 
 
-# ── CampusQuerySet.for_profile ────────────────────────────────────────────────
+# -- CampusQuerySet.for_profile ------------------------------------------------
 
 class CampusQuerySetForProfileTests(TestCase):
     """for_profile() returns only pin-scoped campuses for a given profile."""
@@ -174,7 +174,7 @@ class CampusQuerySetForProfileTests(TestCase):
             self.assertEqual(campus.profile_id, self.u1.profile.pk)
 
 
-# ── CampusQuerySet.for_location ───────────────────────────────────────────────
+# -- CampusQuerySet.for_location -----------------------------------------------
 
 class CampusQuerySetForLocationTests(TestCase):
     """for_location() returns all campuses referencing a given location."""
@@ -194,7 +194,7 @@ class CampusQuerySetForLocationTests(TestCase):
         self.assertNotIn(self.other_campus, Campus.objects.for_location(self.location))
 
 
-# ── CampusQuerySet.for_pin ────────────────────────────────────────────────────
+# -- CampusQuerySet.for_pin ----------------------------------------------------
 
 class CampusQuerySetForPinTests(TestCase):
     """for_pin() returns the campus keyed to a specific pin."""
@@ -221,7 +221,7 @@ class CampusQuerySetForPinTests(TestCase):
         self.assertNotIn(default, qs)
 
 
-# ── CampusManager.effective_for ───────────────────────────────────────────────
+# -- CampusManager.effective_for -----------------------------------------------
 
 class CampusManagerEffectiveForTests(TestCase):
     """effective_for() returns the location-default campus (profile=None, pin=None)."""
@@ -249,7 +249,7 @@ class CampusManagerEffectiveForTests(TestCase):
         self.assertIsNone(Campus.objects.effective_for(empty_loc))
 
 
-# ── CampusManager.effective_for_pin ──────────────────────────────────────────
+# -- CampusManager.effective_for_pin ------------------------------------------
 
 class CampusManagerEffectiveForPinTests(TestCase):
     """effective_for_pin() resolves pin campus → location default → None."""
@@ -293,7 +293,7 @@ class CampusManagerEffectiveForPinTests(TestCase):
         self.assertIsNone(Campus.objects.effective_for_pin(empty_pin))
 
 
-# ── CampusQuerySet.with_location ──────────────────────────────────────────────
+# -- CampusQuerySet.with_location ----------------------------------------------
 
 class CampusQuerySetWithLocationTests(TestCase):
     """with_location() select_relates location so effective_polygon avoids extra queries."""
@@ -315,7 +315,7 @@ class CampusQuerySetWithLocationTests(TestCase):
         self.assertIsNotNone(campus.effective_polygon)
 
 
-# ── CampusController pin detail ───────────────────────────────────────────────
+# -- CampusController pin detail -----------------------------------------------
 
 _DEFAULT_BOUNDARY = Polygon(
     ((-74.003, 39.997), (-74.003, 40.003), (-73.997, 40.003), (-73.997, 39.997), (-74.003, 39.997)),

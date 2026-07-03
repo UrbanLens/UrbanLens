@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
 
 
-# ── CommentQuerySet ────────────────────────────────────────────────────────────
+# -- CommentQuerySet ------------------------------------------------------------
 
 class CommentQuerySetTopLevelTests(TestCase):
     """top_level() returns only comments with no parent."""
@@ -156,7 +156,7 @@ class TripCommentDeleteTests(TestCase):
         self.assertIn(reply, self.trip.comments.filter(parent__isnull=True))
 
 
-# ── PinMarkupQuerySet ─────────────────────────────────────────────────────────
+# -- PinMarkupQuerySet ---------------------------------------------------------
 
 class PinMarkupQuerySetTests(TestCase):
     """for_pin() and for_profile() filter markup by parent and owner."""
@@ -196,7 +196,7 @@ class PinMarkupQuerySetTests(TestCase):
         self.assertNotIn(other_markup, qs)
 
 
-# ── VisitQuerySet ─────────────────────────────────────────────────────────────
+# -- VisitQuerySet -------------------------------------------------------------
 
 class VisitQuerySetTests(TestCase):
     """for_pin(), manual(), and from_takeout() filter visits correctly."""
@@ -243,7 +243,7 @@ class VisitQuerySetTests(TestCase):
         self.assertNotIn(self.manual_visit, qs)
 
 
-# ── SocialLinkQuerySet ────────────────────────────────────────────────────────
+# -- SocialLinkQuerySet --------------------------------------------------------
 
 class SocialLinkQuerySetTests(TestCase):
     """for_profile() with Profile or int, and platform() filter correctly."""
@@ -295,7 +295,7 @@ class SocialLinkQuerySetTests(TestCase):
         self.assertFalse(qs.exists())
 
 
-# ── NotificationQuerySet ───────────────────────────────────────────────────────
+# -- NotificationQuerySet -------------------------------------------------------
 
 class NotificationQuerySetTests(TestCase):
     """unread(), for_profile(), and mark_read() behave correctly."""
@@ -345,7 +345,7 @@ class NotificationQuerySetTests(TestCase):
         self.assertEqual(count, 1)
 
 
-# ── SiteSettings singleton ─────────────────────────────────────────────────────
+# -- SiteSettings singleton -----------------------------------------------------
 
 class SiteSettingsSingletonTests(TestCase):
     """SiteSettings.get_current() creates and returns a singleton record."""
@@ -375,7 +375,7 @@ class SiteSettingsSingletonTests(TestCase):
         self.assertGreater(result.max_bbox_area_km2, 0)
 
 
-# ── TDD: Status enum values are swapped (bug demonstration) ───────────────────
+# -- TDD: Status enum values are swapped (bug demonstration) -------------------
 
 class NotificationStatusBugTests(TestCase):
     """Status enum member names must match their stored database values."""

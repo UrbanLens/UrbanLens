@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ── Pipeline steps ────────────────────────────────────────────────────────────
+# -- Pipeline steps ------------------------------------------------------------
 
 
 def generate_sso_username(
@@ -216,7 +216,7 @@ def save_discord_social_link(
     logger.debug("Saved Discord social link for user %s: %s", user.username, username)
 
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+# -- Internal helpers ----------------------------------------------------------
 
 
 def _sanitize_sso_username(raw: str) -> str | None:

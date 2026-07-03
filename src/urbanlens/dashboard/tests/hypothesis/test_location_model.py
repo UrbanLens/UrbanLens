@@ -46,7 +46,7 @@ def _loc(**kwargs) -> Location:
     return loc
 
 
-# ── effective_date_last_active ────────────────────────────────────────────────
+# -- effective_date_last_active ------------------------------------------------
 
 class LocationEffectiveDateLastActiveTests(TestCase):
     """effective_date_last_active returns date_last_active, infers from abandoned, or None."""
@@ -82,7 +82,7 @@ class LocationEffectiveDateLastActiveTests(TestCase):
         self.assertEqual(loc.effective_date_last_active, d - timedelta(days=1))
 
 
-# ── __str__ ───────────────────────────────────────────────────────────────────
+# -- __str__ -------------------------------------------------------------------
 
 class LocationStrTests(TestCase):
     """__str__ returns the name when set, or 'Location(<pk>)' as a fallback."""
@@ -96,7 +96,7 @@ class LocationStrTests(TestCase):
         self.assertEqual(str(loc), f"Location({loc.pk})")
 
 
-# ── to_json ───────────────────────────────────────────────────────────────────
+# -- to_json -------------------------------------------------------------------
 
 class LocationToJsonTests(TestCase):
     """to_json() serialises key fields; cached_place_name avoids the Google API."""
@@ -143,7 +143,7 @@ class LocationToJsonTests(TestCase):
         self.assertAlmostEqual(self.loc.to_json()["longitude"], -74.2, places=3)
 
 
-# ── has_place_name ────────────────────────────────────────────────────────────
+# -- has_place_name ------------------------------------------------------------
 
 class LocationHasPlaceNameTests(TestCase):
     """has_place_name() is True only when a meaningful place name is available."""
@@ -169,7 +169,7 @@ class LocationHasPlaceNameTests(TestCase):
             self.assertTrue(loc.has_place_name())
 
 
-# ── slug generation ───────────────────────────────────────────────────────────
+# -- slug generation -----------------------------------------------------------
 
 class LocationSlugTests(TestCase):
     """Locations auto-generate a unique URL slug on save."""
@@ -194,7 +194,7 @@ class LocationSlugTests(TestCase):
         self.assertEqual(loc.slug, "old-factory")
 
 
-# ── LocationQuerySet ──────────────────────────────────────────────────────────
+# -- LocationQuerySet ----------------------------------------------------------
 
 class LocationQuerySetTests(TestCase):
     """LocationQuerySet filter methods: by_name, by_cid, within_bounding_box."""
@@ -242,7 +242,7 @@ class LocationQuerySetTests(TestCase):
         self.assertNotIn(self.loc_a, qs)
 
 
-# ── LocationManager ───────────────────────────────────────────────────────────
+# -- LocationManager -----------------------------------------------------------
 
 class LocationManagerGetForPointTests(TestCase):
     """get_for_point() resolves via bounding_box containment, falling back to proximity."""

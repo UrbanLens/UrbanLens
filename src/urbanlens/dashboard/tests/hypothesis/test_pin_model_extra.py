@@ -15,7 +15,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 
-# ── effective_color ────────────────────────────────────────────────────────────
+# -- effective_color ------------------------------------------------------------
 
 
 class PinEffectiveColorTests(TestCase):
@@ -158,7 +158,7 @@ class PinHasMeaningfulNameTests(TestCase):
         self.assertIsNotNone(pin.meaningful_name)
 
 
-# ── rating ────────────────────────────────────────────────────────────────────
+# -- rating --------------------------------------------------------------------
 
 class PinRatingTests(TestCase):
     """rating returns the most recent review rating, or 0 when there are none."""
@@ -182,7 +182,7 @@ class PinRatingTests(TestCase):
         self.assertIsInstance(self.pin.rating, int)
 
 
-# ── add_category / change_category ────────────────────────────────────────────
+# -- add_category / change_category --------------------------------------------
 
 class PinAddCategoryTests(TestCase):
     """add_category creates the Badge if needed and links it to the pin."""
@@ -235,7 +235,7 @@ class PinChangeCategoryTests(TestCase):
         self.assertNotIn(self.old_cat, self.pin.badges.filter(kind="category"))
 
 
-# ── to_json / to_detail_json ──────────────────────────────────────────────────
+# -- to_json / to_detail_json --------------------------------------------------
 
 class PinToJsonTests(TestCase):
     """to_json() serialises core pin fields to a dict."""

@@ -33,7 +33,7 @@
         </div>
     </div>
 
-    {# ── Tabs ───────────────────────────────────────────────────────────── #}
+    {# -- Tabs ------------------------------------------------------------- #}
     <div class="activity-tabs">
         <button type="button" class="activity-tab activity-tab--active" data-tab="all"
                 onclick="tripSetTab('all')">All</button>
@@ -43,7 +43,7 @@
                 onclick="tripSetTab('confirmed')">Confirmed</button>
     </div>
 
-    {# ── List view ──────────────────────────────────────────────────────── #}
+    {# -- List view -------------------------------------------------------- #}
     <div class="activity-view activity-view--list" data-view="list">
         {% if activities_with_index %}
         <ul class="trip-activity-list">
@@ -122,7 +122,7 @@
                     <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% else %}<a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a>{% endif %}</span>
                     {% endif %}
 
-                    {# ── Voting (proposed activities only) ────────────────── #}
+                    {# -- Voting (proposed activities only) ------------------ #}
                     {% if act.status == 'proposed' %}
                     <div class="activity-vote-row">
                         <button type="button"
@@ -206,7 +206,7 @@
         {% endif %}
     </div>
 
-    {# ── Calendar view ──────────────────────────────────────────────────── #}
+    {# -- Calendar view ---------------------------------------------------- #}
     <div class="activity-view activity-view--calendar" data-view="calendar" hidden>
         <div class="activity-calendar-grid"></div>
     </div>

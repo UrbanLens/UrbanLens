@@ -76,7 +76,7 @@ def _make_profile(is_staff: bool = False, is_superuser: bool = False, is_active:
     return user.profile
 
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+# -- Auth ----------------------------------------------------------------------
 
 user: Recipe[User] = Recipe(
     User,
@@ -87,7 +87,7 @@ user: Recipe[User] = Recipe(
     is_active=True,
 )
 
-# ── Location ──────────────────────────────────────────────────────────────────
+# -- Location ------------------------------------------------------------------
 # latitude/longitude have a unique_together constraint; seq() ensures each
 # recipe call produces a distinct coordinate pair.
 
@@ -98,7 +98,7 @@ location: Recipe[Location] = Recipe(
     longitude=seq(Decimal("-74.001"), increment_by=Decimal("0.001")),
 )
 
-# ── Badges ────────────────────────────────────────────────────────────────────
+# -- Badges --------------------------------------------------------------------
 
 badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Badge "), kind="tag")
 tag_badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Tag "), kind="tag")
@@ -111,7 +111,7 @@ badge_customization: Recipe[BadgeCustomization] = Recipe(
     badge=foreign_key("dashboard.badge"),
 )
 
-# ── Campus ────────────────────────────────────────────────────────────────────
+# -- Campus --------------------------------------------------------------------
 
 # Location-level default campus (profile=None, pin=None) - community wiki boundary.
 campus: Recipe[Campus] = Recipe(
@@ -136,7 +136,7 @@ admin_campus: Recipe[Campus] = Recipe(
 #   baker.make("dashboard.Campus", pin=my_pin, location=my_pin.location,
 #              profile=my_pin.profile)
 
-# ── Pin ───────────────────────────────────────────────────────────────────────
+# -- Pin -----------------------------------------------------------------------
 
 pin: Recipe[Pin] = Recipe(
     "dashboard.Pin",
@@ -160,7 +160,7 @@ pin_note: Recipe[PinNote] = Recipe(
     text="A test note.",
 )
 
-# ── Visits ────────────────────────────────────────────────────────────────────
+# -- Visits --------------------------------------------------------------------
 
 pin_visit: Recipe[PinVisit] = Recipe(
     "dashboard.PinVisit",
@@ -174,7 +174,7 @@ takeout_visit: Recipe[PinVisit] = Recipe(
     source="takeout",
 )
 
-# ── Aliases ───────────────────────────────────────────────────────────────────
+# -- Aliases -------------------------------------------------------------------
 
 pin_alias: Recipe[PinAlias] = Recipe(
     "dashboard.PinAlias",
@@ -189,14 +189,14 @@ location_alias: Recipe[LocationAlias] = Recipe(
     created_by=_make_profile,
 )
 
-# ── Images ────────────────────────────────────────────────────────────────────
+# -- Images --------------------------------------------------------------------
 
 image: Recipe[Image] = Recipe(
     "dashboard.Image",
     pin=foreign_key("dashboard.pin"),
 )
 
-# ── Markup ────────────────────────────────────────────────────────────────────
+# -- Markup --------------------------------------------------------------------
 
 pin_markup: Recipe[PinMarkup] = Recipe(
     "dashboard.PinMarkup",
@@ -211,7 +211,7 @@ pin_markup: Recipe[PinMarkup] = Recipe(
     border_opacity=100,
 )
 
-# ── Comments & Reactions ──────────────────────────────────────────────────────
+# -- Comments & Reactions ------------------------------------------------------
 
 # Pin comment - exactly one of (pin, location) must be set.
 comment: Recipe[Comment] = Recipe(
@@ -241,7 +241,7 @@ reaction: Recipe[Reaction] = Recipe(
     emoji="👍",
 )
 
-# ── Reviews ───────────────────────────────────────────────────────────────────
+# -- Reviews -------------------------------------------------------------------
 
 review: Recipe[Review] = Recipe(
     "dashboard.Review",
@@ -251,7 +251,7 @@ review: Recipe[Review] = Recipe(
     review="A test review.",
 )
 
-# ── Friendships ───────────────────────────────────────────────────────────────
+# -- Friendships ---------------------------------------------------------------
 
 friendship: Recipe[Friendship] = Recipe(
     "dashboard.Friendship",
@@ -271,7 +271,7 @@ accepted_friendship: Recipe[Friendship] = Recipe(
     permissions=Permission.VIEW_PROFILE,
 )
 
-# ── Trips ────────────────────────────────────────────────────────────────────
+# -- Trips --------------------------------------------------------------------
 
 trip: Recipe[Trip] = Recipe(
     "dashboard.Trip",
@@ -327,7 +327,7 @@ trip_activity_vote: Recipe[TripActivityVote] = Recipe(
     vote="up",
 )
 
-# ── Notifications ─────────────────────────────────────────────────────────────
+# -- Notifications -------------------------------------------------------------
 
 notification_log: Recipe[NotificationLog] = Recipe(
     "dashboard.NotificationLog",
@@ -357,7 +357,7 @@ notification_preference: Recipe[NotificationPreference] = Recipe(
     wiki_updated=DeliveryPreference.NONE,
 )
 
-# ── Social Links ──────────────────────────────────────────────────────────────
+# -- Social Links --------------------------------------------------------------
 
 social_link: Recipe[SocialLink] = Recipe(
     "dashboard.SocialLink",
@@ -366,7 +366,7 @@ social_link: Recipe[SocialLink] = Recipe(
     handle=seq("handle_"),
 )
 
-# ── Location Edit History ─────────────────────────────────────────────────────
+# -- Location Edit History -----------------------------------------------------
 
 location_edit: Recipe[LocationEdit] = Recipe(
     "dashboard.LocationEdit",
@@ -377,7 +377,7 @@ location_edit: Recipe[LocationEdit] = Recipe(
     reverted_by=None,
 )
 
-# ── Authentication ────────────────────────────────────────────────────────────
+# -- Authentication ------------------------------------------------------------
 
 email_verification: Recipe[EmailVerification] = Recipe(
     "dashboard.EmailVerification",
@@ -385,7 +385,7 @@ email_verification: Recipe[EmailVerification] = Recipe(
     verified_at=None,
 )
 
-# ── Geocoding Cache ───────────────────────────────────────────────────────────
+# -- Geocoding Cache -----------------------------------------------------------
 
 geocoded_location: Recipe[GeocodedLocation] = Recipe(
     "dashboard.GeocodedLocation",

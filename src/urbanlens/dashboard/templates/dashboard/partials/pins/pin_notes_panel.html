@@ -32,7 +32,7 @@
     </ul>
     {% endif %}
 
-    {# ── Add note form ───────────────────────────────────────────────── #}
+    {# -- Add note form ------------------------------------------------- #}
     <form hx-post="{% url 'pin.notes' pin.slug %}"
           hx-target="#pin-notes-panel"
           hx-swap="outerHTML"

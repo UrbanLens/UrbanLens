@@ -44,7 +44,7 @@ def _profile_with_mode(mode: str, **extra) -> Profile:
     return profile
 
 
-# ── GPS mode ──────────────────────────────────────────────────────────────────
+# -- GPS mode ------------------------------------------------------------------
 
 class GetMapCenterGpsModeTests(TestCase):
     """GPS mode must always return None - the browser handles geolocation."""
@@ -82,7 +82,7 @@ class GetMapCenterGpsModeTests(TestCase):
         self.assertIsNone(profile.get_map_center())
 
 
-# ── CUSTOM mode ───────────────────────────────────────────────────────────────
+# -- CUSTOM mode ---------------------------------------------------------------
 
 class GetMapCenterCustomModeTests(TestCase):
     """CUSTOM mode returns the stored coordinates, or None when either is missing."""
@@ -147,7 +147,7 @@ class GetMapCenterCustomModeTests(TestCase):
         self.assertAlmostEqual(result[1], float(lng), places=5)
 
 
-# ── AUTO mode - cached centroid ───────────────────────────────────────────────
+# -- AUTO mode - cached centroid -----------------------------------------------
 
 class GetMapCenterAutoCachedTests(TestCase):
     """AUTO mode returns the cached centroid without hitting the DB for pins."""
@@ -186,7 +186,7 @@ class GetMapCenterAutoCachedTests(TestCase):
         mock_compute.assert_not_called()
 
 
-# ── AUTO mode - cold cache ────────────────────────────────────────────────────
+# -- AUTO mode - cold cache ----------------------------------------------------
 
 class GetMapCenterAutoColdTests(TestCase):
     """AUTO mode falls back to compute_map_center() when the cache is empty."""
@@ -212,7 +212,7 @@ class GetMapCenterAutoColdTests(TestCase):
         self.assertAlmostEqual(result[1], -74.0, places=2)
 
 
-# ── compute_map_center ────────────────────────────────────────────────────────
+# -- compute_map_center --------------------------------------------------------
 
 class ComputeMapCenterTests(TestCase):
     """compute_map_center() averages pin coordinates and persists the result."""
@@ -292,7 +292,7 @@ class ComputeMapCenterTests(TestCase):
         self.assertAlmostEqual(result[1], (lng1 + lng2) / 2, places=4)
 
 
-# ── Clustering behaviour ──────────────────────────────────────────────────────
+# -- Clustering behaviour ------------------------------------------------------
 
 class ComputeMapCenterClusteringTests(TestCase):
     """The largest geographic cluster wins over intercontinental spreads."""
@@ -362,7 +362,7 @@ class ComputeMapCenterClusteringTests(TestCase):
         self.assertLessEqual(result[1], max(lngs) + 0.001)
 
 
-# ── map_default_zoom default ──────────────────────────────────────────────────
+# -- map_default_zoom default --------------------------------------------------
 
 class MapDefaultZoomTests(TestCase):
     """map_default_zoom defaults to 13 for new profiles."""

@@ -1,7 +1,7 @@
 {% load dashboard_tags %}
 <div id="friend_list" class="profile-section">
 
-    {# ── Section header ──────────────────────────────────────────────────────── #}
+    {# -- Section header -------------------------------------------------------- #}
     <div class="profile-section-header">
         <h3 class="profile-section-title">
             {% if is_own_profile %}Friends{% else %}Mutual Friends{% endif %}
@@ -20,7 +20,7 @@
         </div>
     </div>
 
-    {# ── Incoming friend requests (own profile only) ──────────────────────── #}
+    {# -- Incoming friend requests (own profile only) ------------------------ #}
     {% if is_own_profile and incoming_requests %}
     <div class="friend-requests-section">
         <p class="friend-requests-label">
@@ -70,7 +70,7 @@
     </div>
     {% endif %}
 
-    {# ── Friend grid ─────────────────────────────────────────────────────────── #}
+    {# -- Friend grid ----------------------------------------------------------- #}
     {% if is_own_profile %}
     {% if friends %}
     <ul class="friend-grid">
@@ -118,7 +118,7 @@
     {% endif %}
     {% endif %}
 
-    {# ── Add friend button (only when not already friends) ──────────────────── #}
+    {# -- Add friend button (only when not already friends) -------------------- #}
     {% if not is_own_profile and viewer and viewer_can_request %}
     <div class="friend-action-row">
         <button type="button" class="btn-add-friend"

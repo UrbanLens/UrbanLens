@@ -11,12 +11,12 @@
 <div class="trip-detail-page page-content">
     <div id="trip-onboarding" class="page-onboarding" aria-live="polite"></div>
 
-    {# ── Trip header ───────────────────────────────────────────────────── #}
+    {# -- Trip header ----------------------------------------------------- #}
     <div id="trip-header">
         {% include "dashboard/partials/trips/trip_header_partial.html" %}
     </div>
 
-    {# ── Activity map ──────────────────────────────────────────────────── #}
+    {# -- Activity map ---------------------------------------------------- #}
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
         <div class="trip-map-overlay">
@@ -30,7 +30,7 @@
         <p class="trip-map-empty" id="trip-map-empty" hidden>No locations to display.</p>
     </div>
 
-    {# ── Sortable sections - draggable per user, order stored in localStorage ── #}
+    {# -- Sortable sections - draggable per user, order stored in localStorage -- #}
     <div id="trip-sections" class="trip-sections">
 
         {# Activities #}
@@ -103,7 +103,7 @@
 
 </div>
 
-{# ── Edit trip dialog ───────────────────────────────────────────────────── #}
+{# -- Edit trip dialog ----------------------------------------------------- #}
 <dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Trip" %}
     <form hx-post="{% url 'trips.edit' trip.uuid %}"
@@ -141,7 +141,7 @@
     </form>
 </dialog>
 
-{# ── Add activity dialog ────────────────────────────────────────────────── #}
+{# -- Add activity dialog -------------------------------------------------- #}
 <dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Activity" %}
     <form id="add-activity-form"
@@ -251,7 +251,7 @@
     </form>
 </dialog>
 
-{# ── Edit activity dialog ───────────────────────────────────────────────── #}
+{# -- Edit activity dialog ------------------------------------------------- #}
 <dialog id="edit-activity-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Activity" %}
     <form id="edit-activity-form"
@@ -378,7 +378,7 @@
     </form>
 </dialog>
 
-{# ── Mark as completed dialog ────────────────────────────────────────────── #}
+{# -- Mark as completed dialog ---------------------------------------------- #}
 <dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Mark as Completed" %}
     <form id="trip-complete-form"
@@ -405,7 +405,7 @@
     </form>
 </dialog>
 
-{# ── Trip settings dialog ─────────────────────────────────────────────────── #}
+{# -- Trip settings dialog --------------------------------------------------- #}
 {% if viewer_is_organizer %}
 <dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Trip Settings" %}
@@ -415,7 +415,7 @@
 </dialog>
 {% endif %}
 
-{# ── Add member dialog ──────────────────────────────────────────────────── #}
+{# -- Add member dialog ---------------------------------------------------- #}
 <dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
     <form hx-post="{% url 'trips.members' trip.uuid %}"
@@ -511,7 +511,7 @@
 
 
 (function () {
-    // ── Trip activity map ────────────────────────────────────────────────
+    // -- Trip activity map ------------------------------------------------
     var mapEl  = document.getElementById('trip-map');
     var emptyEl = document.getElementById('trip-map-empty');
     var wrapEl = document.getElementById('trip-map-wrap');
@@ -775,7 +775,7 @@
     window.refreshTripMap = _loadPoints;
 }());
 
-// ── Hide trip sections whose HTMX panel comes back hidden (e.g. weather with no data) ─
+// -- Hide trip sections whose HTMX panel comes back hidden (e.g. weather with no data) -
 document.body.addEventListener('htmx:afterSettle', function () {
     var weatherPanel = document.getElementById('trip-weather-panel');
     if (weatherPanel) {
@@ -784,7 +784,7 @@ document.body.addEventListener('htmx:afterSettle', function () {
     }
 });
 
-// ── Show completed toggle (shared between map overlay and activities panel) ─
+// -- Show completed toggle (shared between map overlay and activities panel) -
 var _tripShowCompletedKey = 'trip-show-completed-{{ trip.uuid }}';
 var _tripAllCompletedCollapsedKey = 'trip-all-completed-collapsed-{{ trip.uuid }}';
 window._tripShowCompleted = false;
@@ -860,7 +860,7 @@ window.tripToggleShowCompleted = function () {
     _applyShowCompletedState();
 };
 
-// ── Sortable sections ────────────────────────────────────────────────────
+// -- Sortable sections ----------------------------------------------------
 (function () {
     var container = document.getElementById('trip-sections');
     if (!container || typeof Sortable === 'undefined') return;
@@ -889,7 +889,7 @@ window.tripToggleShowCompleted = function () {
     });
 }());
 
-// ── Location search (shared between add + edit dialogs) ──────────────────
+// -- Location search (shared between add + edit dialogs) ------------------
 (function () {
     function _initLocationSearch(cfg) {
         var searchInput = document.getElementById(cfg.searchId);
@@ -1016,7 +1016,7 @@ window.tripToggleShowCompleted = function () {
     });
 }());
 
-// ── Add activity success callback ────────────────────────────────────────
+// -- Add activity success callback ----------------------------------------
 function _onAddActivitySuccess() {
     document.getElementById('add-activity-dialog').close();
     document.getElementById('add-activity-form').reset();
@@ -1042,7 +1042,7 @@ function _onAddActivitySuccess() {
     // map + view restore are handled by the activities section listener below
 }
 
-// ── Activities section: auto-refresh map + restore view on any panel swap ─
+// -- Activities section: auto-refresh map + restore view on any panel swap -
 (function () {
     var sec = document.querySelector('.trip-detail-activities');
     if (!sec) return;
@@ -1056,7 +1056,7 @@ function _onAddActivitySuccess() {
     });
 }());
 
-// ── Calendar / view toggle ───────────────────────────────────────────────
+// -- Calendar / view toggle -----------------------------------------------
 window._tripCurrentView = 'list';
 var _tripCalOffset = 0;  // months offset from trip's natural date range
 
@@ -1290,7 +1290,7 @@ function _initCalDragDrop(calEl) {
     });
 }
 
-// ── Status pill toggle helper ────────────────────────────────────────────
+// -- Status pill toggle helper --------------------------------------------
 function _setStatusPill(prefix, value) {
     var inputId  = (prefix === 'add') ? 'add-activity-status-input' : 'edit-activity-status-input';
     var groupSel = (prefix === 'add') ? '#add-activity-dialog .status-pill-toggle' : '#edit-activity-dialog .status-pill-toggle';
@@ -1300,7 +1300,7 @@ function _setStatusPill(prefix, value) {
     });
 }
 
-// ── Add activity name toggle ─────────────────────────────────────────────
+// -- Add activity name toggle ---------------------------------------------
 function _toggleAddActivityName() {
     var wrap = document.getElementById('add-activity-name-wrap');
     var btn  = document.getElementById('add-activity-name-toggle');
@@ -1315,7 +1315,7 @@ function _toggleAddActivityName() {
     }
 }
 
-// ── Edit activity name toggle ────────────────────────────────────────────
+// -- Edit activity name toggle --------------------------------------------
 function _toggleEditActivityName() {
     var wrap = document.getElementById('edit-activity-name-wrap');
     var btn  = document.getElementById('edit-activity-name-toggle');
@@ -1330,7 +1330,7 @@ function _toggleEditActivityName() {
     }
 }
 
-// ── Edit activity dialog ─────────────────────────────────────────────────
+// -- Edit activity dialog -------------------------------------------------
 function tripOpenEditDialog(li) {
     var form = document.getElementById('edit-activity-form');
     form.setAttribute('hx-post', li.dataset.editUrl);
@@ -1395,7 +1395,7 @@ function _clearEditLocation() {
     document.getElementById('edit-activity-location-display').textContent = '';
 }
 
-// ── Child trip search ────────────────────────────────────────────────────
+// -- Child trip search ----------------------------------------------------
 (function () {
     function _initChildTripSearch(prefix) {
         var searchInput  = document.getElementById(prefix + '-child-trip-search');
@@ -1470,7 +1470,7 @@ function _clearChildTrip(prefix) {
     document.getElementById(p + '-child-trip-clear').style.display = 'none';
 }
 
-// ── Delete activity from edit dialog ────────────────────────────────────
+// -- Delete activity from edit dialog ------------------------------------
 async function _deleteEditActivity() {
     var btn = document.getElementById('edit-activity-delete-btn');
     var deleteUrl = btn && btn.dataset.deleteUrl;
@@ -1483,7 +1483,7 @@ async function _deleteEditActivity() {
     });
 }
 
-// ── Activity tabs (All / Proposed / Confirmed) ───────────────────────────
+// -- Activity tabs (All / Proposed / Confirmed) ---------------------------
 window._tripCurrentTab = 'all';
 
 window.tripSetTab = function (tab) {
@@ -1515,7 +1515,7 @@ window.tripSetTab = function (tab) {
     if (window._tripCurrentView === 'calendar') _renderTripCalendar();
 };
 
-// ── Mark-as-completed dialog ─────────────────────────────────────────────
+// -- Mark-as-completed dialog ---------------------------------------------
 window.tripOpenCompleteDialog = function (url) {
     var form = document.getElementById('trip-complete-form');
     if (form) {

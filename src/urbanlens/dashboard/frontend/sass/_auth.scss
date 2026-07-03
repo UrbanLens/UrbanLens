@@ -1,6 +1,6 @@
 @use 'variables' as *;
 
-// ── Auth pages (login, signup, password reset, verify email) ──────────────
+// -- Auth pages (login, signup, password reset, verify email) --------------
 
 body.page-auth {
     margin: 0;
@@ -25,7 +25,7 @@ body.page-auth {
     overflow: hidden;
 }
 
-// ── Card header (logo + title) ────────────────────────────────────────────
+// -- Card header (logo + title) --------------------------------------------
 .auth-card-header {
     text-align: center;
     padding: 2.25rem 2rem 1rem;
@@ -70,12 +70,12 @@ body.page-auth {
     margin: 0;
 }
 
-// ── Card body ─────────────────────────────────────────────────────────────
+// -- Card body -------------------------------------------------------------
 .auth-card-body {
     padding: 1.5rem 2rem 2rem;
 }
 
-// ── Form ──────────────────────────────────────────────────────────────────
+// -- Form ------------------------------------------------------------------
 .auth-form {
     display: flex;
     flex-direction: column;
@@ -144,7 +144,7 @@ body.page-auth {
     }
 }
 
-// ── Non-field errors ──────────────────────────────────────────────────────
+// -- Non-field errors ------------------------------------------------------
 .auth-errors {
     background: var(--ul-grey-0);
     border: 1px solid $color-red-200;
@@ -170,7 +170,7 @@ body.page-auth {
     }
 }
 
-// ── Submit button ─────────────────────────────────────────────────────────
+// -- Submit button ---------------------------------------------------------
 .auth-submit-btn {
     background-color: $color-indigo-600;
     font-size: 1rem;
@@ -185,7 +185,7 @@ body.page-auth {
     }
 }
 
-// ── Divider ───────────────────────────────────────────────────────────────
+// -- Divider ---------------------------------------------------------------
 .auth-divider {
     display: flex;
     align-items: center;
@@ -209,7 +209,7 @@ body.page-auth {
 }
 
 
-// ── Footer links (sign up / log in) ──────────────────────────────────────
+// -- Footer links (sign up / log in) --------------------------------------
 .auth-footer {
     text-align: center;
     margin-top: 1.25rem;
@@ -236,7 +236,7 @@ body.page-auth {
     text-decoration: underline;
 }
 
-// ── Info page (check email, verify complete, etc.) ────────────────────────
+// -- Info page (check email, verify complete, etc.) ------------------------
 .auth-info-icon {
     text-align: center;
     margin-bottom: 1.25rem;

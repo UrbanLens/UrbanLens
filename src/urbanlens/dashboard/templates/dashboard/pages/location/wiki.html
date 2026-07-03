@@ -12,7 +12,7 @@
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 
-    {# ── Wiki identity banner ────────────────────────────────────────────── #}
+    {# -- Wiki identity banner ---------------------------------------------- #}
     <div class="wiki-banner">
         <div class="wiki-banner-left">
             <span class="wiki-badge">
@@ -46,7 +46,7 @@
         </div>
     </div>
 
-    {# ── Other-location conflict notice ─────────────────────────────────── #}
+    {# -- Other-location conflict notice ----------------------------------- #}
     {% if other_locations %}
     <div class="wiki-location-conflict" id="wiki-location-conflict">
         <i class="material-icons wiki-lcn-icon">info</i>
@@ -84,10 +84,10 @@
     </div>
     {% endif %}
 
-    {# ── Body grid ───────────────────────────────────────────────────────── #}
+    {# -- Body grid --------------------------------------------------------- #}
     <div class="wiki-body">
 
-        {# ── Description / dates (if any) ───────────────────────────────── #}
+        {# -- Description / dates (if any) --------------------------------- #}
         {% if location.description or location.date_abandoned or location.effective_date_last_active %}
         <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
             <div class="card-header">
@@ -128,7 +128,7 @@
         </div>
         {% endif %}
 
-        {# ── Community stats card ────────────────────────────────────────── #}
+        {# -- Community stats card ------------------------------------------ #}
         <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
             <div class="card-header">
                 <i class="material-icons">people</i>
@@ -148,7 +148,7 @@
             </div>
         </div>
 
-        {# ── Location map (boundary editor + community detail pins) ──────── #}
+        {# -- Location map (boundary editor + community detail pins) -------- #}
         <div class="location-map pin-map card">
             <div class="card-header">
                 <i class="material-icons">place</i>
@@ -156,8 +156,8 @@
             </div>
             <div class="map-wrapper">
 
-                {# ── Map sidebar panel (Details + Photos tabs) ── #}
-                <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
+                {# -- Map sidebar panel (Details + Photos tabs) -- #}
+                <div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
                     <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
                         <i class="material-icons">layers</i>
                         <span id="detail-pin-count-label">0 Layers</span>
@@ -183,7 +183,7 @@
 
                 <div id="bbox-map"></div>
 
-                {# ── Bottom-left overlay controls ── #}
+                {# -- Bottom-left overlay controls -- #}
                 <div class="map-bottom-controls">
                     <button id="bbox-edit-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startBboxEdit()">
                         <i class="material-icons">pentagon</i> Edit Boundary
@@ -196,7 +196,7 @@
                             <i class="material-icons">close</i> Cancel
                         </button>
                     </div>
-                    {# "Add Detail" dropdown ── #}
+                    {# "Add Detail" dropdown -- #}
                     <div class="map-add-detail-wrap" id="add-detail-wrap">
                         <div id="add-detail-menu" class="add-detail-menu" style="display:none">
                             <button type="button" class="add-detail-item" onclick="openWikiAddPinDialog()">
@@ -216,7 +216,7 @@
 
         {# Badges/categories hidden: global categories no longer exist #}
 
-        {# ── Aliases ─────────────────────────────────────────────────────── #}
+        {# -- Aliases ------------------------------------------------------- #}
         <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
              hx-trigger="load"
              hx-swap="outerHTML"
@@ -229,7 +229,7 @@
             <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        {# ── Photo gallery ────────────────────────────────────────────────── #}
+        {# -- Photo gallery -------------------------------------------------- #}
         <div id="wiki-gallery-panel"
              hx-get="{% url 'location.wiki.gallery' location.slug %}"
              hx-trigger="load"
@@ -243,7 +243,7 @@
             </div>
         </div>
 
-        {# ── Comments ─────────────────────────────────────────────────────── #}
+        {# -- Comments ------------------------------------------------------- #}
         <div id="comment-panel"
              hx-get="{% url 'location.wiki.comments' location.slug %}"
              hx-trigger="load"
@@ -256,7 +256,7 @@
             <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        {# ── Tabs: Details / Edit history ────────────────────────────────── #}
+        {# -- Tabs: Details / Edit history ---------------------------------- #}
         <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
             <div class="wiki-tabs">
                 <button class="wiki-tab wiki-tab--active" data-tab="history"
@@ -276,7 +276,7 @@
 
     </div>{# end wiki-body #}
 
-    {# ── Suggest-edits dialog ─────────────────────────────────────────────── #}
+    {# -- Suggest-edits dialog ----------------------------------------------- #}
     <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggest Edits" %}
         <p class="wiki-edit-notice">
@@ -339,7 +339,7 @@
 
 </div>
 
-{# ── Add community detail-pin dialog - outside wiki-body ─────────────────── #}
+{# -- Add community detail-pin dialog - outside wiki-body ------------------- #}
 <dialog id="wiki-detail-pin-dialog" class="detail-pin-add-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Community Detail Pin" %}
     <p class="detail-pin-add-hint">
@@ -417,7 +417,7 @@
     const bboxApiUrl = "{% url 'location.wiki.bbox' location.slug %}";
     const csrfToken = '{{ csrf_token }}';
 
-    // ── Bounding-box map ────────────────────────────────────────────────────
+    // -- Bounding-box map ----------------------------------------------------
     const bboxMap = L.map('bbox-map').setView([locLat, locLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(bboxMap);
     const _centerMarker = L.marker([locLat, locLng]).addTo(bboxMap);
@@ -453,7 +453,7 @@
         _attachBboxClickHandlers();
     }
 
-    // ── Boundary: click the polygon for an Edit/Delete context menu ──────────
+    // -- Boundary: click the polygon for an Edit/Delete context menu ----------
     function _attachBboxClickHandlers() {
         bboxItems.eachLayer(layer => {
             layer.off('click.openEditor');
@@ -580,7 +580,7 @@
         _loadSavedBbox(_savedBboxGeoJSON);
     }
 
-    // ── Add Detail menu ─────────────────────────────────────────────────────
+    // -- Add Detail menu -----------------------------------------------------
     function toggleAddDetailMenu() {
         const menu = document.getElementById('add-detail-menu');
         const chevron = document.querySelector('.add-detail-chevron');
@@ -608,7 +608,7 @@
         }
     });
 
-    // ── Suggest-edits form ──────────────────────────────────────────────────
+    // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
         const data = {};
@@ -642,7 +642,7 @@
         event.detail.headers['X-CSRFToken'] = csrfToken;
     });
 
-    // ── Community detail pins (bbox map overlay) ────────────────────────────
+    // -- Community detail pins (bbox map overlay) ----------------------------
     const _dpColors = {
         building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
         danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
@@ -767,7 +767,7 @@
     }
     loadWikiDetailPinsOnMap();
 
-    // ── Photo panel (wiki) ────────────────────────────────────────────────────
+    // -- Photo panel (wiki) ----------------------------------------------------
     function _makePhotoIcon(url, size, highlighted) {
         const shadow = highlighted
             ? '0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)'
@@ -928,7 +928,7 @@
         .catch(err => console.warn('Could not load gallery photos for wiki panel:', err));
 
 
-    // ── Community wiki onboarding ───────────────────────────────────────────
+    // -- Community wiki onboarding -------------------------------------------
     (function initWikiOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
         const prefix = 'ul_onboarding_v1_wiki_{{ location.uuid|default:location.id }}';
@@ -1005,7 +1005,7 @@
         document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
     }());
 
-    // ── Wiki detail-pin add dialog ───────────────────────────────────────────
+    // -- Wiki detail-pin add dialog -------------------------------------------
     (function () {
         const dlg       = document.getElementById('wiki-detail-pin-dialog');
         const form      = document.getElementById('wiki-detail-pin-form');
@@ -1113,7 +1113,7 @@
         });
     }());
 
-    // ── Photo map layer ───────────────────────────────────────────────────────
+    // -- Photo map layer -------------------------------------------------------
     const _wikiPhotoLayer   = L.layerGroup().addTo(bboxMap);
     const _wikiPhotoMarkers = {};  // id → { marker, img }
     const _wikiPhotoJsonUrl = "{% url 'location.wiki.gallery.json' location.slug %}";

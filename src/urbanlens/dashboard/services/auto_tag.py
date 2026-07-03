@@ -66,7 +66,7 @@ class AutoTagService:
         self.kinds = list(kinds) if kinds is not None else list(self._DEFAULT_KINDS)
         self.max_badges = max_badges
 
-    # ── public entry points ──────────────────────────────────────────────────
+    # -- public entry points --------------------------------------------------
 
     def suggest_for_pin(self, pin: Pin, *, apply: bool = False) -> list[Badge]:
         """Suggest (and optionally apply) badges for a Pin.
@@ -116,7 +116,7 @@ class AutoTagService:
             results.extend(matched)
         return results
 
-    # ── eligibility ──────────────────────────────────────────────────────────
+    # -- eligibility ----------------------------------------------------------
 
     @staticmethod
     def _kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
@@ -160,7 +160,7 @@ class AutoTagService:
             qs = qs.filter(profile__isnull=True)
         return list(qs.order_by("name"))
 
-    # ── matching pipeline ────────────────────────────────────────────────────
+    # -- matching pipeline ----------------------------------------------------
 
     def _match(
         self,
@@ -199,7 +199,7 @@ class AutoTagService:
             matched = matched[: self.max_badges]
         return matched
 
-    # ── keyword matching ──────────────────────────────────────────────────────
+    # -- keyword matching ------------------------------------------------------
 
     @staticmethod
     def _build_keyword_text(target: Pin | Location) -> str:
@@ -290,7 +290,7 @@ class AutoTagService:
                     break
         return matched
 
-    # ── AI matching ───────────────────────────────────────────────────────────
+    # -- AI matching -----------------------------------------------------------
 
     def _ai_match(
         self,

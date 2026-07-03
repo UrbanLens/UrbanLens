@@ -87,39 +87,39 @@ When examining mypy output, never use cast or similar solutions. Remember that t
 
 ```
 src/urbanlens/
-├── manage.py
-├── UrbanLens/
-│   ├── settings/                # Django settings (local.py, app.py, __init__.py)
-│   ├── urls.py                  # Root URL configuration
-│   ├── wsgi.py / asgi.py        # WSGI/ASGI applications
-│   └── environments/            # Environment-specific configuration
-├── dashboard/                   # Main app (maps, pins, profiles, reviews, trips)
-│   ├── controllers/             # ViewSet/View classes
-│   ├── models/                  # Data models (organized by entity)
-│   │   ├── abstract/            # Base classes (Model, QuerySet, Manager, ViewSet, Serializer)
-│   │   ├── pin/                 # Pin model, serializers, querysets, viewsets
-│   │   ├── profile/             # User profile model
-│   │   ├── reviews/             # Review model
-│   │   ├── friendship/          # Friendship relationships
-│   │   ├── images/              # Image attachments
-│   │   ├── categories/          # Pin categories
-│   │   ├── location/            # Location data
-│   │   ├── badges/              # Badges (tags, categories, ...)
-│   │   ├── trips/               # Trip planning
-│   │   └── cache/               # Geocoding cache
-│   ├── services/                # Business logic (AI, search, weather, geocoding, APIs)
-│   ├── frontend/
-│   │   ├── sass/                # SCSS source
-│   │   ├── ts/                  # TypeScript/React source
-│   │   └── static/              # Compiled output
-│   ├── templates/dashboard/     # Django templates
-│   ├── forms/                   # Django forms
-│   ├── migrations/              # Database migrations
-│   └── urls.py                  # Dashboard URL routes
-├── core/
-│   ├── tests/                   # Custom test runner and base test case
-│   └── controllers/             # DB backups, init scripts
-└── bin/                         # Startup and utility scripts
+├-- manage.py
+├-- UrbanLens/
+│   ├-- settings/                # Django settings (local.py, app.py, __init__.py)
+│   ├-- urls.py                  # Root URL configuration
+│   ├-- wsgi.py / asgi.py        # WSGI/ASGI applications
+│   └-- environments/            # Environment-specific configuration
+├-- dashboard/                   # Main app (maps, pins, profiles, reviews, trips)
+│   ├-- controllers/             # ViewSet/View classes
+│   ├-- models/                  # Data models (organized by entity)
+│   │   ├-- abstract/            # Base classes (Model, QuerySet, Manager, ViewSet, Serializer)
+│   │   ├-- pin/                 # Pin model, serializers, querysets, viewsets
+│   │   ├-- profile/             # User profile model
+│   │   ├-- reviews/             # Review model
+│   │   ├-- friendship/          # Friendship relationships
+│   │   ├-- images/              # Image attachments
+│   │   ├-- categories/          # Pin categories
+│   │   ├-- location/            # Location data
+│   │   ├-- badges/              # Badges (tags, categories, ...)
+│   │   ├-- trips/               # Trip planning
+│   │   └-- cache/               # Geocoding cache
+│   ├-- services/                # Business logic (AI, search, weather, geocoding, APIs)
+│   ├-- frontend/
+│   │   ├-- sass/                # SCSS source
+│   │   ├-- ts/                  # TypeScript/React source
+│   │   └-- static/              # Compiled output
+│   ├-- templates/dashboard/     # Django templates
+│   ├-- forms/                   # Django forms
+│   ├-- migrations/              # Database migrations
+│   └-- urls.py                  # Dashboard URL routes
+├-- core/
+│   ├-- tests/                   # Custom test runner and base test case
+│   └-- controllers/             # DB backups, init scripts
+└-- bin/                         # Startup and utility scripts
 ```
 
 ### Key Configuration Files
@@ -191,11 +191,11 @@ Template/HTMX views use `TemplateView` or `ViewMixin` and return rendered HTML. 
 
 ```
 dashboard/
-├── rest/         → DRF router (ViewSets)
-├── map/          → MapController (view, add, edit, search)
-│   └── pin/<id>/ → PinController (detail)
-├── profile/      → ProfileController
-└── friendship/   → FriendController
+├-- rest/         → DRF router (ViewSets)
+├-- map/          → MapController (view, add, edit, search)
+│   └-- pin/<id>/ → PinController (detail)
+├-- profile/      → ProfileController
+└-- friendship/   → FriendController
 ```
 
 ### Frontend & HTMX Philosophy

@@ -1,7 +1,7 @@
 @use "tokens" as *;
 @use "mixins" as *;
 
-// ── Toast notification overrides ─────────────────────────────────────────────
+// -- Toast notification overrides ---------------------------------------------
 //
 // Modern surface-style toasts anchored bottom-right. Click to dismiss; hover
 // pauses the auto-close timer (onHoverTimeOut in base.html).
@@ -61,7 +61,7 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
     }
 }
 
-// ── Container ─────────────────────────────────────────────────────────────────
+// -- Container -----------------------------------------------------------------
 // Override Materialize CDN rules that pin toasts top-right on wide screens.
 
 #toast-container {
@@ -80,7 +80,7 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
         max-width: calc(100vw - #{$space-md * 2}) !important;
     }
 
-    // ── Base toast ────────────────────────────────────────────────────────────
+    // -- Base toast ------------------------------------------------------------
 
     > div {
         width:         $_min-width;
@@ -146,7 +146,7 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
         }
     }
 
-    // ── Semantic variants ─────────────────────────────────────────────────────
+    // -- Semantic variants -----------------------------------------------------
 
     > .toast-success {
         @include toast-variant(

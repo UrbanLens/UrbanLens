@@ -34,12 +34,12 @@
             <p class="wikipedia-description">{{ article.description }}</p>
             {% endif %}
             {% if article.extract %}
-            {# Truncated only as a defensive cap against an unexpectedly huge extract - the #}
-            {# real, space-aware truncation is done client-side (see index.html), since a #}
-            {# fixed character count either wastes room or overflows depending on how tall #}
-            {# this card's row siblings stretch it. 6000 comfortably covers even a full lead #}
-            {# section on a well-developed topic (see WikipediaGateway._fill_short_extract). #}
-            <p class="wikipedia-extract">{{ article.extract|truncatechars:6000 }}</p>
+            {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) #}
+            {# - real headings/paragraphs/lists, already capped server-side. The visible amount is #}
+            {# then further clamped client-side by height (see index.html), since a fixed character #}
+            {# count either wastes room or overflows depending on how tall this card's row siblings #}
+            {# stretch it. #}
+            <div class="wikipedia-extract">{{ article.extract|safe }}</div>
             {% endif %}
             <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer"
                class="wikipedia-read-more">

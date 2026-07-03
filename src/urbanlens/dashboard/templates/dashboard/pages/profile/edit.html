@@ -21,7 +21,7 @@
 
 <div class="edit-profile-page page-content">
 
-    {# ── Setup / welcome banner (shown to all new users until they complete setup) ── #}
+    {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}
     {% if not form.instance.profile_setup_complete %}
     <div class="edit-setup-banner" id="setup-banner">
         <i class="material-icons setup-banner-icon">waving_hand</i>
@@ -42,7 +42,7 @@
         <h1 class="edit-profile-title">Edit Profile</h1>
     </div>
 
-    {# ── Profile info ──────────────────────────────────────────────────────── #}
+    {# -- Profile info -------------------------------------------------------- #}
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Profile Info</h2>
 
@@ -172,14 +172,14 @@
 
     </section>
 
-    {# ── Social links ──────────────────────────────────────────────────────── #}
+    {# -- Social links -------------------------------------------------------- #}
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Social Links</h2>
         <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
         {% include "dashboard/partials/profile/profile_social_links.html" %}
     </section>
 
-    {# ── Contact Information ────────────────────────────────────────────────── #}
+    {# -- Contact Information -------------------------------------------------- #}
     <section class="edit-card ul-section">
         <h2 class="edit-card-title">Contact Information</h2>
 
@@ -281,7 +281,7 @@ function closeDateErrorDialog() {
 (function () {
     var SAVE_URL = '{% url "profile.field.update" %}';
 
-    // ── date error dialog (created dynamically for auto-save errors) ──────────
+    // -- date error dialog (created dynamically for auto-save errors) ----------
     function showDateDialog(message) {
         closeDateErrorDialog();
         var overlay = document.createElement('div');
@@ -304,7 +304,7 @@ function closeDateErrorDialog() {
         document.body.appendChild(dialog);
     }
 
-    // ── per-field status indicator ────────────────────────────────────────────
+    // -- per-field status indicator --------------------------------------------
     function setStatus(field, state, text) {
         var el = document.querySelector('[data-field-status="' + field + '"]');
         if (!el) return;
@@ -315,7 +315,7 @@ function closeDateErrorDialog() {
         }
     }
 
-    // ── core save ─────────────────────────────────────────────────────────────
+    // -- core save -------------------------------------------------------------
     function saveField(field, value, isFile) {
         if (window.autosaveGuard) window.autosaveGuard.markDirty();
         setStatus(field, 'saving', 'Saving...');
@@ -365,7 +365,7 @@ function closeDateErrorDialog() {
             .finally(function () { if (guard) guard.saveFinished(); });
     }
 
-    // ── wire up all autosave inputs ───────────────────────────────────────────
+    // -- wire up all autosave inputs -------------------------------------------
     document.querySelectorAll('[data-autosave]').forEach(function (el) {
         var field = el.getAttribute('data-autosave');
         if (el.type === 'file') {
@@ -377,7 +377,7 @@ function closeDateErrorDialog() {
         }
     });
 
-    // ── username field: debounced availability check + save on blur ───────────
+    // -- username field: debounced availability check + save on blur -----------
     var usernameInput = document.getElementById('username-input');
     var usernameHint  = document.getElementById('username-hint');
     var _unameCheckTimer;
@@ -420,7 +420,7 @@ function closeDateErrorDialog() {
         });
     }
 
-    // ── gravatar button ───────────────────────────────────────────────────────
+    // -- gravatar button -------------------------------------------------------
     var gravatarBtn = document.getElementById('avatar-gravatar-btn');
     if (gravatarBtn) {
         gravatarBtn.addEventListener('click', function () {
@@ -443,7 +443,7 @@ function closeDateErrorDialog() {
         });
     }
 
-    // ── emoji circle buttons ──────────────────────────────────────────────────
+    // -- emoji circle buttons --------------------------------------------------
     document.querySelectorAll('.edit-avatar-emoji-opt').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var animal = btn.dataset.animal;
@@ -485,7 +485,7 @@ function closeDateErrorDialog() {
         }
     }
 
-    // ── setup banner skip ─────────────────────────────────────────────────────
+    // -- setup banner skip -----------------------------------------------------
     var skipBtn = document.getElementById('setup-skip-btn');
     var banner  = document.getElementById('setup-banner');
     if (skipBtn && banner) {
@@ -499,7 +499,7 @@ function closeDateErrorDialog() {
         });
     }
 
-    // ── server-rendered date dialog close wiring ──────────────────────────────
+    // -- server-rendered date dialog close wiring ------------------------------
     var overlay = document.getElementById('date-error-overlay');
     var closeBtn = document.getElementById('date-error-close');
     if (overlay) overlay.addEventListener('click', closeDateErrorDialog);

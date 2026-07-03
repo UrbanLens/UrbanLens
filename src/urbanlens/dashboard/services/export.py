@@ -222,7 +222,7 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
                 zf.write(file_path, arcname)
 
 
-# ── Manifest ──────────────────────────────────────────────────────────────────
+# -- Manifest ------------------------------------------------------------------
 
 
 def _write_manifest(profile: Any, temp_dir: str, export_types: list[str]) -> None:
@@ -237,7 +237,7 @@ def _write_manifest(profile: Any, temp_dir: str, export_types: list[str]) -> Non
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
-# ── Individual exporters ───────────────────────────────────────────────────────
+# -- Individual exporters -------------------------------------------------------
 
 
 def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:

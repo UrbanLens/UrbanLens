@@ -60,7 +60,7 @@ class LoopNetGateway(Gateway):
 
         return self._web_search_fallback(address)
 
-    # ── private ────────────────────────────────────────────────────────────────
+    # -- private ----------------------------------------------------------------
 
     def _direct_search(self, address: str) -> dict[str, Any] | None:
         """Try fetching the LoopNet search results page directly."""

@@ -69,7 +69,7 @@ class WikimediaGateway(MediaProvider):
             return []
         return self._fetch_image_info(page_ids)
 
-    # ── private ────────────────────────────────────────────────────────────────
+    # -- private ----------------------------------------------------------------
 
     def _search_files(self, query: str) -> list[str]:
         """Return up to _MAX_RESULTS file titles from a Commons full-text search."""

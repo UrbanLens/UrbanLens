@@ -1,6 +1,6 @@
 <div id="pin-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %} data-pin-version="{{ client_version }}">
 
-    {# ── Title + community wiki box ───────────────────────────────────────── #}
+    {# -- Title + community wiki box ----------------------------------------- #}
     <div class="pin-overview-title-row">
         <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
 
@@ -60,7 +60,7 @@
         {% endif %}
     </div>
 
-    {# ── Details card ───────────────────────────────────────────────────── #}
+    {# -- Details card ----------------------------------------------------- #}
     <div class="pin-details location-details card"
          data-collapse-scope="pin" data-collapse-section="details">
         <div class="card-header">

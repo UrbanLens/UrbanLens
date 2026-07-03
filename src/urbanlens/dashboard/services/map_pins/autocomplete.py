@@ -75,7 +75,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     q_lower = q.lower()
     seen_pin_ids: set[int] = set()
 
-    # ── Pin search ───────────────────────────────────────────────────────────────
+    # -- Pin search ---------------------------------------------------------------
     # Single query with OR across all relevant text fields.
     pin_qs = (
         Pin.objects.filter(profile=profile)
@@ -118,7 +118,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             ),
         )
 
-    # ── Location search (community wiki) ────────────────────────────────────────
+    # -- Location search (community wiki) ----------------------------------------
     # Only show locations the requesting user has actually pinned so results stay relevant.
     seen_loc_ids: set[int] = set()
     loc_qs = (

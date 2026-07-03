@@ -42,7 +42,7 @@ def _custom(name: str | None = None, icon: str | None = None, color: str | None 
     return SimpleNamespace(name=name, icon=icon, color=color)
 
 
-# ── _get_customization ────────────────────────────────────────────────────────
+# -- _get_customization --------------------------------------------------------
 
 
 class BadgeGetCustomizationTests(TestCase):
@@ -59,7 +59,7 @@ class BadgeGetCustomizationTests(TestCase):
         self.assertIs(b._get_customization(), c)
 
 
-# ── effective_name ────────────────────────────────────────────────────────────
+# -- effective_name ------------------------------------------------------------
 
 
 class BadgeEffectiveNameTests(TestCase):
@@ -91,7 +91,7 @@ class BadgeEffectiveNameTests(TestCase):
         self.assertEqual(b.effective_name, name)
 
 
-# ── effective_icon ────────────────────────────────────────────────────────────
+# -- effective_icon ------------------------------------------------------------
 
 
 class BadgeEffectiveIconTests(TestCase):
@@ -115,7 +115,7 @@ class BadgeEffectiveIconTests(TestCase):
         self.assertIsNone(b.effective_icon)
 
 
-# ── effective_color ───────────────────────────────────────────────────────────
+# -- effective_color -----------------------------------------------------------
 
 
 class BadgeEffectiveColorTests(TestCase):
@@ -139,7 +139,7 @@ class BadgeEffectiveColorTests(TestCase):
         self.assertIsNone(b.effective_color)
 
 
-# ── is_customized ─────────────────────────────────────────────────────────────
+# -- is_customized -------------------------------------------------------------
 
 
 class BadgeIsCustomizedTests(TestCase):
@@ -169,7 +169,7 @@ class BadgeIsCustomizedTests(TestCase):
         self.assertFalse(b.is_customized)
 
 
-# ── icon_is_overridden ────────────────────────────────────────────────────────
+# -- icon_is_overridden --------------------------------------------------------
 
 
 class BadgeIconIsOverriddenTests(TestCase):
@@ -189,7 +189,7 @@ class BadgeIconIsOverriddenTests(TestCase):
         self.assertFalse(b.icon_is_overridden)
 
 
-# ── Badge.__str__ ─────────────────────────────────────────────────────────────
+# -- Badge.__str__ -------------------------------------------------------------
 
 
 class BadgeStrTests(TestCase):
@@ -207,7 +207,7 @@ class BadgeStrTests(TestCase):
         self.assertNotIn("[global]", str(b))
 
 
-# ── BadgeQuerySet.tags / categories / statuses ────────────────────────────────
+# -- BadgeQuerySet.tags / categories / statuses --------------------------------
 
 
 class BadgeQuerySetKindTests(TestCase):
@@ -235,7 +235,7 @@ class BadgeQuerySetKindTests(TestCase):
         self.assertNotIn(self.tag, qs)
 
 
-# ── BadgeQuerySet.visible_to / global_only / for_profile ─────────────────────
+# -- BadgeQuerySet.visible_to / global_only / for_profile ---------------------
 
 
 class BadgeQuerySetVisibilityTests(TestCase):
@@ -280,7 +280,7 @@ class BadgeQuerySetVisibilityTests(TestCase):
         self.assertNotIn(self.global_b, qs)
 
 
-# ── BadgeQuerySet.with_icon ───────────────────────────────────────────────────
+# -- BadgeQuerySet.with_icon ---------------------------------------------------
 
 
 class BadgeQuerySetWithIconTests(TestCase):
@@ -313,7 +313,7 @@ class BadgeQuerySetWithIconTests(TestCase):
         self.assertNotIn(self.no_icon, qs)
 
 
-# ── BadgeQuerySet.ordered ─────────────────────────────────────────────────────
+# -- BadgeQuerySet.ordered -----------------------------------------------------
 
 
 class BadgeQuerySetOrderedTests(TestCase):
@@ -332,7 +332,7 @@ class BadgeQuerySetOrderedTests(TestCase):
         self.assertEqual(pks[0], b_high.pk)
 
 
-# ── BadgeQuerySet.with_customizations_for ────────────────────────────────────
+# -- BadgeQuerySet.with_customizations_for ------------------------------------
 
 
 class BadgeQuerySetWithCustomizationsForTests(TestCase):
@@ -385,7 +385,7 @@ class BadgeQuerySetWithCustomizationsForTests(TestCase):
         self.assertTrue(hasattr(result, "_user_customizations"))
 
 
-# ── BadgeQuerySet.with_pin_counts ─────────────────────────────────────────────
+# -- BadgeQuerySet.with_pin_counts ---------------------------------------------
 
 
 class BadgeQuerySetWithPinCountsTests(TestCase):
@@ -416,7 +416,7 @@ class BadgeQuerySetWithPinCountsTests(TestCase):
         self.assertEqual(result.location_count, 0)
 
 
-# ── Badge.get_badge_and_descendants ──────────────────────────────────────────
+# -- Badge.get_badge_and_descendants ------------------------------------------
 
 
 class BadgeGetBadgeAndDescendantsTests(TestCase):
@@ -468,7 +468,7 @@ class BadgeGetBadgeAndDescendantsTests(TestCase):
         self.assertIsInstance(result, set)
 
 
-# ── Badge.initial_order_for_parents ───────────────────────────────────────────
+# -- Badge.initial_order_for_parents -------------------------------------------
 
 
 class BadgeInitialOrderForParentsTests(TestCase):
@@ -499,7 +499,7 @@ class BadgeInitialOrderForParentsTests(TestCase):
         )
 
 
-# ── Profile default badges ───────────────────────────────────────────────────
+# -- Profile default badges ---------------------------------------------------
 
 
 class ProfileDefaultBadgeSignalTests(TestCase):

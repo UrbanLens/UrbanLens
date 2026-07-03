@@ -6,7 +6,7 @@ Include BEFORE any template that uses MarkupEngine (e.g. in base.html <head>).
 window.MarkupEngine = (function () {
     'use strict';
 
-    // ── Client-side sanitizers (defense-in-depth for legacy stored data) ─────
+    // -- Client-side sanitizers (defense-in-depth for legacy stored data) -----
 
     var _hexColorRe = /^#[0-9a-fA-F]{6}$/;
 
@@ -26,7 +26,7 @@ window.MarkupEngine = (function () {
         return Math.max(lo, Math.min(hi, n));
     }
 
-    // ── Geometry helpers ──────────────────────────────────────────────────────
+    // -- Geometry helpers ------------------------------------------------------
 
     function bearing(from, to) {
         var flat = Array.isArray(from) ? from[0] : from.lat;
@@ -68,7 +68,7 @@ window.MarkupEngine = (function () {
             ';box-shadow:0 1px 3px rgba(0,0,0,.2)">' + (lbl || '&nbsp;') + '</span>';
     }
 
-    // ── Shape renderer - works for both comment-composer (simple) and detail/wiki views ──
+    // -- Shape renderer - works for both comment-composer (simple) and detail/wiki views --
 
     function renderShape(s, group, zoom) {
         if (typeof L === 'undefined') return;
@@ -124,7 +124,7 @@ window.MarkupEngine = (function () {
         }
     }
 
-    // ── Draw session factory ──────────────────────────────────────────────────
+    // -- Draw session factory --------------------------------------------------
     //
     // opts:
     //   getColor()          → css color string for the current tool
@@ -142,7 +142,7 @@ window.MarkupEngine = (function () {
         function _c()  { return opts.getColor     ? opts.getColor()     : '#e74c3c'; }
         function _lbl(){ return opts.getTextLabel ? opts.getTextLabel() : ''; }
 
-        // ── Hint text ─────────────────────────────────────────────────────────
+        // -- Hint text ---------------------------------------------------------
         function _hint() {
             if (!opts.onHintChange) return;
             if (!_tool) { opts.onHintChange(''); return; }
@@ -163,7 +163,7 @@ window.MarkupEngine = (function () {
 
         function _clearPrev() { _prevL.clearLayers(); }
 
-        // ── Rubber-band preview ───────────────────────────────────────────────
+        // -- Rubber-band preview -----------------------------------------------
         function _preview(cursorLL) {
             _clearPrev();
             var c = _c();
@@ -192,7 +192,7 @@ window.MarkupEngine = (function () {
             }
         }
 
-        // ── Commit a finished shape ───────────────────────────────────────────
+        // -- Commit a finished shape -------------------------------------------
         function _commit(type, latlngs, extras) {
             _clearPrev();
             _state = null;
@@ -200,14 +200,14 @@ window.MarkupEngine = (function () {
             if (opts.onCommit) opts.onCommit(type, latlngs, extras || {});
         }
 
-        // ── Public: cancel in-progress shape without deactivating tool ────────
+        // -- Public: cancel in-progress shape without deactivating tool --------
         function cancelShape() {
             _state = null;
             _clearPrev();
             _hint();
         }
 
-        // ── Public: deactivate tool entirely ──────────────────────────────────
+        // -- Public: deactivate tool entirely ----------------------------------
         function deactivate() {
             cancelShape();
             _tool = null;
@@ -216,7 +216,7 @@ window.MarkupEngine = (function () {
             if (opts.onToolChange) opts.onToolChange(null);
         }
 
-        // ── Public: activate a tool ───────────────────────────────────────────
+        // -- Public: activate a tool -------------------------------------------
         function startTool(type) {
             cancelShape();
             _tool = type;
@@ -228,7 +228,7 @@ window.MarkupEngine = (function () {
 
         function getCurrentTool() { return _tool; }
 
-        // ── Click ─────────────────────────────────────────────────────────────
+        // -- Click -------------------------------------------------------------
         function _onClick(e) {
             if (!_tool || e.originalEvent.detail > 1) return;  // skip 2nd click of dblclick
             var ll = e.latlng;
@@ -271,7 +271,7 @@ window.MarkupEngine = (function () {
             }
         }
 
-        // ── Double-click: commit multi-point shapes ───────────────────────────
+        // -- Double-click: commit multi-point shapes ---------------------------
         function _onDblClick(e) {
             if (!_tool || !_state) return;
             L.DomEvent.stop(e);  // critical: prevent map zoom
@@ -294,12 +294,12 @@ window.MarkupEngine = (function () {
             }
         }
 
-        // ── Mouse move: update rubber-band preview ────────────────────────────
+        // -- Mouse move: update rubber-band preview ----------------------------
         function _onMouseMove(e) {
             if (_state || _tool === 'rect') _preview(e.latlng);
         }
 
-        // ── Mouse down: drag-to-draw for circle, rect, arrow/line, text ───────
+        // -- Mouse down: drag-to-draw for circle, rect, arrow/line, text -------
         function _onMouseDown(e) {
             if (!_tool || e.button !== 0) return;
             var eligible = ['circle', 'rect', 'arrow', 'line', 'text'].indexOf(_tool) >= 0;
@@ -376,7 +376,7 @@ window.MarkupEngine = (function () {
             document.addEventListener('mouseup', onUp, { once: true });
         }
 
-        // ── ESC: cancel in-progress shape; deactivate if no state ────────────
+        // -- ESC: cancel in-progress shape; deactivate if no state ------------
         function _onKeyDown(e) {
             if (e.key !== 'Escape' || !_tool) return;
             e.stopImmediatePropagation();

@@ -21,14 +21,14 @@
         </div>
     </div>
 
-    {# ── Trip list ──────────────────────────────────────────────────────── #}
+    {# -- Trip list -------------------------------------------------------- #}
     <div id="trip-list">
         {% include "dashboard/partials/trips/trip_list_partial.html" %}
     </div>
 
 </div>
 
-{# ── Create trip dialog ─────────────────────────────────────────────────── #}
+{# -- Create trip dialog --------------------------------------------------- #}
 <dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
     <form hx-post="{% url 'trips.create' %}"

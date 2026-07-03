@@ -1424,7 +1424,7 @@ ICON_CATEGORIES = {
 # concepts (e.g. "derelict", "industrial", "fire") surface relevant icons
 # even when the display label alone wouldn't match.
 ICON_KEYWORDS: dict[str, str] = {
-    # ── Places ───────────────────────────────────────────────────────────────
+    # -- Places ---------------------------------------------------------------
     "🏠": "residential home dwelling",
     "🏡": "house residential suburb",
     "🏚️": "derelict ruin empty decrepit rot decay shell gutted wreck",
@@ -1496,7 +1496,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "📦": "crate box storage cargo container",
     "🗄️": "filing cabinet storage records archive",
     "📁": "folder file archive records",
-    # ── Danger / hazard ──────────────────────────────────────────────────────
+    # -- Danger / hazard ------------------------------------------------------
     "⚠️": "caution risk alert hazard unsafe",
     "☢️": "radiation toxic nuclear contamination fallout",
     "☣️": "biohazard toxic contamination hazardous waste",
@@ -1512,12 +1512,12 @@ ICON_KEYWORDS: dict[str, str] = {
     "🚒": "fire engine emergency response",
     "🚑": "ambulance emergency medical rescue",
     "🚓": "police patrol enforcement security",
-    # ── Fire ─────────────────────────────────────────────────────────────────
+    # -- Fire -----------------------------------------------------------------
     "🔥": "fire flame heat burn scorched arson",
     "🌡️": "temperature heat cold climate",
     "💨": "wind gust air vent exhaust",
     "💧": "water drip leak moisture damp",
-    # ── Transport ────────────────────────────────────────────────────────────
+    # -- Transport ------------------------------------------------------------
     "🚂": "locomotive steam engine traincar historical heritage rail",
     "🚃": "carriage rolling stock rail",
     "🚄": "high speed passenger rail",
@@ -1545,7 +1545,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "🛥️": "motorboat marina dock",
     "⚓": "anchor dock harbour port maritime",
     "🚁": "helicopter pad rooftop hangar",
-    # ── Nature / terrain ─────────────────────────────────────────────────────
+    # -- Nature / terrain -----------------------------------------------------
     "🌿": "overgrown vegetation nature reclaimed",
     "🍂": "autumn decay seasonal",
     "🌾": "field farmland rural",
@@ -1558,7 +1558,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "🦊": "wildlife mammal forest",
     "🐺": "wildlife mammal predator",
     "🦌": "deer wildlife mammal",
-    # ── Status / markers ─────────────────────────────────────────────────────
+    # -- Status / markers -----------------------------------------------------
     "📌": "pin marker location",
     "📍": "pin drop location mark",
     "🟡": "caution warning moderate",
@@ -1586,7 +1586,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "📹": "video camcorder film",
     "🗺️": "map route navigation plan area",
     "🧭": "compass direction navigation orient",
-    # ── Tools / investigation ─────────────────────────────────────────────────
+    # -- Tools / investigation -------------------------------------------------
     "🪝": "hook attach pull grab",
     "🪢": "rope tie secure restraint",
     "🪤": "trap catch snare",
@@ -1602,7 +1602,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "💊": "medicine pharmacy medical",
     "🩹": "wound injury first aid",
     "🩻": "xray medical scan",
-    # ── History / archaeology ─────────────────────────────────────────────────
+    # -- History / archaeology -------------------------------------------------
     "🏺": "artefact antique historical archaeological",
     "🗿": "stone carving prehistoric ancient monument",
     "📜": "scroll document historical archive record",
@@ -1635,7 +1635,7 @@ ICON_KEYWORDS: dict[str, str] = {
     "🇽": "X Letters Characters Words Text",
     "🇾": "Y Letters Characters Words Text",
     "🇿": "Z Letters Characters Words Text",
-    # ── Requested picker coverage / aliases ──────────────────────────────────
+    # -- Requested picker coverage / aliases ----------------------------------
     "🎟️": "admission ticket entry pass legal permit museum",
     "🎫": "ticket admission pass entry",
     "🧾": "receipt permit paperwork legal",

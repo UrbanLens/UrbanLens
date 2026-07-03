@@ -13,7 +13,7 @@
 
 {% block content %}
 <div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
-    {# ── Map toolbar (tools only) ──────────────────────────────────────────── #}
+    {# -- Map toolbar (tools only) -------------------------------------------- #}
     <div class="map-buttons" id="map-buttons">
         <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
                 data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
@@ -44,7 +44,7 @@
         </div>
     </div>
 
-    {# ── Layers panel (bottom-left, Google-Maps style) ──────────────────────── #}
+    {# -- Layers panel (bottom-left, Google-Maps style) ------------------------ #}
     <div class="map-layers-panel" id="map-layers-panel">
         <button class="map-layers-toggle" id="map-layers-toggle"
                 onclick="_toggleLayersPanel()"
@@ -119,7 +119,7 @@
         </div>
     </div>
 
-    {# ── Place info panel (shown when user clicks "More information" on a Places marker) #}
+    {# -- Place info panel (shown when user clicks "More information" on a Places marker) #}
     {% if show_places_layer %}
     <div id="place-info-panel" class="place-info-panel" hidden>
         <div class="place-info-header">
@@ -130,7 +130,7 @@
     </div>
     {% endif %}
 
-    {# ── Floating address search bar ───────────────────────────────────── #}
+    {# -- Floating address search bar ------------------------------------- #}
     <div id="addr-search-bar">
         <i class="material-icons addr-search-icon">place</i>
         <input type="text" id="address-search-input"
@@ -148,7 +148,7 @@
         <div id="addr-search-suggestions" hidden></div>
     </div>
 
-    {# ── Filter panel ──────────────────────────────────────────────────── #}
+    {# -- Filter panel ---------------------------------------------------- #}
     <div id="filter-panel">
         <div class="fp-header">
             <span class="fp-title">Filter (F)</span>
@@ -167,7 +167,7 @@
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Search pins..." autocomplete="off">
             </div>
 
-            {# Scores ── all numeric sliders combined ── #}
+            {# Scores -- all numeric sliders combined -- #}
             <details class="fp-accordion-item" id="fp-acc-scores" data-importance="high">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Scores</span>
@@ -193,7 +193,7 @@
                 </div>
             </details>
 
-            {# Visit status ── collapsible ── #}
+            {# Visit status -- collapsible -- #}
             <details class="fp-accordion-item" id="fp-acc-visits" data-importance="high">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Visits</span>
@@ -228,7 +228,7 @@
                 </div>
             </details>
 
-            {# Date pinned ── collapsible ── #}
+            {# Date pinned -- collapsible -- #}
             <details class="fp-accordion-item" id="fp-acc-date" data-importance="low">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Date Pinned</span>
@@ -253,7 +253,7 @@
             </details>
 
             {% if filter_badges %}
-            {# Combined badges ── collapsible ── #}
+            {# Combined badges -- collapsible -- #}
             <details class="fp-accordion-item" id="fp-acc-badges" data-importance="medium">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Badges</span>
@@ -332,12 +332,12 @@
         </form>
     </div>
 
-    {# ── Pin list panel (left-docked) ──────────────────────────────────── #}
+    {# -- Pin list panel (left-docked) ------------------------------------ #}
     <div id="pin-list-panel">
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
-    {# ── Pin list handle (always-visible shortcut, desktop only) ──────────── #}
+    {# -- Pin list handle (always-visible shortcut, desktop only) ------------ #}
     <button id="pin-list-handle" class="pin-list-handle" onclick="_togglePinListPanel()"
             aria-label="Toggle pin list" aria-expanded="false"
             data-tooltip="Pin list" data-tooltip-pos="right">
@@ -359,7 +359,7 @@
 
     <div id="loading-pins-message" aria-hidden="true" style="display:none"></div>
 
-    {# ── Offline indicator ─────────────────────────────────────────────────── #}
+    {# -- Offline indicator --------------------------------------------------- #}
     <div id="offline-indicator" aria-live="assertive" hidden>
         <i class="material-icons">wifi_off</i>
         <span>Offline</span>
@@ -533,7 +533,7 @@
 
 {% block scripts %}
 <script>
-    // ── Constants ─────────────────────────────────────────────────────────────
+    // -- Constants -------------------------------------------------------------
     const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
     const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _SHOW_FILTERED_PIN_COUNT = {{ show_filtered_pin_count|yesno:'true,false' }};
@@ -547,7 +547,7 @@
     const _TILE_PAD    = 1.0;   // degrees of prefetch padding around the viewport
     const _MAX_TILES   = 200;   // threshold above which we just fetch the whole world
 
-    // ── Shared state ──────────────────────────────────────────────────────────
+    // -- Shared state ----------------------------------------------------------
     const _pinStore     = new Map();   // uuid → pin data
     const _fetchedTiles = new Set();   // tile keys already loaded from server
     const _markerMap    = new Map();   // uuid → L.Marker
@@ -563,7 +563,7 @@
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
     let   _contextMenuDismiss = null;   // document click handler for the active context menu
 
-    // ── Map ───────────────────────────────────────────────────────────────────
+    // -- Map -------------------------------------------------------------------
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
     const _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
     const _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
@@ -576,7 +576,7 @@
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
 
-    // ── Browser-side user location cache (never sent to server) ──────────────
+    // -- Browser-side user location cache (never sent to server) --------------
     const _USER_LOC_KEY     = 'ul_user_location_v1';
     // Kept long so a stale-but-plausible last-known position beats the generic
     // fallback center on the very common case of returning >5 min after the last visit.
@@ -606,7 +606,7 @@
             ? [_cachedUserLoc.lat, _cachedUserLoc.lng]
             : (_GPS_FALLBACK_LAT !== null ? [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG] : [40.7128, -74.0060]);
 
-    // ── Map viewport URL sync (lat/lng/zoom query params) ─────────────────────
+    // -- Map viewport URL sync (lat/lng/zoom query params) ---------------------
     const _MAP_VIEW_PARAM_KEYS = new Set(['lat', 'lng', 'zoom']);
 
     function _parseMapViewFromUrl(search = location.search) {
@@ -747,7 +747,7 @@
         );
     }
 
-    // ── Cluster layer (replaces plain LayerGroup) ─────────────────────────────
+    // -- Cluster layer (replaces plain LayerGroup) -----------------------------
     var _userClusterRadius = {% if cluster_radius %}{{ cluster_radius }}{% else %}null{% endif %};
     var clusterGroup = L.markerClusterGroup({
         maxClusterRadius: _userClusterRadius !== null
@@ -773,7 +773,7 @@
     clusterGroup.addTo(map);
     var pinsLayerGroup = clusterGroup;   // backward-compat alias
 
-    // ── UI helpers ────────────────────────────────────────────────────────────
+    // -- UI helpers ------------------------------------------------------------
     const _tfi = document.getElementById('tile-fetch-indicator');
     let _fetching = 0;
     function _setFetching(on, message) {
@@ -830,7 +830,7 @@
     }
     window.updatePinCounter = updatePinCounter;
 
-    // ── Tile math ─────────────────────────────────────────────────────────────
+    // -- Tile math -------------------------------------------------------------
     function _tileKey(lat, lng) {
         return `${(Math.floor(lat / _TILE_SIZE) * _TILE_SIZE).toFixed(1)},${(Math.floor(lng / _TILE_SIZE) * _TILE_SIZE).toFixed(1)}`;
     }
@@ -868,7 +868,7 @@
         return { s, w, n, e };
     }
 
-    // ── LocalStorage cache ────────────────────────────────────────────────────
+    // -- LocalStorage cache ----------------------------------------------------
     // Only the fields needed for marker rendering and popup display are cached.
     // Dropping address/city/state/country/priority/profile/statuses/tags_data_json
     // cuts the stored payload by ~40%, keeping it under the 5 MB quota.
@@ -984,7 +984,7 @@
         _refreshPinList();
     };
 
-    // ── Cache status display ──────────────────────────────────────────────────
+    // -- Cache status display --------------------------------------------------
     function _updateCacheStatus(ts) {
         const el = document.getElementById('cache-status');
         if (!el || !ts) return;
@@ -994,7 +994,7 @@
         console.log(`[UrbanLens] Pin cache last refreshed: ${d.toLocaleString()}`);
     }
 
-    // ── Background pin refresh (non-disruptive) ───────────────────────────────
+    // -- Background pin refresh (non-disruptive) -------------------------------
     // Fetches all pins, then adds new ones, updates changed markers, removes
     // deleted ones - without altering map position or zoom.
     async function _refreshAllPins() {
@@ -1057,7 +1057,7 @@
         }
     }
 
-    // ── Server connectivity ───────────────────────────────────────────────────
+    // -- Server connectivity ---------------------------------------------------
     function _setOffline(offline) {
         if (_isOffline === offline) return;
         _isOffline = offline;
@@ -1067,7 +1067,7 @@
         else console.log('[UL] Server connectivity restored');
     }
 
-    // ── Temporary place markers (search jump + right-click context menu) ─────
+    // -- Temporary place markers (search jump + right-click context menu) -----
     // isSearch=true uses amber styling so search markers are visually distinct from
     // permanent pins and from the blue context-menu marker.
     function _createTempPlaceMarker(lat, lng, title = '', isSearch = false) {
@@ -1165,7 +1165,7 @@
         _searchMarker.addTo(map);
     }
 
-    // ── Background polling ────────────────────────────────────────────────────
+    // -- Background polling ----------------------------------------------------
     // Checks whether any pin has been updated since the cached timestamp.
     // Also detects mid-session DB wipes via app_uuid mismatch.
     // Only triggers a full refresh when the server signals a change.
@@ -1193,7 +1193,7 @@
         } catch { _setOffline(true); }
     }
 
-    // ── Marker builder ────────────────────────────────────────────────────────
+    // -- Marker builder --------------------------------------------------------
     function _normalizeHexColor(hex) {
         let h = String(hex).replace('#', '').toLowerCase();
         if (h.length === 3) h = h.split('').map(c => c + c).join('');
@@ -1368,7 +1368,7 @@
     window.addMarker = addMarker;
 
 
-    // ── Gentle onboarding ───────────────────────────────────────────────────
+    // -- Gentle onboarding ---------------------------------------------------
     // Small, dismissible nudges teach powerful map actions in context without
     // blocking map use. Dismissals are stored per profile so users stay in control.
     const _ONBOARDING_PREFIX = `ul_onboarding_v1_${_PROFILE_UUID}`;
@@ -1487,7 +1487,7 @@
         if (card) setTimeout(() => _showOnboardingCard(card), 450);
     }
 
-    // ── Fetch tiles from server ───────────────────────────────────────────────
+    // -- Fetch tiles from server -----------------------------------------------
     async function _fetchJson(url, options, timeoutMs) {
         const controller = new AbortController();
         const tid = setTimeout(() => controller.abort(), timeoutMs || 120000);
@@ -1580,7 +1580,7 @@
         }
     }
 
-    // ── Viewport-based loading ────────────────────────────────────────────────
+    // -- Viewport-based loading ------------------------------------------------
     // Always fetch the full dataset ('*') rather than bbox subsets.
     // Once _fetchedTiles has '*', all viewport changes are served from
     // _pinStore with zero network cost - panning never hits the server again.
@@ -1604,7 +1604,7 @@
     map.on('zoomend', _onMapViewUrlChange);
     map.once('moveend', () => { _urlSyncReady = true; });
 
-    // ── Remember last position ────────────────────────────────────────────────
+    // -- Remember last position ------------------------------------------------
     if (_MAP_CENTER_MODE === 'remember') {
         let _rememberTid = null;
         function _saveMapPosition() {
@@ -1630,7 +1630,7 @@
         map.on('zoomend', _onRememberChange);
     }
 
-    // ── Filter mode ───────────────────────────────────────────────────────────
+    // -- Filter mode -----------------------------------------------------------
     // Called when search/filter results arrive (see data.html).
     // Called by resetFilters() to restore the full pin set from the store.
     function _exitFilterMode() {
@@ -1650,7 +1650,7 @@
     }
     window._exitFilterMode = _exitFilterMode;
 
-    // ── Initialization ────────────────────────────────────────────────────────
+    // -- Initialization --------------------------------------------------------
     (async () => {
         const cache = _readCache();
         if (cache?.pins && Object.keys(cache.pins).length) {
@@ -1747,7 +1747,7 @@
     let _placesLayerActive = false;
     const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
-    // ── Dark map mode helpers ─────────────────────────────────────────────────
+    // -- Dark map mode helpers -------------------------------------------------
     function _isDarkMapActive() {
         if (_MAP_DARK_MODE === 'dark') return true;
         if (_MAP_DARK_MODE === 'light') return false;
@@ -1792,7 +1792,7 @@
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
     }
 
-    // ── Footer attribution (replaces Leaflet's on-map control) ────────────────
+    // -- Footer attribution (replaces Leaflet's on-map control) ----------------
     function _updateFooterAttribution() {
         const el = document.getElementById('map-footer-attribution-text');
         if (!el) return;
@@ -1824,7 +1824,7 @@
         _syncBaseLayer();
     };
 
-    // ── Apply initial base layer from user preference ─────────────────────────
+    // -- Apply initial base layer from user preference -------------------------
     // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.
     _syncBaseLayer();
     (function _applyInitialLayers() {
@@ -1854,7 +1854,7 @@
         _syncBaseViewButtons();
     }());
 
-    // ── Tile loading visual feedback ──────────────────────────────────────────
+    // -- Tile loading visual feedback ------------------------------------------
     // Grey-dim the tile pane while map tiles are downloading; restore when done.
     // Each layer tracks its own loading state via a counter so that swapping
     // layers doesn't leave the map permanently dimmed.
@@ -1874,7 +1874,7 @@
     });
 
     map.on('popupopen', function() {
-        // ── Rating stars ───────────────────────────────────────────────────────
+        // -- Rating stars -------------------------------------------------------
         document.querySelectorAll('.popup-stars').forEach(function(starsEl) {
             const stars = starsEl.querySelectorAll('.popup-star');
 
@@ -2135,7 +2135,7 @@
         menu.style.top = `${e.originalEvent.clientY}px`;
         menu.style.left = `${e.originalEvent.clientX}px`;
 
-        // ── Coordinates row ─────────────────────────────────────────────────
+        // -- Coordinates row -------------------------------------------------
         const latFmt = lat.toFixed(6);
         const lngFmt = lng.toFixed(6);
         const coordItem = document.createElement('button');
@@ -2152,12 +2152,12 @@
         });
         menu.appendChild(coordItem);
 
-        // ── Separator ────────────────────────────────────────────────────────
+        // -- Separator --------------------------------------------------------
         const sep1 = document.createElement('div');
         sep1.className = 'map-context-menu__sep';
         menu.appendChild(sep1);
 
-        // ── Street View (async check) ────────────────────────────────────────
+        // -- Street View (async check) ----------------------------------------
         const svItem = document.createElement('a');
         svItem.className = 'map-context-menu__item map-context-menu__item--link map-context-menu__streetview';
         svItem.target = '_blank';
@@ -2172,7 +2172,7 @@
             .then(data => { if (data.available) svItem.style.display = ''; })
             .catch(() => {});
 
-        // ── Directions ───────────────────────────────────────────────────────
+        // -- Directions -------------------------------------------------------
         const dirItem = document.createElement('a');
         dirItem.className = 'map-context-menu__item map-context-menu__item--link';
         dirItem.target = '_blank';
@@ -2181,12 +2181,12 @@
         dirItem.innerHTML = '<i class="material-icons">directions</i>Directions here';
         menu.appendChild(dirItem);
 
-        // ── Separator ────────────────────────────────────────────────────────
+        // -- Separator --------------------------------------------------------
         const sep2 = document.createElement('div');
         sep2.className = 'map-context-menu__sep';
         menu.appendChild(sep2);
 
-        // ── Add Pin ──────────────────────────────────────────────────────────
+        // -- Add Pin ----------------------------------------------------------
         const addPinItem = document.createElement('button');
         addPinItem.className = 'map-context-menu__item';
         addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
@@ -2312,7 +2312,7 @@
         document.querySelector('#boundaries-button')?.classList.toggle('active', map.hasLayer(boundariesLayer));
     }
 
-    // ── Places layer (VIP only) ───────────────────────────────────────────────
+    // -- Places layer (VIP only) -----------------------------------------------
     const _SHOW_PLACES_LAYER = {{ show_places_layer|yesno:"true,false" }};
     let _placesFetchTid = null;
 
@@ -2631,7 +2631,7 @@
         }
     }
 
-    // ── Map dark mode toggle ──────────────────────────────────────────────────
+    // -- Map dark mode toggle --------------------------------------------------
     function _toggleMapDarkMode() {
         const currentMode = _MAP_DARK_MODE;
         const newMode = (currentMode === 'dark') ? 'light' : 'dark';
@@ -2703,7 +2703,7 @@
         this.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
     });
 
-    // ── Layers panel toggle ───────────────────────────────────────────────────
+    // -- Layers panel toggle ---------------------------------------------------
     function _toggleLayersPanel() {
         if (_isLayersPanelOpen()) { _closeLayersPanel(); } else { _openLayersPanel(); }
     }
@@ -2712,7 +2712,7 @@
         if (panel && !panel.contains(e.target)) { _closeLayersPanel(); }
     });
 
-    // ── Keyboard shortcuts (only when map is visible, not in input fields) ──────
+    // -- Keyboard shortcuts (only when map is visible, not in input fields) ------
     document.addEventListener('keydown', function (e) {
         // Skip if focus is inside a text/date input or textarea
         const tag = (document.activeElement?.tagName || '').toLowerCase();
@@ -2761,7 +2761,7 @@
         }
     });
 
-    // ── Filter panel ──────────────────────────────────────────────────────
+    // -- Filter panel ------------------------------------------------------
     function toggleFilterPanel() {
         const panel = document.getElementById('filter-panel');
         const btn = document.getElementById('search-pins-button');
@@ -2771,7 +2771,7 @@
         mapEl.classList.toggle('filter-open', isOpen);
     }
 
-    // ── Pin list panel ──────────────────────────────────────────────────────
+    // -- Pin list panel ------------------------------------------------------
     function _togglePinListPanel() {
         const panel = document.getElementById('pin-list-panel');
         const btn = document.getElementById('pin-list-button');
@@ -2919,7 +2919,7 @@
     // Delay until after initial pin load
     setTimeout(_restoreFiltersFromUrl, 100);
 
-    // ── Toggle-radio: clicking a selected radio deselects it (resets to "Any") ──
+    // -- Toggle-radio: clicking a selected radio deselects it (resets to "Any") --
     // Capture checked state on mousedown (before browser toggles it)
     document.getElementById('filter-form').addEventListener('mousedown', function (e) {
         const radio = e.target.closest('input[type=radio]');
@@ -2941,7 +2941,7 @@
         radio.dataset.wasChecked = 'false';
     }, true);
 
-    // ── Filter refresh indicator (subtle bottom pill, same as pin fetch) ───────
+    // -- Filter refresh indicator (subtle bottom pill, same as pin fetch) -------
     function _showFilterFetchIndicator() {
         _setFetching(true, 'Updating map...');
     }
@@ -2949,7 +2949,7 @@
         _setFetching(false);
     }
 
-    // ── Skip server round-trip when no filters are active ────────────────────
+    // -- Skip server round-trip when no filters are active --------------------
     document.getElementById('filter-form').addEventListener('htmx:beforeRequest', function (e) {
         if (!_hasActiveFilters()) {
             e.preventDefault();
@@ -2961,7 +2961,7 @@
     });
     document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterFetchIndicator);
 
-    // ── Auto-expand filter accordion sections based on importance and screen height ──
+    // -- Auto-expand filter accordion sections based on importance and screen height --
     // Panels carry data-importance="high|medium|low"; collapse least important first on
     // shorter screens.  New panels added to the sidebar just need the attribute - no code change.
     (function _autoExpandSections() {
@@ -2981,7 +2981,7 @@
         });
     })();
 
-    // ── Prevent filter panel pointer events from reaching the Leaflet map ──
+    // -- Prevent filter panel pointer events from reaching the Leaflet map --
     document.getElementById('filter-panel').addEventListener('wheel', function (e) {
         e.stopPropagation();
     }, { passive: true });
@@ -2995,7 +2995,7 @@
         e.stopPropagation();
     });
 
-    // ── Prevent pin list panel pointer events from reaching the Leaflet map ──
+    // -- Prevent pin list panel pointer events from reaching the Leaflet map --
     document.getElementById('pin-list-panel').addEventListener('wheel', function (e) {
         e.stopPropagation();
     }, { passive: true });
@@ -3009,7 +3009,7 @@
         e.stopPropagation();
     });
 
-    // ── Visit filter UI ──────────────────────────────────────────────────────
+    // -- Visit filter UI ------------------------------------------------------
     function _syncVisitUI(val) {
         const hiddenEl = document.getElementById('fp-visits-hidden');
         const resetBtn = document.getElementById('fp-visits-reset');
@@ -3093,12 +3093,12 @@
         });
     })();
 
-    // ── Floating address search bar ────────────────────────────────────────
+    // -- Floating address search bar ----------------------------------------
     let _addrBarTimer     = null;
     let _addrHistoryNavIdx = -1;   // position when cycling history with the up-arrow button
     let _updateHistoryBtn  = null; // set by _initAddrBar; called by clearAddrSearch
 
-    // ── Search history & recently-viewed pins (localStorage) ─────────────────
+    // -- Search history & recently-viewed pins (localStorage) -----------------
     const _ADDR_HISTORY_KEY = 'ul_addr_history_v1';
     const _RECENT_PINS_KEY  = 'ul_recent_pins_v1';
 
@@ -3138,7 +3138,7 @@
         } catch (_) { return []; }
     }
 
-    // ── Plus Code (Open Location Code) detection and resolution ──────────────
+    // -- Plus Code (Open Location Code) detection and resolution --------------
     // Matches full codes (XXXXXXXX+XX) and shortened codes (XXXX+XX City)
     const _PLUS_CODE_RE = /^([23456789CFGHJMPQRVWXcfghjmpqrvwx]{4,8}\+[23456789CFGHJMPQRVWXcfghjmpqrvwx]{0,2})([\s,].*)?$/;
 
@@ -3172,7 +3172,7 @@
         return null;
     }
 
-    // ── Coordinate parser ─────────────────────────────────────────────────────
+    // -- Coordinate parser -----------------------------------------------------
     function _parseCoordinates(q) {
         // Decimal degrees: "40.7128, -74.0060" / "40.7128 -74.0060" / "40.7128,-74.0060"
         const m1 = q.trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/);
@@ -3196,7 +3196,7 @@
         return null;
     }
 
-    // ── No-results overlay (shown centered on the map when search finds nothing) ─
+    // -- No-results overlay (shown centered on the map when search finds nothing) -
     function _showNoResultsOverlay(message) {
         const mapEl = document.getElementById('map');
         if (!mapEl) return;
@@ -3213,7 +3213,7 @@
         setTimeout(() => overlay.remove(), 6000);
     }
 
-    // ── Map suggestion section key from label ─────────────────────────────────
+    // -- Map suggestion section key from label ---------------------------------
     function _sectionKey(label) {
         const l = label.toLowerCase();
         if (l.includes('pin') || l.includes('location')) return 'pins';
@@ -3226,7 +3226,7 @@
         return 'suggestions';
     }
 
-    // ── Build a collapsible section header and wire its click handler ──────────
+    // -- Build a collapsible section header and wire its click handler ----------
     function _makeCollapsibleHdr(label, sectionKey, slot) {
         const hdr = document.createElement('div');
         hdr.className = 'addr-suggestion-group-hdr';
@@ -3246,7 +3246,7 @@
         return hdr;
     }
 
-    // ── Suggestion item builder ───────────────────────────────────────────────
+    // -- Suggestion item builder -----------------------------------------------
     let _addrActiveIdx = -1;
     let _addrSearchSeq = 0;
 
@@ -3464,7 +3464,7 @@
         if (_addrActiveIdx >= 0) items[_addrActiveIdx]?.scrollIntoView({ block: 'nearest' });
     }
 
-    // ── Slot-based source fetcher ─────────────────────────────────────────────
+    // -- Slot-based source fetcher ---------------------------------------------
     // Each source writes into a pre-allocated <div> slot placed in the correct
     // display order, so pins always appear above OSM / Google Places regardless
     // of which fetch completes first.
@@ -3499,7 +3499,7 @@
         }
     }
 
-    // ── Derived / fallback suggestions ────────────────────────────────────────
+    // -- Derived / fallback suggestions ----------------------------------------
     // Always appended so there is always something actionable for any query,
     // matching Google Maps' behaviour of showing "search for X near Y" variants.
     function _generateDerivedSuggestions(query) {
@@ -3532,7 +3532,7 @@
         return results;
     }
 
-    // ── recenterToUserLocation (also invoked by "My Location" suggestion) ─────
+    // -- recenterToUserLocation (also invoked by "My Location" suggestion) -----
     function recenterToUserLocation() {
         if (!navigator.geolocation) {
             toastr.warning('Geolocation is not supported by your browser.');
@@ -3625,7 +3625,7 @@
         if (_updateHistoryBtn) _updateHistoryBtn();
     }
 
-    // ── Main multi-source search (typed query) ────────────────────────────────
+    // -- Main multi-source search (typed query) --------------------------------
     function _startMultiSearch(query) {
         _clearSearchMarker();
         const seq = ++_addrSearchSeq;
@@ -3746,7 +3746,7 @@
         box.hidden = false;
     }
 
-    // ── Empty-input suggestions (shown on focus with no text) ─────────────────
+    // -- Empty-input suggestions (shown on focus with no text) -----------------
     function _showEmptySuggestions() {
         const seq = ++_addrSearchSeq;
         const input = document.getElementById('address-search-input');
@@ -3999,7 +3999,7 @@
         _updateHistoryBtn();
     })();
 
-    // ── Combined badge filter section ─────────────────────────────────────────
+    // -- Combined badge filter section -----------------------------------------
     // _badgeState: Map of badgeId(string) → 'incl' | 'excl'
     // _inclMode:   'and' | 'or'  - how included badges are combined
     const _badgeState = new Map();
@@ -4010,7 +4010,7 @@
     let _badgeAvailJustDragged = false; // same, for badges dragged straight from the suggestion list
     let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    // -- Helpers -------------------------------------------------------------
     function _badgeLabelForId(id) {
         return document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`)?.dataset.badgeLabel || String(id);
     }
@@ -4033,7 +4033,7 @@
         return m;
     }
 
-    // ── Chip HTML ────────────────────────────────────────────────────────────
+    // -- Chip HTML ------------------------------------------------------------
     function _badgeChipHtml(id, label, color, icon, mode) {
         const bg     = color ? (color + '33') : (mode === 'incl' ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)');
         const border = color ? (color + '66') : (mode === 'incl' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)');
@@ -4046,7 +4046,7 @@
                 </span>`;
     }
 
-    // ── Serialise state → badge_groups JSON ──────────────────────────────────
+    // -- Serialise state → badge_groups JSON ----------------------------------
     // When _formulaGroups is set (formula mode), use it directly so group structure
     // (mixed AND/OR) is preserved. Otherwise derive from _badgeState + _inclMode.
     function _serializeBadgeGroups() {
@@ -4112,7 +4112,7 @@
         return true;
     }
 
-    // ── Rebuild selected chips UI ────────────────────────────────────────────
+    // -- Rebuild selected chips UI --------------------------------------------
     function _rebuildBadgeSelected() {
         const inclEl         = document.getElementById('fp-badge-incl-chips');
         const exclEl         = document.getElementById('fp-badge-excl-chips');
@@ -4227,7 +4227,7 @@
         _updateFormulaFromState();
     }
 
-    // ── Badge state mutations ────────────────────────────────────────────────
+    // -- Badge state mutations ------------------------------------------------
     function _onBadgeAvailClick(btn) {
         // Suppress the click some browsers fire on the source element right after a drag-drop
         if (_badgeAvailJustDragged) return;
@@ -4279,7 +4279,7 @@
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
-    // ── Column drop handlers (switch mode / add from list) ──────────────────
+    // -- Column drop handlers (switch mode / add from list) ------------------
     function _onBadgeColDrop(e, targetMode) {
         e.currentTarget.classList.remove('fp-drag-over');
         if (!_badgeDragId) return;
@@ -4328,7 +4328,7 @@
         setTimeout(() => { _badgeAvailJustDragged = false; }, 0);
     });
 
-    // ── Badge formula bar ────────────────────────────────────────────────────
+    // -- Badge formula bar ----------------------------------------------------
     (function _initBadgeFormulaBar() {
         const bar  = document.getElementById('fp-badge-formula');
         const sugg = document.getElementById('fp-formula-suggestions');
@@ -4630,7 +4630,7 @@
         });
     }());
 
-    // ── Shared UI helpers (also used in organize page) ────────────────────
+    // -- Shared UI helpers (also used in organize page) --------------------
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -4753,7 +4753,7 @@
         }
     });
 
-    // ── Add-Pin / Edit-Pin dialog ─────────────────────────────────────────
+    // -- Add-Pin / Edit-Pin dialog -----------------------------------------
     let _addPinClickMode = false;
     let _addPinMarker = null;
     let _editPinUuid = null;   // null = add mode; uuid string = edit mode
@@ -5043,7 +5043,7 @@
         setTimeout(() => { document.getElementById('apdlg-addr-suggestions').hidden = true; }, 150);
     });
 
-    // ── Badge selector ────────────────────────────────────────────────────
+    // -- Badge selector ----------------------------------------------------
     let _apdlgSelectedBadges = [];
     let _apdlgAllBadges = [];
     (function() {
@@ -5216,7 +5216,7 @@
         });
     })();
 
-    // ── Shared helper: fetch updated pin data and refresh map marker ─────────
+    // -- Shared helper: fetch updated pin data and refresh map marker ---------
     function _refreshPinInStore(pinSlug, onDone) {
         fetch(`{% url "map.pin.json" pin_slug="placeholder-slug" %}`.replace('placeholder-slug', pinSlug), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -5235,7 +5235,7 @@
         const lng = document.getElementById('apdlg-lng').value.trim();
 
         if (_editPinUuid) {
-            // ── Edit mode ──────────────────────────────────────────────────────
+            // -- Edit mode ------------------------------------------------------
             const formData = new FormData();
             formData.append('name', document.getElementById('apdlg-name').value.trim());
             if (lat) formData.append('latitude', lat);
@@ -5274,7 +5274,7 @@
             .finally(() => { this.disabled = false; this.textContent = 'Save Changes'; });
 
         } else {
-            // ── Add mode ───────────────────────────────────────────────────────
+            // -- Add mode -------------------------------------------------------
             if (!lat || !lng) {
                 toastr.warning('Set a location first - click the map or enter an address.');
                 return;
@@ -5352,7 +5352,7 @@
         }
     });
 
-    // ── Location conflict picker ───────────────────────────────────────────────
+    // -- Location conflict picker -----------------------------------------------
     function _showLocationConflictPicker(pinSlug, locations) {
         var dlg = document.getElementById('loc-conflict-dialog');
         var list = document.getElementById('loc-conflict-list');
@@ -5402,7 +5402,7 @@
 
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 
-{# ── Location conflict picker dialog ────────────────────────────────────────── #}
+{# -- Location conflict picker dialog ------------------------------------------ #}
 <dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog">
     <div class="dialog-header">
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>

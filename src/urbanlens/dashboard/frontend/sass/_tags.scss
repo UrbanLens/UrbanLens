@@ -1,7 +1,7 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── Pin list membership panel (on pin detail page) ───────────────────────────
+// -- Pin list membership panel (on pin detail page) ---------------------------
 
 .pinlist-panel {
     background: var(--ul-grey-0);
@@ -144,7 +144,7 @@
     }
 }
 
-// ── Tags (replaces pin lists) ─────────────────────────────────────────────────
+// -- Tags (replaces pin lists) -------------------------------------------------
 
 
 .badge-header {
@@ -585,7 +585,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Badge kind chip (shown in parent selectors to distinguish tag / category / status) ──
+// -- Badge kind chip (shown in parent selectors to distinguish tag / category / status) --
 .badge-kind-chip {
     display: inline-block;
     margin-left: auto;
@@ -603,7 +603,7 @@ dialog.tag-create-card.ul-dialog {
     &--status   { background: #fef3c7; color: #b45309; }
 }
 
-// ── Tag edit dialog ────────────────────────────────────────────────────────────
+// -- Tag edit dialog ------------------------------------------------------------
 // overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
     @include dialog-base(52em);
@@ -623,7 +623,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Tag merge dialog form ─────────────────────────────────────────────────────
+// -- Tag merge dialog form -----------------------------------------------------
 .tag-merge-form {
     padding: 1.25rem;
 }
@@ -683,7 +683,7 @@ dialog.tag-create-card.ul-dialog {
     border-radius: 50%;
 }
 
-// ── Tag membership panel (on pin detail page) ─────────────────────────────────
+// -- Tag membership panel (on pin detail page) ---------------------------------
 
 .tag-panel {
     background: var(--ul-grey-0);
@@ -817,7 +817,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Import dialog tag picker ──────────────────────────────────────────────────
+// -- Import dialog tag picker --------------------------------------------------
 
 .import-tag-section {
     margin-top: 1rem;
@@ -917,7 +917,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Gallery view ──────────────────────────────────────────────────────────────
+// -- Gallery view --------------------------------------------------------------
 .organize-badge-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -973,7 +973,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Tree view ─────────────────────────────────────────────────────────────────
+// -- Tree view -----------------------------------------------------------------
 .tag-tree-root {
     display: flex;
     flex-direction: column;
@@ -1013,7 +1013,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Category select checkbox ──────────────────────────────────────────────────
+// -- Category select checkbox --------------------------------------------------
 
 .ul-checkbox-wrap {
     display: flex;
@@ -1087,7 +1087,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Selection action bar ──────────────────────────────────────────────────────
+// -- Selection action bar ------------------------------------------------------
 
 .cat-sel-bar {
     display: flex;
@@ -1191,7 +1191,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Multi-merge dialog ────────────────────────────────────────────────────────
+// -- Multi-merge dialog --------------------------------------------------------
 
 .cat-merge-dialog {
     @include dialog-base(520px);
@@ -1425,7 +1425,7 @@ dialog.tag-create-card.ul-dialog {
     @include spinner;
 }
 
-// ── Bulk-edit helpers (dialog shell uses .tag-edit-dialog / .tag-edit-dialog-body) ─
+// -- Bulk-edit helpers (dialog shell uses .tag-edit-dialog / .tag-edit-dialog-body) -
 
 .bulk-nochange-label {
     display: inline-flex;
@@ -1448,7 +1448,7 @@ dialog.tag-create-card.ul-dialog {
     pointer-events: none;
 }
 
-// ── Badge rows: gallery checkbox positioning + Materialize checkbox suppression ─
+// -- Badge rows: gallery checkbox positioning + Materialize checkbox suppression -
 .organize-badge-rows {
     &.tag-view--gallery {
         .ul-checkbox-wrap {
@@ -1503,7 +1503,7 @@ dialog.tag-create-card.ul-dialog {
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-// ── Organize page (unified Tags + Categories + Priority) ──────────────────────
+// -- Organize page (unified Tags + Categories + Priority) ----------------------
 
 
 // When .tag-page is used as a panel inside .organize-page, strip its own
@@ -1638,7 +1638,7 @@ dialog.tag-create-card.ul-dialog {
     &:hover { opacity: .8; }
 }
 
-// ── Priority list ─────────────────────────────────────────────────────────────
+// -- Priority list -------------------------------------------------------------
 
 .priority-list {
     display: flex;
@@ -1984,7 +1984,7 @@ dialog.tag-create-card.ul-dialog {
     margin-top: 1.25rem;
 }
 
-// ── Kind toggle (tag ↔ category conversion) ───────────────────────────────────
+// -- Kind toggle (tag ↔ category conversion) -----------------------------------
 
 .kind-toggle {
     display: flex;
@@ -2061,7 +2061,7 @@ dialog.tag-create-card.ul-dialog {
     margin: .35rem 0 0;
 }
 
-// ── People-label tab (Organize page) ──────────────────────────────────────────
+// -- People-label tab (Organize page) ------------------------------------------
 
 .tag-list {
     display: flex;
@@ -2217,10 +2217,10 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Organize page ───────────────────────────────────────────────────────────
+// -- Organize page -----------------------------------------------------------
 .organize-page {
 
-    /* ── Organize: filter bar ─────────────────────────────────────────── */
+    /* -- Organize: filter bar ------------------------------------------- */
     .org-filter-bar {
         display: none;
         align-items: flex-start;
@@ -2415,14 +2415,14 @@ dialog.tag-create-card.ul-dialog {
 
 }
 
-/* ── Hide per-row actions when anything is selected ──────────────────────── */
+/* -- Hide per-row actions when anything is selected ------------------------ */
 .organize-page.org-page--has-selection .tag-card-actions {
     opacity: 0;
     pointer-events: none;
     transition: opacity .15s;
 }
 
-/* ── Organize: select-all toggle button ──────────────────────────────────── */
+/* -- Organize: select-all toggle button ------------------------------------ */
 /* (Outside .organize-page because it lives in the header, not the panel)    */
 
 .tag-view-toggle--sel {
@@ -2459,7 +2459,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-/* ── Organize: floating bulk action bar (fixed - lives OUTSIDE .organize-page in DOM) ── */
+/* -- Organize: floating bulk action bar (fixed - lives OUTSIDE .organize-page in DOM) -- */
 
 .org-bulk-bar {
     position: fixed;
@@ -2606,7 +2606,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Pin list utilities ──────────────────────────────────────────────────────
+// -- Pin list utilities ------------------------------------------------------
 .pinlist-form-actions {
     display: flex;
     gap: 10px;
@@ -2629,7 +2629,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Organize page: responsive rules ──────────────────────────────────────────
+// -- Organize page: responsive rules ------------------------------------------
 
 @include down($breakpoint-sm) {
     // Tab bar: allow horizontal scroll instead of wrapping/overflow
@@ -2716,7 +2716,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// ── Priority panel tools (header right side) ──────────────────────────────────
+// -- Priority panel tools (header right side) ----------------------------------
 
 .priority-panel-tools {
     display: flex;
@@ -2741,7 +2741,7 @@ dialog.tag-create-card.ul-dialog {
     &[hidden] { display: none; }
 }
 
-// ── Priority multi-drag selection ─────────────────────────────────────────────
+// -- Priority multi-drag selection ---------------------------------------------
 
 .priority-item--selected {
     border-color: var(--primary-color) !important;
@@ -2784,7 +2784,7 @@ dialog.tag-create-card.ul-dialog {
     color: var(--primary-color);
 }
 
-// ── Filter-bar open animation ─────────────────────────────────────────────────
+// -- Filter-bar open animation -------------------------------------------------
 
 @keyframes org-filter-bar-open {
     from { opacity: 0; transform: translateY(-6px); }
@@ -2795,7 +2795,7 @@ dialog.tag-create-card.ul-dialog {
     animation: org-filter-bar-open 0.15s ease;
 }
 
-// ── Touch devices: always-visible row actions ─────────────────────────────────
+// -- Touch devices: always-visible row actions ---------------------------------
 // On touch devices there is no hover state; keep action buttons permanently
 // visible at reduced opacity so they remain discoverable.
 

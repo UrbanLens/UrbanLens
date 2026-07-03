@@ -26,7 +26,7 @@
         </div>
     </div>
 
-    {# ── KPI cards (HTMX, lazy + polling) ─────────────────────────────────── #}
+    {# -- KPI cards (HTMX, lazy + polling) ----------------------------------- #}
     <div id="stats-kpi-region"
          hx-get="{% url 'site_admin_stats_kpi' %}"
          hx-trigger="load, every 60s"
@@ -60,7 +60,7 @@
         </div>
     </div>
 
-    {# ── Charts (server-rendered, fast DB queries) ─────────────────────────── #}
+    {# -- Charts (server-rendered, fast DB queries) --------------------------- #}
     <div class="stats-charts-grid">
         <div class="site-admin-card ul-section card stats-chart-card">
             <div class="card-header">
@@ -82,7 +82,7 @@
         </div>
     </div>
 
-    {# ── System health (HTMX, lazy + polling) ─────────────────────────────── #}
+    {# -- System health (HTMX, lazy + polling) ------------------------------- #}
     <div id="stats-system-region"
          hx-get="{% url 'site_admin_stats_system' %}"
          hx-trigger="load, every 60s"
@@ -115,7 +115,7 @@
         </div>
     </div>
 
-    {# ── External API usage (HTMX, lazy + polling) ────────────────────────── #}
+    {# -- External API usage (HTMX, lazy + polling) -------------------------- #}
     <div id="stats-api-region"
          hx-get="{% url 'site_admin_stats_api' %}"
          hx-trigger="load, every 60s"

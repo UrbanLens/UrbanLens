@@ -1,17 +1,17 @@
-// ── Reusable UI components ────────────────────────────────────────────────────
+// -- Reusable UI components ----------------------------------------------------
 // Built on var(--ul-*) design tokens from _dark.scss so every component adapts
 // to dark mode automatically. Include AFTER _dark.scss in style.scss.
 
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── Surface primitives ────────────────────────────────────────────────────────
+// -- Surface primitives --------------------------------------------------------
 
 .ul-surface {
 	@include surface;
 }
 
-// ── Cards ─────────────────────────────────────────────────────────────────────
+// -- Cards ---------------------------------------------------------------------
 
 .ul-card {
 	@include surface;
@@ -47,7 +47,7 @@
 	background: var(--ul-grey-1a);
 }
 
-// ── Global dialog utility classes ─────────────────────────────────────────────
+// -- Global dialog utility classes ---------------------------------------------
 // These standalone classes are shared by all native <dialog> elements and do
 // not depend on .ul-dialog being a parent.
 
@@ -97,7 +97,7 @@
 	}
 }
 
-// ── Dialog component ──────────────────────────────────────────────────────────
+// -- Dialog component ----------------------------------------------------------
 // Base class for all native <dialog> elements. Feature dialogs set their own
 // width via @include dialog-base($width) and add only feature-specific rules.
 
@@ -154,7 +154,7 @@
 	outline: none;
 }
 
-// ── Panels ────────────────────────────────────────────────────────────────────
+// -- Panels --------------------------------------------------------------------
 
 .ul-panel {
 	@include panel-base;
@@ -221,7 +221,7 @@
 	}
 }
 
-// ── Spinner ───────────────────────────────────────────────────────────────────
+// -- Spinner -------------------------------------------------------------------
 // Reusable inline spinner for loading states outside of button contexts.
 // For button loading states, use @mixin btn-loading-spinner from _mixins.scss.
 
@@ -229,7 +229,7 @@
 	@include spinner;
 }
 
-// ── Badges ────────────────────────────────────────────────────────────────────
+// -- Badges --------------------------------------------------------------------
 
 .ul-badge {
 	display: inline-flex;
@@ -280,7 +280,7 @@
 	}
 }
 
-// ── Dropdown ──────────────────────────────────────────────────────────────────
+// -- Dropdown ------------------------------------------------------------------
 
 .ul-dropdown {
 	@include surface-elevated;
@@ -316,7 +316,7 @@
 	margin: 4px 0;
 }
 
-// ── Tab bar ───────────────────────────────────────────────────────────────────
+// -- Tab bar -------------------------------------------------------------------
 
 .ul-tab-bar {
 	display: flex;
@@ -356,7 +356,7 @@
 	}
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// -- Empty state ---------------------------------------------------------------
 
 .ul-empty {
 	@include empty-state;
@@ -373,7 +373,7 @@
 	}
 }
 
-// ── Notice / inline alert ─────────────────────────────────────────────────────
+// -- Notice / inline alert -----------------------------------------------------
 
 .ul-notice {
 	display: flex;
@@ -415,7 +415,7 @@
 	}
 }
 
-// ── Chip / pill ───────────────────────────────────────────────────────────────
+// -- Chip / pill ---------------------------------------------------------------
 
 .ul-chip {
 	display: inline-flex;
@@ -445,7 +445,7 @@
 	}
 }
 
-// ── Toggle switch ─────────────────────────────────────────────────────────────
+// -- Toggle switch -------------------------------------------------------------
 
 .ul-switch {
 	position: relative;
@@ -542,7 +542,7 @@
 }
 
 // - Dual range slider
-// ── Dual-handle range slider ─────────────────────────────────────────────────
+// -- Dual-handle range slider -------------------------------------------------
 // One track with overlapped min/max <input type="range"> thumbs.
 
 .ul-dual-range-slider {
@@ -648,7 +648,7 @@
 }
 
 
-// ── Pagination bar ────────────────────────────────────────────────────────────
+// -- Pagination bar ------------------------------------------------------------
 // Shared Prev/Next control for any paginated card (see _pagination_controls.html).
 
 .pagination-bar {

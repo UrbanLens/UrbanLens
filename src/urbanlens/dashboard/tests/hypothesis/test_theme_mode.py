@@ -27,7 +27,7 @@ def _profile() -> Profile:
     return baker.make("auth.User").profile
 
 
-# ── ThemeChoice enum ──────────────────────────────────────────────────────────
+# -- ThemeChoice enum ----------------------------------------------------------
 
 
 class ThemeChoiceEnumTests(TestCase):
@@ -50,7 +50,7 @@ class ThemeChoiceEnumTests(TestCase):
         self.assertIn("OS", label)
 
 
-# ── Profile.theme_mode field ──────────────────────────────────────────────────
+# -- Profile.theme_mode field --------------------------------------------------
 
 
 class ProfileThemeModeDefaultTests(TestCase):
@@ -96,7 +96,7 @@ class ProfileThemeModePeristenceTests(TestCase):
         self.assertEqual(profile.theme_mode, theme)
 
 
-# ── StyleSettingsForm ─────────────────────────────────────────────────────────
+# -- StyleSettingsForm ---------------------------------------------------------
 
 
 class StyleSettingsFormValidationTests(TestCase):

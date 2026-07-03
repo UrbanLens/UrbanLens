@@ -45,7 +45,7 @@
         </div>
     </div>
 
-    {# ── Tab bar (full Organize page only) ────────────────────────────────────── #}
+    {# -- Tab bar (full Organize page only) -------------------------------------- #}
     {% if not standalone_mode %}
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
@@ -184,7 +184,7 @@
 
 </div>{# end .organize-page #}
 
-{# ── Floating bulk action toolbar ─────────────────────────────────────────── #}
+{# -- Floating bulk action toolbar ------------------------------------------- #}
 <div id="org-bulk-bar" class="org-bulk-bar" aria-live="polite">
     <span id="org-bulk-count" class="org-bulk-count"></span>
     <button type="button" class="org-bulk-deselect-btn" id="org-bulk-deselect-btn" title="Clear selection"
@@ -206,17 +206,17 @@
     </button>
 </div>
 
-{# ── Shared badge edit dialog (tags, categories, statuses) ────────────────── #}
+{# -- Shared badge edit dialog (tags, categories, statuses) ------------------ #}
 {% include 'dashboard/partials/badges/organize_badge_edit_dialog.html' with dialog_id='badge-edit-dialog' title='Edit' title_id='badge-edit-dialog-title' body_id='badge-edit-dialog-body' %}
 {% include 'dashboard/partials/badges/organize_badge_edit_dialog.html' with dialog_id='people-badge-edit-dialog' title='Edit Label' title_id='people-badge-edit-dialog-title' body_id='people-badge-edit-dialog-body' %}
 
-{# ── Badge merge dialogs (shared template for tag/category/status) ──────────── #}
+{# -- Badge merge dialogs (shared template for tag/category/status) ------------ #}
 {% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='tag' title='Merge Tags' %}
 {% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='cat' title='Merge Categories' %}
 {% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='status' title='Merge Statuses' %}
 {% include 'dashboard/partials/badges/organize_badge_merge_dialog.html' with ns='people' title='Merge Labels' %}
 
-{# ── Badge bulk-edit dialogs use the shared edit field structure. ─────────── #}
+{# -- Badge bulk-edit dialogs use the shared edit field structure. ----------- #}
 {% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='tag' title='Edit Tags' picker_id='tag-bulk-edit' %}
 
 {% include 'dashboard/partials/badges/organize_badge_bulk_edit_dialog.html' with ns='cat' title='Edit Categories' picker_id='cat-bulk-edit' %}
@@ -550,7 +550,7 @@ function showTagCustomPreview(input) {
     reader.readAsDataURL(input.files[0]);
 }
 
-// ── Filter panel shared engine ──────────────────────────────────────────────
+// -- Filter panel shared engine ----------------------------------------------
 // ns: 'tag' | 'cat' | 'status' | 'people'
 // View and filter state is shared across all tabs (except Priority, which has no toolbar).
 var ORG_FILTER_NAMESPACES = ['tag', 'cat', 'status', 'people'];
@@ -737,7 +737,7 @@ function _applyOrgFilterCore(ns) {
 
 window._applyOrgFilterImpl = _applyOrgFilterCore;
 
-// ── Cross-tab counts ──────────────────────────────────────────────────────
+// -- Cross-tab counts ------------------------------------------------------
 // After every filter pass, update tab count badges and the cross-tab footer row.
 
 var _ORG_NS_LABELS = { tag: 'tags', cat: 'categories', status: 'statuses', people: 'people' };
@@ -857,7 +857,7 @@ document.addEventListener('click', function(e) {
     if (tabBtn) tabBtn.click();
 });
 
-// ── Delegated filter-bar event handling (replaces inline onclick/oninput) ─────
+// -- Delegated filter-bar event handling (replaces inline onclick/oninput) -----
 
 document.addEventListener('input', function(e) {
     if (!e.target.classList.contains('org-filter-search')) return;
@@ -952,7 +952,7 @@ function clearOrgFilter(ns) {
     applyAllOrgFilters();
 }
 
-// ── Consolidated HTMX dialog opener (tags, categories, statuses, people) ────
+// -- Consolidated HTMX dialog opener (tags, categories, statuses, people) ----
 document.body.addEventListener('htmx:afterSwap', function(e) {
     var id = e.detail.target && e.detail.target.id;
     if (!id) return;
@@ -981,7 +981,7 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
     }
 });
 
-// ── Kind-changed: refresh destination rows + switch tab after conversion ────
+// -- Kind-changed: refresh destination rows + switch tab after conversion ----
 (function () {
     var _rowUrls = {
         'tag': '{% url "badge.rows" badge_kind="tag" %}',
@@ -1008,7 +1008,7 @@ document.body.addEventListener('htmx:afterSwap', function(e) {
 }());
 </script>
 
-{# ── Shared page-header toolbar (one DOM block, tab-specific handlers) ─────── #}
+{# -- Shared page-header toolbar (one DOM block, tab-specific handlers) ------- #}
 <script>
 window._orgHeader = (function() {
     var tabs = {};
@@ -1141,7 +1141,7 @@ window._orgHeader = (function() {
 })();
 </script>
 
-{# ── Tab switching ─────────────────────────────────────────────────────────── #}
+{# -- Tab switching ----------------------------------------------------------- #}
 <script>
 (function() {
     var tabs = document.querySelectorAll('.organize-tab');
@@ -1192,7 +1192,7 @@ window._orgHeader = (function() {
 })();
 </script>
 
-{# ── Shared bulk-action toolbar JS ────────────────────────────────────────── #}
+{# -- Shared bulk-action toolbar JS ------------------------------------------ #}
 <script>
 window._orgBulk = { deselect: null, edit: null, merge: null, del: null };
 window._orgSelectionClearers = window._orgSelectionClearers || [];
@@ -1232,7 +1232,7 @@ window._orgBulkSync = function(n, opts) {
 };
 </script>
 
-{# ── Tags tab JS ───────────────────────────────────────────────────────────── #}
+{# -- Tags tab JS ------------------------------------------------------------- #}
 <script>
 (function() {
     var _tagSelected = new Set();
@@ -1360,7 +1360,7 @@ window._orgBulkSync = function(n, opts) {
         applyOrgFilter('tag');
     }
 
-    // ── New tag form ──────────────────────────────────────────────────────────
+    // -- New tag form ----------------------------------------------------------
     function resetNewTagForm() {
         var c = document.getElementById('new-tag-form'); if (!c) return;
         c.querySelector('form').reset();
@@ -1376,7 +1376,7 @@ window._orgBulkSync = function(n, opts) {
         var cv = document.getElementById('new-tag-color-value'); if (cv) cv.value = '';
     }
 
-    // ── Selection ─────────────────────────────────────────────────────────────
+    // -- Selection -------------------------------------------------------------
     document.getElementById('tag-rows').addEventListener('click', function(e) {
         if (!e.shiftKey) return;
         var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
@@ -1410,7 +1410,7 @@ window._orgBulkSync = function(n, opts) {
         _syncTagCheckboxes(); _updateTagBar();
     });
 
-    // ── Multi-merge dialog ────────────────────────────────────────────────────
+    // -- Multi-merge dialog ----------------------------------------------------
     function _getTagCardData(id) {
         var c = document.querySelector('[data-tag-id="' + id + '"]');
         if (!c) return { id:id, name:'?', color:'', icon:'', pinCount:'0', customIcon:'' };
@@ -1479,7 +1479,7 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
     });
 
-    // ── Bulk delete ───────────────────────────────────────────────────────────
+    // -- Bulk delete -----------------------------------------------------------
     async function _tagBulkDelete() {
         var n = _tagSelected.size; if (!n) return;
         if (!await confirmDialog({title:'Delete Tags',message:(n===1?'Delete 1 tag?':'Delete '+n+' tags?')+'\nPins will NOT be deleted.',confirmLabel:'Delete'})) return;
@@ -1494,7 +1494,7 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
     }
 
-    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    // -- Bulk edit dialog ------------------------------------------------------
     var _tagBulkConvertTarget = null; // null | 'category' | 'status'
 
     window._setTagBulkConvert = function(target) {
@@ -1642,7 +1642,7 @@ window._orgBulkSync = function(n, opts) {
         }
     });
 
-    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    // -- HTMX hooks ------------------------------------------------------------
     document.getElementById('tag-rows').addEventListener('htmx:afterSwap', _onTagRowsUpdated);
 
     // Update select-all button when filters change visible items
@@ -1650,7 +1650,7 @@ window._orgBulkSync = function(n, opts) {
         if (e.detail.ns === 'tag') _updateTagSelAllBtn();
     });
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    // -- Init ------------------------------------------------------------------
     window._orgHeader.register('tags', {
         filterTitle: 'Filter tags',
         viewAriaLabel: 'Tag view mode',
@@ -1682,7 +1682,7 @@ window._orgBulkSync = function(n, opts) {
 })();
 </script>
 
-{# ── Categories tab JS ─────────────────────────────────────────────────────── #}
+{# -- Categories tab JS ------------------------------------------------------- #}
 <script>
 (function() {
     var _catSelected = new Set();
@@ -1794,7 +1794,7 @@ window._orgBulkSync = function(n, opts) {
         applyOrgFilter('cat');
     }
 
-    // ── New category form ─────────────────────────────────────────────────────
+    // -- New category form -----------------------------------------------------
     function resetNewCatForm() {
         var c=document.getElementById('new-category-form'); if(!c)return;
         c.querySelector('form').reset();
@@ -1808,7 +1808,7 @@ window._orgBulkSync = function(n, opts) {
         if(prev){prev.src='';prev.style.display='none';}
     }
 
-    // ── Selection ─────────────────────────────────────────────────────────────
+    // -- Selection -------------------------------------------------------------
     document.getElementById('category-rows').addEventListener('click', function(e) {
         if (!e.shiftKey) return;
         var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
@@ -1842,7 +1842,7 @@ window._orgBulkSync = function(n, opts) {
         _syncCatCheckboxes(); _updateCatBar();
     });
 
-    // ── Multi-merge dialog ────────────────────────────────────────────────────
+    // -- Multi-merge dialog ----------------------------------------------------
     function _getCatCardData(id){
         var c=document.querySelector('[data-category-id="'+id+'"]');
         if(!c)return{id:id,name:'?',color:'',icon:'',pinCount:'0',locationCount:'0'};
@@ -1909,7 +1909,7 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err){toastr.error('Merge failed: '+err.message); btn.disabled=false; btn.innerHTML=saved;});
     });
 
-    // ── Bulk delete ───────────────────────────────────────────────────────────
+    // -- Bulk delete -----------------------------------------------------------
     async function _catBulkDelete() {
         var n=_catSelected.size; if(!n)return;
         if(!await confirmDialog({title:'Delete Categories',message:(n===1?'Delete 1 category?':'Delete '+n+' categories?')+'\nPins and locations will NOT be deleted.',confirmLabel:'Delete'}))return;
@@ -1924,7 +1924,7 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err){toastr.error('Delete failed: '+err.message);});
     }
 
-    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    // -- Bulk edit dialog ------------------------------------------------------
     var _catBulkConvertTarget = null; // null | 'tag' | 'status'
 
     window._setCatBulkConvert = function(target) {
@@ -2054,7 +2054,7 @@ window._orgBulkSync = function(n, opts) {
         }
     });
 
-    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    // -- HTMX hooks ------------------------------------------------------------
     document.getElementById('category-rows').addEventListener('htmx:afterSwap', _onCatRowsUpdated);
 
     // Update select-all button when filters change visible items
@@ -2062,7 +2062,7 @@ window._orgBulkSync = function(n, opts) {
         if (e.detail.ns === 'cat') _updateCatSelAllBtn();
     });
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    // -- Init ------------------------------------------------------------------
     window._orgHeader.register('categories', {
         filterTitle: 'Filter categories',
         viewAriaLabel: 'Category view mode',
@@ -2094,7 +2094,7 @@ window._orgBulkSync = function(n, opts) {
 })();
 </script>
 
-{# ── Status tab JS ─────────────────────────────────────────────────────────── #}
+{# -- Status tab JS ----------------------------------------------------------- #}
 <script>
 (function() {
     var _statusSelected = new Set();
@@ -2130,7 +2130,7 @@ window._orgBulkSync = function(n, opts) {
         });
     }
 
-    // ── Bulk edit dialog ──────────────────────────────────────────────────────
+    // -- Bulk edit dialog ------------------------------------------------------
     var _statusBulkConvertTarget = null; // null | 'tag' | 'category'
 
     window._setStatusBulkConvert = function(target) {
@@ -2335,7 +2335,7 @@ window._orgBulkSync = function(n, opts) {
         _updateStatusSelAllBtn();
     }
 
-    // ── View toggle ───────────────────────────────────────────────────────────
+    // -- View toggle -----------------------------------------------------------
     function _applyStatusView() {
         var rows = document.getElementById('status-rows'); if (!rows) return;
         var view = window._orgHeader.getSharedView();
@@ -2350,7 +2350,7 @@ window._orgBulkSync = function(n, opts) {
         }
     }
 
-    // ── Merge dialog ──────────────────────────────────────────────────────────
+    // -- Merge dialog ----------------------------------------------------------
     function _getStatusCardData(id) {
         var c = document.querySelector('[data-status-id="' + id + '"]');
         if (!c) return { id: id, name: '?', color: '', icon: '', pinCount: '0' };
@@ -2441,7 +2441,7 @@ window._orgBulkSync = function(n, opts) {
         }).catch(function(err) { toastr.error('Merge failed: ' + err.message); btn.disabled = false; btn.innerHTML = saved; });
     });
 
-    // ── Selection ─────────────────────────────────────────────────────────────
+    // -- Selection -------------------------------------------------------------
     document.getElementById('status-rows').addEventListener('click', function(e) {
         var card = e.target.closest('.tag-card[data-status-id]');
         if (!card) return;
@@ -2474,7 +2474,7 @@ window._orgBulkSync = function(n, opts) {
         _syncStatusSelBar();
     });
 
-    // ── HTMX hooks ────────────────────────────────────────────────────────────
+    // -- HTMX hooks ------------------------------------------------------------
     document.getElementById('status-rows').addEventListener('htmx:afterSwap', function() {
         _statusSelected.clear(); _lastStatusClickIdx = -1; _syncStatusSelBar();
         _applyStatusView();
@@ -2486,7 +2486,7 @@ window._orgBulkSync = function(n, opts) {
         if (e.detail.ns === 'status') _updateStatusSelAllBtn();
     });
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    // -- Init ------------------------------------------------------------------
     function resetNewStatusForm() {
         var c = document.getElementById('new-status-form'); if (!c) return;
         c.querySelector('form').reset();
@@ -2533,7 +2533,7 @@ window._orgBulkSync = function(n, opts) {
 })();
 </script>
 
-{# ── Priority tab JS ───────────────────────────────────────────────────────── #}
+{# -- Priority tab JS --------------------------------------------------------- #}
 <script>
 (function() {
     var _prioritySortable = null;
@@ -2680,7 +2680,7 @@ window._orgBulkSync = function(n, opts) {
         saveBtn.onclick = function(e) { e.preventDefault(); _commitOrderEditor(); };
     }
 
-    // ── Multi-select helpers ───────────────────────────────────────────────────
+    // -- Multi-select helpers ---------------------------------------------------
 
     function _updatePrioritySelBar() {
         var list = document.getElementById('priority-list');
@@ -2716,7 +2716,7 @@ window._orgBulkSync = function(n, opts) {
         if (!_prioritySelectMode) window._clearPrioritySelection();
     };
 
-    // ── Sortable initialization ────────────────────────────────────────────────
+    // -- Sortable initialization ------------------------------------------------
 
     function _initPrioritySortable() {
         var list = document.getElementById('priority-list');
@@ -2786,7 +2786,7 @@ window._orgBulkSync = function(n, opts) {
 })();
 </script>
 
-{# ── People-label tab JS ───────────────────────────────────────────────────── #}
+{# -- People-label tab JS ----------------------------------------------------- #}
 <script>
 (function () {
     var _peopleSelected = new Set();
@@ -2992,7 +2992,7 @@ window._orgBulkSync = function(n, opts) {
         _syncPeopleSelBar();
     });
 
-    // ── Filter ────────────────────────────────────────────────────────────────
+    // -- Filter ----------------------------------------------------------------
     // Wrap applyOrgFilter to handle people rows while preserving the shared filter UI.
     var _origApplyFilter = window._applyOrgFilterImpl;
     window._applyOrgFilterImpl = function (ns) {
@@ -3037,7 +3037,7 @@ window._orgBulkSync = function(n, opts) {
         document.dispatchEvent(new CustomEvent('org:filter-applied', { detail: { ns: 'people' } }));
     };
 
-    // ── Merge ──────────────────────────────────────────────────────────────────
+    // -- Merge ------------------------------------------------------------------
     function _miniCard(name) {
         return '<div class="cat-merge-mini-card"><div class="cat-merge-mini-info"><div class="cat-merge-mini-name">' + name.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div></div></div>';
     }

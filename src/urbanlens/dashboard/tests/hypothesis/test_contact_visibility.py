@@ -41,7 +41,7 @@ def _make_accepted_friendship(a: Profile, b: Profile) -> Friendship:
     )
 
 
-# ── Contact field defaults ────────────────────────────────────────────────────
+# -- Contact field defaults ----------------------------------------------------
 
 
 class ContactFieldDefaultsTests(TestCase):
@@ -73,7 +73,7 @@ class ContactFieldDefaultsTests(TestCase):
         self.assertEqual(self.profile.contact_visibility, VisibilityChoice.FRIENDS)
 
 
-# ── ContactMethodsForm validation ─────────────────────────────────────────────
+# -- ContactMethodsForm validation ---------------------------------------------
 
 
 class ContactMethodsFormValidationTests(TestCase):
@@ -208,7 +208,7 @@ class ContactMethodsFormSaveTests(TestCase):
         self.assertEqual(profile.matrix_handle, "@user:matrix.org")
 
 
-# ── Profile.can_view_contact_info ─────────────────────────────────────────────
+# -- Profile.can_view_contact_info ---------------------------------------------
 
 
 class CanViewContactInfoAnyoneTests(TestCase):

@@ -20,7 +20,7 @@ Context:
   <input type="file" id="gallery-file-input" accept="image/*" multiple hidden
          onchange="galleryHandleFiles(this.files)">
 
-  {# ── Gallery grid ────────────────────────────────────────────────────────── #}
+  {# -- Gallery grid ---------------------------------------------------------- #}
   <ul class="gallery-grid" id="gallery-grid">
     {% for img in images %}
     <li class="gallery-item" id="gallery-item-{{ img.pk }}"
@@ -69,7 +69,7 @@ Context:
   {% include "dashboard/partials/ui/_pagination_controls.html" %}
 </div>
 
-{# ── Lightbox ───────────────────────────────────────────────────────────────── #}
+{# -- Lightbox ----------------------------------------------------------------- #}
 <dialog id="gallery-lightbox" class="gallery-lightbox ul-dialog">
   <div class="lightbox-inner">
     <button type="button" class="lightbox-close" onclick="document.getElementById('gallery-lightbox').close()">
@@ -86,7 +86,7 @@ Context:
   </div>
 </dialog>
 
-{# ── Full-page drop overlay (shown when user drags files onto the page) ─────── #}
+{# -- Full-page drop overlay (shown when user drags files onto the page) ------- #}
 <div id="gallery-drop-overlay" class="gallery-drop-overlay" hidden
      ondragover="event.preventDefault()"
      ondrop="_galleryOverlayDrop(event)">
@@ -101,7 +101,7 @@ Context:
 
 <script>
 (function () {
-  // ── State ──────────────────────────────────────────────────────────────────
+  // -- State ------------------------------------------------------------------
   var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
@@ -118,7 +118,7 @@ Context:
   });
   var _lightboxIdx = 0;
 
-  // ── Page-level drag-to-upload detection ────────────────────────────────────
+  // -- Page-level drag-to-upload detection ------------------------------------
   // Depth counting handles enter/leave bubbling from child elements.
   var _dragDepth = 0;
   var _overlay   = document.getElementById('gallery-drop-overlay');
@@ -162,7 +162,7 @@ Context:
     galleryHandleFiles(e.dataTransfer.files);
   };
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
+  // -- Upload -----------------------------------------------------------------
   window.galleryHandleFiles = function (files) {
     if (!files || !files.length) return;
     var progress = document.getElementById('gallery-upload-progress');
@@ -239,7 +239,7 @@ Context:
     _items.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
   }
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
     if (!confirm('Delete this photo?')) return;
     fetch(REPOSITION_BASE + imgId + '/', {
@@ -256,7 +256,7 @@ Context:
     });
   };
 
-  // ── Lightbox ───────────────────────────────────────────────────────────────
+  // -- Lightbox ---------------------------------------------------------------
   window.galleryOpenLightbox = function (imgId) {
     _lightboxIdx = _items.findIndex(function (i) { return i.id === imgId; });
     if (_lightboxIdx < 0) _lightboxIdx = 0;
@@ -278,12 +278,12 @@ Context:
     document.getElementById('lightbox-caption').textContent = caption;
   }
 
-  // ── Map hover sync ─────────────────────────────────────────────────────────
+  // -- Map hover sync ---------------------------------------------------------
   window.galleryHover = function (imgId, on) {
     if (window._galleryHighlightMarker) window._galleryHighlightMarker(imgId, on);
   };
 
-  // ── Reposition callback (called from map panel when user finishes dragging) ──
+  // -- Reposition callback (called from map panel when user finishes dragging) --
   window.galleryRepositionImage = function (imgId, lat, lng) {
     fetch(REPOSITION_BASE + imgId + '/', {
       method: 'POST',

@@ -219,7 +219,7 @@ class NPSGateway(Gateway):
             return []
 
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+# -- helpers --------------------------------------------------------------------
 
 def _parse_lat_long(lat_long_str: str) -> tuple[float | None, float | None]:
     """

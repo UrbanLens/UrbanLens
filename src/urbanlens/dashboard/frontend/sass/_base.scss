@@ -37,7 +37,7 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-// ── Responsive grid utilities ─────────────────────────────────────────────────
+// -- Responsive grid utilities -------------------------------------------------
 // Apply .ul-grid plus a modifier to get a standard responsive grid.
 // .ul-grid__full inside a grid spans all columns.
 
@@ -96,7 +96,7 @@ body div.container {
     }
 }
 
-// ── Confirm dialog ────────────────────────────────────────────────────────────
+// -- Confirm dialog ------------------------------------------------------------
 
 .confirm-dialog {
     @include dialog-base;

@@ -7,7 +7,7 @@
         <p class="settings-subtitle">Manage your account preferences</p>
     </div>
 
-    {# ── Privacy ───────────────────────────────────────────────────────────── #}
+    {# -- Privacy ------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
             <i class="material-icons">lock</i>
@@ -104,7 +104,7 @@
         </form>
     </section>
 
-    {# ── Style ─────────────────────────────────────────────────────────────── #}
+    {# -- Style --------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
             <i class="material-icons">palette</i>
@@ -219,7 +219,7 @@
         </form>
     </section>
 
-    {# ── Map ───────────────────────────────────────────────────────────────── #}
+    {# -- Map ----------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
             <i class="material-icons">map</i>
@@ -376,7 +376,7 @@
         </form>
     </section>
 
-    {# ── Places Layer Sources ────────────────────────────────────────────── #}
+    {# -- Places Layer Sources ---------------------------------------------- #}
     {% if show_places_layer %}
     <section class="settings-section ul-section" id="places-layer-settings-section">
         <div class="settings-section-header">
@@ -437,7 +437,7 @@
     </section>
     {% endif %}
 
-    {# ── Pin Detail Defaults ─────────────────────────────────────────────── #}
+    {# -- Pin Detail Defaults ----------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
             <i class="material-icons">draw</i>
@@ -501,7 +501,7 @@
         </form>
     </section>
 
-    {# ── AI Features ───────────────────────────────────────────────────────── #}
+    {# -- AI Features --------------------------------------------------------- #}
     {% if can_use_ai_features %}
     <section class="settings-section ul-section" id="ai-settings-section">
         <div class="settings-section-header">
@@ -570,7 +570,7 @@
     </section>
     {% endif %}
 
-    {# ── Notifications ─────────────────────────────────────────────────────── #}
+    {# -- Notifications ------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
             <i class="material-icons">notifications</i>
@@ -661,7 +661,7 @@ function applyGuidancePreview(level) {
     if (detail && _guidanceHelpText[level]) detail.textContent = _guidanceHelpText[level];
 }
 
-// ── Map Center Preview ────────────────────────────────────────────────────────
+// -- Map Center Preview --------------------------------------------------------
 (function () {
     var GEOCODE_URL = '{% url "settings.geocode" %}';
     var currentMode = '{{ map_center_form.instance.map_center_mode|default:"gps" }}';
@@ -852,7 +852,7 @@ function applyGuidancePreview(level) {
     applyMode(currentMode);
 })();
 
-// ── Cluster radius ─────────────────────────────────────────────────────────────
+// -- Cluster radius -------------------------------------------------------------
 window.setClusterMode = function (mode) {
     var wrap = document.getElementById('cluster-radius-wrap');
     var hidden = document.getElementById('{{ map_display_form.cluster_radius.id_for_label }}');
@@ -879,7 +879,7 @@ window.updateClusterRadius = function (value) {
     document.getElementById('cluster-radius-display').textContent = value;
 };
 
-// ── Color+Opacity Picker (cop) ────────────────────────────────────────────────
+// -- Color+Opacity Picker (cop) ------------------------------------------------
 (function () {
     var _palette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
 
@@ -985,7 +985,7 @@ window.updateClusterRadius = function (value) {
     updatePreview('cop-border-preview', borderColor, initBorderOpacity);
 })();
 
-// ── Auto-save settings forms ──────────────────────────────────────────────────
+// -- Auto-save settings forms --------------------------------------------------
 (function () {
     function getCsrf() {
         var m = document.cookie.match(/csrftoken=([^;]+)/);
@@ -1062,7 +1062,7 @@ window.updateClusterRadius = function (value) {
     };
 }());
 
-// ── AI settings: toggle sub-options when master switch is flipped ─────────────
+// -- AI settings: toggle sub-options when master switch is flipped -------------
 (function () {
     var masterToggle = document.getElementById('{{ ai_form.ai_enabled.id_for_label }}');
     var subOptions   = document.getElementById('ai-sub-options');

@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 
 
-# ── Strategies ─────────────────────────────────────────────────────────────────
+# -- Strategies -----------------------------------------------------------------
 
 _ascii_text = st.text(
     alphabet=st.characters(min_codepoint=32, max_codepoint=126, blacklist_characters='\n\r"'),
@@ -36,7 +36,7 @@ def _loc(**kwargs) -> Location:
     return loc
 
 
-# ── address property ───────────────────────────────────────────────────────────
+# -- address property -----------------------------------------------------------
 
 class AddressPropertyTests(TestCase):
     """AddressableMixin.address builds from street_number, route, locality, state, zipcode."""
@@ -111,7 +111,7 @@ class AddressPropertyTests(TestCase):
         self.assertIn(route, loc.address)
 
 
-# ── address_basic property ────────────────────────────────────────────────────
+# -- address_basic property ----------------------------------------------------
 
 class AddressBasicPropertyTests(TestCase):
     """AddressableMixin.address_basic - only street_number and route."""
@@ -154,7 +154,7 @@ class AddressBasicPropertyTests(TestCase):
             self.assertIsNone(loc.address_basic)
 
 
-# ── address_extended property ─────────────────────────────────────────────────
+# -- address_extended property -------------------------------------------------
 
 class AddressExtendedPropertyTests(TestCase):
     """AddressableMixin.address_extended - street with city, no state/zip."""
@@ -189,7 +189,7 @@ class AddressExtendedPropertyTests(TestCase):
             self.assertIsNone(loc.address_extended)
 
 
-# ── Proxy properties and setters ─────────────────────────────────────────────
+# -- Proxy properties and setters ---------------------------------------------
 
 class ProxyPropertyTests(TestCase):
     """state, county, and city are thin proxies for administrative_area fields."""

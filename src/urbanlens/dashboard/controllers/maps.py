@@ -652,7 +652,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         cache_seconds = site.google_places_cache_days * 86400
         places: list[dict] = []
 
-        # ── Google historical landmarks (Places API v1 - supports historical_landmark type) ──
+        # -- Google historical landmarks (Places API v1 - supports historical_landmark type) --
         if use_google:
             api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
             if not api_key:
@@ -699,7 +699,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         elif profile.places_google_enabled:
             logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
 
-        # ── National Park Service ────────────────────────────────────────────
+        # -- National Park Service --------------------------------------------
         if use_nps and settings.nps_api_key:
             try:
                 from urbanlens.dashboard.services.apis.parks.nps.parks import (
@@ -743,7 +743,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             except Exception as exc:
                 logger.warning("NPS nearby search failed: %s", exc)
 
-        # ── Wikipedia ────────────────────────────────────────────────────────
+        # -- Wikipedia --------------------------------------------------------
         if use_wiki:
             try:
                 from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway

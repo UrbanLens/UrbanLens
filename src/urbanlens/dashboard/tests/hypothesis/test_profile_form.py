@@ -42,7 +42,7 @@ def _past_date(years_ago: int) -> date:
         return today.replace(year=today.year - years_ago, day=28)
 
 
-# ── validate_birth_date ───────────────────────────────────────────────────────
+# -- validate_birth_date -------------------------------------------------------
 
 class ValidateBirthDateTests(TestCase):
     """validate_birth_date returns None for valid dates and an error string otherwise."""
@@ -108,7 +108,7 @@ class ValidateBirthDateTests(TestCase):
             self.assertIn("future", error.lower())
 
 
-# ── validate_started_exploring ────────────────────────────────────────────────
+# -- validate_started_exploring ------------------------------------------------
 
 class ValidateStartedExploringTests(TestCase):
     """validate_started_exploring returns None for past/present dates and an error for future."""
@@ -149,7 +149,7 @@ class ValidateStartedExploringTests(TestCase):
             self.assertIsNotNone(result)
 
 
-# ── MarkupDefaultsForm ────────────────────────────────────────────────────────
+# -- MarkupDefaultsForm --------------------------------------------------------
 
 class MarkupDefaultsFormTests(TestCase):
     """MarkupDefaultsForm clean methods apply defaults and strip whitespace."""
@@ -217,7 +217,7 @@ class MarkupDefaultsFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
 
-# ── PrivacySettingsForm ───────────────────────────────────────────────────────
+# -- PrivacySettingsForm -------------------------------------------------------
 
 class PrivacySettingsFormTests(TestCase):
     """PrivacySettingsForm excludes FRIENDS from friend_request_visibility."""
@@ -290,7 +290,7 @@ class PrivacySettingsFormTests(TestCase):
         self.assertNotIn("friend_request_visibility", form.errors)
 
 
-# ── ProfileForm ───────────────────────────────────────────────────────────────
+# -- ProfileForm ---------------------------------------------------------------
 
 class ProfileFormTests(TestCase):
     """ProfileForm.clean_birth_date and clean_started_exploring raise ValidationError for bad values."""
@@ -304,7 +304,7 @@ class ProfileFormTests(TestCase):
         form.is_valid()
         return form
 
-    # ── clean_birth_date ──────────────────────────────────────────────────────
+    # -- clean_birth_date ------------------------------------------------------
 
     def test_blank_birth_date_is_valid(self) -> None:
         form = self._submit(birth_date="")
@@ -337,7 +337,7 @@ class ProfileFormTests(TestCase):
         form = self._submit(birth_date=min_age_date.isoformat())
         self.assertNotIn("birth_date", form.errors)
 
-    # ── clean_started_exploring ───────────────────────────────────────────────
+    # -- clean_started_exploring -----------------------------------------------
 
     def test_blank_started_exploring_is_valid(self) -> None:
         form = self._submit(started_exploring="")
@@ -374,7 +374,7 @@ class ProfileFormTests(TestCase):
         self.assertNotIn("started_exploring", form.errors)
 
 
-# ── DiscordHandleForm ─────────────────────────────────────────────────────────
+# -- DiscordHandleForm ---------------------------------------------------------
 
 class DiscordHandleFormTests(TestCase):
     """DiscordHandleForm accepts an optional Discord username."""

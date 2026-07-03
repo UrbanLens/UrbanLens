@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# ── Login rate limiting helpers ────────────────────────────────────────────────
+# -- Login rate limiting helpers ------------------------------------------------
 
 def _attempts_key(username: str) -> str:
     """Cache key for the failed-attempt counter for a given username."""
@@ -94,7 +94,7 @@ def _clear_login_attempts(username: str) -> None:
     cache.delete(_lockout_key(username))
 
 
-# ── Registration form ─────────────────────────────────────────────────────
+# -- Registration form -----------------------------------------------------
 
 
 class RegistrationForm(UserCreationForm):
@@ -143,7 +143,7 @@ class RegistrationForm(UserCreationForm):
         return user
 
 
-# ── Sign-up view ──────────────────────────────────────────────────────────
+# -- Sign-up view ----------------------------------------------------------
 
 
 class SignupView(generic.CreateView):
@@ -210,7 +210,7 @@ class SignupView(generic.CreateView):
             self.request.session["debug_verify_url"] = verify_url
 
 
-# ── Email verification views ──────────────────────────────────────────────
+# -- Email verification views ----------------------------------------------
 
 
 class VerifyEmailSentView(View):
@@ -326,7 +326,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
         request.session["debug_verify_url"] = verify_url
 
 
-# ── Custom login view ─────────────────────────────────────────────────────
+# -- Custom login view -----------------------------------------------------
 
 
 class CustomLoginView(LoginView):
@@ -446,7 +446,7 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
         return None
 
 
-# ── Invitation processing ──────────────────────────────────────────────────
+# -- Invitation processing --------------------------------------------------
 
 
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:

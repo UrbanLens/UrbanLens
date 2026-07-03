@@ -1,7 +1,7 @@
 @use "tokens" as *;
 @use 'sass:color';
 
-// ── Responsive ────────────────────────────────────────────────────────────────
+// -- Responsive ----------------------------------------------------------------
 // up()   - mobile-first: apply styles at $breakpoint and wider (preferred).
 // down() - use only to override desktop-first legacy rules; prefer up() for new code.
 
@@ -17,7 +17,7 @@
 	}
 }
 
-// ── Layout helpers ────────────────────────────────────────────────────────────
+// -- Layout helpers ------------------------------------------------------------
 
 @mixin flex-center {
 	display: flex;
@@ -37,7 +37,7 @@
 	text-overflow: ellipsis;
 }
 
-// ── Focus & inputs ────────────────────────────────────────────────────────────
+// -- Focus & inputs ------------------------------------------------------------
 
 @mixin focus-ring($color: $primary-color, $alpha: .15) {
 	outline: none;
@@ -75,7 +75,7 @@
 	}
 }
 
-// ── Surfaces ──────────────────────────────────────────────────────────────────
+// -- Surfaces ------------------------------------------------------------------
 
 @mixin surface($radius: $radius-md) {
 	background: var(--ul-grey-1b);
@@ -88,7 +88,7 @@
 	box-shadow: var(--ul-shadow-lg);
 }
 
-// ── Buttons ───────────────────────────────────────────────────────────────────
+// -- Buttons -------------------------------------------------------------------
 // These mixins are the source of truth for button appearance. The .btn class in
 // _buttons.scss uses them, and feature files can @include them directly in
 // feature-specific button classes so they never need to reimplement button styles.
@@ -227,7 +227,7 @@
 	}
 }
 
-// ── Panels & dialogs ────────────────────────────────────────────────────────────
+// -- Panels & dialogs ------------------------------------------------------------
 
 // Header bar shared by cards, panels, and dialogs.
 // Pass $spread: true when actions should pin to opposite edges.
@@ -398,7 +398,7 @@
 	}
 }
 
-// ── Dropdowns ─────────────────────────────────────────────────────────────────
+// -- Dropdowns -----------------------------------------------------------------
 
 @mixin dropdown-item {
 	display: flex;

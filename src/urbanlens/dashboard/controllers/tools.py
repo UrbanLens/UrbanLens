@@ -78,7 +78,7 @@ def _import_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
     )
 
 
-# ── Views ──────────────────────────────────────────────────────────────────────
+# -- Views ----------------------------------------------------------------------
 
 
 class ToolsIndexView(LoginRequiredMixin, View):

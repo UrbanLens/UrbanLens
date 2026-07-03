@@ -218,7 +218,7 @@ class ShowPinCountTests(TestCase):
         self.assertTrue(resp.context["show_pin_count"])
 
 
-# ── map_pins_meta ─────────────────────────────────────────────────────────────
+# -- map_pins_meta -------------------------------------------------------------
 
 class MapPinsMetaTests(TestCase):
     """map_pins_meta must return the latest pin update timestamp or null."""

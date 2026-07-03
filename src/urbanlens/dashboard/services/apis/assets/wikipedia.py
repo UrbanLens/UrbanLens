@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-import re
 from typing import Any, ClassVar
+
+from django.utils.html import escape
+import lxml.html as lxml_html
+import nh3
 
 from urbanlens.dashboard.services.gateway import Gateway
 
@@ -28,18 +31,33 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.man
 _SHORT_EXTRACT_CHARS = 1200
 # Server-side cap on the extended extract - generous, but bounded so a single
 # huge article (some run 50k+ characters) doesn't get pulled in wholesale.
+# Measured in visible text characters, not markup bytes.
 _EXTENDED_EXTRACT_CHARS = 5000
-# Plain-text extracts keep MediaWiki section markers ("== Heading ==") as
-# literal text - meaningless (and ugly) once flattened into one inline
-# paragraph client-side, so they're stripped out.
-_SECTION_HEADING_PATTERN = re.compile(r"^\s*=+\s*.+?\s*=+\s*$", re.MULTILINE)
+
+# `prop=extracts` (without `explaintext`) returns the article's real parsed
+# markup instead of flattened plain text, so headings/paragraphs/lists survive.
+# That markup is untrusted (it's from an external API), so it's sanitized down
+# to this small allowlist before anything else touches it. Links are dropped
+# (unwrapped to plain text) rather than allowed through, since MediaWiki's
+# internal hrefs are relative and meaningless outside Wikipedia.
+_ALLOWED_TAGS = frozenset({
+    "p", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "dl", "dt", "dd",
+    "b", "i", "em", "strong", "sup", "sub", "blockquote", "br",
+})
+# Tags whose contents are dropped along with the tag itself, rather than
+# unwrapped - these are non-prose widgets (embedded population-graph SVGs,
+# stray <style>/<script>/<table> blocks) whose inner text would otherwise leak
+# into the card as noise (chart axis labels, raw JSON, etc.).
+_CLEAN_CONTENT_TAGS = frozenset({"wiki-chart", "svg", "style", "script", "table"})
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 # Sections whose content reads poorly as prose (bibliography entries, bare
-# citation text, etc.) - the extended extract is truncated before the first
-# one of these rather than including them.
-_STOP_SECTION_PATTERN = re.compile(
-    r"^\s*=+\s*(references|external links|see also|notes|bibliography|further reading|sources|gallery|footnotes)\s*=+\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
+# citation text, etc.) - the extended extract is truncated at the first
+# heading matching one of these rather than including them.
+_STOP_HEADING_TITLES = frozenset({
+    "references", "external links", "see also", "notes",
+    "bibliography", "further reading", "sources", "gallery", "footnotes",
+})
 
 
 @dataclass(slots=True, kw_only=True)
@@ -154,7 +172,7 @@ class WikipediaGateway(Gateway):
                 return article
         return None
 
-    # ── private ────────────────────────────────────────────────────────────────
+    # -- private ----------------------------------------------------------------
 
     def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
         """Mutate ``article["extract"]`` in place with more text when it's short.
@@ -163,25 +181,24 @@ class WikipediaGateway(Gateway):
         card's available space, so this pulls from later sections of the
         article body too rather than stopping at the lead.
         """
-        if len(article["extract"]) >= _SHORT_EXTRACT_CHARS:
+        if self._visible_length(article["extract"]) >= _SHORT_EXTRACT_CHARS:
             return
-        if (extended := self._fetch_extended_extract(title)) and len(extended) > len(article["extract"]):
+        extended = self._fetch_extended_extract(title)
+        if extended and self._visible_length(extended) > self._visible_length(article["extract"]):
             article["extract"] = extended
 
     def _fetch_extended_extract(self, title: str) -> str | None:
-        """Fetch a longer plain-text extract spanning the whole article body.
+        """Fetch a longer HTML extract spanning the whole article body.
 
         Unlike ``_fetch_summary``, this isn't limited to the lead section -
-        the full article text is requested and then trimmed to
-        ``_EXTENDED_EXTRACT_CHARS`` on our end (MediaWiki's own ``exchars``
-        param maxes out at 1200 regardless of what's requested, which isn't
-        enough headroom here), cut on a sentence boundary where possible.
+        the full article's parsed markup is requested (real headings,
+        paragraphs, and lists, not flattened plain text) and then sanitized
+        and trimmed to ``_EXTENDED_EXTRACT_CHARS`` on our end.
         """
         params: dict[str, str | int] = {
             "action": "query",
             "prop": "extracts",
             "titles": title,
-            "explaintext": 1,
             "format": "json",
         }
         try:
@@ -196,19 +213,38 @@ class WikipediaGateway(Gateway):
         return None
 
     @staticmethod
-    def _clean_and_trim_extract(text: str) -> str:
-        """Drop trailing reference-style sections, strip heading markers, and cap length."""
-        if stop := _STOP_SECTION_PATTERN.search(text):
-            text = text[: stop.start()]
-        text = _SECTION_HEADING_PATTERN.sub("", text)
-        text = re.sub(r"\n{2,}", "\n\n", text).strip()
-        if len(text) <= _EXTENDED_EXTRACT_CHARS:
-            return text
-        truncated = text[:_EXTENDED_EXTRACT_CHARS]
-        cut = max(truncated.rfind(". "), truncated.rfind(".\n"))
-        if cut > 0:
-            truncated = truncated[: cut + 1]
-        return truncated.rstrip()
+    def _visible_length(html_fragment: str) -> int:
+        """Return the rendered-text length of an HTML fragment, ignoring markup."""
+        if not html_fragment:
+            return 0
+        return len(lxml_html.fromstring(f"<div>{html_fragment}</div>").text_content())
+
+    @staticmethod
+    def _clean_and_trim_extract(raw_html: str) -> str:
+        """Sanitize untrusted article HTML, drop reference-style sections, and cap length.
+
+        Truncation happens at block-element boundaries (never mid-tag or
+        mid-sentence) so the result is always well-formed and never ends on a
+        dangling heading.
+        """
+        safe_html = nh3.clean(raw_html, tags=_ALLOWED_TAGS, clean_content_tags=_CLEAN_CONTENT_TAGS, attributes={})
+        root = lxml_html.fromstring(f"<div>{safe_html}</div>")
+
+        kept: list[lxml_html.HtmlElement] = []
+        total_len = 0
+        for child in root:
+            if child.tag in _HEADING_TAGS and child.text_content().strip().lower() in _STOP_HEADING_TITLES:
+                break
+            block_len = len(child.text_content())
+            if kept and total_len + block_len > _EXTENDED_EXTRACT_CHARS:
+                break
+            kept.append(child)
+            total_len += block_len
+
+        while kept and kept[-1].tag in _HEADING_TAGS:
+            kept.pop()
+
+        return "".join(lxml_html.tostring(el, encoding="unicode") for el in kept).strip()
 
     def _geo_search(self, lat: float, lng: float) -> list[dict]:
         """Return up to _MAX_CANDIDATES article stubs near the coordinates."""
@@ -281,9 +317,18 @@ class WikipediaGateway(Gateway):
     def _normalise(summary: dict) -> dict[str, Any]:
         """Shape the raw REST summary into our standard dict."""
         thumbnail = summary.get("thumbnail") or {}
+        if raw_extract_html := summary.get("extract_html"):
+            extract = WikipediaGateway._clean_and_trim_extract(raw_extract_html)
+        elif raw_extract := summary.get("extract"):
+            # No extract_html in this response (unexpected, but the REST API
+            # doesn't guarantee it) - fall back to the plain-text extract,
+            # escaped since it's rendered with the `safe` filter downstream.
+            extract = f"<p>{escape(raw_extract)}</p>"
+        else:
+            extract = ""
         return {
             "title": summary.get("title", ""),
-            "extract": summary.get("extract", ""),
+            "extract": extract,
             "url": summary.get("content_urls", {}).get("desktop", {}).get("page", ""),
             "thumbnail": thumbnail.get("source", ""),
             "description": summary.get("description", ""),

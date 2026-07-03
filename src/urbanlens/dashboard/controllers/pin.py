@@ -641,7 +641,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    # ── External-data HTMX endpoints ───────────────────────────────────────────
+    # -- External-data HTMX endpoints -------------------------------------------
 
     def wikipedia_info(self, request: HttpRequest, pin_slug: str):
         """

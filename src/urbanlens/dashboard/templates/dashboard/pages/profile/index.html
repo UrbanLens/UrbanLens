@@ -3,7 +3,7 @@
 {% block content %}
 <div class="profile-page page-content">
 
-    {# ── Hero card ─────────────────────────────────────────────────────────── #}
+    {# -- Hero card ----------------------------------------------------------- #}
     <div class="profile-hero ul-section">
         <div class="profile-avatar-col">
             <div class="profile-avatar-wrap">
@@ -35,7 +35,7 @@
                     <p class="profile-username">@{{ profile.username }}</p>
                 </div>
 
-                {# ── Friendship actions (only when viewing another user) ── #}
+                {# -- Friendship actions (only when viewing another user) -- #}
                 {% if user.is_authenticated and profile.user != request.user %}
                 <div class="profile-friendship-actions">
                     {% if friendship_status == 'accepted' %}
@@ -165,7 +165,7 @@
         </div>
     </div>
 
-    {# ── Stats row ─────────────────────────────────────────────────────────── #}
+    {# -- Stats row ----------------------------------------------------------- #}
     <div class="profile-stats-row">
         {% if profile.user == request.user %}
         {# Own profile - show their own pin count and exploring year #}
@@ -208,7 +208,7 @@
         {% endif %}
     </div>
 
-    {# ── Social links ──────────────────────────────────────────────────────── #}
+    {# -- Social links -------------------------------------------------------- #}
     {% if social_links %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title">Social</h3>
@@ -235,7 +235,7 @@
     </div>
     {% endif %}
 
-    {# ── Contact Info ──────────────────────────────────────────────────────── #}
+    {# -- Contact Info -------------------------------------------------------- #}
     {% if contact_info %}
     {% with ci=contact_info %}
     {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
@@ -284,12 +284,12 @@
     {% endwith %}
     {% endif %}
 
-    {# ── Private annotation panel (viewer ≠ profile owner) ─────────────────── #}
+    {# -- Private annotation panel (viewer ≠ profile owner) ------------------- #}
     {% if user.is_authenticated and profile.user != request.user %}
     {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
     {% endif %}
 
-    {# ── Friends ───────────────────────────────────────────────────────────── #}
+    {# -- Friends ------------------------------------------------------------- #}
     <div id="friend_list"
          hx-get="{% url 'friend.list' profile.id %}"
          hx-trigger="load"
@@ -304,7 +304,7 @@
 
 </div>
 
-{# ── External-link warning dialog ──────────────────────────────────────────── #}
+{# -- External-link warning dialog -------------------------------------------- #}
 <div id="ext-warn-overlay" class="dialog-overlay" style="display:none;" aria-hidden="true">
     <div class="dialog ext-warn-dialog" role="alertdialog" aria-labelledby="ext-warn-title" aria-describedby="ext-warn-desc">
         <h2 id="ext-warn-title">

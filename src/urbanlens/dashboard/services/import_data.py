@@ -178,7 +178,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         schedule_import_cleanup(os.path.dirname(zip_path), job_status)
 
 
-# ── Validation ────────────────────────────────────────────────────────────────
+# -- Validation ----------------------------------------------------------------
 
 
 class _ImportValidationError(Exception):
@@ -235,7 +235,7 @@ def _read_json(data_dir: str, filename: str) -> Any:
         return json.load(fh)
 
 
-# ── Individual importers ───────────────────────────────────────────────────────
+# -- Individual importers -------------------------------------------------------
 
 
 def _import_badges(
@@ -610,7 +610,7 @@ def _safe_set(
         logger.debug("Skipped setting %s=%r: could not validate choices", field_name, value)
 
 
-# ── Dispatch table ─────────────────────────────────────────────────────────────
+# -- Dispatch table -------------------------------------------------------------
 
 _IMPORT_ORDER = ["badges", "pins", "visit_history", "connections", "settings"]
 

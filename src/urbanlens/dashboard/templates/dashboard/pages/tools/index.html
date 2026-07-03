@@ -10,7 +10,7 @@
 
     <div class="tools-grid">
 
-        {# ── Export card ─────────────────────────────────────────────────────── #}
+        {# -- Export card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="export-card">
             <div class="ul-card-header">
                 <i class="material-icons">download</i>
@@ -36,7 +36,7 @@
 
                         <div class="export-options">
 
-                            {# ── Select all ── #}
+                            {# -- Select all -- #}
                             <label class="export-select-all">
                                 <span class="ul-checkbox-wrap">
                                     <input type="checkbox" id="export-select-all" checked>
@@ -45,7 +45,7 @@
                                 <span class="export-select-all-label">Select all</span>
                             </label>
 
-                            {# ── Data checkboxes ── #}
+                            {# -- Data checkboxes -- #}
                             <div class="export-checkboxes" id="export-data-checkboxes">
                                 <label class="export-checkbox-item">
                                     <span class="ul-checkbox-wrap">
@@ -121,7 +121,7 @@
                                 </label>
                             </div>
 
-                            {# ── Format options ── #}
+                            {# -- Format options -- #}
                             <div class="export-format-section">
                                 <p class="export-format-label">Format options</p>
                                 <label class="export-checkbox-item export-format-item">
@@ -150,7 +150,7 @@
             </div>
         </div>
 
-        {# ── Import card ─────────────────────────────────────────────────────── #}
+        {# -- Import card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="import-card">
             <div class="ul-card-header">
                 <i class="material-icons">upload</i>
@@ -209,7 +209,7 @@
         </div>
 
 
-        {# ── Admin Tools card (admins only) ──────────────────────────────────── #}
+        {# -- Admin Tools card (admins only) ------------------------------------ #}
         {% if perms.dashboard.view_site_admin %}
         <div class="ul-card tools-card" id="admin-tools-card">
             <div class="ul-card-header">
@@ -231,7 +231,7 @@
         </div>
         {% endif %}
 
-        {# ── Invite friend card ──────────────────────────────────────────────── #}
+        {# -- Invite friend card ------------------------------------------------ #}
         <div class="ul-card tools-card" id="invite-friend-card">
             <div class="ul-card-header">
                 <i class="material-icons">person_add_alt</i>
@@ -302,7 +302,7 @@
     line-height: 1.5;
 }
 
-/* ── Checkbox checkmark override for export/import cards ─────────────────── */
+/* -- Checkbox checkmark override for export/import cards ------------------- */
 
 #export-card .ul-checkbox::after,
 #import-card .ul-checkbox::after {
@@ -341,7 +341,7 @@
     transform: none;
 }
 
-/* ── Export options layout ───────────────────────────────────────────────── */
+/* -- Export options layout ------------------------------------------------- */
 
 .export-options {
     margin-bottom: 1.25rem;
@@ -420,7 +420,7 @@
     color: var(--ul-grey-5);
 }
 
-/* ── Format section ──────────────────────────────────────────────────────── */
+/* -- Format section -------------------------------------------------------- */
 
 .export-format-section {
     margin-top: 1rem;
@@ -453,7 +453,7 @@
     margin-top: 1px;
 }
 
-/* ── Actions ─────────────────────────────────────────────────────────────── */
+/* -- Actions --------------------------------------------------------------- */
 
 .export-actions,
 .tools-card-actions {
@@ -470,7 +470,7 @@
     gap: .4rem;
 }
 
-/* ── Progress area ───────────────────────────────────────────────────────── */
+/* -- Progress area --------------------------------------------------------- */
 
 .export-progress-wrap {
     margin-top: 1rem;
@@ -543,7 +543,7 @@
     margin-top: .75rem;
 }
 
-/* ── Import upload area ──────────────────────────────────────────────────── */
+/* -- Import upload area ---------------------------------------------------- */
 
 .import-upload-area {
     position: relative;
@@ -682,7 +682,7 @@
 
 <script>
 (function () {
-    /* ── Export: select-all ↔ individual checkbox sync ── */
+    /* -- Export: select-all ↔ individual checkbox sync -- */
     const selectAll = document.getElementById('export-select-all');
     const dataCheckboxes = document.querySelectorAll('#export-data-checkboxes .export-type-cb');
     const EXPORT_LEAVE_MSG = 'An export is still in progress. Leaving now will stop the export and you may lose your download.';
@@ -711,7 +711,7 @@
         cb.addEventListener('change', syncSelectAll);
     });
 
-    /* ── Export: navigation guard ── */
+    /* -- Export: navigation guard -- */
     function isExportInProgress() {
         const poll = document.getElementById('export-status-poll');
         return !!(poll && poll.hasAttribute('hx-get'));
@@ -805,7 +805,7 @@
         }
     });
 
-    /* ── Import: file picker UX ── */
+    /* -- Import: file picker UX -- */
     const fileInput = document.getElementById('import-file-input');
     const fileChosen = document.getElementById('import-file-chosen');
     const fileName = document.getElementById('import-file-name');

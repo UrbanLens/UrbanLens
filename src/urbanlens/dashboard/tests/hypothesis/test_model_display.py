@@ -27,7 +27,7 @@ _MARKUP_TYPES = list(MarkupType.values)
 _VISIT_SOURCES = list(VisitSource.values)
 
 
-# ── PinVisit ──────────────────────────────────────────────────────────────────
+# -- PinVisit ------------------------------------------------------------------
 
 class PinVisitStrTests(TestCase):
     """PinVisit.__str__ contains the pin_id and a YYYY-MM-DD date."""
@@ -76,7 +76,7 @@ class VisitSourceEnumTests(TestCase):
         self.assertEqual(len(VisitSource.values), 2)
 
 
-# ── PinMarkup ─────────────────────────────────────────────────────────────────
+# -- PinMarkup -----------------------------------------------------------------
 
 class PinMarkupStrTests(TestCase):
     """PinMarkup.__str__ encodes the markup_type and parent pin id."""
@@ -201,7 +201,7 @@ class MarkupTypeEnumTests(TestCase):
         self.assertTrue(member.label)
 
 
-# ── Alias models ──────────────────────────────────────────────────────────────
+# -- Alias models --------------------------------------------------------------
 
 class PinAliasStrTests(TestCase):
     """PinAlias.__str__ includes the alias name and the phrase 'pin alias'."""

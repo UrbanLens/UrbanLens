@@ -26,7 +26,7 @@ _hyp = settings(max_examples=100, deadline=None)
 _hyp_db = settings(max_examples=20, deadline=None)
 
 
-# ── _haversine_km ─────────────────────────────────────────────────────────────
+# -- _haversine_km -------------------------------------------------------------
 
 class HaversineTests(TestCase):
     """_haversine_km computes great-circle distances in kilometres."""
@@ -98,7 +98,7 @@ class HaversineTests(TestCase):
         self.assertLessEqual(dist, 20040.0)
 
 
-# ── Profile proxy properties ──────────────────────────────────────────────────
+# -- Profile proxy properties --------------------------------------------------
 
 class ProfileProxyPropertyTests(TestCase):
     """Profile proxies user.username, email, first_name, last_name, full_name."""
@@ -132,7 +132,7 @@ class ProfileProxyPropertyTests(TestCase):
         self.assertEqual(str(user.profile), "theuser")
 
 
-# ── Profile.get_map_center ────────────────────────────────────────────────────
+# -- Profile.get_map_center ----------------------------------------------------
 
 class ProfileGetMapCenterTests(TestCase):
     """get_map_center() returns coordinates based on the mode setting."""
@@ -202,7 +202,7 @@ class ProfileGetMapCenterTests(TestCase):
         self.assertIsInstance(result[1], float)
 
 
-# ── Profile.compute_map_center ────────────────────────────────────────────────
+# -- Profile.compute_map_center ------------------------------------------------
 
 class ProfileComputeMapCenterTests(TestCase):
     """compute_map_center() returns the centroid of the user's pins."""
@@ -300,7 +300,7 @@ class ProfileComputeMapCenterTests(TestCase):
         self.assertIsInstance(result[1], float)
 
 
-# ── VisibilityChoice / MapViewChoice / MapCenterMode ──────────────────────────
+# -- VisibilityChoice / MapViewChoice / MapCenterMode --------------------------
 
 class ProfileChoiceTests(TestCase):
     """Choice enumerations have expected values."""
@@ -333,7 +333,7 @@ class ProfileChoiceTests(TestCase):
         self.assertIn("custom", MapCenterMode.values)
 
 
-# ── Profile.get_map_center - custom mode with only one coord None ─────────────
+# -- Profile.get_map_center - custom mode with only one coord None -------------
 
 class ProfileGetMapCenterEdgeCaseTests(TestCase):
     """get_map_center() edge: CUSTOM mode with only one coordinate set returns None."""

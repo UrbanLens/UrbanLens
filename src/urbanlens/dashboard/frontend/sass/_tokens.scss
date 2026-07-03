@@ -250,33 +250,33 @@ $color-grey-10a: #121212;
 $color-grey-10: #090909;
 $color-grey-10b: #000000;
 
-// ── Supplementary UI colour palette ──────────────────────────────────────────
+// -- Supplementary UI colour palette ------------------------------------------
 // Tailwind-CSS-inspired palette for UI components. Named with the `$ui-` prefix
 // to avoid conflicts with the Material Design scale above.
 // TODO: This is deprecated. Use the Material Design scale instead, and replace these references over time.
 
-// ── Map filter-panel & cluster-marker colours ────────────────────────────────
+// -- Map filter-panel & cluster-marker colours --------------------------------
 // Intentionally static - filter panel and map clusters always render on dark
 // backdrops and must not invert in dark mode.
 $ui-fp-active:   $color-indigo-500;   // filter panel active accent / range-slider fill
 $ui-fp-spinner:  $color-indigo-300;   // progress spinner / dot glow
 $ui-fp-chip-txt: $color-indigo-100;   // active-chip label on dark panel
 
-// ── Toast-notification backgrounds ────────────────────────────────────────────
+// -- Toast-notification backgrounds --------------------------------------------
 // Dark saturated colours designed for legibility against white/light text.
 $toast-success-bg: $color-green-900;
 $toast-error-bg:   $color-red-900;
 $toast-info-bg:    $color-blue-900;
 $toast-warning-bg: $color-amber-900;
 
-// ── Star / trust-rating gold ────────────────────────────────────────────────────
+// -- Star / trust-rating gold ----------------------------------------------------
 $ui-star-gold: $color-amber-500;
 
-// ── Link colour on always-dark surfaces (map popups, overlays) ─────────────────
+// -- Link colour on always-dark surfaces (map popups, overlays) -----------------
 $ui-link-on-dark:       $color-blue-300;
 $ui-link-on-dark-hover: $color-blue-400;
 
-// ── Pin cluster marker gradients ────────────────────────────────────────────────
+// -- Pin cluster marker gradients ------------------------------------------------
 // Always rendered on the map; these colours never invert with dark mode.
 $cluster-s-start: $color-indigo-500;
 $cluster-s-end:   $color-indigo-600;
@@ -285,7 +285,7 @@ $cluster-m-end:   $color-indigo-700;
 $cluster-l-start: $color-pink-600;
 $cluster-l-end:   $color-pink-700;
 
-// - Brand palette ─────────────────────────────────────────────────────────────
+// - Brand palette -------------------------------------------------------------
 $primary-color: $color-blue-500;
 $primary-color-dark: $color-blue-700;
 $primary-color-light: $color-blue-300;
@@ -295,7 +295,7 @@ $highlight-color: $color-amber-300;
 $selected-color: $color-blue-300;
 $section-header-bg: $color-blue-300;
 
-// ── Semantic colors ───────────────────────────────────────────────────────────
+// -- Semantic colors -----------------------------------------------------------
 $text-primary: $color-grey-9;
 $text-secondary: $color-grey-6;
 $text-muted: $color-grey-4;
@@ -321,7 +321,7 @@ $accent-2: $color-amber-500;
 $accent-2-light: $color-amber-300;
 $accent-2-dark: $color-amber-700;
 
-// ── Dark-mode accent palette ──────────────────────────────────────────────────
+// -- Dark-mode accent palette --------------------------------------------------
 $dk-navy:         $color-blue-1500;                  
 $dk-panel-bg:     $color-deep-purple-1500;           
 $dk-panel-border: rgba($color-deep-purple-1500, .5); 
@@ -350,12 +350,12 @@ $dk-panel-bg-alt:       $color-indigo-900;
 $dk-tag-stat-border:    $color-indigo-700;
 $dk-danger-text:        $color-red-200;
 
-// ── Third-party brand colours ─────────────────────────────────────────────────
+// -- Third-party brand colours -------------------------------------------------
 $discord-brand:       #5865f2;   // Discord blurple
 $discord-brand-hover: #4752c4;   // Discord blurple hover
 $google-text:         #3c4043;   // Google button text (Material Bluegrey 700)
 
-// ── Radius ────────────────────────────────────────────────────────────────────
+// -- Radius --------------------------------------------------------------------
 
 $radius-xs: 4px;
 $radius-sm: 8px;
@@ -363,13 +363,13 @@ $radius-md: 12px;
 $radius-full: 9999px;
 $radius-icon-btn: $radius-xs + 2; // 6px
 
-// ── Shadows ───────────────────────────────────────────────────────────────────
+// -- Shadows -------------------------------------------------------------------
 
 $shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
 $shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
 $shadow-dialog: 0 8px 40px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
 
-// ── Spacing ───────────────────────────────────────────────────────────────────
+// -- Spacing -------------------------------------------------------------------
 
 $space-xs: .25rem;
 $space-sm: .5rem;
@@ -380,7 +380,7 @@ $space-xl: 2rem;
 $bar-padding-y: .75rem;
 $bar-padding-x: 1rem;
 
-// ── Breakpoints ─────────────────────────────────────────────────────────────────
+// -- Breakpoints -----------------------------------------------------------------
 // Use these tokens with the up() and down() mixins in _mixins.scss.
 // Mobile-first: base styles target xs. Enhance upward with up().
 
@@ -390,7 +390,7 @@ $breakpoint-md: 1024px; // standard laptops / desktops
 $breakpoint-lg: 1280px; // wide desktops
 $breakpoint-xl: 1600px; // ultra-wide desktops
 
-// ── Z-index scale ─────────────────────────────────────────────────────────────
+// -- Z-index scale -------------------------------------------------------------
 
 $z-dropdown: 500;
 $z-overlay: 999;

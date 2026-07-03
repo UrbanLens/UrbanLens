@@ -1,7 +1,7 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// ── About page ────────────────────────────────────────────────────────────────
+// -- About page ----------------------------------------------------------------
 
 .page-about {
 
@@ -13,7 +13,7 @@
         padding: 0 1.5rem;
     }
 
-    // ── Hero ──────────────────────────────────────────────────────────────────
+    // -- Hero ------------------------------------------------------------------
     .about-hero {
         display: grid;
         grid-template-columns: 1fr;
@@ -79,7 +79,7 @@
         }
     }
 
-    // ── Hero visual (decorative map mock) ─────────────────────────────────────
+    // -- Hero visual (decorative map mock) -------------------------------------
     .about-hero-visual {
         display: none;
         align-items: center;
@@ -160,7 +160,7 @@
         }
     }
 
-    // ── Shared section chrome ─────────────────────────────────────────────────
+    // -- Shared section chrome -------------------------------------------------
     .about-section {
         padding: 5rem 0;
         background: var(--ul-grey-0);
@@ -206,7 +206,7 @@
         margin: 0 0 1.1rem;
     }
 
-    // ── Pillars ───────────────────────────────────────────────────────────────
+    // -- Pillars ---------------------------------------------------------------
     .about-pillars {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -251,7 +251,7 @@
         margin: 0;
     }
 
-    // ── Values grid ───────────────────────────────────────────────────────────
+    // -- Values grid -----------------------------------------------------------
     .about-values-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -290,7 +290,7 @@
         margin: 0;
     }
 
-    // ── Feature rows ──────────────────────────────────────────────────────────
+    // -- Feature rows ----------------------------------------------------------
     .about-features-list {
         margin-top: 2.5rem;
         display: flex;
@@ -390,7 +390,7 @@
         }
     }
 
-    // ── Audience grid ─────────────────────────────────────────────────────────
+    // -- Audience grid ---------------------------------------------------------
     .about-audience-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -426,7 +426,7 @@
         display: block;
     }
 
-    // ── CTA ───────────────────────────────────────────────────────────────────
+    // -- CTA -------------------------------------------------------------------
     .about-cta-section {
         background: linear-gradient(135deg, $color-indigo-900 0%, $color-indigo-700 100%);
         padding: 5rem 1.5rem;

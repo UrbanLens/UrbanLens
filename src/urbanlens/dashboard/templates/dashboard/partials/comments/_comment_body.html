@@ -65,7 +65,7 @@
   {% endif %}
   {% endif %}
 
-  {# ── Reactions ── #}
+  {# -- Reactions -- #}
   <div class="comment-reactions" id="comment-reactions-{{ comment.id }}">
     {% for emoji, data in reactions.items %}
     <button type="button"
@@ -108,7 +108,7 @@
     </div>
   </div>
 
-  {# ── Reply button (top-level only) ── #}
+  {# -- Reply button (top-level only) -- #}
   {% if not is_reply %}
   <button type="button" class="comment-reply-btn"
           onclick="toggleReplyForm('reply-form-{{ comment.id }}')">

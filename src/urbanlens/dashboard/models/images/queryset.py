@@ -79,7 +79,7 @@ class ImageQuerySet(QuerySet):
             allowed.add(uploader_id)
         return allowed
 
-    # ── Helpers ────────────────────────────────────────────────────────────────
+    # -- Helpers ----------------------------------------------------------------
 
     def _get_friend_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus

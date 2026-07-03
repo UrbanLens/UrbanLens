@@ -63,7 +63,7 @@ def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = 
     return loc
 
 
-# ── effective_name ─────────────────────────────────────────────────────────────
+# -- effective_name -------------------------------------------------------------
 
 class PinEffectiveNameTests(TestCase):
 
@@ -104,7 +104,7 @@ class PinEffectiveNameTests(TestCase):
         self.assertEqual(pin.effective_name, "Fallback Name")
 
 
-# ── effective_latitude / effective_longitude ───────────────────────────────────
+# -- effective_latitude / effective_longitude -----------------------------------
 
 class PinEffectiveCoordinateTests(TestCase):
 
@@ -187,7 +187,7 @@ class PinEffectiveCoordinateTests(TestCase):
         self.assertIsInstance(result, float)
 
 
-# ── effective_date_last_active ─────────────────────────────────────────────────
+# -- effective_date_last_active -------------------------------------------------
 
 class PinEffectiveDateLastActiveTests(TestCase):
 
@@ -239,7 +239,7 @@ class PinEffectiveDateLastActiveTests(TestCase):
         self.assertEqual((abandoned - inferred).days, 1)
 
 
-# ── effective_icon ─────────────────────────────────────────────────────────────
+# -- effective_icon -------------------------------------------------------------
 
 class PinEffectiveIconTests(TestCase):
     """effective_icon follows a defined priority chain.

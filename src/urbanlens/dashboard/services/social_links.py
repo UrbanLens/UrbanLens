@@ -166,14 +166,14 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
     path_parts = [p for p in parsed.path.strip("/").split("/") if p]
     qs = parse_qs(parsed.query)
 
-    # ── Instagram ─────────────────────────────────────────────────────────────
+    # -- Instagram -------------------------------------------------------------
     if host == "instagram.com":
         handle = _clean_handle(path_parts[0] if path_parts else None)
         if not handle or validate_handle("instagram", handle) is not None:
             return None
         return ("instagram", handle)
 
-    # ── Bluesky ───────────────────────────────────────────────────────────────
+    # -- Bluesky ---------------------------------------------------------------
     if host == "bsky.app":
         # https://bsky.app/profile/<handle>
         if len(path_parts) >= 2 and path_parts[0] == "profile":
@@ -183,21 +183,21 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
             return ("bluesky", handle)
         return None
 
-    # ── UER ───────────────────────────────────────────────────────────────────
+    # -- UER -------------------------------------------------------------------
     if host == "uer.ca":
         posterid = qs.get("posterid", [None])[0]
         if posterid and validate_handle("uer", posterid) is None:
             return ("uer", posterid)
         return None
 
-    # ── Facebook ──────────────────────────────────────────────────────────────
+    # -- Facebook --------------------------------------------------------------
     if host in {"facebook.com", "fb.com", "fb.me"}:
         handle = _clean_handle(path_parts[0] if path_parts else None)
         if not handle or validate_handle("facebook", handle) is not None:
             return None
         return ("facebook", handle)
 
-    # ── Flickr ────────────────────────────────────────────────────────────────
+    # -- Flickr ----------------------------------------------------------------
     if host == "flickr.com":
         # https://flickr.com/photos/<username>
         if len(path_parts) >= 2 and path_parts[0] == "photos":
@@ -207,7 +207,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
             return ("flickr", handle)
         return None
 
-    # ── YouTube ───────────────────────────────────────────────────────────────
+    # -- YouTube ---------------------------------------------------------------
     if host in {"youtube.com", "youtu.be"}:
         if path_parts:
             first = path_parts[0]
@@ -223,7 +223,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
                 return ("youtube", handle)
         return None
 
-    # ── TikTok ────────────────────────────────────────────────────────────────
+    # -- TikTok ----------------------------------------------------------------
     if host == "tiktok.com":
         # https://tiktok.com/@username
         if path_parts and path_parts[0].startswith("@"):
@@ -233,7 +233,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
             return ("tiktok", handle)
         return None
 
-    # ── Reddit ────────────────────────────────────────────────────────────────
+    # -- Reddit ----------------------------------------------------------------
     if host in {"reddit.com", "redd.it"}:
         # /u/<name> or /user/<name>
         if len(path_parts) >= 2 and path_parts[0] in {"u", "user"}:
@@ -243,7 +243,7 @@ def parse_social_link(raw: str) -> tuple[str, str] | None:
             return ("reddit", handle)
         return None
 
-    # ── Generic website ───────────────────────────────────────────────────────
+    # -- Generic website -------------------------------------------------------
     if parsed.scheme in {"http", "https"} and parsed.hostname:
         safe = parsed._replace(fragment="").geturl()
         if len(safe) <= 500:

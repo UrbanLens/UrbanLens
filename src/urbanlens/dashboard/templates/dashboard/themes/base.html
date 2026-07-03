@@ -18,7 +18,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     {% load static %}
-    {# ── Shared markup engine - must load before {% block content %} scripts ── #}
+    {# -- Shared markup engine - must load before {% block content %} scripts -- #}
     {% include 'dashboard/partials/layout/_markup_engine.html' %}
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
@@ -149,7 +149,7 @@
         }());
     </script>
     <script>
-    // ── Comment utilities ─────────────────────────────────────────────────────
+    // -- Comment utilities -----------------------------------------------------
 
     function toggleReplyForm(id) {
         var el = document.getElementById(id);
@@ -240,7 +240,7 @@
         }
     });
 
-    // ── @mention autocomplete ─────────────────────────────────────────────────
+    // -- @mention autocomplete -------------------------------------------------
     (function () {
         var _timer = null;
 
@@ -372,7 +372,7 @@
         });
     }());
 
-    // ── Comment image upload preview ─────────────────────────────────────────
+    // -- Comment image upload preview -----------------------------------------
     document.addEventListener('change', function (e) {
         if (!e.target.classList.contains('comment-image-input')) return;
         var file = e.target.files && e.target.files[0];
@@ -381,7 +381,7 @@
         if (preview) preview.textContent = file ? '📎 ' + file.name : '';
     });
 
-    // ── Activity mention hover → highlight trip map marker ────────────────────
+    // -- Activity mention hover → highlight trip map marker --------------------
     document.addEventListener('mouseover', function (e) {
         var link = e.target.closest && e.target.closest('.mention--activity');
         if (!link || !window.tripHighlightMarker) return;
@@ -397,7 +397,7 @@
     </script>
 
     <script>
-    // ── Scroll to hash anchor after HTMX swap (for dynamically loaded comments) ─
+    // -- Scroll to hash anchor after HTMX swap (for dynamically loaded comments) -
     (function () {
         function _scrollToHash() {
             var hash = window.location.hash;
@@ -411,7 +411,7 @@
     </script>
 
     <script>
-    // ── Unsaved / in-flight auto-save guard ───────────────────────────────────
+    // -- Unsaved / in-flight auto-save guard -----------------------------------
     (function () {
         var _dirty = false;
         var _inFlight = 0;
@@ -474,7 +474,7 @@
     </script>
 
     <script>
-    // ── Close any <dialog> on backdrop click (not drag-outside) ───────────────
+    // -- Close any <dialog> on backdrop click (not drag-outside) ---------------
     (function () {
         var _dialogPress = null;
 
@@ -501,7 +501,7 @@
     }());
     </script>
 
-    {# ── Comment map composer dialog ──────────────────────────────────────────── #}
+    {# -- Comment map composer dialog -------------------------------------------- #}
     <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog">
       <div class="dialog-header">
         <span>Attach a Map</span>
@@ -577,7 +577,7 @@
       </div>
     </dialog>
 
-    {# ── Global confirm dialog (replaces browser confirm()) ──────────────────── #}
+    {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
     <dialog id="confirm-dialog" class="confirm-dialog ul-dialog">
         <div class="dialog-header">
             <span id="confirm-dialog-title">Are you sure?</span>
@@ -626,14 +626,14 @@
     }());
     </script>
 
-    {# ── Comment map composer + viewer JS ────────────────────────────────────── #}
+    {# -- Comment map composer + viewer JS -------------------------------------- #}
     {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load  #}
     {# it in {% block header %} along with their plugins (MarkerCluster, Leaflet.draw).         #}
     {# Re-loading would clobber those plugins by replacing window.L.  Comment-map code          #}
     {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // ── Shared tile layer factory ─────────────────────────────────────────
+        // -- Shared tile layer factory -----------------------------------------
         var _TILE_LAYERS = {
             standard: {
                 url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -654,7 +654,7 @@
             return L.tileLayer(cfg.url, cfg.options);
         }
 
-        // ── Composer state ────────────────────────────────────────────────────
+        // -- Composer state ----------------------------------------------------
         var _composerMap = null;
         var _composerTileLayer = null;    // active tile layer
         var _composerLayerMode = 'standard';
@@ -668,7 +668,7 @@
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
 
-        // ── Open composer ─────────────────────────────────────────────────────
+        // -- Open composer -----------------------------------------------------
         window._openCommentMapComposer = function (form) {
             if (typeof L === 'undefined') {
                 toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
@@ -771,7 +771,7 @@
             if (_composerSession) _composerSession.deactivate();
         };
 
-        // ── Layer switching ───────────────────────────────────────────────────
+        // -- Layer switching ---------------------------------------------------
         function _setComposerLayer(mode) {
             if (!_composerMap || !_TILE_LAYERS[mode]) return;
             if (_composerTileLayer) _composerMap.removeLayer(_composerTileLayer);
@@ -787,7 +787,7 @@
             btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
         });
 
-        // ── Close / cancel ────────────────────────────────────────────────────
+        // -- Close / cancel ----------------------------------------------------
         document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
         document.getElementById('comment-map-composer-cancel').addEventListener('click', _closeComposer);
 
@@ -796,7 +796,7 @@
             if (_dialog.open) _dialog.close();
         }
 
-        // ── Save ──────────────────────────────────────────────────────────────
+        // -- Save --------------------------------------------------------------
         document.getElementById('comment-map-composer-save').addEventListener('click', function () {
             if (!_composerMap || !_originForm) return;
             var center = _composerMap.getCenter();
@@ -818,7 +818,7 @@
             _closeComposer();
         });
 
-        // ── Clear attached map from a form ────────────────────────────────────
+        // -- Clear attached map from a form ------------------------------------
         window._clearCommentMap = function (form) {
             var hf = form && form.querySelector('.comment-map-data-field');
             if (hf) hf.value = '';
@@ -838,7 +838,7 @@
             }
         });
 
-        // ── Tool selection ────────────────────────────────────────────────────
+        // -- Tool selection ----------------------------------------------------
         document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 if (!_composerSession) return;
@@ -858,7 +858,7 @@
             _redrawMarkup();
         });
 
-        // ── Redraw all confirmed shapes ───────────────────────────────────────
+        // -- Redraw all confirmed shapes ---------------------------------------
         function _redrawMarkup() {
             if (!_composerMarkupLayer) return;
             _composerMarkupLayer.clearLayers();
@@ -867,7 +867,7 @@
             });
         }
 
-        // ── Pin search / address / coordinate autocomplete ────────────────────
+        // -- Pin search / address / coordinate autocomplete --------------------
         function _loadPinsForSearch() {
             if (_pinCache.length) return;
             fetch('/dashboard/comments/map-pins/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
@@ -969,7 +969,7 @@
             if (_dialog.open && _composerMap) _composerMap.invalidateSize();
         });
 
-        // ── Markup bounds helpers ─────────────────────────────────────────────
+        // -- Markup bounds helpers ---------------------------------------------
         // Returns an L.LatLngBounds covering all points in the shapes array,
         // or null when there are no shapes with computable bounds.
         function _computeMarkupBounds(shapes) {
@@ -1016,7 +1016,7 @@
             lmap.fitBounds(bounds.pad(0.15));
         }
 
-        // ── Comment map viewer ────────────────────────────────────────────────
+        // -- Comment map viewer ------------------------------------------------
         var _viewerMaps = {};   // commentId → L.Map
 
         window._expandCommentMap = function (commentId) {
@@ -1063,7 +1063,7 @@
             }, { once: true });
         };
 
-        // ── Render thumbnail map inside .comment-map-thumb ────────────────────
+        // -- Render thumbnail map inside .comment-map-thumb --------------------
         // Runs on DOMContentLoaded and after HTMX swaps
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
@@ -1094,7 +1094,7 @@
         document.addEventListener('DOMContentLoaded', _initThumbs);
         document.addEventListener('htmx:afterSettle', _initThumbs);
 
-        // ── Comment form validation (text optional if photo or map attached) ─
+        // -- Comment form validation (text optional if photo or map attached) -
         window._validateCommentForm = function (form) {
             var text = ((form.querySelector('[name=text]') || {}).value || '').trim();
             var imgInput = form.querySelector('[name=image]');
@@ -1108,7 +1108,7 @@
     </script>
 
     <script>
-    // ── Collapsible sections ───────────────────────────────────────────────────
+    // -- Collapsible sections ---------------------------------------------------
     // Any element with [data-collapse-scope][data-collapse-section] gets a
     // chevron button injected into its header that toggles an .is-collapsed
     // class. State is persisted in localStorage keyed by scope ("pin", "wiki",

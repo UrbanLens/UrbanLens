@@ -2,7 +2,7 @@
 @use 'variables' as *;
 
 
-// ── Offline indicator (shown when the server is unreachable) ──────────────
+// -- Offline indicator (shown when the server is unreachable) --------------
 #offline-indicator {
     position: absolute;
     bottom: 2rem;
@@ -31,7 +31,7 @@
     &[hidden] { display: none; }
 }
 
-// ── Temporary place marker (search jump + right-click context menu) ────────
+// -- Temporary place marker (search jump + right-click context menu) --------
 .search-result-marker-wrap {
     background: none !important;
     border: none !important;
@@ -123,7 +123,7 @@
     }
 }
 
-// ── Map bottom-left overlay controls ──────────────────────────────────────
+// -- Map bottom-left overlay controls --------------------------------------
 
 .map-bottom-controls {
     position: absolute;
@@ -159,22 +159,32 @@
     }
 }
 
-// ── Detail pin list panel (top-left map overlay) ───────────────────────────
-
-.detail-pin-list-panel {
-    position: absolute;
-    top: 6em;
-    left: 10px;
-    z-index: 1000;
+// - Map Dialogs
+.map-dialog {
     background: var(--ul-grey-0);
-    opacity: 0.95;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    opacity: 0.95;
     min-width: 175px;
     max-width: 240px;
-    backdrop-filter: blur(4px);
+    
+    &--markup {
+        position: absolute;
+        right: 10px;
+        bottom: 50px;
+        width: 220px;
+        overflow: hidden;
+    }
+    &--details {
+        position: absolute;
+        top: 6em;
+        left: 10px;
+    }
 }
 
+// -- Detail pin list panel (top-left map overlay) ---------------------------
 .detail-pin-list-toggle {
     display: flex;
     align-items: center;
@@ -281,8 +291,7 @@
     }
 }
 
-// ── Map sidebar panel tabs (Details / Photos) ─────────────────────────────
-
+// -- Map sidebar panel tabs (Details / Photos) -----------------------------
 .map-panel-tabs {
     display: flex;
     border-bottom: 1px solid var(--ul-grey-1a);
@@ -343,7 +352,7 @@
     padding: .25rem 0;
 }
 
-// ── Photo panel items ─────────────────────────────────────────────────────
+// -- Photo panel items -----------------------------------------------------
 
 .photo-panel-list {
     list-style: none;
@@ -459,7 +468,7 @@
     pointer-events: none;
 }
 
-// ── "Add Detail" dropdown button ──────────────────────────────────────────
+// -- "Add Detail" dropdown button ------------------------------------------
 
 .map-add-detail-wrap {
     position: relative;
@@ -519,20 +528,8 @@
     }
 }
 
-// ── Markup mini-form panel (line/arrow/text placement) ─────────────────────
+// -- Markup mini-form panel (line/arrow/text placement) ---------------------
 
-.markup-form-panel {
-    position: absolute;
-    right: 10px;
-    bottom: 50px;
-    z-index: 1000;
-    background: rgba(255, 255, 255, 0.97);
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, .2);
-    width: 220px;
-    backdrop-filter: blur(4px);
-    overflow: hidden;
-}
 
 .markup-form-header {
     display: flex;
@@ -618,7 +615,7 @@
     }
 }
 
-// ── Map text labels and arrow decorations ──────────────────────────────────
+// -- Map text labels and arrow decorations ----------------------------------
 
 .map-text-label {
     display: inline-block;
@@ -641,7 +638,7 @@
     overflow: visible;
 }
 
-// ── Settings map view chooser ─────────────────────────────────────────────
+// -- Settings map view chooser ---------------------------------------------
 
 .settings-map-view-row {
     display: flex;
@@ -650,7 +647,7 @@
     margin-top: .5rem;
 }
 
-// ── Add-Pin dialog ─────────────────────────────────────────────────────────
+// -- Add-Pin dialog ---------------------------------------------------------
 
 .add-pin-dialog {
     @include dialog-base(46em);
@@ -829,7 +826,7 @@
     }
 }
 
-// ── Unified badge selector ──────────────────────────────────────────────────
+// -- Unified badge selector --------------------------------------------------
 
 .apdlg-badge-field {
     display: flex;
@@ -982,7 +979,7 @@
     }
 }
 
-// ── Privacy row ─────────────────────────────────────────────────────────────
+// -- Privacy row -------------------------------------------------------------
 
 .apdlg-customize {
     border: 1px solid var(--ul-grey-1a);
@@ -1075,7 +1072,7 @@
     flex-shrink: 0;
 }
 
-// ── Map context menu (right-click) ─────────────────────────────────────────
+// -- Map context menu (right-click) -----------------------------------------
 
 .map-context-menu {
     position: fixed;
@@ -1199,7 +1196,7 @@
     margin-top: .2rem;
 }
 
-/* ── Filter panel ─────────────────────────────────────────────────── */
+/* -- Filter panel --------------------------------------------------- */
 #filter-panel {
     position: absolute;
     top: 0;
@@ -1223,7 +1220,7 @@
     transform: translateX(0);
 }
 
-/* ── Pin list panel (left-docked mirror of the filter panel) ───────── */
+/* -- Pin list panel (left-docked mirror of the filter panel) --------- */
 #pin-list-panel {
     position: absolute;
     top: 0;
@@ -1635,7 +1632,7 @@
 }
 
 
-/* ── Accordion filter sections ────────────────────────────────────── */
+/* -- Accordion filter sections -------------------------------------- */
 .fp-accordion-item {
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     margin: 0 -14px;
@@ -1688,7 +1685,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     padding-bottom: 12px;
 }
 
-/* ── Combined Scores section (rating, danger, priority, vulnerability) ── */
+/* -- Combined Scores section (rating, danger, priority, vulnerability) -- */
 .fp-scores-body {
     padding-bottom: 4px;
 }
@@ -1710,7 +1707,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     margin-bottom: 4px;
 }
 
-/* ── Range layout (min / max) ─────────────────────────────────────── */
+/* -- Range layout (min / max) --------------------------------------- */
 .fp-range-row {
     display: flex;
     align-items: flex-start;
@@ -1764,7 +1761,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.09);
 }
 
-/* ── Date inputs ──────────────────────────────────────────────────── */
+/* -- Date inputs ---------------------------------------------------- */
 .fp-date-block {
     margin-top: 8px;
 }
@@ -1804,7 +1801,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.09);
 }
 
-/* ── Tag filter list ──────────────────────────────────────────────── */
+/* -- Tag filter list ------------------------------------------------ */
 .fp-tag-search {
     width: 100%;
     background: rgba(255, 255, 255, 0.06);
@@ -1833,7 +1830,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
-/* ── Floating address search bar (mobile-first) ───────────────────── */
+/* -- Floating address search bar (mobile-first) --------------------- */
 #addr-search-bar {
     position: absolute;
     top: 10px;
@@ -2194,7 +2191,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-/* ── Pin popup ────────────────────────────────────────────────────── */
+/* -- Pin popup ------------------------------------------------------ */
 .leaflet-popup-content-wrapper {
     background: rgba(18, 22, 34, 0.97);
     backdrop-filter: blur(12px);
@@ -2404,7 +2401,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     .material-icons { font-size: .85rem; flex-shrink: 0; }
 }
 
-/* ── Places layer ─────────────────────────────────────────────────── */
+/* -- Places layer --------------------------------------------------- */
 .search-result-marker-icon {
     color: var(--ul-grey-3);
     opacity: 0.8;
@@ -2501,7 +2498,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     gap: 8px;
 }
 
-/* ── Marker clusters ──────────────────────────────────────────────── */
+/* -- Marker clusters ------------------------------------------------ */
 .pin-cluster {
     display: flex;
     align-items: center;
@@ -2562,7 +2559,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     box-shadow: inset 0 0 0 2px var(--ul-primary-color);
 }
 
-/* ── Boundary polygon context menu (click a boundary to Edit/Delete it) ── */
+/* -- Boundary polygon context menu (click a boundary to Edit/Delete it) -- */
 .boundary-ctx-menu-popup .leaflet-popup-content-wrapper {
     min-width: 0;
 }
@@ -2624,7 +2621,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-/* ── Map tile loading - dim tile pane while images download ─────── */
+/* -- Map tile loading - dim tile pane while images download ------- */
 #map .leaflet-tile-pane {
     transition: opacity 0.35s ease;
 }
@@ -2667,7 +2664,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// ── Mobile-responsive map overrides ──────────────────────────────────────────
+// -- Mobile-responsive map overrides ------------------------------------------
 
 @include down($breakpoint-sm) {
     // Filter panel: full-width bottom sheet on phones instead of 272px side panel
@@ -2705,7 +2702,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-/* ── Pin load overlay (cold start only) ─────────────────────────── */
+/* -- Pin load overlay (cold start only) --------------------------- */
 #pin-load-overlay {
     position: absolute;
     inset: 0;
@@ -2760,7 +2757,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     letter-spacing: 0.015em;
 }
 
-/* ── Tile-fetch progress pill ─────────────────────────────────────── */
+/* -- Tile-fetch progress pill --------------------------------------- */
 #tile-fetch-indicator {
     position: absolute;
     bottom: 28px;
@@ -2812,7 +2809,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-/* ── Cache status indicator ─────────────────────────────────────── */
+/* -- Cache status indicator --------------------------------------- */
 #cache-status {
     position: absolute;
     bottom: 6px;
@@ -2842,7 +2839,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         box-shadow: 0 0 10px rgba(0, 0, 0, .4);
     }
 }
-// ── Gentle map onboarding ────────────────────────────────────────────────
+// -- Gentle map onboarding ------------------------------------------------
 .map-onboarding {
     position: absolute;
     top: 88px;
@@ -3011,7 +3008,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// ── Detail/wiki contextual onboarding ────────────────────────────────────
+// -- Detail/wiki contextual onboarding ------------------------------------
 .page-onboarding {
     position: fixed;
     top: 86px;
@@ -3174,7 +3171,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// ── Toolbar: slim collapse arrow ──────────────────────────────────────────────
+// -- Toolbar: slim collapse arrow ----------------------------------------------
 
 .map-toolbar-collapse {
     display: flex;
@@ -3201,7 +3198,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     .map-toolbar-collapse .material-icons { content: 'chevron_left'; }
 }
 
-// ── Layers panel (bottom-left, Google Maps style) ─────────────────────────────
+// -- Layers panel (bottom-left, Google Maps style) -----------------------------
 
 .map-layers-panel {
     position: absolute;
@@ -3438,7 +3435,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .map-layer-btn.active .map-layer-thumb img { opacity: 1; }
 
-// ── Combined badge filter section ─────────────────────────────────────────────
+// -- Combined badge filter section ---------------------------------------------
 
 .fp-badge-selected {
     display: flex;
@@ -3479,7 +3476,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     .fp-badge-col--excl & { color: rgba(252, 165, 165, .85); }
 }
 
-// ── Complex formula display (replaces 2-column when mixed AND/OR active) ──────
+// -- Complex formula display (replaces 2-column when mixed AND/OR active) ------
 
 .fp-formula-display {
     display: flex;
@@ -3600,7 +3597,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     letter-spacing: .02em;
 }
 
-// ── AND/OR mode toggle (inside column header) ─────────────────────────────────
+// -- AND/OR mode toggle (inside column header) ---------------------------------
 
 .fp-badge-mode-btn {
     margin-left: auto;
@@ -3633,7 +3630,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// ── Formula bar ──────────────────────────────────────────────────────────────
+// -- Formula bar --------------------------------------------------------------
 
 .fp-formula-wrap {
     position: relative;
@@ -3696,7 +3693,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &[hidden] { display: none; }
 }
 
-// ── Visits row: chips + reset button side by side ─────────────────────────────
+// -- Visits row: chips + reset button side by side -----------------------------
 
 .fp-visits-row {
     display: flex;
@@ -3708,7 +3705,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     flex: 1;
 }
 
-// ── Icon-only reset buttons (visit filter + date filters) ─────────────────────
+// -- Icon-only reset buttons (visit filter + date filters) ---------------------
 
 .fp-visits-reset,
 .fp-date-reset {
@@ -3739,7 +3736,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     margin-top: 5px;
 }
 
-// ── Address bar: opacity treatment ───────────────────────────────────────────
+// -- Address bar: opacity treatment -------------------------------------------
 
 #addr-search-bar {
     opacity: 0.8;
@@ -3769,7 +3766,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// ── Cursor fixes: override Leaflet's grab cursor on overlay buttons ───────────
+// -- Cursor fixes: override Leaflet's grab cursor on overlay buttons -----------
 // Everything inside #map inherits Leaflet's drag cursor by default.
 // Override it to pointer on all interactive overlays.
 #map-buttons,

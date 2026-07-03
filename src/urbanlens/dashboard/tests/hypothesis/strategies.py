@@ -14,7 +14,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, Friends
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.profile.model import MapCenterMode
 
-# ── Safe text ──────────────────────────────────────────────────────────────────
+# -- Safe text ------------------------------------------------------------------
 # Restrict to printable ASCII to avoid encoding edge-cases in DB text columns.
 # max_codepoint=127 enforces the ASCII boundary; without it, Unicode categories
 # like Lu/Ll include non-ASCII characters (e.g. İ, ß) whose Python case-folding
@@ -28,7 +28,7 @@ long_text = st.text(alphabet=_printable_alphabet, min_size=0, max_size=2000)
 # Non-empty text that is also non-whitespace (suitable for pin names).
 nonempty_name = st.text(alphabet=_printable_alphabet, min_size=1, max_size=255).filter(str.strip)
 
-# ── Geographic coordinates ─────────────────────────────────────────────────────
+# -- Geographic coordinates -----------------------------------------------------
 # Pin.latitude/longitude are DecimalField(max_digits=9, decimal_places=6).
 # Keep values inside valid geographic ranges.
 
@@ -70,21 +70,21 @@ def two_distant_coord_pairs(draw):
     lon2 = draw(st.floats(min_value=lon1 + 2.0, max_value=min(179.9, lon1 + 10.0), allow_nan=False, allow_infinity=False))
     return (lat1, lon1), (lat2, lon2)
 
-# ── Numeric fields ─────────────────────────────────────────────────────────────
+# -- Numeric fields -------------------------------------------------------------
 priority = st.integers(min_value=-9999, max_value=9999)
 valid_rating = st.integers(min_value=0, max_value=5)
 # Ratings outside the validated [0, 5] range.
 invalid_rating_low = st.integers(max_value=-1)
 invalid_rating_high = st.integers(min_value=6)
 
-# ── Choices ────────────────────────────────────────────────────────────────────
+# -- Choices --------------------------------------------------------------------
 pin_type = st.sampled_from(list(PinType.values))
 security_level = st.sampled_from(list(SecurityLevel.values))
 friendship_status = st.sampled_from(list(FriendshipStatus.values))
 friendship_type = st.sampled_from(list(FriendshipType.values))
 permission_choice = st.sampled_from(list(Permission.values))
 
-# ── Dates and datetimes ────────────────────────────────────────────────────────
+# -- Dates and datetimes --------------------------------------------------------
 reasonable_date = st.dates(min_value=date(1900, 1, 1), max_value=date(2100, 12, 31))
 reasonable_datetime = st.datetimes(
     min_value=datetime(1900, 1, 1),
@@ -97,7 +97,7 @@ date_range = st.tuples(reasonable_date, reasonable_date).map(
     lambda pair: (min(pair), max(pair))
 )
 
-# ── Colour hex strings ─────────────────────────────────────────────────────────
+# -- Colour hex strings ---------------------------------------------------------
 _hex_digit = st.sampled_from("0123456789ABCDEF")
 hex_color = st.builds(
     lambda digits: "#" + "".join(digits),
@@ -105,10 +105,10 @@ hex_color = st.builds(
 )
 hex_color_or_none = st.one_of(st.none(), hex_color)
 
-# ── Map center ─────────────────────────────────────────────────────────────────
+# -- Map center -----------------------------------------------------------------
 map_center_mode = st.sampled_from(list(MapCenterMode.values))
 # Zoom levels accepted by MapCenterForm (1-19, matching Leaflet's maxZoom).
 valid_zoom = st.integers(min_value=1, max_value=19)
 
-# ── Misc ───────────────────────────────────────────────────────────────────────
+# -- Misc -----------------------------------------------------------------------
 invalid_security_level = short_text.filter(lambda s: s.lower() not in SecurityLevel.values)

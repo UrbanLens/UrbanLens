@@ -75,7 +75,7 @@
         });
     }
 
-    // ── Mouse ─────────────────────────────────────────────────────────────────
+    // -- Mouse -----------------------------------------------------------------
     document.addEventListener('mouseover', e => {
         const trigger = e.target.closest('[data-tooltip]');
         if (trigger && usesFloat(trigger)) show(trigger);
@@ -88,7 +88,7 @@
         scheduleHide();
     });
 
-    // ── Keyboard / focus ──────────────────────────────────────────────────────
+    // -- Keyboard / focus ------------------------------------------------------
     document.addEventListener('focusin', e => {
         const trigger = e.target.closest('[data-tooltip]');
         if (trigger && usesFloat(trigger)) show(trigger);
@@ -98,7 +98,7 @@
         if (activeTrigger && usesFloat(activeTrigger)) scheduleHide();
     });
 
-    // ── Touch / coarse pointer: tap to toggle ─────────────────────────────────
+    // -- Touch / coarse pointer: tap to toggle ---------------------------------
     document.addEventListener('click', e => {
         const trigger = e.target.closest('[data-tooltip]');
 
@@ -124,12 +124,12 @@
         if (!wasOpen) trigger.classList.add('is-tooltip-open');
     });
 
-    // ── Dismiss ───────────────────────────────────────────────────────────────
+    // -- Dismiss ---------------------------------------------------------------
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') { clearOpenClasses(); hide(); }
     });
 
-    // ── Reposition on scroll / resize ─────────────────────────────────────────
+    // -- Reposition on scroll / resize -----------------------------------------
     window.addEventListener('scroll', () => {
         if (activeTrigger) {
             const pos = activeTrigger.getAttribute('data-tooltip-pos') || 'top';

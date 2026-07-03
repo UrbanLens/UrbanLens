@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.abstract.serializer import Serializer
 _hyp = settings(max_examples=50, deadline=None)
 
 
-# ── Concrete test serializer subclass ─────────────────────────────────────────
+# -- Concrete test serializer subclass -----------------------------------------
 
 class _TestSerializer(Serializer):
     """Minimal concrete serializer used to exercise include/exclude logic."""
@@ -46,7 +46,7 @@ class _GeneratedSerializer(Serializer):
         generated_fields: list[str] = ["computed"]
 
 
-# ── No-context: all fields present ────────────────────────────────────────────
+# -- No-context: all fields present --------------------------------------------
 
 class SerializerNoContextTests(TestCase):
     """Without context, all declared fields are included."""
@@ -60,7 +60,7 @@ class SerializerNoContextTests(TestCase):
         self.assertSetEqual(set(s.fields.keys()), {"id", "name", "score", "tag"})
 
 
-# ── exclude_fields ─────────────────────────────────────────────────────────────
+# -- exclude_fields -------------------------------------------------------------
 
 class SerializerExcludeFieldsTests(TestCase):
     """context['exclude_fields'] removes the named fields from the serializer."""
@@ -107,7 +107,7 @@ class SerializerExcludeFieldsTests(TestCase):
             self.assertIn(field, s.fields)
 
 
-# ── include_fields ─────────────────────────────────────────────────────────────
+# -- include_fields -------------------------------------------------------------
 
 class SerializerIncludeFieldsTests(TestCase):
     """context['include_fields'] restricts the serializer to only those fields."""
@@ -145,7 +145,7 @@ class SerializerIncludeFieldsTests(TestCase):
         self.assertEqual(len(s.fields), len(included))
 
 
-# ── get_fieldnames and get_native_fields ───────────────────────────────────────
+# -- get_fieldnames and get_native_fields ---------------------------------------
 
 class SerializerClassMethodTests(TestCase):
     """get_fieldnames() and get_native_fields() return the expected field lists."""
@@ -171,7 +171,7 @@ class SerializerClassMethodTests(TestCase):
         self.assertIn("tag", native)
 
 
-# ── TDD: get_native_fields has a mutation bug ─────────────────────────────────
+# -- TDD: get_native_fields has a mutation bug ---------------------------------
 
 class SerializerGetNativeFieldsMutationBugTests(TestCase):
     """TDD: get_native_fields() must be idempotent - repeated calls should return the same result.

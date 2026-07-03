@@ -40,7 +40,7 @@ def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | N
     }
 
 
-# ── Pin gallery ──────────────────────────────────────────────────────────────
+# -- Pin gallery --------------------------------------------------------------
 
 
 class PinGalleryView(LoginRequiredMixin, View):
@@ -121,7 +121,7 @@ class PinImageView(LoginRequiredMixin, View):
         return HttpResponse(status=204)
 
 
-# ── Location wiki gallery ─────────────────────────────────────────────────────
+# -- Location wiki gallery -----------------------------------------------------
 
 
 class WikiGalleryView(LoginRequiredMixin, View):

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="friends-page page-content">
 
-    {# ── Page header ──────────────────────────────────────────────────────────── #}
+    {# -- Page header ------------------------------------------------------------ #}
     <div class="friends-page-header">
         <a href="{% url 'profile.view_user' profile.slug %}" class="friends-back-link">
             <i class="material-icons">arrow_back</i>
@@ -22,7 +22,7 @@
     {% include "dashboard/partials/profile/_invite_friend_dialog.html" %}
     {% endif %}
 
-    {# ── Incoming requests (own profile only) ────────────────────────────────── #}
+    {# -- Incoming requests (own profile only) ---------------------------------- #}
     {% if is_own_profile and incoming_requests %}
     <section class="friends-section friends-section--requests card">
         <div class="card-header">
@@ -70,7 +70,7 @@
     </section>
     {% endif %}
 
-    {# ── Friends grid ─────────────────────────────────────────────────────────── #}
+    {# -- Friends grid ----------------------------------------------------------- #}
     {% if friends %}
     <section class="friends-section card">
         <div class="card-header">

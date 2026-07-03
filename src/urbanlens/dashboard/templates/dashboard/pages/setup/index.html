@@ -6,7 +6,7 @@
 <div class="setup-wizard">
     <div class="setup-wizard__layout">
 
-        {# ── Sidebar ────────────────────────────────────────────────────── #}
+        {# -- Sidebar ------------------------------------------------------ #}
         <aside class="setup-wizard__sidebar">
             <div class="setup-wizard__brand">
                 <i class="material-icons brand-icon">explore</i>
@@ -38,13 +38,13 @@
             </ul>
         </aside>
 
-        {# ── Main content ────────────────────────────────────────────────── #}
+        {# -- Main content -------------------------------------------------- #}
         <div class="setup-wizard__content">
             <div class="setup-wizard__progress">
                 <div class="progress-bar" id="setup-progress" style="width:20%"></div>
             </div>
 
-            {# ── Step 1: Welcome ─────────────────────────────────────────── #}
+            {# -- Step 1: Welcome ------------------------------------------- #}
             <div class="setup-step setup-step--active" data-step="1">
                 <div class="setup-step__eyebrow">Getting started</div>
                 <h1 class="setup-step__title">Welcome to UrbanLens</h1>
@@ -91,7 +91,7 @@
                 </div>
             </div>
 
-            {# ── Step 2: Your Profile ─────────────────────────────────────── #}
+            {# -- Step 2: Your Profile --------------------------------------- #}
             <div class="setup-step" data-step="2">
                 <div class="setup-step__eyebrow">Step 2 of 5</div>
                 <h1 class="setup-step__title">Your Profile</h1>
@@ -175,7 +175,7 @@
                 </div>
             </div>
 
-            {# ── Step 3: Name Your App ────────────────────────────────────── #}
+            {# -- Step 3: Name Your App -------------------------------------- #}
             <div class="setup-step" data-step="3">
                 <div class="setup-step__eyebrow">Step 3 of 5</div>
                 <h1 class="setup-step__title">Name Your App</h1>
@@ -233,7 +233,7 @@
                 </div>
             </div>
 
-            {# ── Step 4: Integrations ─────────────────────────────────────── #}
+            {# -- Step 4: Integrations --------------------------------------- #}
             <div class="setup-step" data-step="4">
                 <div class="setup-step__eyebrow">Step 4 of 5</div>
                 <h1 class="setup-step__title">Integrations</h1>
@@ -282,7 +282,7 @@
                 </div>
             </div>
 
-            {# ── Step 5: Done ─────────────────────────────────────────────── #}
+            {# -- Step 5: Done ----------------------------------------------- #}
             <div class="setup-step" data-step="5">
                 <div class="setup-complete">
                     <div class="setup-complete__icon">
@@ -491,7 +491,7 @@
         });
     }
 
-    // ── Step 2: Profile - username + avatar ──────────────────────────────────
+    // -- Step 2: Profile - username + avatar ----------------------------------
     var PROFILE_URL = '{% url "profile.field.update" %}';
 
     function setAvatarStatus(text, color) {

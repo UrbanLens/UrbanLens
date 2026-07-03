@@ -1,7 +1,7 @@
 @use 'variables' as *;
 
 
-// ── Compact weather forecast strip ─────────────────────────────────────────
+// -- Compact weather forecast strip -----------------------------------------
 .weather-widget {
     .weather-strip-scroll {
         overflow-x: auto;
@@ -102,7 +102,7 @@
     }
 }
 
-// ── Small icon button (used in card headers) ────────────────────────────────
+// -- Small icon button (used in card headers) --------------------------------
 .btn-icon-sm {
     display: inline-flex;
     align-items: center;
@@ -130,7 +130,7 @@
     }
 }
 
-// ── Tag chips (pin detail page) ─────────────────────────────────────────────
+// -- Tag chips (pin detail page) ---------------------------------------------
 .tag-chips-row {
     display: flex;
     flex-wrap: wrap;
@@ -187,11 +187,11 @@
     font-style: italic;
 }
 
-// ── Tag-add dialog specifics ────────────────────────────────────────────────
+// -- Tag-add dialog specifics ------------------------------------------------
 .tag-add-dialog {
     width: min(460px, 95vw); // slightly wider to accommodate tabs
 
-    // ── Tab bar ──────────────────────────────────────────────────────────────
+    // -- Tab bar --------------------------------------------------------------
     .tad-tabs {
         display: flex;
         gap: 0;
@@ -225,7 +225,7 @@
         }
     }
 
-    // ── Search ───────────────────────────────────────────────────────────────
+    // -- Search ---------------------------------------------------------------
     .dialog-search {
         display: block;
         width: calc(100% - 1.5rem);
@@ -289,7 +289,7 @@
         flex: 1;
     }
 
-    // ── Kind pill (shown in "All" tab next to badge name) ────────────────────
+    // -- Kind pill (shown in "All" tab next to badge name) --------------------
     .tad-kind-pill {
         display: inline-flex;
         align-items: center;
@@ -319,7 +319,7 @@
     }
 }
 
-// ── Dark mode: tag-add-dialog feature colors ─────────────────────────────────
+// -- Dark mode: tag-add-dialog feature colors ---------------------------------
 // Structural colors (background, text, border) are now fully token-driven via
 // @include dialog-base and var(--ul-*) custom properties. Only the feature-
 // specific indigo accent colours need explicit dark overrides here.
@@ -360,7 +360,7 @@
     }
 }
 
-// ── Visit history panel ─────────────────────────────────────────────────────
+// -- Visit history panel -----------------------------------------------------
 .visit-empty {
     padding: .6rem 1rem;
     font-size: .85rem;
@@ -430,7 +430,7 @@
     }
 }
 
-// ── Visit-add dialog specifics ──────────────────────────────────────────────
+// -- Visit-add dialog specifics ----------------------------------------------
 .visit-add-dialog {
     .visit-add-form {
         padding: .75rem 1rem;
@@ -472,7 +472,7 @@
     }
 }
 
-// ── Satellite imagery carousel ─────────────────────────────────────────────────
+// -- Satellite imagery carousel -------------------------------------------------
 .sat-carousel {
     display: flex;
     flex-direction: column;
@@ -589,7 +589,7 @@
     }
 }
 
-// ── Street-view imagery carousel ──────────────────────────────────────────────
+// -- Street-view imagery carousel ----------------------------------------------
 .sv-carousel {
     display: flex;
     flex-direction: column;
@@ -688,23 +688,52 @@
     }
 }
 
-// ── Wikipedia summary panel ────────────────────────────────────────────────
+// -- Wikipedia summary panel ------------------------------------------------
 .wikipedia-info {
     .wikipedia-body {
         display: flex;
         flex-direction: column;
     }
 
-    // Line count is set dynamically in JS to fill whatever height the card was
-    // stretched to (see index.html) rather than a fixed number of lines.
+    // The extract now contains real block markup (headings/paragraphs/lists)
+    // rather than one flat run of text, so it's clamped in JS by hiding
+    // overflowing block children (see index.html) instead of relying on
+    // -webkit-line-clamp across mixed block content, which isn't reliable.
     .wikipedia-extract {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
         overflow: hidden;
+
+        > :first-child { margin-top: 0; }
+        > :last-child { margin-bottom: 0; }
+
+        p, ul, ol, dl, blockquote {
+            margin: 0 0 .5rem;
+        }
+
+        h2, h3, h4, h5, h6 {
+            margin: .75rem 0 .35rem;
+            font-size: .88rem;
+            font-weight: 600;
+            color: var(--ul-grey-9);
+        }
+
+        ul, ol {
+            padding-left: 1.1rem;
+        }
+
+        dd {
+            margin: 0 0 .4rem;
+        }
+
+        blockquote {
+            margin-left: 0;
+            padding-left: .6rem;
+            border-left: 2px solid var(--ul-grey-2);
+            color: var(--ul-grey-6);
+        }
     }
 }
 
-// ── USGS Historical Topographic Maps panel ────────────────────────────────────
+// -- USGS Historical Topographic Maps panel ------------------------------------
 .usgs-topo {
     .usgs-topo-grid {
         display: grid;
@@ -789,7 +818,7 @@
     }
 }
 
-// ── LoopNet commercial real-estate panel (pin details page) ────────────────────
+// -- LoopNet commercial real-estate panel (pin details page) --------------------
 .loopnet-info {
     .loopnet-property-details {
         margin: .5rem 0 0;
@@ -844,8 +873,8 @@
     }
 }
 
-// ── Pin detail supplements ──────────────────
-// ── Wiki link banner (pin details page) ───────────────────────────────────────
+// -- Pin detail supplements ------------------
+// -- Wiki link banner (pin details page) ---------------------------------------
 .wiki-link-banner {
     display: flex;
     align-items: center;
@@ -890,8 +919,8 @@
 }
 
 
-// ── Pin detail extra ─────────────────────────
-// ── Pin overview (title + details card) ──────────────────────────────────
+// -- Pin detail extra -------------------------
+// -- Pin overview (title + details card) ----------------------------------
 
 .pin-overview-title-row {
     display: flex;
@@ -906,7 +935,7 @@
     }
 }
 
-// ── Pin edit dialog ───────────────────────────────────────────────────────
+// -- Pin edit dialog -------------------------------------------------------
 
 .pin-edit-dialog {
     width: min(560px, 96vw);
@@ -947,7 +976,7 @@
     gap: .75rem;
 }
 
-// ── Security indicators ───────────────────────────────────────────────────
+// -- Security indicators ---------------------------------------------------
 
 .security-indicators {
     padding: .5rem 1rem .75rem;
@@ -1065,7 +1094,7 @@
     }
 }
 
-// ── Interactive star rating (rating + priority) ───────────────────────────
+// -- Interactive star rating (rating + priority) ---------------------------
 .star-rating-interactive {
     display: inline-flex;
     align-items: center;
@@ -1196,7 +1225,7 @@
     }
 }
 
-// ── Pin details card theming (pin overview / location details page) ────────
+// -- Pin details card theming (pin overview / location details page) --------
 body.page-location-details {
     .location-details.card {
         border: 1px solid var(--ul-grey-1a);
@@ -1218,7 +1247,7 @@ body.page-location-details {
         }
     }
 
-    // ── Rating / Priority / Place Name row ─────────────────────────────────
+    // -- Rating / Priority / Place Name row ---------------------------------
     .pin-stats {
         display: flex;
         flex-wrap: wrap;
@@ -1264,7 +1293,7 @@ body.page-location-details {
     }
 }
 
-// ── Community wiki CTA link (pin overview) ────────────────────────────────
+// -- Community wiki CTA link (pin overview) --------------------------------
 .wiki-cta-link {
     display: flex;
     align-items: center;
@@ -1297,7 +1326,7 @@ body.page-location-details {
     }
 }
 
-// ── Community wiki box ────────────────────────────────────────────────────────
+// -- Community wiki box --------------------------------------------------------
 // A floating info box that sits in the title row, to the right of the pin's
 // name - it's metadata about the pin (link + detach action), not a first-class
 // page section, so it stays out of the Details card entirely.
@@ -1418,7 +1447,7 @@ body.page-location-details {
     }
 }
 
-// ── Location picker panel ──────────────────────────────────────────────────────
+// -- Location picker panel ------------------------------------------------------
 // Drops down from the wiki box like a menu (anchored via .pin-wiki-box's
 // position:relative) rather than living inline in the Details card.
 
@@ -1523,7 +1552,7 @@ body.page-location-details {
     }
 }
 
-// ── Location conflict dialog (map page) ───────────────────────────────────────
+// -- Location conflict dialog (map page) ---------------------------------------
 
 .loc-conflict-dialog {
     @include dialog-base(520px);
@@ -1592,7 +1621,7 @@ body.page-location-details {
     flex-shrink: 0;
 }
 
-// ── Wiki "other locations" conflict notice ────────────────────────────────────
+// -- Wiki "other locations" conflict notice ------------------------------------
 
 .wiki-location-conflict {
     display: flex;
@@ -1684,7 +1713,7 @@ body.page-location-details {
     }
 }
 
-// ── Dark mode ─────────────────────────────────────────────────────────────────
+// -- Dark mode -----------------------------------------------------------------
 
 [data-theme="dark"] {
     .pin-status-chip {
@@ -1789,7 +1818,7 @@ body.page-location-details {
     }
 }
 
-// ── Pin detail page: section card accents ────────────────────────────────
+// -- Pin detail page: section card accents --------------------------------
 
 body.page-location-details {
 
@@ -1816,7 +1845,7 @@ body.page-location-details {
     }
 }
 
-// ── Pin note delete button ────────────────────────────────────────────────
+// -- Pin note delete button ------------------------------------------------
 
 .pin-note-delete-btn {
     @include icon-btn-danger(28px);
@@ -1828,7 +1857,7 @@ body.page-location-details {
     }
 }
 
-// ── Pin detail page layout ─────────────────────────────────────────────────
+// -- Pin detail page layout -------------------------------------------------
 body.page-location-details {
     background: var(--ul-grey-0);
 }
@@ -2142,7 +2171,7 @@ body.page-location-details .pin-detail-grid {
 
 }
 
-// ── Pin detail layout ─────────────────────────────────────────────────────────
+// -- Pin detail layout ---------------------------------------------------------
 //
 // Mobile-first, content-aware layout for the pin details page. The grid avoids
 // brittle fixed spans: every card starts as a full-width section, then available

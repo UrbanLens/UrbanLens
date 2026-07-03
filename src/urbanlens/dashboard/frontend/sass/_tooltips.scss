@@ -1,4 +1,4 @@
-// ── Tooltip system ─────────────────────────────────────────────────────────────
+// -- Tooltip system -------------------------------------------------------------
 //
 // Attribute-based (CSS-only, no JS required):
 //   data-tooltip="Hint text"
@@ -14,7 +14,7 @@
 
 @use 'variables' as *;
 
-// ── Internal mixins ───────────────────────────────────────────────────────────
+// -- Internal mixins -----------------------------------------------------------
 
 @mixin _bubble {
     padding: 6px 10px;
@@ -54,7 +54,7 @@
     @if $from == right  { border-right-color:  var(--ul-tooltip-bg); }
 }
 
-// ── Attribute triggers ────────────────────────────────────────────────────────
+// -- Attribute triggers --------------------------------------------------------
 
 [data-tooltip] {
     position: relative;
@@ -99,7 +99,7 @@
         --_tip-max: 300px;
     }
 
-    // ── below ──────────────────────────────────────────────────────────────────
+    // -- below ------------------------------------------------------------------
     &[data-tooltip-pos='below'] {
         &::after {
             bottom: auto;
@@ -115,7 +115,7 @@
         }
     }
 
-    // ── left ───────────────────────────────────────────────────────────────────
+    // -- left -------------------------------------------------------------------
     &[data-tooltip-pos='left'] {
         &::after {
             bottom: auto;
@@ -136,7 +136,7 @@
         }
     }
 
-    // ── right ──────────────────────────────────────────────────────────────────
+    // -- right ------------------------------------------------------------------
     &[data-tooltip-pos='right'] {
         &::after {
             bottom: auto;
@@ -155,7 +155,7 @@
         }
     }
 
-    // ── Reveal states ──────────────────────────────────────────────────────────
+    // -- Reveal states ----------------------------------------------------------
 
     @media (hover: hover) and (pointer: fine) {
         &:hover::after  { opacity: 1; visibility: visible; transform: var(--_t-show); }
@@ -178,7 +178,7 @@
     }
 }
 
-// ── Info icon trigger ─────────────────────────────────────────────────────────
+// -- Info icon trigger ---------------------------------------------------------
 
 .ul-tooltip-help {
     @include icon-btn(18px);
@@ -226,7 +226,7 @@
     }
 }
 
-// ── Label + help row ──────────────────────────────────────────────────────────
+// -- Label + help row ----------------------------------------------------------
 
 .ul-tooltip-label {
     display: inline-flex;
@@ -234,7 +234,7 @@
     gap: .35rem;
 }
 
-// ── "Hide tooltips" user preference ──────────────────────────────────────────
+// -- "Hide tooltips" user preference ------------------------------------------
 // Applied via the html.tooltips-disabled class set from the user's profile setting.
 
 html.tooltips-disabled {
@@ -246,7 +246,7 @@ html.tooltips-disabled {
     .ul-tooltip-help { display: none !important; }
 }
 
-// ── Floating tooltip (JS portal - escapes overflow:hidden) ────────────────────
+// -- Floating tooltip (JS portal - escapes overflow:hidden) --------------------
 
 .ul-tooltip-float {
     @include _bubble;
