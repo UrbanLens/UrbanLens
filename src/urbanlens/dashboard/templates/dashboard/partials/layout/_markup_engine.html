@@ -146,23 +146,30 @@ window.MarkupEngine = (function () {
 
         // -- Hint text ---------------------------------------------------------
         function _hint() {
-            if (!opts.onHintChange) return;
-            if (!_tool) { opts.onHintChange(''); return; }
-            var n = _state ? _state.points.length : 0;
-            var msgs = {
-                arrow:   n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
-                       : n ? n + ' pt - click to add another point'
-                           : 'Click to start, drag for a quick arrow',
-                line:    n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
-                       : n ? n + ' pt - click to add another point'
-                           : 'Click to start, drag for a quick line',
-                polygon: n >= 3 ? 'Click near start (or Enter) to close'
-                                : n ? 'Click to add vertices' : 'Click to place first vertex',
-                circle:  n ? 'Click to set radius, or drag' : 'Click to place center, or drag',
-                rect:    n ? 'Click second corner, or drag' : 'Click first corner, or drag',
-                text:    'Click to place, or drag to size a text box',
-            };
-            opts.onHintChange(msgs[_tool] || '');
+            if (opts.onHintChange) {
+                if (!_tool) {
+                    opts.onHintChange('');
+                } else {
+                    var n = _state ? _state.points.length : 0;
+                    var msgs = {
+                        arrow:   n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
+                               : n ? n + ' pt - click to add another point'
+                                   : 'Click to start, drag for a quick arrow',
+                        line:    n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
+                               : n ? n + ' pt - click to add another point'
+                                   : 'Click to start, drag for a quick line',
+                        polygon: n >= 3 ? 'Click near start (or Enter) to close'
+                                        : n ? 'Click to add vertices' : 'Click to place first vertex',
+                        circle:  n ? 'Click to set radius, or drag' : 'Click to place center, or drag',
+                        rect:    n ? 'Click second corner, or drag' : 'Click first corner, or drag',
+                        text:    'Click to place, or drag to size a text box',
+                    };
+                    opts.onHintChange(msgs[_tool] || '');
+                }
+            }
+            if (opts.onPointsChange) {
+                opts.onPointsChange(!!(_state && _state.points && _state.points.length));
+            }
         }
 
         function _clearPrev() { _prevL.clearLayers(); }
@@ -242,6 +249,19 @@ window.MarkupEngine = (function () {
         }
 
         function getCurrentTool() { return _tool; }
+
+        // -- Public: would finishCurrent() actually commit a shape right now? -----
+        // Lets the UI show a single context-sensitive "Close" action instead of
+        // separate Finish/Cancel buttons - closing finishes a valid in-progress
+        // shape, or just abandons the tool when there's nothing to finish yet.
+        function canFinish() {
+            if (!_state) return false;
+            var n = _state.points.length;
+            if (_tool === 'polygon')                    return n >= 3;
+            if (_tool === 'line' || _tool === 'arrow')  return n >= 2;
+            if (_tool === 'rect' || _tool === 'circle') return n >= 1 && !!_lastCursorLL;
+            return false;
+        }
 
         // -- Public: finish the in-progress shape now (e.g. Enter key / toolbar button) --
         function finishCurrent() {
@@ -486,6 +506,7 @@ window.MarkupEngine = (function () {
             deactivate:      deactivate,
             cancelShape:     cancelShape,
             getCurrentTool:  getCurrentTool,
+            canFinish:       canFinish,
             finishCurrent:   finishCurrent,
             undoLastPoint:   undoLastPoint,
             destroy:         destroy,

@@ -245,9 +245,8 @@
                         </select>
                     </label>
                     <div class="form-actions" id="markup-panel-draw-actions" style="margin-top:.5rem">
-                        <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="_finishMarkupDraw()">Finish</button>
-                        <button type="button" class="btn btn--ghost" onclick="_undoMarkupPoint()">Undo Point</button>
-                        <button type="button" class="btn btn--ghost" onclick="cancelMarkupDraw()">Cancel</button>
+                        <button type="button" class="btn btn--ghost" id="markup-panel-undo-point" onclick="_undoMarkupPoint()" hidden>Undo Point</button>
+                        <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="_closeMarkupDraw()" style="margin-left:auto">Close</button>
                     </div>
                     <div class="form-actions" id="markup-panel-edit-actions" style="margin-top:.5rem" hidden>
                         <button type="button" class="btn btn--ghost" onclick="closeMarkupPanel()">Close</button>
@@ -1295,6 +1294,9 @@
             const el = document.getElementById('markup-panel-hint-text');
             if (el) el.textContent = hint;
         },
+        onPointsChange: (hasPoints) => {
+            document.getElementById('markup-panel-undo-point').hidden = !hasPoints;
+        },
         onToolChange: (tool) => {
             _markupDrawType = tool;
             if (!tool && !_editingMarkupItem) {
@@ -1630,9 +1632,18 @@
         _editingMarkupItem = null;
     }
 
-    function cancelMarkupDraw() { closeMarkupPanel(); }
     function _undoMarkupPoint() { _drawSession.undoLastPoint(); }
-    function _finishMarkupDraw(){ _drawSession.finishCurrent(); }
+    // Single "Close" action for draw mode: finishes a valid in-progress shape
+    // (the old Finish button), or just abandons the tool if there's nothing
+    // to finish yet (the old Cancel button) - autosave means there's never a
+    // saved-but-unconfirmed state to explicitly "cancel" once a shape exists.
+    function _closeMarkupDraw() {
+        if (_drawSession && _drawSession.canFinish()) {
+            _drawSession.finishCurrent();
+        } else {
+            closeMarkupPanel();
+        }
+    }
 
     function _rebuildEditSwatch(containerId, inputId, withNone) {
         const cont  = document.getElementById(containerId);
@@ -2647,6 +2658,19 @@
             var body = section.querySelector('.wikipedia-body');
             var readMore = section.querySelector('.wikipedia-read-more');
             if (!extract || !body || !readMore) return;
+
+            // .wikipedia-body has a static max-height in CSS so a long article can't
+            // itself set this row's height (that's what stops it from stretching
+            // shorter sibling cards to match). But that means the cap never grows
+            // back when a *different* reason stretches the row taller - e.g. a
+            // sibling card's own image finishing load - leaving spare room unused.
+            // .card-header sits outside .wikipedia-body, so whatever's left of the
+            // card's own (grid-stretched) height after subtracting it is what
+            // .wikipedia-body is actually allowed to fill; raise the cap to that.
+            var header = section.querySelector('.card-header');
+            var headerHeight = header ? header.getBoundingClientRect().height : 0;
+            var bodyBudget = section.getBoundingClientRect().height - headerHeight;
+            if (bodyBudget > 0) body.style.maxHeight = bodyBudget + 'px';
 
             var children = Array.prototype.slice.call(extract.children);
             children.forEach(function (el) {
