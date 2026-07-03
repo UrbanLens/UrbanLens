@@ -118,6 +118,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
         return {
             "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
             "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
+            "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
         }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False}
+        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False}

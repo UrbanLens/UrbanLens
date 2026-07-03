@@ -1,6 +1,11 @@
 @use "sass:color";
 @use 'variables' as *;
 
+.page-map-view {
+    > div.container {
+        max-width: 100%;
+    }
+}
 
 // -- Offline indicator (shown when the server is unreachable) --------------
 #offline-indicator {

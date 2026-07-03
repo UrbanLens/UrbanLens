@@ -124,7 +124,7 @@
         hx-trigger="load"
         hx-swap="outerHTML">
         <div class="card-header">
-            <i class="material-icons">globe</i>
+            <i class="material-symbols-outlined">globe</i>
             <h3>Satellite View</h3>
         </div>
         <div class="view-loading">
@@ -237,7 +237,7 @@
             hx-timeout="25000"
             hidden></div>
 
-        {% if pin.meaningful_name %}
+        {% if pin.meaningful_name and can_use_web_search %}
         <div id="web-search-section" class="web-search card card--secondary"
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="load"

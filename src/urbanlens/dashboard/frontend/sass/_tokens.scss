@@ -327,7 +327,6 @@ $dk-panel-bg:     $color-deep-purple-1500;
 $dk-panel-border: rgba($color-deep-purple-1500, .5); 
 
 // Extended dark-mode surface/state tokens
-$dk-nav-bg:             $color-blue-1700;
 $dk-info-link:          $color-blue-300;   
 $dk-success-bg:         $color-green-900;
 $dk-accept-border:      $color-green-700;
@@ -501,6 +500,7 @@ $z-nav: 1100;
 
     --primary-color: #{$primary-color};
     --secondary-color: #{$secondary-color};
+    --nav-bg: #24324D;
 }
 
 [data-theme="dark"] {
@@ -563,4 +563,5 @@ $z-nav: 1100;
     --ul-tooltip-fg: #dde5f5;
     --ul-tooltip-border: rgba(140, 170, 255, 0.13);
     --ul-tooltip-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.28);
+    --nav-bg: #{$color-blue-1700};
 }

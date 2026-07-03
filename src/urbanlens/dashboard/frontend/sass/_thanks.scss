@@ -4,6 +4,10 @@
 
 .page-thanks {
 
+    > div.container {
+        max-width: 100%;
+    }
+
     .attr-section-inner {
         max-width: 1100px;
         margin: 0 auto;
@@ -64,7 +68,7 @@
             background: var(--ul-surface-1, #{$color-indigo-50});
 
             .attr-section-title {
-                color: var(--ul-grey-1);
+                color: var(--ul-grey-9);
             }
         }
     }

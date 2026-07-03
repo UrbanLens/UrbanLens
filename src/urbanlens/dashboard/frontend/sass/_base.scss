@@ -6,6 +6,11 @@ html {
     scrollbar-gutter: stable;
 }
 
+body {
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-8);
+}
+
 // Suppress the browser's default teal/green focus ring on mouse clicks site-wide;
 // keep a styled ring for keyboard navigation only
 button,

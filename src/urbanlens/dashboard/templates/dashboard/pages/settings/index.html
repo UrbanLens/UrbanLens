@@ -246,7 +246,7 @@
                     {% for radio in map_display_form.default_map_view %}
                     <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
                         {{ radio.tag }}
-                        {% if radio.data.value == "satellite" %}<i class="material-icons">globe</i>
+                        {% if radio.data.value == "satellite" %}<i class="material-symbols-outlined">globe</i>
                         {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
                         {% elif radio.data.value == "remember" %}<i class="material-icons">history</i>
                         {% else %}<i class="material-icons">map</i>{% endif %}

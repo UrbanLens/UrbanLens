@@ -5,6 +5,10 @@
 
 .page-about {
 
+    > div.container {
+        max-width: 100%;    
+    }
+
     // Shared inner width
     .about-section-inner,
     .about-cta-inner {

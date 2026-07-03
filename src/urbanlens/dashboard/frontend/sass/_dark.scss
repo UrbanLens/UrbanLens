@@ -9,8 +9,6 @@
 }
 
 [data-theme="dark"] {
-    background: var(--ul-grey-1);
-    color: var(--ul-grey-8);
 
     @include input-selectors { 
         color: var(--ul-grey-6); 
@@ -18,20 +16,7 @@
     @include input-selectors(":disabled", "[readonly=readonly]") { 
         color: var(--ul-grey-5); 
     }
-
-    body {
-        background: var(--ul-grey-0);
-        color: var(--ul-grey-1);
-    }
     
-    .app-nav {
-        background-color: $dk-nav-bg;
-    }
-    
-    .app-nav-brand-name {
-        color: var(--ul-grey-9);
-    }
-
     .page-content > .ul-section {
         background-color: var(--ul-grey-0a);
     }
@@ -58,13 +43,6 @@
         border-left-color: var(--ul-grey-7b);
     }
 
-    .settings-title {
-        color: var(--ul-grey-5);
-    }
-
-    .settings-section-title,
-    .settings-label,
-    .settings-toggle-label,
     .badge-title {
         color: var(--ul-grey-1);
     }
@@ -185,17 +163,6 @@
 
     .dialog-overlay {
         background: rgba(0, 0, 0, .7);
-    }
-
-    .page-footer {
-        background-color: $dk-nav-bg;
-        color: var(--ul-grey-6);
-
-        &__meta {
-            a {
-                color: var(--ul-grey-8);
-            }
-        }
     }
 
     .edit-input,

@@ -210,6 +210,7 @@ Features planned for future releases.
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc.
 * Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them)
 * Automatically mark nearby PD, public parking, etc.
+* On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated")
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -343,3 +344,6 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Clicking on notification should take you to the relevant page.
 * Viewing notifications in the dropdown should mark them read. Not just clicking on them.
 * Hide "(schedule) Never" in pin popup for last visited. This is already implied.
+
+## To Investigate
+* When creating pin here: 39.15924, -84.68402... place name is "Mack", details ui sections are wonky, street view is black image.
