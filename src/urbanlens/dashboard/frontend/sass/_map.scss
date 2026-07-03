@@ -169,16 +169,17 @@
     opacity: 0.95;
     min-width: 175px;
     max-width: 240px;
+    position: absolute;
+    top: 0;
+    right: 0;
     
     &--markup {
-        position: absolute;
         right: 10px;
         bottom: 50px;
         width: 220px;
         overflow: hidden;
     }
     &--details {
-        position: absolute;
         top: 6em;
         left: 10px;
     }
@@ -641,13 +642,12 @@
     .material-icons {
         font-size: .95rem;
     }
+}
 
-    .markup-panel-hint-actions {
-        margin-left: auto;
-        display: flex;
-        gap: .2rem;
-        flex-shrink: 0;
-    }
+// Keeps a slider's "Label 3px" caption on one line above the control, instead of
+// the label text, value, and unit each becoming their own row in the column flex.
+.markup-form-label-line {
+    display: block;
 }
 
 // -- Map text labels and arrow decorations ----------------------------------
@@ -660,6 +660,10 @@
     padding: 2px 5px;
     border-radius: 3px;
     pointer-events: none;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
     &--line {
         font-size: .75rem;
@@ -679,6 +683,10 @@
         line-height: 1.15;
         box-sizing: border-box;
     }
+}
+
+.leaflet-marker-icon.leaflet-interactive {
+    display: flex;
 }
 
 .map-markup-arrowhead-svg {

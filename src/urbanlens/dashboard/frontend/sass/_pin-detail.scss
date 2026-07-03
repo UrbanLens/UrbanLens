@@ -1011,20 +1011,20 @@
 
     &--no {
         background: $color-green-100;
-        color: $color-green-800;
-        border-color: $color-green-200;
+        color: $color-green-1700;
+        border-color: $color-green-500;
     }
 
     &--some {
         background: var(--ul-accent-amber-bg);
-        color: $color-amber-800;
-        border-color: $color-amber-200;
+        color: $color-amber-1700;
+        border-color: $color-amber-500;
     }
 
     &--everywhere {
-        background: var(--ul-grey-0a);
-        color: -red-800;
-        border-color: $color-red-300;
+        background: $color-red-100;
+        color: $color-red-1700;
+        border-color: $color-red-500;
     }
 }
 

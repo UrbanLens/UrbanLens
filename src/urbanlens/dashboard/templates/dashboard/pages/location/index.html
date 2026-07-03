@@ -193,18 +193,11 @@
                     <p id="markup-panel-hint" class="markup-place-hint" hidden>
                         <i class="material-icons">touch_app</i>
                         <span id="markup-panel-hint-text"></span>
-                        <span class="markup-panel-hint-actions">
-                            <button type="button" class="btn btn--icon-sm" title="Remove last point" onclick="_undoMarkupPoint()">
-                                <i class="material-icons">undo</i>
-                            </button>
-                            <button type="button" class="btn btn--icon-sm" title="Finish shape" onclick="_finishMarkupDraw()">
-                                <i class="material-icons">check</i>
-                            </button>
-                        </span>
                     </p>
                     <label class="markup-form-label-row">
-                        <span id="markup-panel-label-caption">Label</span> <small>(optional)</small>
-                        <input type="text" id="markup-panel-label" placeholder="e.g. Route in" class="markup-form-input">
+                        <span class="markup-form-label-line"><span id="markup-panel-label-caption">Label</span> <small>(optional)</small></span>
+                        <input type="text" id="markup-panel-label" placeholder="e.g. Route in" class="markup-form-input"
+                               oninput="_liveApplyMarkupEdit()">
                     </label>
                     <label class="markup-form-label-row">
                         <span id="markup-panel-color-label">Fill Color</span>
@@ -217,23 +210,29 @@
                         <input type="hidden" id="markup-panel-border" value="{{ markup_border_color }}">
                     </label>
                     <label class="markup-form-label-row">
-                        <span id="markup-panel-width-label-text">Width</span>&nbsp;<span id="markup-panel-width-label">3</span>px
+                        <span class="markup-form-label-line">
+                            <span id="markup-panel-width-label-text">Width</span>&nbsp;<span id="markup-panel-width-label">3</span>px
+                        </span>
                         <input type="range" id="markup-panel-width" min="1" max="8" value="3"
-                               oninput="document.getElementById('markup-panel-width-label').textContent=this.value;_livePreviewTextEdit()">
+                               oninput="document.getElementById('markup-panel-width-label').textContent=this.value;_liveApplyMarkupEdit()">
                     </label>
                     <label class="markup-form-label-row">
-                        <span id="markup-panel-fill-opacity-label-text">Fill Opacity</span>&nbsp;<span id="markup-panel-fill-opacity-val">87</span>%
+                        <span class="markup-form-label-line">
+                            <span id="markup-panel-fill-opacity-label-text">Fill Opacity</span>&nbsp;<span id="markup-panel-fill-opacity-val">87</span>%
+                        </span>
                         <input type="range" id="markup-panel-fill-opacity" min="0" max="100" value="87"
-                               oninput="document.getElementById('markup-panel-fill-opacity-val').textContent=this.value">
+                               oninput="document.getElementById('markup-panel-fill-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
                     </label>
                     <label class="markup-form-label-row" id="markup-panel-border-opacity-row">
-                        Border Opacity&nbsp;<span id="markup-panel-border-opacity-val">100</span>%
+                        <span class="markup-form-label-line">
+                            Border Opacity&nbsp;<span id="markup-panel-border-opacity-val">100</span>%
+                        </span>
                         <input type="range" id="markup-panel-border-opacity" min="0" max="100" value="100"
-                               oninput="document.getElementById('markup-panel-border-opacity-val').textContent=this.value">
+                               oninput="document.getElementById('markup-panel-border-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
                     </label>
                     <label class="markup-form-label-row" id="markup-panel-security-row">
                         Security Type
-                        <select id="markup-panel-security" class="markup-form-select">
+                        <select id="markup-panel-security" class="markup-form-select" onchange="_liveApplyMarkupEdit()">
                             <option value="">- None -</option>
                             <option value="fence">Fence</option>
                             <option value="camera">Camera</option>
@@ -247,12 +246,12 @@
                     </label>
                     <div class="form-actions" id="markup-panel-draw-actions" style="margin-top:.5rem">
                         <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="_finishMarkupDraw()">Finish</button>
+                        <button type="button" class="btn btn--ghost" onclick="_undoMarkupPoint()">Undo Point</button>
                         <button type="button" class="btn btn--ghost" onclick="cancelMarkupDraw()">Cancel</button>
                     </div>
                     <div class="form-actions" id="markup-panel-edit-actions" style="margin-top:.5rem" hidden>
-                        <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="saveMarkupEdit()">Save</button>
-                        <button type="button" class="btn btn--danger" onclick="deleteMarkupEdit()">Delete</button>
-                        <button type="button" class="btn btn--ghost" onclick="closeMarkupPanel()">Cancel</button>
+                        <button type="button" class="btn btn--ghost" onclick="closeMarkupPanel()">Close</button>
+                        <button type="button" class="btn btn--danger" onclick="deleteMarkupEdit()" style="margin-left:auto">Delete</button>
                     </div>
                 </div>
             </div>
@@ -928,6 +927,13 @@
             li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
                 e.stopPropagation();
                 if (!await confirmDialog({title:'Delete Item', message:`Delete this ${item.markup_type}?`, confirmLabel:'Delete'})) return;
+                // If this item's edit panel happens to be open, close it too - editing
+                // a just-deleted item would otherwise keep autosaving into a 404.
+                if (_editingMarkupItem === item) {
+                    if (_markupAutoSaveItem === item) { clearTimeout(_markupAutoSaveTimer); _markupAutoSaveItem = null; }
+                    document.getElementById('markup-panel').style.display = 'none';
+                    _editingMarkupItem = null;
+                }
                 fetch(_markupEditBase + item.uuid + '/', {
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrftoken },
@@ -1041,7 +1047,7 @@
                 container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
                 btn.classList.add('markup-color-swatch--active');
                 input.value = color;
-                _livePreviewTextEdit();
+                _liveApplyMarkupEdit();
             });
             container.appendChild(btn);
         });
@@ -1062,7 +1068,7 @@
             container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
             noneBtn.classList.add('markup-color-swatch--active');
             input.value = 'none';
-            _livePreviewTextEdit();
+            _liveApplyMarkupEdit();
         });
         container.appendChild(noneBtn);
         _markupPalette.forEach(color => {
@@ -1074,7 +1080,7 @@
                 container.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
                 btn.classList.add('markup-color-swatch--active');
                 input.value = color;
-                _livePreviewTextEdit();
+                _liveApplyMarkupEdit();
             });
             container.appendChild(btn);
         });
@@ -1488,6 +1494,9 @@
     };
 
     function _configureMarkupPanelForTool(tool) {
+        // Only one map side-panel open at a time.
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
+
         const isText = tool === 'text';
         _editingMarkupItem = null;
 
@@ -1612,6 +1621,7 @@
     }
 
     function closeMarkupPanel() {
+        _flushMarkupAutoSave();  // don't lose an edit made just before closing
         if (_drawSession && _drawSession.getCurrentTool()) {
             _drawSession.deactivate();  // triggers onToolChange(null), which hides the panel
         } else {
@@ -1637,7 +1647,7 @@
             nb.addEventListener('click', () => {
                 cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
                 nb.classList.add('markup-color-swatch--active'); input.value = 'none';
-                _livePreviewTextEdit();
+                _liveApplyMarkupEdit();
             });
             cont.appendChild(nb);
         }
@@ -1649,27 +1659,68 @@
             btn.addEventListener('click', () => {
                 cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
                 btn.classList.add('markup-color-swatch--active'); input.value = color;
-                _livePreviewTextEdit();
+                _liveApplyMarkupEdit();
             });
             cont.appendChild(btn);
         });
     }
 
-    function _livePreviewTextEdit() {
-        if (!_editingMarkupItem || _editingMarkupItem.markup_type !== 'text') return;
+    // Applies every edit-panel field to the map instantly, then schedules a
+    // debounced save - so annotations update in realtime as the user drags a
+    // slider or picks a color, without needing an explicit Save button, and
+    // without hammering the server on every single input event.
+    function _liveApplyMarkupEdit() {
+        if (!_editingMarkupItem) return;
         const item = _editingMarkupItem;
-        const newLabel       = document.getElementById('markup-panel-label').value;
-        const newColor       = document.getElementById('markup-panel-color').value;
-        const newBorderColor = document.getElementById('markup-panel-border').value;
-        const newSize        = parseInt(document.getElementById('markup-panel-width').value, 10);
-        // Temporarily override item fields for _textIcon/_textLabelHtml
-        const snapshot = { ...item, label: newLabel, color: newColor, border_color: newBorderColor, stroke_width: newSize };
-        if (item._textMarker) {
-            item._textMarker.setIcon(_textIcon(snapshot));
-        }
+        const isText = item.markup_type === 'text';
+
+        item.label = document.getElementById('markup-panel-label').value.trim();
+        item.color = document.getElementById('markup-panel-color').value;
+        item.border_color = document.getElementById('markup-panel-border').value;
+        item.stroke_width = parseInt(document.getElementById('markup-panel-width').value, 10);
+        item.fill_opacity = parseInt(document.getElementById('markup-panel-fill-opacity').value, 10);
+        item.border_opacity = parseInt(document.getElementById('markup-panel-border-opacity').value, 10);
+        item.security_indicator = isText ? '' : document.getElementById('markup-panel-security').value;
+
+        // Re-render in place: the item object's identity is preserved (same
+        // reference in _markupItems / _editingMarkupItem), only its layers change,
+        // so this reuses _renderMarkupItem as the single source of truth for how
+        // every shape type looks rather than hand-rolling per-type restyle logic.
+        if (item._layers) item._layers.forEach(l => _markupLayer.removeLayer(l));
+        _renderMarkupItem(item);
+
+        _scheduleMarkupAutoSave(item);
+    }
+
+    let _markupAutoSaveTimer = null;
+    let _markupAutoSaveItem  = null;
+
+    function _scheduleMarkupAutoSave(item) {
+        clearTimeout(_markupAutoSaveTimer);
+        _markupAutoSaveItem = item;
+        _markupAutoSaveTimer = setTimeout(_flushMarkupAutoSave, 500);
+    }
+
+    function _flushMarkupAutoSave() {
+        clearTimeout(_markupAutoSaveTimer);
+        const item = _markupAutoSaveItem;
+        _markupAutoSaveItem = null;
+        if (!item) return;
+        fetch(_markupEditBase + item.uuid + '/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({
+                label: item.label, color: item.color, border_color: item.border_color,
+                stroke_width: item.stroke_width, fill_opacity: item.fill_opacity,
+                border_opacity: item.border_opacity, security_indicator: item.security_indicator,
+            }),
+        }).catch(() => toastr.error('Failed to save annotation changes.'));
     }
 
     function openMarkupEditDialog(item) {
+        // Only one map side-panel open at a time.
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
+
         _editingMarkupItem = item;
         const isText = item.markup_type === 'text';
 
@@ -1708,28 +1759,11 @@
         if (isText) document.getElementById('markup-panel-label').focus();
     }
 
-    function saveMarkupEdit() {
-        if (!_editingMarkupItem) return;
-        const label              = document.getElementById('markup-panel-label').value.trim();
-        const color              = document.getElementById('markup-panel-color').value;
-        const border_color       = document.getElementById('markup-panel-border').value;
-        const stroke_width       = parseInt(document.getElementById('markup-panel-width').value, 10);
-        const fill_opacity       = parseInt(document.getElementById('markup-panel-fill-opacity').value, 10);
-        const border_opacity     = parseInt(document.getElementById('markup-panel-border-opacity').value, 10);
-        const security_indicator = _editingMarkupItem.markup_type === 'text' ? '' : document.getElementById('markup-panel-security').value;
-        fetch(_markupEditBase + _editingMarkupItem.uuid + '/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-            body: JSON.stringify({ label, color, border_color, stroke_width, fill_opacity, border_opacity, security_indicator }),
-        })
-        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-        .then(() => { closeMarkupPanel(); loadMarkup(); })
-        .catch(() => toastr.error('Failed to update annotation.'));
-    }
-
     async function deleteMarkupEdit() {
         if (!_editingMarkupItem) return;
         if (!await confirmDialog({title: 'Delete Annotation', message: 'Delete this annotation?', confirmLabel: 'Delete'})) return;
+        // Drop any pending autosave for this item - it no longer exists to save.
+        if (_markupAutoSaveItem === _editingMarkupItem) { clearTimeout(_markupAutoSaveTimer); _markupAutoSaveItem = null; }
         fetch(_markupEditBase + _editingMarkupItem.uuid + '/', { method: 'DELETE', headers: { 'X-CSRFToken': csrftoken } })
             .then(r => { if (!r.ok) throw new Error(); closeMarkupPanel(); loadMarkup(); toastr.success('Annotation deleted.'); })
             .catch(() => toastr.error('Failed to delete annotation.'));
@@ -2051,6 +2085,9 @@
 
     function openAddPinDialog() {
         _closeAddDetailMenu();
+        // Only one map side-panel open at a time - closing markup autosaves first.
+        closeMarkupPanel();
+
         _dpMode = 'add';
         _editingDp = null;
         _resetDpForm();
@@ -2067,6 +2104,9 @@
 
     function openDetailPinEditDialog(dp) {
         _closeAddDetailMenu();
+        // Only one map side-panel open at a time - closing markup autosaves first.
+        closeMarkupPanel();
+
         _dpMode = 'edit';
         _editingDp = dp;
         _resetDpForm();
@@ -2294,14 +2334,19 @@
     }());
 
     // -- Campus boundary: click a polygon for an Edit/Delete context menu -----
+    // Leaflet's event system has no jQuery-style dot-namespacing - a listener
+    // registered for the literal string 'click.openEditor' never matches a real
+    // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
+    // handler under the real event name instead.
+    function _onBoundaryLayerClick(e) {
+        if (campusDrawControl) return;
+        L.DomEvent.stopPropagation(e);
+        _openBoundaryCtxMenu(e.target, e.latlng);
+    }
     function _attachCampusClickHandlers() {
         campusItems.eachLayer(layer => {
-            layer.off('click.openEditor');
-            layer.on('click.openEditor', (e) => {
-                if (campusDrawControl) return;
-                L.DomEvent.stopPropagation(e);
-                _openBoundaryCtxMenu(layer, e.latlng);
-            });
+            layer.off('click', _onBoundaryLayerClick);
+            layer.on('click', _onBoundaryLayerClick);
         });
     }
 
