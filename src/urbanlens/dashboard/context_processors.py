@@ -72,6 +72,34 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
     }
 
 
+def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
+    """Expose the active environment to every template for the non-production indicator banner.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``env_indicator_type`` (lowercase environment value, e.g. ``"staging"``) and
+        ``env_indicator_label`` (human-readable label). Both are empty strings in production,
+        which templates use as the signal to hide the indicator.
+    """
+    from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+
+    try:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        site = SiteSettings.get_current()
+        env_type = site.get_effective_environment_type()
+        if env_type == EnvironmentTypes.PRODUCTION:
+            return {"env_indicator_type": "", "env_indicator_label": ""}
+        return {
+            "env_indicator_type": env_type.value,
+            "env_indicator_label": site.get_effective_environment_label(),
+        }
+    except (ImportError, DatabaseError):
+        return {"env_indicator_type": "", "env_indicator_label": ""}
+
+
 def add_page_name(request: HttpRequest) -> dict[str, str]:
     resolver_match = request.resolver_match
     if resolver_match is None:

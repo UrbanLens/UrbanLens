@@ -1,6 +1,39 @@
 @use "tokens" as *;
 @use 'sass:color';
 
+$inputs: (
+    "input:not([type])",
+    "input[type=text]:not(.browser-default)",
+    "input[type=password]:not(.browser-default)",
+    "input[type=email]:not(.browser-default)",
+    "input[type=url]:not(.browser-default)",
+    "input[type=time]:not(.browser-default)",
+    "input[type=date]:not(.browser-default)",
+    "input[type=datetime]:not(.browser-default)",
+    "input[type=datetime-local]:not(.browser-default)",
+    "input[type=tel]:not(.browser-default)",
+    "input[type=number]:not(.browser-default)",
+    "input[type=search]:not(.browser-default)",
+    "select",
+    "textarea"
+);
+// Example Usage:
+// @include input-selectors { color: red; }
+// @include input-selectors(".disabled") { color: blue; }
+// @include input-selectors(".disabled", ".readonly") { color: green; }
+@mixin input-selectors($suffixes...) {
+    @if length($suffixes) == 0 {
+        $suffixes: ("");
+    }
+    @each $suffix in $suffixes {
+        @each $selector in $inputs {
+            #{$selector}#{$suffix} {
+                @content;
+            }
+        }
+    }
+}
+
 // -- Responsive ----------------------------------------------------------------
 // up()   - mobile-first: apply styles at $breakpoint and wider (preferred).
 // down() - use only to override desktop-first legacy rules; prefer up() for new code.
@@ -363,12 +396,7 @@
 		color: var(--ul-grey-6);
 	}
 
-	input[type="text"],
-	input[type="email"],
-	input[type="date"],
-	input[type="number"],
-	textarea,
-	select {
+	@include input-selectors {
 		@include ul-input;
 	}
 }

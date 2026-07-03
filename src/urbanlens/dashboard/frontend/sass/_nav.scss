@@ -380,6 +380,7 @@ nav {
     }
 
     a {
+        color: #{$color-grey-2};
         transition: color 0.15s;
 
         &:hover {

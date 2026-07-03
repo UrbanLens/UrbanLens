@@ -1,0 +1,42 @@
+// Non-production environment indicator - fixed badge shown on every environment except
+// production, so it's never possible to mistake a dev/staging/testing session for prod.
+@use 'tokens' as *;
+
+.env-indicator {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10060;
+    padding: 0.15rem 0.85rem;
+    border-radius: 0 0 8px 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.92;
+    box-shadow: var(--ul-shadow-lg);
+
+    &:hover {
+        opacity: 1;
+    }
+}
+
+.env-indicator--local {
+    background: $color-teal-500;
+}
+
+.env-indicator--development {
+    background: $color-green-600;
+}
+
+.env-indicator--testing {
+    background: $color-purple-500;
+}
+
+.env-indicator--staging {
+    background: $color-orange-700;
+}

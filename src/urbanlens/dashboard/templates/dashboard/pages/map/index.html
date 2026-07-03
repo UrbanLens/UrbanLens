@@ -412,7 +412,7 @@
             <label class="form-label">Badges</label>
             <div class="apdlg-badge-field" id="apdlg-badge-field">
                 <div class="apdlg-badge-chips" id="apdlg-badge-chips"></div>
-                <div class="apdlg-badge-input-wrap">
+                <div class="apdlg-badge-input-wrap form-input-wrap">
                     <input type="text" id="apdlg-badge-search" class="form-input apdlg-badge-input"
                            placeholder="Search or add badges..." autocomplete="off" autocorrect="off">
                     <div id="apdlg-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
@@ -1394,7 +1394,7 @@
             body: 'Use Add Pin, or right-click the map, to save a location without leaving the map.',
             button: 'Add a pin',
             target: 'add-pin-button',
-            shouldShow: () => _totalPins === 0,
+            shouldShow: () => _totalPins < 1,
             watchSelector: '#add-pin-button',
             action: () => openAddPinDialog(),
         },

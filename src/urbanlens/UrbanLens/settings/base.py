@@ -85,6 +85,7 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_site_settings",
                 "urbanlens.dashboard.context_processors.add_dev_toolbar",
                 "urbanlens.dashboard.context_processors.add_feature_access",
+                "urbanlens.dashboard.context_processors.add_environment_indicator",
             ],
         },
     },

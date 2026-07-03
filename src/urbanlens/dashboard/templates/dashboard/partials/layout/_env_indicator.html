@@ -1,0 +1,6 @@
+{# Non-production environment indicator - shown for every environment except production. #}
+{% if env_indicator_type %}
+<div class="env-indicator env-indicator--{{ env_indicator_type }}" title="This site is running in the {{ env_indicator_label }} environment">
+    <span class="env-indicator__label">{{ env_indicator_label }}</span>
+</div>
+{% endif %}

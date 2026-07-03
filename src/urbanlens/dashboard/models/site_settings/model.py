@@ -246,19 +246,36 @@ class SiteSettings(abstract.Model):
         return self.get_effective_environment_type() in {EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL}
 
     def show_dev_admin_features(self, user) -> bool:
-        """Return whether dev-only admin UI should be visible to ``user``.
+        """Return whether dev-only admin UI (e.g. the developer toolbar) should be visible to ``user``.
+
+        Site admins see it whenever the effective environment is development or local.
+        Non-admin users can also see it, but only when the ``UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS``
+        env var is enabled AND the effective environment is development, local, or testing -
+        this lets QA/test accounts exercise dev tooling without granting them site-admin permission,
+        while staying off by default and never active in staging/production.
 
         Args:
             user: The current request user.
 
         Returns:
-            True for site admins when the effective environment is development.
+            True when dev-only admin UI should be shown to ``user``.
         """
-        return (
-            user.is_authenticated
-            and user.has_perm("dashboard.view_site_admin")
-            and self.is_development_environment()
-        )
+        if not user.is_authenticated:
+            return False
+
+        if user.has_perm("dashboard.view_site_admin"):
+            return self.is_development_environment()
+
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        if not app_settings.allow_dev_toolbar_for_non_admins:
+            return False
+
+        return self.get_effective_environment_type() in {
+            EnvironmentTypes.DEVELOPMENT,
+            EnvironmentTypes.LOCAL,
+            EnvironmentTypes.TESTING,
+        }
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_site_settings"

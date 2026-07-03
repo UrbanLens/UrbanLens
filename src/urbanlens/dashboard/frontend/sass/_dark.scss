@@ -1,5 +1,6 @@
 @use 'sass:color';
 @use 'variables' as *;
+@use "mixins" as *;
 
 @mixin standard-section {
     background-color: var(--ul-grey-0a);
@@ -11,45 +12,11 @@
     background: var(--ul-grey-1);
     color: var(--ul-grey-8);
 
-    input[type=text],
-    input[type=number],
-    input[type=email],
-    input[type=url],
-    input[type=time],
-    input[type=date],
-    input[type=datetime],
-    input[type=datetime-local],
-    input[type=tel],
-    input[type=search],
-    textarea {
-        color: var(--ul-grey-6);
+    @include input-selectors { 
+        color: var(--ul-grey-6); 
     }
-
-    input:not([type]):disabled,
-    input:not([type])[readonly=readonly],
-    input[type=text]:not(.browser-default):disabled,
-    input[type=text]:not(.browser-default)[readonly=readonly],
-    input[type=password]:not(.browser-default):disabled,
-    input[type=password]:not(.browser-default)[readonly=readonly],
-    input[type=email]:not(.browser-default):disabled,
-    input[type=email]:not(.browser-default)[readonly=readonly],
-    input[type=url]:not(.browser-default):disabled,
-    input[type=url]:not(.browser-default)[readonly=readonly],
-    input[type=time]:not(.browser-default):disabled,
-    input[type=time]:not(.browser-default)[readonly=readonly],
-    input[type=date]:not(.browser-default):disabled,
-    input[type=date]:not(.browser-default)[readonly=readonly],
-    input[type=datetime]:not(.browser-default):disabled,
-    input[type=datetime]:not(.browser-default)[readonly=readonly],
-    input[type=datetime-local]:not(.browser-default):disabled,
-    input[type=datetime-local]:not(.browser-default)[readonly=readonly],
-    input[type=tel]:not(.browser-default):disabled,
-    input[type=tel]:not(.browser-default)[readonly=readonly],
-    input[type=number]:not(.browser-default):disabled,
-    input[type=number]:not(.browser-default)[readonly=readonly],
-    input[type=search]:not(.browser-default):disabled,
-    input[type=search]:not(.browser-default)[readonly=readonly] {
-        color: var(--ul-grey-5);
+    @include input-selectors(":disabled", "[readonly=readonly]") { 
+        color: var(--ul-grey-5); 
     }
 
     body {
@@ -1542,22 +1509,17 @@
 // pages that still use raw element selectors while newer components consume the
 // semantic tokens directly.
 [data-theme="dark"] {
-    input[type=text],
-    input[type=password],
-    input[type=number],
-    input[type=email],
-    input[type=url],
-    input[type=time],
-    input[type=date],
-    input[type=datetime],
-    input[type=datetime-local],
-    input[type=tel],
-    input[type=search],
-    textarea,
-    select {
+    @include input-selectors {
         background-color: var(--ul-grey-1);
         border-color: var(--ul-grey-1a);
         color: var(--ul-grey-8);
+    }
+
+    // TODO: Temporary fix for right now.
+    .form-input-wrap {
+        @include input-selectors {
+            background-color: transparent;
+        }
     }
 
     .ul-section,

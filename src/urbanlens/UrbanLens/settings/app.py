@@ -71,6 +71,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     backup_enabled: bool = Field(default=True, description="Whether scheduled database backups are enabled")
     backup_frequency_hours: int = Field(default=24, description="How often scheduled database backups should run, in hours")
     backup_retention: int = Field(default=30, description="The number of backup files to retain")
+    allow_dev_toolbar_for_non_admins: bool = Field(
+        default=False,
+        description=(
+            "Allow authenticated users without site-admin permission to see the developer toolbar. "
+            "Only takes effect in development, local, or testing environments - ignored in staging/production."
+        ),
+    )
 
     # Classes
     default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")
