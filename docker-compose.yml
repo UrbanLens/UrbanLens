@@ -15,6 +15,7 @@ x-app-env: &app-env
   UL_DB_PASS: ${UL_DB_PASS:-postgres}
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_APP_PORT: ${UL_APP_PORT:-21800}
   ENVIRONMENT: ${ENVIRONMENT:-production}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
@@ -88,7 +89,7 @@ services:
       - ./src/urbanlens/config/nginx/django.conf:/etc/nginx/conf.d/django.conf:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${APP_PORT:-21800}:8080"
+      - "${UL_APP_PORT:-21800}:8080"
     depends_on:
       - app
     networks:
