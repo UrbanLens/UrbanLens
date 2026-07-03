@@ -69,7 +69,7 @@ services:
           - urbanlens_app
 
     ports:
-      - "${APP_PORT:-21810}:8080"
+      - "21810:8080"
 
     environment:
       <<: *app-env
