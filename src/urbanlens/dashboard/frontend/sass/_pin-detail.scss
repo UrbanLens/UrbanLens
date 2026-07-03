@@ -1206,15 +1206,10 @@ body.page-location-details {
     .details-grid {
         .detail-row {
             padding: .45rem .9rem;
-            border-bottom: 1px solid var(--ul-grey-1a);
             border-radius: 0;
 
             &:last-child {
                 border-bottom: none;
-            }
-
-            &:nth-child(even) {
-                background: var(--ul-grey-0);
             }
         }
 
