@@ -126,40 +126,52 @@
         min-height: 0; // required for flex children to shrink below content size
     }
 
-    .detail-pin-add-hint {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-        margin: .5rem 1.25rem 0;
-        font-size: .82rem;
-        color: var(--ul-grey-6);
-    }
-
-    #detail-pin-picker-map {
+    #wiki-detail-pin-picker-map {
         // Viewport-relative height: scales with zoom, never smaller than 180px.
         height: clamp(180px, 30vh, 340px);
         margin: .75rem 1.25rem;
         border-radius: 8px;
         overflow: hidden;
     }
+}
 
-    .detail-pin-add-form {
-        padding: 0 1.25rem 1.25rem;
+// Unscoped (not tied to the modal .detail-pin-add-dialog) so the same markup and
+// styling work whether the form sits in a native <dialog> (community wiki) or in
+// the non-modal .map-dialog--side panel (pin detail page).
+.detail-pin-add-hint {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: .5rem 1.25rem 0;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
 
-        .form-row {
-            @include form-row;
-            margin-bottom: .8rem;
+    .material-icons {
+        color: $color-blue-600;
+    }
 
-            &--coords {
-                flex-direction: row;
-                gap: .75rem;
+    // Set once a location has been placed - confirms the click/drag registered.
+    &.is-placed .material-icons {
+        color: $color-green-600;
+    }
+}
 
-                > div {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    gap: .3rem;
-                }
+.detail-pin-add-form {
+    padding: 0 1.25rem 1.25rem;
+
+    .form-row {
+        @include form-row;
+        margin-bottom: .8rem;
+
+        &--coords {
+            flex-direction: row;
+            gap: .75rem;
+
+            > div {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: .3rem;
             }
         }
     }

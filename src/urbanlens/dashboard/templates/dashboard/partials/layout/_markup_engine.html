@@ -138,6 +138,8 @@ window.MarkupEngine = (function () {
         var _tool  = null;
         var _state = null;   // { points: [[lat,lng],...] } while multi-point drawing
         var _prevL = L.layerGroup().addTo(map);
+        var _lastCursorLL     = null;  // most recent map.mouseEventToLatLng, for Enter-to-finish
+        var _suppressClickUntil = 0;   // swallow the synthetic click that follows a completed drag
 
         function _c()  { return opts.getColor     ? opts.getColor()     : '#e74c3c'; }
         function _lbl(){ return opts.getTextLabel ? opts.getTextLabel() : ''; }
@@ -148,15 +150,17 @@ window.MarkupEngine = (function () {
             if (!_tool) { opts.onHintChange(''); return; }
             var n = _state ? _state.points.length : 0;
             var msgs = {
-                arrow:   n ? n + ' pt' + (n > 1 ? 's' : '') + ' - drag to finish, or double-click'
-                           : 'Drag for a quick arrow, or click to add points',
-                line:    n ? n + ' pt' + (n > 1 ? 's' : '') + ' - drag to finish, or double-click'
-                           : 'Drag for a quick line, or click to add points',
-                polygon: n >= 3 ? 'Click near start or double-click to close'
+                arrow:   n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
+                       : n ? n + ' pt - click to add another point'
+                           : 'Click to start, drag for a quick arrow',
+                line:    n >= 2 ? 'Click near last point (or Enter) to finish, or drag'
+                       : n ? n + ' pt - click to add another point'
+                           : 'Click to start, drag for a quick line',
+                polygon: n >= 3 ? 'Click near start (or Enter) to close'
                                 : n ? 'Click to add vertices' : 'Click to place first vertex',
-                circle:  'Drag to draw a circle',
-                rect:    _state ? 'Click second corner, or drag' : 'Click first corner, or drag to draw',
-                text:    'Drag to size text box, or click to place',
+                circle:  n ? 'Click to set radius, or drag' : 'Click to place center, or drag',
+                rect:    n ? 'Click second corner, or drag' : 'Click first corner, or drag',
+                text:    'Click to place, or drag to size a text box',
             };
             opts.onHintChange(msgs[_tool] || '');
         }
@@ -189,6 +193,10 @@ window.MarkupEngine = (function () {
             } else if (_tool === 'rect' && _state && _state.points.length >= 1) {
                 L.rectangle(L.latLngBounds(_state.points[0], [cursorLL.lat, cursorLL.lng]),
                     { color: c, weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false }).addTo(_prevL);
+            } else if (_tool === 'circle' && _state && _state.points.length >= 1) {
+                var center = L.latLng(_state.points[0]);
+                L.circle(center, { radius: center.distanceTo(cursorLL), color: c, weight: 2,
+                    fillOpacity: 0.08, dashArray: '5 7', interactive: false }).addTo(_prevL);
             }
         }
 
@@ -212,6 +220,7 @@ window.MarkupEngine = (function () {
             cancelShape();
             _tool = null;
             map.doubleClickZoom.enable();
+            map.dragging.enable();
             map.getContainer().style.cursor = '';
             if (opts.onToolChange) opts.onToolChange(null);
         }
@@ -220,7 +229,13 @@ window.MarkupEngine = (function () {
         function startTool(type) {
             cancelShape();
             _tool = type;
+            // Disabling map panning while a tool is armed is what makes drag-to-draw
+            // reliable: without this, Leaflet's own panning races the shape-drawing
+            // drag on the same gesture, and since panning keeps the ground point
+            // under the cursor fixed, the start/end coordinates the draw session
+            // records end up nearly identical - producing "0-length" shapes.
             map.doubleClickZoom.disable();
+            map.dragging.disable();
             map.getContainer().style.cursor = 'crosshair';
             if (opts.onToolChange) opts.onToolChange(type);
             _hint();
@@ -228,9 +243,37 @@ window.MarkupEngine = (function () {
 
         function getCurrentTool() { return _tool; }
 
+        // -- Public: finish the in-progress shape now (e.g. Enter key / toolbar button) --
+        function finishCurrent() {
+            if (!_state) return;
+            var n = _state.points.length;
+            if (_tool === 'polygon' && n >= 3)                    { _commit('polygon', _state.points.slice()); return; }
+            if ((_tool === 'line' || _tool === 'arrow') && n >= 2) { _commit(_tool, _state.points.slice()); return; }
+            if (_tool === 'rect' && n >= 1 && _lastCursorLL) {
+                _commit('rect', [_state.points[0], [_lastCursorLL.lat, _lastCursorLL.lng]]); return;
+            }
+            if (_tool === 'circle' && n >= 1 && _lastCursorLL) {
+                _commit('circle', [_state.points[0], [_lastCursorLL.lat, _lastCursorLL.lng]]); return;
+            }
+        }
+
+        // -- Public: remove the last placed point without cancelling the whole shape --
+        function undoLastPoint() {
+            if (!_state || !_state.points.length) return;
+            _state.points.pop();
+            if (!_state.points.length) {
+                _state = null;
+                _clearPrev();
+            } else if (_lastCursorLL) {
+                _preview(_lastCursorLL);
+            }
+            _hint();
+        }
+
         // -- Click -------------------------------------------------------------
         function _onClick(e) {
             if (!_tool || e.originalEvent.detail > 1) return;  // skip 2nd click of dblclick
+            if (Date.now() < _suppressClickUntil) return;      // swallow click that follows a drag-commit
             var ll = e.latlng;
 
             if (_tool === 'text') {
@@ -239,8 +282,22 @@ window.MarkupEngine = (function () {
             }
 
             if (_tool === 'line' || _tool === 'arrow') {
-                if (!_state) _state = { points: [[ll.lat, ll.lng]] };
-                else _state.points.push([ll.lat, ll.lng]);
+                if (!_state) {
+                    _state = { points: [[ll.lat, ll.lng]] };
+                } else {
+                    // Finish when clicking near the last-placed point - the natural
+                    // "I'm done" gesture, mirroring polygon's close-near-first-point below.
+                    var n = _state.points.length;
+                    if (n >= 2) {
+                        var lp = map.latLngToContainerPoint(L.latLng(_state.points[n - 1][0], _state.points[n - 1][1]));
+                        var cp = map.latLngToContainerPoint(ll);
+                        if (Math.hypot(lp.x - cp.x, lp.y - cp.y) <= 20) {
+                            _commit(_tool, _state.points.slice());
+                            return;
+                        }
+                    }
+                    _state.points.push([ll.lat, ll.lng]);
+                }
                 _preview(ll); _hint();
                 return;
             }
@@ -267,6 +324,12 @@ window.MarkupEngine = (function () {
             if (_tool === 'rect') {
                 if (!_state) { _state = { points: [[ll.lat, ll.lng]] }; _hint(); }
                 else { _commit('rect', [_state.points[0], [ll.lat, ll.lng]]); }
+                return;
+            }
+
+            if (_tool === 'circle') {
+                if (!_state) { _state = { points: [[ll.lat, ll.lng]] }; _hint(); }
+                else { _commit('circle', [_state.points[0], [ll.lat, ll.lng]]); }
                 return;
             }
         }
@@ -296,7 +359,8 @@ window.MarkupEngine = (function () {
 
         // -- Mouse move: update rubber-band preview ----------------------------
         function _onMouseMove(e) {
-            if (_state || _tool === 'rect') _preview(e.latlng);
+            _lastCursorLL = e.latlng;
+            if (_state || _tool === 'rect' || _tool === 'circle') _preview(e.latlng);
         }
 
         // -- Mouse down: drag-to-draw for circle, rect, arrow/line, text -------
@@ -351,6 +415,9 @@ window.MarkupEngine = (function () {
                 var dx = ev.clientX - startX, dy = ev.clientY - startY;
                 if (!isDragging || Math.hypot(dx, dy) < 6) return;  // too small - treat as click
                 var endLL = map.mouseEventToLatLng(ev);
+                // A completed drag still fires a native `click` right after this mouseup;
+                // swallow it so it doesn't start a stray new point at the drag's end.
+                _suppressClickUntil = Date.now() + 350;
 
                 if (_tool === 'circle') {
                     _commit('circle', [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]]);
@@ -366,9 +433,10 @@ window.MarkupEngine = (function () {
                     _commit(_tool, finalPts);
 
                 } else if (_tool === 'text') {
-                    var fontSize = Math.max(10, Math.min(72, Math.round(Math.abs(dy) * 0.65)));
-                    _commit('text', [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]],
-                        { dragFontSize: fontSize, label: _lbl() });
+                    // Drag defines an actual bounding box - both corners are committed
+                    // (mirroring rect) so the renderer can size/wrap the label to fit it,
+                    // instead of just deriving a font size from the drag distance.
+                    _commit('text', [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]], { label: _lbl() });
                 }
             }
 
@@ -376,13 +444,26 @@ window.MarkupEngine = (function () {
             document.addEventListener('mouseup', onUp, { once: true });
         }
 
-        // -- ESC: cancel in-progress shape; deactivate if no state ------------
+        // -- Keyboard: Escape cancels, Enter finishes, Backspace undoes a point --
         function _onKeyDown(e) {
-            if (e.key !== 'Escape' || !_tool) return;
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            if (_state) { cancelShape(); }
-            else        { deactivate(); }
+            if (!_tool) return;
+            if (e.key === 'Escape') {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                if (_state) { cancelShape(); }
+                else        { deactivate(); }
+                return;
+            }
+            if (!_state) return;
+            if (e.key === 'Enter') {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                finishCurrent();
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                undoLastPoint();
+            }
         }
 
         map.on('click',     _onClick);
@@ -405,6 +486,8 @@ window.MarkupEngine = (function () {
             deactivate:      deactivate,
             cancelShape:     cancelShape,
             getCurrentTool:  getCurrentTool,
+            finishCurrent:   finishCurrent,
+            undoLastPoint:   undoLastPoint,
             destroy:         destroy,
         };
     }

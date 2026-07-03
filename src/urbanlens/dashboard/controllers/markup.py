@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -58,6 +59,25 @@ _GEOMETRY_TYPES = {
     "circle": "Circle",  # Custom non-GeoJSON type stored as {"type":"Circle","coordinates":[lng,lat],"radius":m}
     "polygon": "Polygon",
 }
+
+
+def _sanitize_text_box_corner(geometry: dict) -> None:
+    """Drop ``geometry["box_corner"]`` if it isn't a valid [lng, lat] pair.
+
+    A drag-created text label stores the opposite corner of the box the user
+    dragged out alongside its anchor point, so the frontend can size/wrap the
+    label to fit it. Mutates *geometry* in place.
+    """
+    corner = geometry.get("box_corner")
+    if corner is None:
+        return
+    valid = (
+        isinstance(corner, (list, tuple))
+        and len(corner) == 2
+        and all(isinstance(n, (int, float)) and math.isfinite(n) for n in corner)
+    )
+    if not valid:
+        geometry.pop("box_corner", None)
 
 
 def _parse_body(request: HttpRequest) -> dict:
@@ -123,6 +143,8 @@ class MarkupView(LoginRequiredMixin, View):
                 {"ok": False, "error": f"{markup_type} requires {expected_geom_type} geometry"},
                 status=400,
             )
+        if markup_type == "text":
+            _sanitize_text_box_corner(geometry)
 
         label = (body.get("label") or "").strip()
         security_indicator = body.get("security_indicator") or ""
@@ -177,7 +199,10 @@ class MarkupEditView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
-            item.geometry = body["geometry"]
+            geometry = body["geometry"]
+            if item.markup_type == "text":
+                _sanitize_text_box_corner(geometry)
+            item.geometry = geometry
         if "label" in body:
             item.label = (body["label"] or "").strip()
         if "color" in body:
