@@ -1043,6 +1043,15 @@
 
     function _arrowheadSize() { return MarkupEngine.arrowheadSize(map.getZoom()); }
 
+    // Local to this script block - the page's other `escapeHtml` (used by the
+    // debug overlay) lives inside a separate, conditionally-rendered <script>
+    // and its own IIFE, so it's never actually in scope here.
+    function _escapeMarkupLabel(s) {
+        const div = document.createElement('div');
+        div.textContent = s || '';
+        return div.innerHTML;
+    }
+
     function _textFontSize(item) {
         // Scale text proportionally to zoom, halving/doubling every 2 zoom levels
         const base = item.stroke_width || 16;
@@ -1086,9 +1095,9 @@
         const sz = _textFontSize(item);
         if (rect) {
             return `<span class="map-text-label map-text-label--box" style="color:${item.color};background:${bg};` +
-                `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeHtml(label) || '&nbsp;'}</span>`;
+                `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${_escapeMarkupLabel(label) || '&nbsp;'}</span>`;
         }
-        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${escapeHtml(label) || '&nbsp;'}</span>`;
+        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${_escapeMarkupLabel(label) || '&nbsp;'}</span>`;
     }
 
     function _textIcon(item) {
@@ -1168,7 +1177,7 @@
                     // (which the user fully controls), this is just a readable caption.
                     icon: L.divIcon({
                         className: '', iconSize: null, iconAnchor: [0, 0],
-                        html: `<span class="map-text-label map-text-label--line">${escapeHtml(item.label)}</span>`,
+                        html: `<span class="map-text-label map-text-label--line">${_escapeMarkupLabel(item.label)}</span>`,
                     }),
                     interactive: false,
                 }));
@@ -1183,7 +1192,7 @@
                 layers.push(L.marker(center, {
                     icon: L.divIcon({
                         className: '', iconSize: null, iconAnchor: [0, 0],
-                        html: `<span class="map-text-label">${escapeHtml(item.label)}</span>`,
+                        html: `<span class="map-text-label">${_escapeMarkupLabel(item.label)}</span>`,
                     }),
                     interactive: false,
                 }));
@@ -1245,7 +1254,10 @@
     // a line/arrow - that's the moment "click the last point again to finish"
     // becomes an actual, live gesture. Non-blocking (pointer-events: none on the
     // wrapper) so it never steals the click the user is mid-gesture on.
-    const _lineFinishTipKey = 'ul_markup_line_finish_tip_dismissed_v1';
+    // Key uses the shared 'ul_onboarding_v1_' prefix so the dev toolbar's
+    // "Reset onboarding" tool (which sweeps that prefix from localStorage)
+    // clears it along with every other onboarding hint.
+    const _lineFinishTipKey = 'ul_onboarding_v1_markup_line_finish_tip_dismissed';
     function _lineFinishTipDismissed() {
         {% if not request.user.profile.show_onboarding_tips %}return true;{% endif %}
         try { return localStorage.getItem(_lineFinishTipKey) === '1'; } catch (_) { return true; }
