@@ -148,13 +148,14 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationWikiDetailPinView(LoginRequiredMixin, View):
-    """HTMX partial: community detail pins panel for a Location wiki page.
+    """Community detail pins for a Location wiki page.
 
-    GET  → renders the panel partial.
-    POST → creates a new community detail pin, records a LocationEdit, re-renders.
+    GET  → renders the (legacy, currently unused by the wiki page's own JS) panel partial.
+    POST → creates a new community detail pin, records a LocationEdit, returns JSON.
     """
 
-    def _render(self, request, location):
+    def get(self, request, location_slug):
+        location = get_object_or_404(Location, slug=location_slug)
         detail_pins = (
             Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
             .select_related("profile__user")
@@ -169,10 +170,6 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
                 "pin_type_choices": PinType.choices,
             },
         )
-
-    def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        return self._render(request, location)
 
     def post(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
@@ -198,6 +195,10 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
+            detail_bg_color=body.get("bg_color") or None,
+            detail_bg_opacity=int(body.get("bg_opacity") or 80),
+            detail_border_color=body.get("border_color") or None,
+            detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_location=location,
             profile=profile,
             location=location,
@@ -209,11 +210,16 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             changes={"detail_pin_added": {"from": None, "to": detail_pin.effective_name}},
         )
 
-        return self._render(request, location)
+        return JsonResponse({"ok": True, "uuid": str(detail_pin.uuid)})
 
 
 class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
-    """Move a community detail pin and record a LocationEdit."""
+    """Edit, move, or delete a community detail pin.
+
+    Both verbs share one URL (mirroring the personal-pin equivalent,
+    DetailPinEditView) so the frontend can use one base URL for both.
+    Moves and deletes record a LocationEdit.
+    """
 
     def post(self, request, location_slug, detail_pin_uuid):
         location = get_object_or_404(Location, slug=location_slug)
@@ -225,32 +231,46 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
+        # Style/content fields update silently (no LocationEdit) - same reasoning
+        # as personal detail pins: these autosave on every panel change, and a
+        # granular audit entry per keystroke would flood the wiki's edit history.
+        for field, value in {
+            "name": body.get("name") or None,
+            "description": body.get("description") or None,
+            "pin_type": body.get("pin_type") or None,
+            "icon": body.get("icon") or None,
+            "color": body.get("color") or None,
+            "detail_bg_color": body.get("bg_color") or None,
+            "detail_border_color": body.get("border_color") or None,
+        }.items():
+            if value is not None or field in body:
+                setattr(detail_pin, field, value)
+        if "bg_opacity" in body:
+            detail_pin.detail_bg_opacity = int(body["bg_opacity"])
+        if "border_opacity" in body:
+            detail_pin.detail_border_opacity = int(body["border_opacity"])
+
         lat = body.get("latitude")
         lon = body.get("longitude")
-        if not lat or not lon:
-            return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
-
-        old_lat = detail_pin.latitude
-        old_lon = detail_pin.longitude
-        detail_pin.latitude = float(lat)
-        detail_pin.longitude = float(lon)
+        moved = bool(lat and lon)
+        old_lat, old_lon = detail_pin.latitude, detail_pin.longitude
+        if moved:
+            detail_pin.latitude = float(lat)
+            detail_pin.longitude = float(lon)
         detail_pin.save()
 
-        LocationEdit.objects.create(
-            location=location,
-            editor=profile,
-            changes={"detail_pin_moved": {
-                "pin": detail_pin.effective_name,
-                "from": [str(old_lat), str(old_lon)],
-                "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
-            }},
-        )
+        if moved:
+            LocationEdit.objects.create(
+                location=location,
+                editor=profile,
+                changes={"detail_pin_moved": {
+                    "pin": detail_pin.effective_name,
+                    "from": [str(old_lat), str(old_lon)],
+                    "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
+                }},
+            )
 
         return JsonResponse({"ok": True})
-
-
-class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
-    """Delete a single community detail pin and record a LocationEdit."""
 
     def delete(self, request, location_slug, detail_pin_uuid):
         location = get_object_or_404(Location, slug=location_slug)
@@ -267,17 +287,4 @@ class LocationWikiDetailPinDeleteView(LoginRequiredMixin, View):
             changes={"detail_pin_removed": {"from": pin_name, "to": None}},
         )
 
-        detail_pins = (
-            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
-            .select_related("profile__user")
-            .order_by("pin_type", "name")
-        )
-        return render(
-            request,
-            "dashboard/partials/pins/location_detail_pins_panel.html",
-            {
-                "location": location,
-                "detail_pins": detail_pins,
-                "pin_type_choices": PinType.choices,
-            },
-        )
+        return HttpResponse("", status=200)

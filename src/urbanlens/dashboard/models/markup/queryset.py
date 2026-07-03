@@ -17,6 +17,10 @@ class PinMarkupQuerySet(abstract.QuerySet):
         """All markup items belonging to a specific parent pin."""
         return self.filter(parent_pin=pin)
 
+    def for_location(self, location) -> Self:
+        """All shared/community markup items belonging to a specific Location."""
+        return self.filter(parent_location=location)
+
     def for_profile(self, profile) -> Self:
         """All markup items belonging to a specific profile."""
         return self.filter(profile=profile)

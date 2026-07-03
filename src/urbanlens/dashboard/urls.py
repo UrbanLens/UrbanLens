@@ -563,14 +563,24 @@ urlpatterns = [
                     name="location.wiki.detail_pins.panel",
                 ),
                 path(
-                    "<slug:location_slug>/wiki/detail-pins/<uuid:detail_pin_uuid>/delete/",
-                    detail_pins.LocationWikiDetailPinDeleteView.as_view(),
-                    name="location.wiki.detail_pin.delete",
-                ),
-                path(
-                    "<slug:location_slug>/wiki/detail-pins/<uuid:detail_pin_uuid>/edit/",
+                    "<slug:location_slug>/wiki/detail-pins/<uuid:detail_pin_uuid>/",
                     detail_pins.LocationWikiDetailPinEditView.as_view(),
                     name="location.wiki.detail_pin.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/markup/json/",
+                    markup.MarkupJsonView.as_view(),
+                    name="location.wiki.markup.json",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/markup/",
+                    markup.MarkupView.as_view(),
+                    name="location.wiki.markup",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/markup/<uuid:markup_uuid>/",
+                    markup.MarkupEditView.as_view(),
+                    name="location.wiki.markup.edit",
                 ),
                 path(
                     "<slug:location_slug>/wiki/comments/",

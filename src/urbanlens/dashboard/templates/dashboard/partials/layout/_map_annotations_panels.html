@@ -1,0 +1,242 @@
+{% comment %}
+Shared map annotation UI - used identically by the pin detail page and the
+Location wiki page so a change to one lands on both. Include inside a
+`.map-wrapper` div (must be `position: relative` - see _map.scss), right
+after the map's own card-header, alongside `<div id="map"></div>`.
+
+Relies on context already provided by both pages' own views: pin_type_choices,
+detail_pin_icon_choices, color_choices, markup_fill_color, markup_border_color.
+No page-specific (pin vs location) values are referenced here - see
+_map_annotations_script.html for the parameterized JS half.
+{% endcomment %}
+
+{# -- Map sidebar panel (Details + Photos tabs) -- #}
+<div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
+    <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+        <i class="material-icons">layers</i>
+        <span id="detail-pin-count-label">0 Layers</span>
+        <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
+    </button>
+    <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
+        <div class="map-panel-tabs">
+            <button type="button" class="map-panel-tab is-active" data-tab="details">
+                <i class="material-icons">layers</i>Details
+            </button>
+            <button type="button" class="map-panel-tab" data-tab="photos" id="map-panel-tab-photos">
+                <i class="material-icons">photo_library</i>Photos
+            </button>
+        </div>
+        <div id="map-panel-details" class="map-panel-body">
+            <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
+        </div>
+        <div id="map-panel-photos" class="map-panel-body" hidden>
+            <ul id="photo-panel-list" class="photo-panel-list"></ul>
+        </div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+{# -- Bottom-left map controls -- #}
+<div class="map-bottom-controls">
+    <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
+        <i class="material-icons">pentagon</i> Edit Boundary
+    </button>
+    <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
+            <i class="material-icons">delete_outline</i> Clear
+        </button>
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
+            <i class="material-icons">close</i> Cancel
+        </button>
+    </div>
+    {# "Add Detail" dropdown ----------------------------------- #}
+    <div class="map-add-detail-wrap" id="add-detail-wrap">
+        <div id="add-detail-menu" class="add-detail-menu" style="display:none">
+            <button type="button" class="add-detail-item" onclick="openAddPinDialog()">
+                <i class="material-icons">place</i> Pin
+            </button>
+            <button type="button" class="add-detail-item" onclick="startMarkupDraw('line')">
+                <i class="material-icons">show_chart</i> Line
+            </button>
+            <button type="button" class="add-detail-item" onclick="startMarkupDraw('arrow')">
+                <i class="material-icons">arrow_forward</i> Arrow
+            </button>
+            <button type="button" class="add-detail-item" onclick="startTextPlacement()">
+                <i class="material-icons">title</i> Text
+            </button>
+            <button type="button" class="add-detail-item" onclick="startShapeDraw('square')">
+                <i class="material-icons">crop_square</i> Square
+            </button>
+            <button type="button" class="add-detail-item" onclick="startShapeDraw('circle')">
+                <i class="material-icons">circle</i> Circle
+            </button>
+            <button type="button" class="add-detail-item" onclick="startShapeDraw('polygon')">
+                <i class="material-icons">format_shapes</i> Polygon
+            </button>
+        </div>
+        <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
+                id="add-detail-btn" onclick="toggleAddDetailMenu()">
+            <i class="material-icons">add_location_alt</i> Add Detail
+            <i class="material-icons add-detail-chevron">expand_less</i>
+        </button>
+    </div>
+</div>
+
+{# -- Unified markup panel: same shell/fields for drawing AND editing -- #}
+<div id="markup-panel" class="map-dialog map-dialog--side" style="display:none">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Draw Arrow" title_id="markup-panel-title" closefn="closeMarkupPanel" %}
+    <div class="markup-form-body">
+        <p id="markup-panel-hint" class="markup-place-hint" hidden>
+            <i class="material-icons">touch_app</i>
+            <span id="markup-panel-hint-text"></span>
+        </p>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line"><span id="markup-panel-label-caption">Label</span> <small>(optional)</small></span>
+            <input type="text" id="markup-panel-label" placeholder="e.g. Route in" class="markup-form-input"
+                   oninput="_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row">
+            <span id="markup-panel-color-label">Fill Color</span>
+            <div class="markup-color-swatches" id="markup-panel-color-swatches"></div>
+            <input type="hidden" id="markup-panel-color" value="{{ markup_fill_color }}">
+        </label>
+        <label class="markup-form-label-row">
+            <span id="markup-panel-border-label">Border Color</span>
+            <div class="markup-color-swatches" id="markup-panel-border-swatches"></div>
+            <input type="hidden" id="markup-panel-border" value="{{ markup_border_color }}">
+        </label>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line">
+                <span id="markup-panel-width-label-text">Width</span>&nbsp;<span id="markup-panel-width-label">3</span>px
+            </span>
+            <input type="range" id="markup-panel-width" min="1" max="8" value="3"
+                   oninput="document.getElementById('markup-panel-width-label').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line">
+                <span id="markup-panel-fill-opacity-label-text">Fill Opacity</span>&nbsp;<span id="markup-panel-fill-opacity-val">87</span>%
+            </span>
+            <input type="range" id="markup-panel-fill-opacity" min="0" max="100" value="87"
+                   oninput="document.getElementById('markup-panel-fill-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row" id="markup-panel-border-opacity-row">
+            <span class="markup-form-label-line">
+                Border Opacity&nbsp;<span id="markup-panel-border-opacity-val">100</span>%
+            </span>
+            <input type="range" id="markup-panel-border-opacity" min="0" max="100" value="100"
+                   oninput="document.getElementById('markup-panel-border-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row" id="markup-panel-security-row">
+            Security Type
+            <select id="markup-panel-security" class="markup-form-select" onchange="_liveApplyMarkupEdit()">
+                <option value="">- None -</option>
+                <option value="fence">Fence</option>
+                <option value="camera">Camera</option>
+                <option value="alarm">Alarm</option>
+                <option value="security">Security Guard</option>
+                <option value="sign">Sign</option>
+                <option value="plywood">Plywood</option>
+                <option value="locked">Locked</option>
+                <option value="vps">VPS</option>
+            </select>
+        </label>
+        <div class="form-actions" id="markup-panel-draw-actions" style="margin-top:.5rem">
+            <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="_closeMarkupDraw()" style="margin-left:auto">Close</button>
+        </div>
+        <div class="form-actions" id="markup-panel-edit-actions" style="margin-top:.5rem" hidden>
+            {# The dialog header's X already closes this panel - no need to duplicate it here. #}
+            <button type="button" class="btn btn--danger" onclick="deleteMarkupEdit()" style="margin-left:auto">Delete</button>
+        </div>
+    </div>
+</div>
+
+{# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
+{# embedded picker map - placing/moving the pin happens on the main map. Must --- #}
+{# live inside .map-wrapper (like #markup-panel above) since .map-dialog--side -- #}
+{# positions itself absolutely relative to that ancestor. ---------------------- #}
+<div id="detail-pin-panel" class="map-dialog map-dialog--side" style="display:none">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Detail Pin" title_id="detail-pin-panel-title" closefn="closeDetailPinPanel" %}
+    <div class="detail-pin-add-body">
+    <p id="detail-pin-place-hint" class="detail-pin-add-hint">
+        <i class="material-icons">place</i>
+        <span id="detail-pin-place-hint-text">Click anywhere on the map to place the pin.</span>
+    </p>
+    <form id="detail-pin-form" class="detail-pin-add-form" novalidate>
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="dp-type">Type</label>
+            <select id="dp-type" name="pin_type">
+                {% for value, label in pin_type_choices %}
+                {% if value != "location" %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label>Icon <span class="form-optional">(optional)</span></label>
+            <div class="dp-icon-picker" id="dp-icon-picker">
+                {% for icon_val, icon_label in detail_pin_icon_choices %}
+                <button type="button" class="dp-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+                    <i class="material-icons">{{ icon_val }}</i>
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="dp-icon" name="icon" value="">
+        </div>
+        <div class="form-row">
+            <label>Icon Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker" id="dp-color-picker">
+                {% for color_hex, color_name in color_choices %}
+                <button type="button" class="dp-color-swatch" data-color="{{ color_hex }}"
+                        style="background:{{ color_hex }}" title="{{ color_name }}"></button>
+                {% endfor %}
+            </div>
+            <input type="hidden" id="dp-color" name="color" value="">
+        </div>
+        <div class="form-row">
+            <label>Background Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker dp-circle-swatches" id="dp-bg-swatches"></div>
+            <div class="dp-opacity-row">
+                <span class="dp-opacity-label">Opacity</span>
+                <input type="range" id="dp-bg-opacity" min="0" max="100" value="80">
+                <span id="dp-bg-opacity-val" class="dp-opacity-val">80</span><span class="cop-pct">%</span>
+            </div>
+            <input type="hidden" id="dp-bg-color" value="">
+        </div>
+        <div class="form-row">
+            <label>Border Color <span class="form-optional">(optional)</span></label>
+            <div class="dp-color-picker dp-circle-swatches" id="dp-border-swatches"></div>
+            <div class="dp-opacity-row">
+                <span class="dp-opacity-label">Opacity</span>
+                <input type="range" id="dp-border-opacity" min="0" max="100" value="100">
+                <span id="dp-border-opacity-val" class="dp-opacity-val">100</span><span class="cop-pct">%</span>
+            </div>
+            <input type="hidden" id="dp-border-color" value="">
+        </div>
+        <div class="form-row">
+            <label for="dp-name">Name <span class="form-optional">(optional)</span></label>
+            <input type="text" id="dp-name" name="name" placeholder="e.g. Main Entrance">
+        </div>
+        <div class="form-row">
+            <label for="dp-description">Notes <span class="form-optional">(optional)</span></label>
+            <textarea id="dp-description" name="description" rows="2"
+                      placeholder="Any useful details..."></textarea>
+        </div>
+        <input type="hidden" id="dp-lat" name="latitude">
+        <input type="hidden" id="dp-lon" name="longitude">
+        <div class="form-actions">
+            <button type="submit" id="detail-pin-submit-btn" class="btn btn--primary btn--lg btn--submit" disabled>
+                Add Pin
+            </button>
+            <button type="button" class="btn btn--danger" id="detail-pin-delete-btn" hidden>
+                Delete
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="closeDetailPinPanel()">
+                Cancel
+            </button>
+        </div>
+    </form>
+    </div>{# /detail-pin-add-body #}
+</div>

@@ -24,17 +24,22 @@ logger = logging.getLogger(__name__)
 
 
 class PinMarkup(abstract.Model):
-    """A map annotation attached to a user's Pin.
+    """A map annotation attached to a user's Pin, or shared on a Location's wiki.
 
-    Markup items let users annotate a pin's map view with lines, arrows, text
+    Markup items let users annotate a map view with lines, arrows, text
     labels, and geometric shapes (squares, circles, free polygons).
 
-    All markup is personal (scoped to the owning profile) and rendered on the
-    "Markup" layer in the pin detail map.
+    Exactly one of ``parent_pin`` / ``parent_location`` is set, mirroring how
+    ``Pin`` itself distinguishes a personal detail pin (``parent_pin`` set)
+    from a community detail pin (``parent_location`` set). Pin-scoped markup
+    is personal (only the owning profile can see/edit it, rendered on the
+    "Markup" layer in the pin detail map); Location-scoped markup is shared
+    community data, editable by any signed-in user, rendered on the wiki map.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
-        parent_pin: The Pin whose detail map shows this annotation.
+        parent_pin: The Pin whose detail map shows this annotation, if personal.
+        parent_location: The Location whose wiki map shows this annotation, if shared.
         profile: The user who created this annotation.
         markup_type: One of line / arrow / text / square / circle / polygon.
         geometry: GeoJSON-style geometry dict.
@@ -57,6 +62,15 @@ class PinMarkup(abstract.Model):
     parent_pin = ForeignKey(
         "dashboard.Pin",
         on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="markup_items",
+    )
+    parent_location = ForeignKey(
+        "dashboard.Location",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
         related_name="markup_items",
     )
     profile = ForeignKey(
@@ -102,12 +116,14 @@ class PinMarkup(abstract.Model):
         }
 
     def __str__(self) -> str:
-        return f"{self.markup_type}: {self.label or '(unlabelled)'} [{self.parent_pin_id}]"
+        owner = f"pin={self.parent_pin_id}" if self.parent_pin_id else f"location={self.parent_location_id}"
+        return f"{self.markup_type}: {self.label or '(unlabelled)'} [{owner}]"
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
         indexes = [
             Index(fields=["parent_pin"], name="dashboard_pm_pin_idx"),
+            Index(fields=["parent_location"], name="dashboard_pm_location_idx"),
             Index(fields=["profile"], name="dashboard_pm_profile_idx"),
         ]

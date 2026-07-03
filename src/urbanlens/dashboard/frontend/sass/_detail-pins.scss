@@ -111,33 +111,15 @@
     font-size: .8em;
 }
 
-.detail-pin-add-dialog {
-    @include dialog-base(520px);
-    // Inner body scrolls - cap slightly tighter than default for this tall form
-    max-height: min(92vh, 900px);
-    &::backdrop {
-        background: rgba(0, 0, 0, .4);
-    }
-
-    // Scrollable body - everything below the fixed header
-    .detail-pin-add-body {
-        flex: 1;
-        overflow-y: auto;
-        min-height: 0; // required for flex children to shrink below content size
-    }
-
-    #wiki-detail-pin-picker-map {
-        // Viewport-relative height: scales with zoom, never smaller than 180px.
-        height: clamp(180px, 30vh, 340px);
-        margin: .75rem 1.25rem;
-        border-radius: 8px;
-        overflow: hidden;
-    }
+// Scrollable body - everything below the fixed header. Shared by the
+// non-modal .map-dialog--side panel used identically on both the pin detail
+// page and the Location wiki page.
+.detail-pin-add-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0; // required for flex children to shrink below content size
 }
 
-// Unscoped (not tied to the modal .detail-pin-add-dialog) so the same markup and
-// styling work whether the form sits in a native <dialog> (community wiki) or in
-// the non-modal .map-dialog--side panel (pin detail page).
 .detail-pin-add-hint {
     display: flex;
     align-items: center;

@@ -85,6 +85,10 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "pin_type_choices": PinType.choices,
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
+                "markup_fill_color": profile.markup_fill_color,
+                "markup_fill_opacity": profile.markup_fill_opacity,
+                "markup_border_color": profile.markup_border_color,
+                "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
                 "location_security_values": [
                     ("fences", "Fences", location.fences),

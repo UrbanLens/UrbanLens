@@ -1,0 +1,1690 @@
+{% comment %}
+Shared map annotations script - markup drawing/editing, the unified detail-pin
+side panel, the Campus-based boundary editor (+ its context menu), and the
+Details/Photos layers list panel. Used identically by the pin detail page and
+the Location wiki page; a fix here lands on both.
+
+Must be included after the page has already created its Leaflet `map` and
+opened `<div id="map">` inside a `.map-wrapper` (see index.html/wiki.html),
+and after `_markup_engine.html` (defines window.MarkupEngine) and toastr are
+loaded.
+
+Required include context (pass via `{% include ... with %}`):
+  map_center_lat, map_center_lng   - numeric center for the map view
+  markup_json_url, markup_create_url, markup_edit_url_template
+  detail_pins_json_url, detail_pin_create_url, detail_pin_edit_url_template
+  boundary_url                    - single endpoint, GET (load) + POST (save)
+  photo_gallery_json_url
+
+Optional:
+  main_marker_owner_uuid - if set (a Pin's UUID), the map's center marker is
+                          draggable and PATCHes /dashboard/rest/pins/<uuid>/
+                          with its new position on drag; otherwise a plain,
+                          non-draggable marker is shown (Locations don't
+                          support dragging their canonical coordinates -
+                          those are edited via "Suggest edits" instead).
+  default_map_view      - 'satellite' | 'topographic' | 'street' (default: satellite)
+  openweathermap_api_key - if unset, the Rain/Clouds overlay layers are omitted
+
+Inherited from the parent page's own context (not re-passed): pin_type_choices,
+detail_pin_icon_choices, color_choices, markup_fill_color, markup_fill_opacity,
+markup_border_color, markup_border_opacity.
+{% endcomment %}
+<script>
+    // -- Map setup -------------------------------------------------------------
+    const mapCenterLat = {{ map_center_lat }};
+    const mapCenterLng = {{ map_center_lng }};
+    // Expose for the comment map composer's default center.
+    window._commentMapDefaultLat = mapCenterLat;
+    window._commentMapDefaultLng = mapCenterLng;
+    const _defaultMapView = '{{ default_map_view|default:"satellite" }}';
+
+    const map = L.map('map', { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
+    window.map = map;
+
+    // Dedicated panes keep markup shapes clickable even when a campus boundary
+    // polygon visually overlaps them - without this, both layer groups share the
+    // default overlayPane and whichever one's SVG was appended to the DOM last
+    // (campus, since it loads after markup) silently swallows clicks meant for
+    // the markup shape underneath.
+    // Both stay below the default markerPane (600) so our own arrowhead/text/label
+    // markers still render on top of their own shapes, but above the default
+    // overlayPane (400) that any unrelated vector layer would otherwise share.
+    map.createPane('markupPane').style.zIndex = 550;
+    map.createPane('campusPane').style.zIndex = 540;
+
+    // Enable scroll-wheel zoom only after the user has hovered over the map
+    // for a moment, so normal page scrolling is not hijacked.
+    let _scrollEnableTimer = null;
+    const _mapEl = document.getElementById('map');
+    _mapEl.addEventListener('mouseenter', () => {
+        _scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), 750);
+    });
+    _mapEl.addEventListener('mouseleave', () => {
+        clearTimeout(_scrollEnableTimer);
+        map.scrollWheelZoom.disable();
+    });
+
+    const _stdLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+    const _satLayer  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19,
+    });
+    const _topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17 });
+
+    // Add user's preferred default layer
+    (_defaultMapView === 'satellite' ? _satLayer : _defaultMapView === 'topographic' ? _topoLayer : _stdLayer).addTo(map);
+
+    const _baseLayers = { 'Street': _stdLayer, 'Satellite': _satLayer, 'Topographic': _topoLayer };
+    const _overlays = {};
+
+    {% if openweathermap_api_key %}
+    const _rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{ openweathermap_api_key }}', {
+        layer: 'precipitation_new', opacity: 0.7, attribution: '&copy; OpenWeatherMap',
+    });
+    const _cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{ openweathermap_api_key }}', {
+        layer: 'clouds_new', opacity: 0.5, attribution: '&copy; OpenWeatherMap',
+    });
+    _overlays['Rain'] = _rainLayer;
+    _overlays['Clouds'] = _cloudLayer;
+    {% endif %}
+
+    const markerIcon = L.icon({
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        iconSize: [25, 41], shadowSize: [41, 41],
+        iconAnchor: [12, 41], shadowAnchor: [12, 41], popupAnchor: [1, -34],
+    });
+    L.Marker.prototype.options.icon = markerIcon;
+
+    // Main center marker - hidden whenever a boundary polygon exists. Draggable
+    // (and self-saving) only when main_marker_owner_uuid is provided - Locations
+    // don't support relocating their canonical coordinates by dragging.
+    let _mainMarkerLat = mapCenterLat, _mainMarkerLng = mapCenterLng;
+    let _mainMarker = L.marker([mapCenterLat, mapCenterLng], { draggable: {% if main_marker_owner_uuid %}true{% else %}false{% endif %} }).addTo(map);
+    {% if main_marker_owner_uuid %}
+    _mainMarker.on('dragend', function () {
+        const pos = _mainMarker.getLatLng();
+        fetch(`/dashboard/rest/pins/{{ main_marker_owner_uuid }}/`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => { _mainMarkerLat = pos.lat; _mainMarkerLng = pos.lng; toastr.success('Pin moved.'); })
+        .catch(() => {
+            toastr.error('Failed to save new position.');
+            _mainMarker.setLatLng([_mainMarkerLat, _mainMarkerLng]);
+        });
+    });
+    {% endif %}
+
+    setTimeout(() => map.invalidateSize(), 300);
+
+    // Re-validate map size on resize and orientation change (important on mobile)
+    (function () {
+        let _resizeTimer;
+        function onResize() {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(() => map.invalidateSize(), 150);
+        }
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', () => setTimeout(() => map.invalidateSize(), 300));
+    }());
+
+    // -- Detail pins layer -----------------------------------------------------
+    const _detailPinColors = {
+        building: '#6b7280', entrance: '#16a34a', poi: '#d97706',
+        danger: '#dc2626', other: '#7c3aed', location: '#2563eb',
+    };
+    const _detailPinIcons = {
+        building: 'business', entrance: 'door_front', poi: 'star',
+        danger: 'warning', other: 'info', location: 'place',
+    };
+    // Both sub-layers live inside _detailsLayer so one toggle shows/hides everything.
+    const _detailPinLayer = L.layerGroup();
+    const _markupLayer    = L.layerGroup();
+    const _detailsLayer   = L.layerGroup([_detailPinLayer, _markupLayer]).addTo(map);
+    _overlays['Details'] = _detailsLayer;
+
+    const _photoLayer   = L.layerGroup().addTo(map);
+    _overlays['Photos'] = _photoLayer;
+
+    L.control.layers(_baseLayers, _overlays, { position: 'topright', collapsed: true }).addTo(map);
+
+    // URL base for detail pin edit/delete: strip the placeholder UUID off the end
+    const _dpEditBase = "{{ detail_pin_edit_url_template }}"
+        .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    let _detailPins = []; // { uuid, name, pin_type, icon, color, latitude, longitude, marker }
+    let _highlightedDpUuid = null;
+    let _photoPanelItems = []; // { id, url, lat, lng, mine }
+    const _photoMarkers  = {}; // imgId → { marker, url, lat, lng }
+
+    function _hexToRgb(hex) {
+        const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        return `${r},${g},${b}`;
+    }
+
+    function _detailIcon(dp, highlighted) {
+        const pinType = dp.pin_type || 'location';
+        const color   = dp.color || _detailPinColors[pinType] || '#2563eb';
+        const icon    = dp.icon  || _detailPinIcons[pinType]  || 'place';
+        const bgColor = dp.bg_color || null;
+        const bgOp    = bgColor ? ((dp.bg_opacity != null ? dp.bg_opacity : 80) / 100) : 0;
+        const bdColor = dp.border_color || null;
+        const bdOp    = bdColor ? ((dp.border_opacity != null ? dp.border_opacity : 100) / 100) : 0;
+
+        const hasCircle = !!(bgColor || bdColor);
+        const size      = highlighted ? 32 : 24;
+        const pad       = hasCircle ? 5 : 0;
+        const total     = size + pad * 2;
+
+        const bgStyle  = bgColor ? `background:rgba(${_hexToRgb(bgColor)},${bgOp});` : '';
+        const bdStyle  = bdColor ? `border:2px solid rgba(${_hexToRgb(bdColor)},${bdOp});` : '';
+        const ring     = highlighted
+            ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>`
+            : '';
+
+        return L.divIcon({
+            className: '',
+            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
+            iconSize: [total, total],
+            iconAnchor: [total / 2, total],
+            popupAnchor: [0, -total - 2],
+            tooltipAnchor: [0, -total / 2],
+        });
+    }
+
+    function _highlightDetailPin(uuid) {
+        _clearDetailPinHighlight();
+        _highlightedDpUuid = uuid;
+        const dp = _detailPins.find(d => d.uuid === uuid);
+        if (!dp) return;
+        dp.marker.setIcon(_detailIcon(dp, true));
+        map.panTo(dp.marker.getLatLng());
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => {
+            li.classList.toggle('is-highlighted', li.dataset.uuid === uuid);
+        });
+    }
+
+    function _clearDetailPinHighlight() {
+        if (_highlightedDpUuid) {
+            const dp = _detailPins.find(d => d.uuid === _highlightedDpUuid);
+            if (dp) dp.marker.setIcon(_detailIcon(dp, false));
+            _highlightedDpUuid = null;
+        }
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => li.classList.remove('is-highlighted'));
+    }
+
+    function _refreshPanelHeader() {
+        const panel      = document.getElementById('detail-pin-list-panel');
+        const countLabel = document.getElementById('detail-pin-count-label');
+        const total = _detailPins.length + _markupItems.length + _photoPanelItems.length;
+        if (!panel) return;
+        panel.style.display = total ? '' : 'none';
+        if (countLabel) countLabel.textContent = `${total} Layer${total === 1 ? '' : 's'}`;
+    }
+
+    function _buildDetailList() {
+        const ul = document.getElementById('detail-pin-list-ul');
+        if (!ul) return;
+        _refreshPanelHeader();
+        ul.innerHTML = '';
+
+        // -- Pin items ------------------------------------------------------
+        _detailPins.forEach(dp => {
+            const color = dp.color || _detailPinColors[dp.pin_type] || '#2563eb';
+            const icon  = dp.icon  || _detailPinIcons[dp.pin_type]  || 'place';
+            const li = document.createElement('li');
+            li.className = 'detail-pin-list-item';
+            li.dataset.uuid = dp.uuid;
+            li.dataset.kind = 'pin';
+            li.innerHTML = `
+                <span class="material-icons detail-pin-list-item-icon" style="color:${color}">${icon}</span>
+                <span class="detail-pin-list-item-name">${dp.name}</span>
+                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? 'you' : dp.added_by}</span>` : ''}
+                <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
+                    <i class="material-icons">close</i>
+                </button>`;
+            li.addEventListener('click', e => {
+                if (e.target.closest('.detail-pin-list-item-delete')) return;
+                _highlightDetailPin(dp.uuid);
+                openDetailPinEditDialog(dp);
+            });
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (!await confirmDialog({title:'Delete Pin', message:`Delete "${dp.name}"?`, confirmLabel:'Delete'})) return;
+                fetch(_dpEditBase + dp.uuid + '/', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrftoken },
+                })
+                .then(r => { if (!r.ok) throw new Error(); })
+                .then(() => { toastr.success('Detail pin deleted.'); loadDetailPins(); })
+                .catch(() => toastr.error('Failed to delete detail pin.'));
+            });
+            ul.appendChild(li);
+        });
+
+        // -- Markup items ---------------------------------------------------
+        const _markupIcon = { line: 'show_chart', arrow: 'arrow_forward', text: 'title', square: 'crop_square', circle: 'circle', polygon: 'format_shapes' };
+        _markupItems.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'detail-pin-list-item';
+            li.dataset.uuid = item.uuid;
+            li.dataset.kind = 'markup';
+            const displayName = item.label || (item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1));
+            li.innerHTML = `
+                <span class="material-icons detail-pin-list-item-icon" style="color:${item.color}">${_markupIcon[item.markup_type] || 'edit'}</span>
+                <span class="detail-pin-list-item-name">${displayName}</span>
+                <button type="button" class="detail-pin-list-item-delete" title="Delete">
+                    <i class="material-icons">close</i>
+                </button>`;
+            li.addEventListener('click', e => {
+                if (e.target.closest('.detail-pin-list-item-delete')) return;
+                openMarkupEditDialog(item);
+            });
+            li.querySelector('.detail-pin-list-item-delete').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (!await confirmDialog({title:'Delete Item', message:`Delete this ${item.markup_type}?`, confirmLabel:'Delete'})) return;
+                // If this item's edit panel happens to be open, close it too - editing
+                // a just-deleted item would otherwise keep autosaving into a 404.
+                if (_editingMarkupItem === item) {
+                    if (_markupAutoSaveItem === item) { clearTimeout(_markupAutoSaveTimer); _markupAutoSaveItem = null; }
+                    document.getElementById('markup-panel').style.display = 'none';
+                    _editingMarkupItem = null;
+                }
+                fetch(_markupEditBase + item.uuid + '/', {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrftoken },
+                })
+                .then(r => { if (!r.ok) throw new Error(); })
+                .then(() => { toastr.success('Markup deleted.'); loadMarkup(); })
+                .catch(() => toastr.error('Failed to delete markup.'));
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    // Detail pin list toggle
+    document.getElementById('detail-pin-list-toggle').addEventListener('click', () => {
+        const drawer  = document.getElementById('detail-pin-list-drawer');
+        const chevron = document.getElementById('detail-pin-list-chevron');
+        const open    = drawer.style.display !== 'none';
+        if (!open) {
+            // Cap the drawer to whatever room is actually free above the bottom-left
+            // controls, instead of a static max-height that can overlap them on short
+            // viewports - recomputed on every open since the map can resize.
+            const wrapper = document.querySelector('.map-wrapper');
+            const bottomControls = document.querySelector('.map-bottom-controls');
+            const panel = document.getElementById('detail-pin-list-panel');
+            if (wrapper && bottomControls && panel) {
+                const available = wrapper.getBoundingClientRect().bottom
+                    - bottomControls.getBoundingClientRect().height
+                    - panel.getBoundingClientRect().top - 24;
+                drawer.style.maxHeight = Math.max(120, Math.min(320, available)) + 'px';
+            }
+        }
+        drawer.style.display  = open ? 'none' : '';
+        chevron.classList.toggle('open', !open);
+    });
+
+    function loadDetailPins() {
+        fetch("{{ detail_pins_json_url }}")
+            .then(r => r.json())
+            .then(data => {
+                _detailPinLayer.clearLayers();
+                _highlightedDpUuid = null;
+                _detailPins = [];
+                (data.detail_pins || []).forEach(dp => {
+                    if (!dp.latitude || !dp.longitude) return;
+                    const entry = {
+                        uuid: dp.uuid, name: dp.name, pin_type: dp.pin_type,
+                        icon: dp.icon, color: dp.color,
+                        bg_color: dp.bg_color || '', bg_opacity: dp.bg_opacity,
+                        border_color: dp.border_color || '', border_opacity: dp.border_opacity,
+                        description: dp.description || '',
+                        added_by: dp.added_by || '', is_mine: !!dp.is_mine,
+                        latitude: dp.latitude, longitude: dp.longitude,
+                        marker: null,
+                    };
+                    const marker = L.marker([dp.latitude, dp.longitude], {
+                        icon: _detailIcon(entry),
+                        draggable: true,
+                    });
+                    if (dp.name) marker.bindTooltip(dp.name, { permanent: false, direction: 'top', className: 'detail-pin-tooltip' });
+                    marker.on('click', () => openDetailPinEditDialog(entry));
+                    marker.on('dragend', function () {
+                        const pos = marker.getLatLng();
+                        fetch(_dpEditBase + dp.uuid + '/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                            body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                        })
+                        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                        .then(() => { entry.latitude = pos.lat; entry.longitude = pos.lng; toastr.success('Pin moved.'); })
+                        .catch(() => {
+                            toastr.error('Failed to save new position.');
+                            marker.setLatLng([entry.latitude, entry.longitude]);
+                        });
+                    });
+                    marker.addTo(_detailPinLayer);
+                    entry.marker = marker;
+                    _detailPins.push(entry);
+                });
+                _buildDetailList();
+            })
+            .catch(err => console.warn('Could not load detail pins:', err));
+    }
+    loadDetailPins();
+
+    // -- Markup layer ----------------------------------------------------------
+    const _markupJsonUrl  = "{{ markup_json_url }}";
+    const _markupPostUrl  = "{{ markup_create_url }}";
+    const _markupEditBase = "{{ markup_edit_url_template }}"
+        .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    // Profile defaults (0-100 percent, converted to 0-1 for Leaflet)
+    const _markupDefaultFillOpacity   = {{ markup_fill_opacity }}   / 100;
+    const _markupDefaultBorderOpacity = {{ markup_border_opacity }} / 100;
+
+    let _markupItems    = [];
+    let _markupDrawType = null;
+    let _drawSession    = null;  // MarkupEngine draw session (created after loadMarkup)
+
+    const _markupPalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
+    // A shape/arrow/line's own Border Color is restricted to black/white/none - it's
+    // just an outline for legibility, not a design choice like a dedicated Text
+    // item's fully user-controlled color+background.
+    const _borderOnlyPalette = ['#0f172a', '#f8fafc'];
+
+    _rebuildEditSwatch('markup-panel-color-swatches', 'markup-panel-color', false);
+    _rebuildEditSwatch('markup-panel-border-swatches', 'markup-panel-border', true, _borderOnlyPalette);
+
+    function _arrowheadSize() { return MarkupEngine.arrowheadSize(map.getZoom()); }
+
+    // Not `escapeHtml` - a page may separately define a debug-overlay helper of
+    // that name inside its own IIFE, which wouldn't be in scope here anyway.
+    function _escapeMarkupLabel(s) {
+        const div = document.createElement('div');
+        div.textContent = s || '';
+        return div.innerHTML;
+    }
+
+    function _textFontSize(item) {
+        // Scale text proportionally to zoom, halving/doubling every 2 zoom levels
+        const base = item.stroke_width || 16;
+        const z    = map.getZoom();
+        const scale = Math.pow(2, (z - 16) * 0.5);
+        return Math.max(8, Math.min(72, Math.round(base * scale)));
+    }
+
+    function _textBackground(item) {
+        if (item.border_color === 'none')  return 'transparent';
+        if (item.border_color)             return item.border_color;
+        return 'rgba(255,255,255,0.94)';   // default
+    }
+
+    // Text placed by dragging commits a second point (box_corner) alongside the
+    // anchor coordinate - this converts that pair into an on-screen pixel rect
+    // (recomputed on every render since it depends on the current zoom) so the
+    // label can be sized/wrapped to fit the box the user actually dragged out,
+    // instead of just deriving a font size from the drag distance.
+    function _textBoxPixelRect(item) {
+        const bc = item.geometry.box_corner;
+        if (!bc) return null;
+        const c1 = item.geometry.coordinates;
+        const p1 = map.latLngToLayerPoint([c1[1], c1[0]]);
+        const p2 = map.latLngToLayerPoint([bc[1], bc[0]]);
+        return {
+            w: Math.max(24, Math.abs(p2.x - p1.x)),
+            h: Math.max(18, Math.abs(p2.y - p1.y)),
+            anchorX: p2.x < p1.x ? Math.abs(p2.x - p1.x) : 0,
+            anchorY: p2.y < p1.y ? Math.abs(p2.y - p1.y) : 0,
+        };
+    }
+
+    function _textLabelHtml(item, overrideLabel) {
+        const label = overrideLabel !== undefined ? overrideLabel : (item.label || '');
+        const bg    = _textBackground(item);
+        const rect  = _textBoxPixelRect(item);
+        // The Font Size slider (item.stroke_width) always drives the rendered size -
+        // for a drag-created box, the box just defines a fixed wrap/clip region
+        // around that text instead of the box height dictating the font size.
+        const sz = _textFontSize(item);
+        if (rect) {
+            return `<span class="map-text-label map-text-label--box" style="color:${item.color};background:${bg};` +
+                `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${_escapeMarkupLabel(label) || '&nbsp;'}</span>`;
+        }
+        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${_escapeMarkupLabel(label) || '&nbsp;'}</span>`;
+    }
+
+    function _textIcon(item) {
+        const rect = _textBoxPixelRect(item);
+        return rect
+            ? L.divIcon({ className: '', html: _textLabelHtml(item), iconSize: [rect.w, rect.h], iconAnchor: [rect.anchorX, rect.anchorY] })
+            : L.divIcon({ className: '', html: _textLabelHtml(item), iconSize: null, iconAnchor: [0, 0] });
+    }
+
+    function _shapeOptions(item) {
+        const bc = item.border_color;
+        const strokeColor = bc && bc !== 'none' ? bc : 'white';
+        const hasBorder   = bc && bc !== 'none';
+        const fillOp   = (item.fill_opacity   != null ? item.fill_opacity   : 87) / 100;
+        const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+        return {
+            pane: 'markupPane',
+            color: strokeColor,
+            fillColor: item.color,
+            fillOpacity: fillOp,
+            weight: hasBorder ? (item.stroke_width || 2) : 0,
+            opacity: borderOp,
+        };
+    }
+
+    function _renderMarkupItem(item) {
+        const layers = [];
+        const type   = item.markup_type;
+
+        if (type === 'text') {
+            const c = item.geometry.coordinates;
+            const textMarker = L.marker([c[1], c[0]], { icon: _textIcon(item) });
+            layers.push(textMarker);
+            item._textMarker = textMarker;
+
+        } else if (type === 'line' || type === 'arrow') {
+            const latlngs = item.geometry.coordinates.map(c => L.latLng(c[1], c[0]));
+            const w       = item.stroke_width || 3;
+            const isArrow = type === 'arrow';
+            const fillOp   = (item.fill_opacity   != null ? item.fill_opacity   : 87)  / 100;
+            const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+            const outlineColor = item.border_color && item.border_color !== 'none' ? item.border_color : 'white';
+
+            if (isArrow) {
+                layers.push(L.polyline(latlngs, {
+                    pane: 'markupPane', color: outlineColor, weight: w + 4, opacity: borderOp * 0.75, interactive: false,
+                }));
+            } else if (item.border_color && item.border_color !== 'none') {
+                layers.push(L.polyline(latlngs, {
+                    pane: 'markupPane', color: item.border_color, weight: w + 3, opacity: borderOp * 0.7, interactive: false,
+                }));
+            }
+
+            layers.push(L.polyline(latlngs, { pane: 'markupPane', color: item.color, weight: isArrow ? w + 2 : w, opacity: fillOp }));
+
+            if (isArrow && latlngs.length >= 2) {
+                const deg = MarkupEngine.bearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
+                const sz  = _arrowheadSize();
+                const arrowMarker = L.marker(latlngs[latlngs.length - 1], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: MarkupEngine.arrowheadSvg(item.color, deg, sz, fillOp),
+                        iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
+                    }),
+                    interactive: false,
+                });
+                layers.push(arrowMarker);
+                item._arrowheadMarker = arrowMarker;
+                item._arrowheadDeg    = deg;
+            }
+
+            if (item.label) {
+                const mid = latlngs[Math.floor(latlngs.length / 2)];
+                layers.push(L.marker(mid, {
+                    // Shape/arrow/line names always render as black-on-white, regardless
+                    // of the shape's own color - unlike a dedicated Text markup item
+                    // (which the user fully controls), this is just a readable caption.
+                    icon: L.divIcon({
+                        className: '', iconSize: null, iconAnchor: [0, 0],
+                        html: `<span class="map-text-label map-text-label--line">${_escapeMarkupLabel(item.label)}</span>`,
+                    }),
+                    interactive: false,
+                }));
+            }
+
+        } else if (type === 'square' || type === 'polygon') {
+            const rings   = item.geometry.coordinates.map(ring => ring.map(c => L.latLng(c[1], c[0])));
+            const polygon = L.polygon(rings, _shapeOptions(item));
+            layers.push(polygon);
+            if (item.label) {
+                const center = polygon.getBounds().getCenter();
+                layers.push(L.marker(center, {
+                    icon: L.divIcon({
+                        className: '', iconSize: null, iconAnchor: [0, 0],
+                        html: `<span class="map-text-label">${_escapeMarkupLabel(item.label)}</span>`,
+                    }),
+                    interactive: false,
+                }));
+            }
+
+        } else if (type === 'circle') {
+            const [lng, lat] = item.geometry.coordinates;
+            const circle     = L.circle([lat, lng], { radius: item.geometry.radius, ..._shapeOptions(item) });
+            layers.push(circle);
+        }
+
+        layers.forEach(l => l.addTo(_markupLayer));
+        item._layers = layers;
+
+        // Clicking any interactive layer opens the edit dialog
+        // Also bind a tooltip showing the label (if any) on hover
+        layers.forEach(l => {
+            if (!l.on) return;
+            l.on('click', () => openMarkupEditDialog(item));
+            if (item.label && l.bindTooltip) {
+                l.bindTooltip(item.label, { permanent: false, direction: 'top', className: 'detail-pin-tooltip' });
+            }
+        });
+    }
+
+    function _highlightMarkupItem(item) {
+        _clearDetailPinHighlight();
+        if (!item._layers || !item._layers.length) return;
+        const first = item._layers[0];
+        if (first instanceof L.Marker) {
+            map.panTo(first.getLatLng());
+        } else if (first.getBounds) {
+            map.fitBounds(first.getBounds().pad(0.3));
+        }
+        document.querySelectorAll('.detail-pin-list-item').forEach(li => {
+            li.classList.toggle('is-highlighted',
+                li.dataset.uuid === item.uuid && li.dataset.kind === 'markup');
+        });
+    }
+
+    function loadMarkup() {
+        fetch(_markupJsonUrl)
+            .then(r => r.json())
+            .then(data => {
+                _markupLayer.clearLayers();
+                _markupItems = [];
+                (data.markup_items || []).forEach(item => {
+                    _renderMarkupItem(item);
+                    _markupItems.push(item);
+                });
+                _buildDetailList();
+            })
+            .catch(err => console.warn('Could not load markup:', err));
+    }
+    loadMarkup();
+
+    // -- One-time tip: how to finish a multi-point line/arrow -------------------
+    // Shown once ever (not per-page) the first time a user places a 2nd point on
+    // a line/arrow - that's the moment "click the last point again to finish"
+    // becomes an actual, live gesture. Non-blocking (pointer-events: none on the
+    // wrapper) so it never steals the click the user is mid-gesture on.
+    // Key uses the shared 'ul_onboarding_v1_' prefix so the dev toolbar's
+    // "Reset onboarding" tool (which sweeps that prefix from localStorage)
+    // clears it along with every other onboarding hint.
+    const _lineFinishTipKey = 'ul_onboarding_v1_markup_line_finish_tip_dismissed';
+    function _lineFinishTipDismissed() {
+        {% if not request.user.profile.show_onboarding_tips %}return true;{% endif %}
+        try { return localStorage.getItem(_lineFinishTipKey) === '1'; } catch (_) { return true; }
+    }
+    function _dismissLineFinishTip() {
+        try { localStorage.setItem(_lineFinishTipKey, '1'); } catch (_) {}
+        document.getElementById('markup-line-finish-tip')?.remove();
+    }
+    function _maybeShowLineFinishTip() {
+        if (_lineFinishTipDismissed() || document.getElementById('markup-line-finish-tip')) return;
+        const wrapper = document.querySelector('.map-wrapper');
+        if (!wrapper) return;
+        const el = document.createElement('div');
+        el.id = 'markup-line-finish-tip';
+        el.className = 'markup-line-finish-tip';
+        el.innerHTML =
+            '<i class="material-icons markup-line-finish-tip__icon">gesture</i>' +
+            '<span class="markup-line-finish-tip__text">Click that <strong>last point</strong> again to finish the shape</span>' +
+            '<button type="button" class="markup-line-finish-tip__close" aria-label="Got it, don\'t show this again">' +
+            '<i class="material-icons">close</i></button>';
+        el.querySelector('.markup-line-finish-tip__close').addEventListener('click', _dismissLineFinishTip);
+        wrapper.appendChild(el);
+        setTimeout(_dismissLineFinishTip, 8000);
+    }
+
+    // -- Markup draw session ---------------------------------------------------
+    _drawSession = MarkupEngine.createDrawSession(map, {
+        getColor:     () => document.getElementById('markup-panel-color').value,
+        getWidth:     () => parseInt(document.getElementById('markup-panel-width').value || '3', 10),
+        getTextLabel: () => document.getElementById('markup-panel-label').value.trim(),
+        onCommit:     _onDrawCommit,
+        onHintChange: (hint) => {
+            const el = document.getElementById('markup-panel-hint-text');
+            if (el) el.textContent = hint;
+        },
+        onPointCountChange: (tool, n) => {
+            // The "click the last point again to finish" gesture only becomes
+            // live once a 2nd point is down - that's the moment to teach it.
+            if ((tool === 'line' || tool === 'arrow') && n === 2) _maybeShowLineFinishTip();
+        },
+        onToolChange: (tool) => {
+            _markupDrawType = tool;
+            if (!tool && !_editingMarkupItem) {
+                document.getElementById('markup-panel').style.display = 'none';
+            }
+        },
+    });
+
+    // -- Photo panel -----------------------------------------------------------
+    function _makePhotoIcon(url, size, highlighted) {
+        const shadow = highlighted
+            ? '0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)'
+            : '0 2px 6px rgba(0,0,0,.35)';
+        return L.divIcon({
+            className: '',
+            html: `<img src="${url}" class="photo-marker-img" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:5px;border:2px solid #fff;box-shadow:${shadow};display:block;transition:transform .15s,box-shadow .15s;">`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+        });
+    }
+
+    function _addPhotoMarker(imgId, url, lat, lng) {
+        if (_photoMarkers[imgId]) _photoLayer.removeLayer(_photoMarkers[imgId].marker);
+        const marker = L.marker([lat, lng], { icon: _makePhotoIcon(url, 44, false), draggable: true });
+        marker.on('dragend', function () {
+            const pos = marker.getLatLng();
+            _photoMarkers[imgId].lat = pos.lat;
+            _photoMarkers[imgId].lng = pos.lng;
+            const item = _photoPanelItems.find(p => p.id === imgId);
+            if (item) { item.lat = pos.lat; item.lng = pos.lng; }
+            if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, pos.lat, pos.lng);
+            _buildPhotoPanel();
+        });
+        marker.on('mouseover', function () { window._galleryHighlightMarker(imgId, true); });
+        marker.on('mouseout',  function () { window._galleryHighlightMarker(imgId, false); });
+        marker.addTo(_photoLayer);
+        _photoMarkers[imgId] = { marker, url, lat, lng };
+    }
+
+    window._galleryAddMarker = function (img) {
+        if (!_photoPanelItems.find(p => p.id === img.id))
+            _photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
+        if (img.latitude != null && img.longitude != null) _addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    };
+
+    window._galleryRemoveMarker = function (imgId) {
+        _photoPanelItems = _photoPanelItems.filter(p => p.id !== imgId);
+        if (_photoMarkers[imgId]) { _photoLayer.removeLayer(_photoMarkers[imgId].marker); delete _photoMarkers[imgId]; }
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    };
+
+    window._galleryHighlightMarker = function (imgId, on) {
+        const entry = _photoMarkers[imgId];
+        if (entry) {
+            const sz = on ? 56 : 44;
+            entry.marker.setIcon(_makePhotoIcon(entry.url, sz, on));
+            if (on) map.panTo([entry.lat, entry.lng]);
+        }
+        document.querySelectorAll('.photo-panel-item').forEach(li => {
+            li.classList.toggle('is-highlighted', +li.dataset.id === imgId && on);
+        });
+    };
+
+    function _buildPhotoPanel() {
+        const ul = document.getElementById('photo-panel-list');
+        if (!ul) return;
+        ul.innerHTML = '';
+        // Update badge on Photos tab button
+        const photoTab = document.getElementById('map-panel-tab-photos');
+        if (photoTab) {
+            let badge = photoTab.querySelector('.map-panel-tab-badge');
+            if (_photoPanelItems.length) {
+                if (!badge) { badge = document.createElement('span'); badge.className = 'map-panel-tab-badge'; photoTab.appendChild(badge); }
+                badge.textContent = _photoPanelItems.length;
+            } else if (badge) { badge.remove(); }
+        }
+        if (!_photoPanelItems.length) {
+            const empty = document.createElement('li');
+            empty.className = 'photo-panel-empty';
+            empty.innerHTML = '<i class="material-icons">photo_camera</i><span>No photos yet</span>';
+            ul.appendChild(empty);
+            return;
+        }
+        _photoPanelItems.forEach(function (img) {
+            const hasCoords = img.lat != null && img.lng != null;
+            const li = document.createElement('li');
+            li.className = 'photo-panel-item';
+            li.dataset.id = img.id;
+            li.draggable = true;
+            li.title = hasCoords ? 'Drag to reposition · click to view' : 'Drag onto map to set location · click to view';
+            li.innerHTML = `
+                <div class="photo-panel-thumb-wrap">
+                    <img src="${img.url}" class="photo-panel-thumb" alt="">
+                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS - drag to map'}">
+                        <i class="material-icons">${hasCoords ? 'place' : 'location_off'}</i>
+                    </span>
+                </div>
+                <span class="photo-panel-hint">${hasCoords ? 'Drag to move' : 'Drag to map'}</span>`;
+            li.addEventListener('mouseenter', () => window._galleryHighlightMarker(img.id, true));
+            li.addEventListener('mouseleave', () => window._galleryHighlightMarker(img.id, false));
+            li.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/photoid', String(img.id));
+                e.dataTransfer.effectAllowed = 'move';
+                li.classList.add('is-dragging');
+            });
+            li.addEventListener('dragend', () => li.classList.remove('is-dragging'));
+            li.addEventListener('click', () => {
+                if (hasCoords) map.panTo([img.lat, img.lng]);
+                if (window.galleryOpenLightbox) window.galleryOpenLightbox(img.id);
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    // Drop photo onto map → assign coordinates
+    const _photoDragMapEl = _mapEl;
+    _photoDragMapEl.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('text/photoid')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        _photoDragMapEl.classList.add('photo-drop-target');
+    });
+    _photoDragMapEl.addEventListener('dragleave', () => _photoDragMapEl.classList.remove('photo-drop-target'));
+    _photoDragMapEl.addEventListener('drop', e => {
+        _photoDragMapEl.classList.remove('photo-drop-target');
+        const idStr = e.dataTransfer.getData('text/photoid');
+        if (!idStr) return;
+        e.preventDefault();
+        const imgId = parseInt(idStr, 10);
+        const rect  = _photoDragMapEl.getBoundingClientRect();
+        const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+        const item = _photoPanelItems.find(p => p.id === imgId);
+        if (!item) return;
+        item.lat = latlng.lat;
+        item.lng = latlng.lng;
+        _addPhotoMarker(imgId, item.url, latlng.lat, latlng.lng);
+        if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, latlng.lat, latlng.lng);
+        _buildPhotoPanel();
+        _refreshPanelHeader();
+    });
+
+    // Tab switching
+    document.querySelectorAll('.map-panel-tab').forEach(btn => {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.map-panel-tab').forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            const tab = btn.dataset.tab;
+            document.getElementById('map-panel-details').hidden = (tab !== 'details');
+            document.getElementById('map-panel-photos').hidden  = (tab !== 'photos');
+        });
+    });
+
+    // Load gallery photos on page load
+    fetch("{{ photo_gallery_json_url }}")
+        .then(r => r.json())
+        .then(data => {
+            _photoPanelItems = [];
+            (data.images || []).forEach(function (img) {
+                _photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
+                if (img.latitude != null && img.longitude != null) _addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+            });
+            _buildPhotoPanel();
+            _refreshPanelHeader();
+        })
+        .catch(err => console.warn('Could not load gallery photos for panel:', err));
+
+    // -- "Add Detail" dropdown -------------------------------------------------
+    let _addDetailOpen = false;
+
+    function toggleAddDetailMenu() {
+        _addDetailOpen = !_addDetailOpen;
+        document.getElementById('add-detail-menu').style.display = _addDetailOpen ? '' : 'none';
+        document.querySelector('.add-detail-chevron').classList.toggle('open', _addDetailOpen);
+    }
+    function _closeAddDetailMenu() {
+        _addDetailOpen = false;
+        document.getElementById('add-detail-menu').style.display = 'none';
+        document.querySelector('.add-detail-chevron').classList.remove('open');
+    }
+    document.addEventListener('click', e => {
+        if (_addDetailOpen && !document.getElementById('add-detail-wrap').contains(e.target)) {
+            _closeAddDetailMenu();
+        }
+    });
+
+    // -- Markup drawing - engine-backed ---------------------------------------
+    // One panel (#markup-panel) is used for both drawing a new item and editing
+    // an existing one - only its title, hint, and action row change between the
+    // two modes, so the user only ever learns a single set of controls.
+    let _editingMarkupItem = null;
+
+    const _MARKUP_TOOL_TITLES = {
+        line: 'Draw Line', arrow: 'Draw Arrow', text: 'Add Text Label',
+        rect: 'Draw Square', circle: 'Draw Circle', polygon: 'Draw Polygon',
+    };
+
+    function _configureMarkupPanelForTool(tool) {
+        // Only one map side-panel open at a time.
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
+
+        const isText = tool === 'text';
+        _editingMarkupItem = null;
+
+        document.getElementById('markup-panel-title').textContent = _MARKUP_TOOL_TITLES[tool] || 'Draw';
+        document.getElementById('markup-panel-label-caption').textContent      = isText ? 'Text' : 'Label';
+        document.getElementById('markup-panel-color-label').textContent        = isText ? 'Text Color' : 'Fill Color';
+        document.getElementById('markup-panel-border-label').textContent       = isText ? 'Background' : 'Border Color';
+        document.getElementById('markup-panel-fill-opacity-label-text').textContent = isText ? 'Text Opacity' : 'Fill Opacity';
+        document.getElementById('markup-panel-width-label-text').textContent   = isText ? 'Font Size' : 'Width';
+        document.getElementById('markup-panel-security-row').hidden = isText;
+        _rebuildEditSwatch('markup-panel-border-swatches', 'markup-panel-border', true, isText ? _markupPalette : _borderOnlyPalette);
+
+        const widthEl = document.getElementById('markup-panel-width');
+        widthEl.min   = isText ? 10 : 1;
+        widthEl.max   = isText ? 48 : 8;
+        widthEl.value = isText ? 16 : 3;
+        document.getElementById('markup-panel-width-label').textContent = widthEl.value;
+        document.getElementById('markup-panel-label').value = '';
+
+        document.getElementById('markup-panel-hint').hidden = false;
+        document.getElementById('markup-panel-draw-actions').hidden = false;
+        document.getElementById('markup-panel-edit-actions').hidden = true;
+        document.getElementById('markup-panel').style.display = '';
+    }
+
+    function _createMarkupItem(markupType, geometry) {
+        const label              = document.getElementById('markup-panel-label').value.trim();
+        const color              = document.getElementById('markup-panel-color').value;
+        const border_color       = document.getElementById('markup-panel-border').value;
+        const stroke_width       = parseInt(document.getElementById('markup-panel-width').value, 10);
+        const fill_opacity       = parseInt(document.getElementById('markup-panel-fill-opacity').value, 10);
+        const border_opacity     = parseInt(document.getElementById('markup-panel-border-opacity').value, 10);
+        const security_indicator = markupType === 'text' ? '' : document.getElementById('markup-panel-security').value;
+        fetch(_markupPostUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({
+                markup_type: markupType, geometry, label, color, stroke_width, border_color,
+                fill_opacity, border_opacity, security_indicator,
+            }),
+        })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => _reloadMarkupAndOpenEdit(data.uuid))
+        .catch(() => toastr.error('Failed to save markup.'));
+    }
+
+    function _onDrawCommit(type, latlngs, extras) {
+        // Deactivate tool first - hides the panel via onToolChange, unless we're
+        // about to immediately re-show it in edit mode once the save completes.
+        _drawSession.deactivate();
+
+        if (type === 'line' || type === 'arrow') {
+            const coords = latlngs.map(ll => [ll[1], ll[0]]);
+            _createMarkupItem(type, { type: 'LineString', coordinates: coords });
+            return;
+        }
+        if (type === 'circle') {
+            const center = L.latLng(latlngs[0][0], latlngs[0][1]);
+            const edge   = L.latLng(latlngs[1][0], latlngs[1][1]);
+            _createMarkupItem('circle', {
+                type: 'Circle',
+                coordinates: [latlngs[0][1], latlngs[0][0]],
+                radius: center.distanceTo(edge),
+            });
+            return;
+        }
+        if (type === 'rect') {
+            const [n, w] = [latlngs[0][0], latlngs[0][1]];
+            const [s, e] = [latlngs[1][0], latlngs[1][1]];
+            _createMarkupItem('square', {
+                type: 'Polygon',
+                coordinates: [[[w,n],[e,n],[e,s],[w,s],[w,n]]],
+            });
+            return;
+        }
+        if (type === 'polygon') {
+            const coords = latlngs.map(ll => [ll[1], ll[0]]);
+            coords.push(coords[0]);
+            _createMarkupItem('polygon', { type: 'Polygon', coordinates: [coords] });
+            return;
+        }
+        if (type === 'text') {
+            const ll = L.latLng(latlngs[0][0], latlngs[0][1]);
+            const geometry = { type: 'Point', coordinates: [ll.lng, ll.lat] };
+            // A drag-created text commits a second point (the opposite box corner) -
+            // store it so the renderer can size/wrap the label to fit that box.
+            if (latlngs.length > 1) {
+                const corner = L.latLng(latlngs[1][0], latlngs[1][1]);
+                geometry.box_corner = [corner.lng, corner.lat];
+            }
+            _createMarkupItem('text', geometry);
+        }
+    }
+
+    function startMarkupDraw(type) {
+        _closeAddDetailMenu();
+        _configureMarkupPanelForTool(type);
+        _drawSession.startTool(type);
+    }
+
+    function _reloadMarkupAndOpenEdit(newUuid) {
+        return fetch(_markupJsonUrl).then(r => r.json()).then(markupData => {
+            _markupLayer.clearLayers();
+            _markupItems = [];
+            (markupData.markup_items || []).forEach(item => {
+                _renderMarkupItem(item);
+                _markupItems.push(item);
+            });
+            _buildDetailList();
+            const newItem = _markupItems.find(i => i.uuid === newUuid);
+            if (newItem) openMarkupEditDialog(newItem);
+        });
+    }
+
+    // -- Shape drawing (square, circle, polygon) -------------------------------
+
+    function startShapeDraw(type) {
+        _closeAddDetailMenu();
+        // Engine uses 'rect' for both 'square' and 'rect'
+        const tool = type === 'square' ? 'rect' : type;
+        _configureMarkupPanelForTool(tool);
+        _drawSession.startTool(tool);
+    }
+
+    function closeMarkupPanel() {
+        _flushMarkupAutoSave();  // don't lose an edit made just before closing
+        if (_drawSession && _drawSession.getCurrentTool()) {
+            _drawSession.deactivate();  // triggers onToolChange(null), which hides the panel
+        } else {
+            document.getElementById('markup-panel').style.display = 'none';
+        }
+        _editingMarkupItem = null;
+    }
+
+    // Single "Close" action for draw mode: finishes a valid in-progress shape
+    // (the old Finish button), or just abandons the tool if there's nothing
+    // to finish yet (the old Cancel button) - autosave means there's never a
+    // saved-but-unconfirmed state to explicitly "cancel" once a shape exists.
+    function _closeMarkupDraw() {
+        if (_drawSession && _drawSession.canFinish()) {
+            _drawSession.finishCurrent();
+        } else {
+            closeMarkupPanel();
+        }
+    }
+
+    function _rebuildEditSwatch(containerId, inputId, withNone, palette) {
+        const cont  = document.getElementById(containerId);
+        const input = document.getElementById(inputId);
+        cont.innerHTML = '';
+        if (withNone) {
+            const nb = document.createElement('button');
+            nb.type = 'button'; nb.title = 'None';
+            nb.className = 'markup-color-swatch markup-color-swatch--none' + (!input.value || input.value === 'none' ? ' markup-color-swatch--active' : '');
+            nb.style.cssText = 'background:transparent;border:1px solid #cbd5e1;position:relative;';
+            nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+            nb.addEventListener('click', () => {
+                cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                nb.classList.add('markup-color-swatch--active'); input.value = 'none';
+                _liveApplyMarkupEdit();
+            });
+            cont.appendChild(nb);
+        }
+        (palette || _markupPalette).forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'markup-color-swatch' + (color === input.value ? ' markup-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                cont.querySelectorAll('.markup-color-swatch').forEach(b => b.classList.remove('markup-color-swatch--active'));
+                btn.classList.add('markup-color-swatch--active'); input.value = color;
+                _liveApplyMarkupEdit();
+            });
+            cont.appendChild(btn);
+        });
+    }
+
+    // Applies every edit-panel field to the map instantly, then schedules a
+    // debounced save - so annotations update in realtime as the user drags a
+    // slider or picks a color, without needing an explicit Save button, and
+    // without hammering the server on every single input event.
+    function _liveApplyMarkupEdit() {
+        if (!_editingMarkupItem) return;
+        const item = _editingMarkupItem;
+        const isText = item.markup_type === 'text';
+
+        item.label = document.getElementById('markup-panel-label').value.trim();
+        item.color = document.getElementById('markup-panel-color').value;
+        item.border_color = document.getElementById('markup-panel-border').value;
+        item.stroke_width = parseInt(document.getElementById('markup-panel-width').value, 10);
+        item.fill_opacity = parseInt(document.getElementById('markup-panel-fill-opacity').value, 10);
+        item.border_opacity = parseInt(document.getElementById('markup-panel-border-opacity').value, 10);
+        item.security_indicator = isText ? '' : document.getElementById('markup-panel-security').value;
+
+        // Re-render in place: the item object's identity is preserved (same
+        // reference in _markupItems / _editingMarkupItem), only its layers change,
+        // so this reuses _renderMarkupItem as the single source of truth for how
+        // every shape type looks rather than hand-rolling per-type restyle logic.
+        if (item._layers) item._layers.forEach(l => _markupLayer.removeLayer(l));
+        _renderMarkupItem(item);
+
+        _scheduleMarkupAutoSave(item);
+    }
+
+    let _markupAutoSaveTimer = null;
+    let _markupAutoSaveItem  = null;
+    function _scheduleMarkupAutoSave(item) {
+        clearTimeout(_markupAutoSaveTimer);
+        _markupAutoSaveItem = item;
+        _markupAutoSaveTimer = setTimeout(_flushMarkupAutoSave, 500);
+    }
+    function _flushMarkupAutoSave() {
+        clearTimeout(_markupAutoSaveTimer);
+        const item = _markupAutoSaveItem;
+        _markupAutoSaveItem = null;
+        if (!item) return;
+        fetch(_markupEditBase + item.uuid + '/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({
+                label: item.label, color: item.color, border_color: item.border_color,
+                stroke_width: item.stroke_width, fill_opacity: item.fill_opacity,
+                border_opacity: item.border_opacity, security_indicator: item.security_indicator,
+            }),
+        }).catch(() => toastr.error('Failed to save annotation changes.'));
+    }
+
+    function openMarkupEditDialog(item) {
+        // Only one map side-panel open at a time.
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
+
+        _editingMarkupItem = item;
+        const isText = item.markup_type === 'text';
+
+        document.getElementById('markup-panel-title').textContent = 'Edit ' + (isText ? 'Text Label' : 'Annotation');
+        document.getElementById('markup-panel-label-caption').textContent      = isText ? 'Text' : 'Label';
+        document.getElementById('markup-panel-label').value = item.label || '';
+        const widthEl = document.getElementById('markup-panel-width');
+        widthEl.min   = isText ? 10 : 1;
+        widthEl.max   = isText ? 48 : 8;
+        widthEl.value = item.stroke_width || (isText ? 16 : 3);
+        document.getElementById('markup-panel-width-label').textContent = item.stroke_width || (isText ? 16 : 3);
+        document.getElementById('markup-panel-width-label-text').textContent = isText ? 'Font Size' : 'Width';
+        document.getElementById('markup-panel-color-label').textContent  = isText ? 'Text Color' : 'Fill Color';
+        document.getElementById('markup-panel-border-label').textContent = isText ? 'Background' : 'Border Color';
+        document.getElementById('markup-panel-fill-opacity-label-text').textContent = isText ? 'Text Opacity' : 'Fill Opacity';
+        const fillOpEl = document.getElementById('markup-panel-fill-opacity');
+        const fillOpVal = item.fill_opacity != null ? item.fill_opacity : 87;
+        fillOpEl.value = fillOpVal;
+        document.getElementById('markup-panel-fill-opacity-val').textContent = fillOpVal;
+        const borderOpEl = document.getElementById('markup-panel-border-opacity');
+        const borderOpVal = item.border_opacity != null ? item.border_opacity : 100;
+        borderOpEl.value = borderOpVal;
+        document.getElementById('markup-panel-border-opacity-val').textContent = borderOpVal;
+
+        document.getElementById('markup-panel-color').value  = item.color || '#e53e3e';
+        document.getElementById('markup-panel-border').value = item.border_color || '';
+        _rebuildEditSwatch('markup-panel-color-swatches',  'markup-panel-color',  false);
+        _rebuildEditSwatch('markup-panel-border-swatches', 'markup-panel-border', true, isText ? _markupPalette : _borderOnlyPalette);
+        document.getElementById('markup-panel-security-row').hidden = isText;
+        document.getElementById('markup-panel-security').value = item.security_indicator || '';
+
+        document.getElementById('markup-panel-hint').hidden = true;
+        document.getElementById('markup-panel-draw-actions').hidden = true;
+        document.getElementById('markup-panel-edit-actions').hidden = false;
+        document.getElementById('markup-panel').style.display = '';
+        if (isText) document.getElementById('markup-panel-label').focus();
+    }
+
+    async function deleteMarkupEdit() {
+        if (!_editingMarkupItem) return;
+        if (!await confirmDialog({title: 'Delete Annotation', message: 'Delete this annotation?', confirmLabel: 'Delete'})) return;
+        // Drop any pending autosave for this item - it no longer exists to save.
+        if (_markupAutoSaveItem === _editingMarkupItem) { clearTimeout(_markupAutoSaveTimer); _markupAutoSaveItem = null; }
+        fetch(_markupEditBase + _editingMarkupItem.uuid + '/', { method: 'DELETE', headers: { 'X-CSRFToken': csrftoken } })
+            .then(r => { if (!r.ok) throw new Error(); closeMarkupPanel(); loadMarkup(); toastr.success('Annotation deleted.'); })
+            .catch(() => toastr.error('Failed to delete annotation.'));
+    }
+
+    // Rescale arrowheads and text labels when the user zooms in/out
+    map.on('zoomend', () => {
+        const sz = _arrowheadSize();
+        _markupItems.forEach(item => {
+            if (item._arrowheadMarker) {
+                const itemOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
+                item._arrowheadMarker.setIcon(L.divIcon({
+                    className: '',
+                    html: MarkupEngine.arrowheadSvg(item.color, item._arrowheadDeg, sz, itemOp),
+                    iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2],
+                }));
+            }
+            if (item._textMarker) {
+                item._textMarker.setIcon(_textIcon(item));
+            }
+        });
+    });
+
+    // -- Text placement --------------------------------------------------------
+
+    function startTextPlacement() {
+        _closeAddDetailMenu();
+        _configureMarkupPanelForTool('text');
+        _drawSession.startTool('text');
+    }
+
+    // -- Campus boundary editor ------------------------------------------------
+    const campusApiUrl = "{{ boundary_url }}";
+    const campusItems = new L.FeatureGroup().addTo(map);
+    const campusStyle = { pane: 'campusPane', color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
+    let campusDrawControl = null;
+    let _savedCampusGeoJSON = null;
+
+    // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
+    if (!window._boundaryDrawToggleWired) {
+        window._boundaryDrawToggleWired = true;
+        [L.Draw.Polygon, L.EditToolbar.Edit].forEach(Ctor => {
+            const _origEnable = Ctor.prototype.enable;
+            Ctor.prototype.enable = function () {
+                if (this._enabled) { this.disable(); return this; }
+                return _origEnable.call(this);
+            };
+        });
+    }
+
+    function _setMainMarkerVisible(visible) {
+        if (visible && !map.hasLayer(_mainMarker)) {
+            _mainMarker.addTo(map);
+        } else if (!visible && map.hasLayer(_mainMarker)) {
+            map.removeLayer(_mainMarker);
+        }
+    }
+
+    function _loadSavedCampus(geojson) {
+        campusItems.clearLayers();
+        if (geojson) {
+            // Split MultiPolygon into individual L.Polygon layers so Leaflet.Draw
+            // can edit each sub-polygon independently.
+            const rings = geojson.type === 'MultiPolygon'
+                ? geojson.coordinates
+                : geojson.type === 'Polygon'
+                    ? [geojson.coordinates]
+                    : null;
+            if (rings) {
+                rings.forEach(ringSet => {
+                    // GeoJSON coords are [lng, lat]; Leaflet wants [lat, lng].
+                    campusItems.addLayer(
+                        L.polygon(ringSet.map(ring => ring.map(c => [c[1], c[0]])), campusStyle)
+                    );
+                });
+            } else {
+                // FeatureCollection fallback
+                L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
+            }
+            if (campusItems.getLayers().length) {
+                map.fitBounds(campusItems.getBounds().pad(0.25));
+            }
+            _setMainMarkerVisible(false);
+        } else {
+            _setMainMarkerVisible(true);
+        }
+        map.invalidateSize();
+        if (typeof _attachCampusClickHandlers === 'function') _attachCampusClickHandlers();
+    }
+
+    fetch(campusApiUrl)
+        .then(r => r.json())
+        .then(data => {
+            _savedCampusGeoJSON = data.polygon || null;
+            _loadSavedCampus(_savedCampusGeoJSON);
+        })
+        .catch(err => console.warn('Could not load campus:', err));
+
+    function _attachEditRightClickDelete() {
+        // Walk the edit handler's marker group and fire a click (delete) on right-click
+        setTimeout(() => {
+            campusItems.eachLayer(layer => {
+                if (layer.editing && layer.editing._markerGroup) {
+                    layer.editing._markerGroup.eachLayer(m => {
+                        m.off('contextmenu.rcdelete');
+                        m.on('contextmenu.rcdelete', e => {
+                            L.DomEvent.stopPropagation(e);
+                            m.fire('click');
+                        });
+                    });
+                }
+            });
+        }, 100);
+    }
+
+    function startEditCampus() {
+        if (campusDrawControl) return;
+        // Editing the boundary is its own exclusive map-interaction mode - close
+        // whichever side panel happens to be open first (autosave makes this safe).
+        if (typeof closeMarkupPanel === 'function') closeMarkupPanel();
+        if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
+        // While actively editing the boundary, campus polygons need to catch clicks/drags
+        // ahead of markup shapes - temporarily swap the pane stacking order for that.
+        map.getPane('campusPane').style.zIndex = 560;
+        campusDrawControl = new L.Control.Draw({
+            draw: {
+                polygon: {
+                    allowIntersection: false,
+                    drawError: { color: '#ffcc00', message: 'Boundaries cannot intersect!' },
+                    shapeOptions: campusStyle,
+                    showArea: true,
+                },
+                marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
+            },
+            edit: { featureGroup: campusItems, remove: false },
+        });
+        map.addControl(campusDrawControl);
+        map.on(L.Draw.Event.CREATED, function (e) {
+            // Add the new polygon to the existing set - never clear others.
+            campusItems.addLayer(e.layer);
+            _setMainMarkerVisible(false);
+            saveCampus({ exitEdit: false });
+        });
+        // Re-attach right-click delete whenever edit mode is activated by toolbar click
+        map.on(L.Draw.Event.EDITSTART, _attachEditRightClickDelete);
+        map.on(L.Draw.Event.EDITED, () => saveCampus({ exitEdit: false }));
+        map.on(L.Draw.Event.DELETED, () => saveCampus({ exitEdit: false }));
+        campusItems.eachLayer(layer => layer.on('edit', _scheduleCampusAutoSave));
+
+        // Auto-activate the right tool immediately after the control renders
+        setTimeout(() => {
+            if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
+                campusDrawControl._toolbars.edit._modes.edit.handler.enable();
+                _attachEditRightClickDelete();
+                toastr.info('Drag vertices to reshape, click a vertex to delete it, or right-click to delete.');
+            } else {
+                campusDrawControl._toolbars.draw._modes.polygon.handler.enable();
+            }
+        }, 50);
+
+        document.getElementById('edit-campus-btn').style.display = 'none';
+        document.getElementById('campus-save-controls').style.display = '';
+    }
+
+    let _campusAutoSaveTimer = null;
+
+    function _scheduleCampusAutoSave() {
+        if (!campusDrawControl) return;
+        clearTimeout(_campusAutoSaveTimer);
+        _campusAutoSaveTimer = setTimeout(() => saveCampus({ exitEdit: false, quiet: true }), 600);
+    }
+
+    function saveCampus(options = {}) {
+        const layers = campusItems.getLayers();
+        const geometry = layers.length === 0 ? null : {
+            type: 'MultiPolygon',
+            coordinates: layers.map(l => l.toGeoJSON().geometry.coordinates),
+        };
+        fetch(campusApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ polygon: geometry }),
+        })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(data => {
+            _savedCampusGeoJSON = data.polygon || geometry || null;
+            if (!geometry && data.polygon) _loadSavedCampus(data.polygon);
+            if (!options.quiet) toastr.success(geometry ? 'Boundary saved.' : 'Boundary reset to the default.');
+            if (options.exitEdit !== false) _exitCampusEdit();
+        })
+        .catch(() => toastr.error('Failed to save campus boundary.'));
+    }
+
+    async function clearCampus() {
+        if (!await confirmDialog({title:'Clear Boundary', message:'Reset this boundary to its default?', confirmLabel:'Clear'})) return;
+        campusItems.clearLayers();
+        _setMainMarkerVisible(true);
+        saveCampus();
+    }
+
+    function _exitCampusEdit() {
+        if (campusDrawControl) { map.removeControl(campusDrawControl); campusDrawControl = null; }
+        map.off(L.Draw.Event.CREATED);
+        map.off(L.Draw.Event.EDITED);
+        map.off(L.Draw.Event.DELETED);
+        campusItems.eachLayer(layer => layer.off('edit', _scheduleCampusAutoSave));
+        map.getPane('campusPane').style.zIndex = 540;
+        document.getElementById('edit-campus-btn').style.display = '';
+        document.getElementById('campus-save-controls').style.display = 'none';
+        _attachCampusClickHandlers();
+    }
+
+    function cancelCampusEdit() {
+        _exitCampusEdit();
+        _loadSavedCampus(_savedCampusGeoJSON);
+    }
+
+    // -- Circle-style swatch builder (bg/border for detail pins) --------------
+    const _circlePalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc', '#ffffff'];
+
+    function _buildCircleSwatches(containerId, inputId, currentVal, onChange) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+        // None option
+        const nb = document.createElement('button');
+        nb.type = 'button'; nb.title = 'None';
+        nb.className = 'dp-color-swatch markup-color-swatch--none' + (!currentVal ? ' dp-color-swatch--active' : '');
+        nb.style.cssText = 'background:transparent;border:1px dashed #cbd5e1;position:relative;';
+        nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+        nb.addEventListener('click', () => {
+            container.querySelectorAll('.dp-color-swatch').forEach(b => b.classList.remove('dp-color-swatch--active'));
+            nb.classList.add('dp-color-swatch--active');
+            document.getElementById(inputId).value = '';
+            if (onChange) onChange('');
+        });
+        container.appendChild(nb);
+        _circlePalette.forEach(color => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'dp-color-swatch' + (color === currentVal ? ' dp-color-swatch--active' : '');
+            btn.style.cssText = `background:${color};${color === '#f8fafc' || color === '#ffffff' ? 'border:1px solid #cbd5e1;' : ''}`;
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.dp-color-swatch').forEach(b => b.classList.remove('dp-color-swatch--active'));
+                btn.classList.add('dp-color-swatch--active');
+                document.getElementById(inputId).value = color;
+                if (onChange) onChange(color);
+            });
+            container.appendChild(btn);
+        });
+    }
+
+    // -- Unified detail-pin panel (add + edit) ----------------------------------
+    // Same panel/fields for both; instead of a second embedded map, placing or
+    // moving the pin happens by clicking/dragging directly on the main map -
+    // the map stays interactive and in view the whole time.
+    let _editingDp        = null;
+    let _dpMode           = null;   // 'add' | 'edit'
+    let _dpActiveMarker   = null;   // marker being placed/moved while the panel is open
+
+    function _currentDpIcon() {
+        return _detailIcon({
+            pin_type: document.getElementById('dp-type').value,
+            icon:     document.getElementById('dp-icon').value || null,
+            color:    document.getElementById('dp-color').value || null,
+            bg_color: document.getElementById('dp-bg-color').value || null,
+            bg_opacity: parseInt(document.getElementById('dp-bg-opacity').value || '80', 10),
+            border_color: document.getElementById('dp-border-color').value || null,
+            border_opacity: parseInt(document.getElementById('dp-border-opacity').value || '100', 10),
+        });
+    }
+
+    function _updateDpMarkerIcon() {
+        if (_dpActiveMarker) _dpActiveMarker.setIcon(_currentDpIcon());
+    }
+
+    function _setDpLocation(lat, lng) {
+        document.getElementById('dp-lat').value = lat.toFixed(6);
+        document.getElementById('dp-lon').value = lng.toFixed(6);
+        document.getElementById('detail-pin-submit-btn').disabled = false;
+        document.getElementById('detail-pin-place-hint').classList.add('is-placed');
+        document.getElementById('detail-pin-place-hint-text').textContent =
+            _dpMode === 'edit' ? 'Drag the pin to move it.' : 'Drag the pin, or click elsewhere to move it.';
+    }
+
+    function _onDpMarkerDragEnd() {
+        const pos = _dpActiveMarker.getLatLng();
+        _setDpLocation(pos.lat, pos.lng);
+    }
+
+    function _onMainMapClickForDp(e) {
+        // In edit mode the pin already exists on the map and is draggable/self-saving
+        // (see loadDetailPins) - clicking elsewhere should pan/interact with the map
+        // as normal, not silently relocate an existing pin.
+        if (_dpMode === 'edit') return;
+        const { lat, lng } = e.latlng;
+        if (_dpActiveMarker) {
+            _dpActiveMarker.setLatLng([lat, lng]);
+        } else {
+            _dpActiveMarker = L.marker([lat, lng], { icon: _currentDpIcon(), draggable: true }).addTo(map);
+            _dpActiveMarker.on('dragend', _onDpMarkerDragEnd);
+        }
+        _setDpLocation(lat, lng);
+    }
+
+    function _resetDpForm() {
+        document.getElementById('detail-pin-form').reset();
+        document.getElementById('dp-lat').value = '';
+        document.getElementById('dp-lon').value = '';
+        document.getElementById('dp-icon').value = '';
+        document.getElementById('dp-color').value = '';
+        document.getElementById('dp-bg-color').value = '';
+        document.getElementById('dp-border-color').value = '';
+        document.getElementById('dp-bg-opacity').value = '80';
+        document.getElementById('dp-border-opacity').value = '100';
+        document.getElementById('dp-bg-opacity-val').textContent = '80';
+        document.getElementById('dp-border-opacity-val').textContent = '100';
+        document.querySelectorAll('#dp-icon-picker .dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+        document.querySelectorAll('#dp-color-picker .dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+        _buildCircleSwatches('dp-bg-swatches', 'dp-bg-color', '', _updateDpMarkerIcon);
+        _buildCircleSwatches('dp-border-swatches', 'dp-border-color', '', _updateDpMarkerIcon);
+    }
+
+    function openAddPinDialog() {
+        _closeAddDetailMenu();
+        // Only one map side-panel open at a time - closing markup autosaves first.
+        closeMarkupPanel();
+
+        _dpMode = 'add';
+        _editingDp = null;
+        _resetDpForm();
+
+        document.getElementById('detail-pin-panel-title').textContent = 'Add Detail Pin';
+        document.getElementById('detail-pin-submit-btn').textContent = 'Add Pin';
+        document.getElementById('detail-pin-submit-btn').disabled = true;
+        document.getElementById('detail-pin-delete-btn').hidden = true;
+        document.getElementById('detail-pin-place-hint').classList.remove('is-placed');
+        document.getElementById('detail-pin-place-hint-text').textContent = 'Click anywhere on the map to place the pin.';
+        document.getElementById('detail-pin-panel').style.display = '';
+        map.on('click', _onMainMapClickForDp);
+    }
+
+    function openDetailPinEditDialog(dp) {
+        _closeAddDetailMenu();
+        // Only one map side-panel open at a time - closing markup autosaves first.
+        closeMarkupPanel();
+
+        _dpMode = 'edit';
+        _editingDp = dp;
+        _resetDpForm();
+
+        document.getElementById('detail-pin-panel-title').textContent = 'Edit Detail Pin';
+        document.getElementById('detail-pin-submit-btn').textContent = 'Save Changes';
+        document.getElementById('detail-pin-submit-btn').disabled = false;
+        document.getElementById('detail-pin-delete-btn').hidden = false;
+        document.getElementById('detail-pin-place-hint').classList.add('is-placed');
+        document.getElementById('detail-pin-place-hint-text').textContent = 'Drag the pin to move it.';
+
+        document.getElementById('dp-name').value = dp.name || '';
+        document.getElementById('dp-description').value = dp.description || '';
+        document.getElementById('dp-type').value = dp.pin_type || 'poi';
+        document.getElementById('dp-icon').value = dp.icon || '';
+        document.getElementById('dp-color').value = dp.color || '';
+        document.getElementById('dp-lat').value = dp.latitude;
+        document.getElementById('dp-lon').value = dp.longitude;
+
+        document.querySelectorAll('#dp-icon-picker .dp-icon-btn').forEach(b => {
+            b.classList.toggle('dp-icon-btn--active', b.dataset.icon === dp.icon);
+        });
+        document.querySelectorAll('#dp-color-picker .dp-color-swatch').forEach(s => {
+            s.classList.toggle('dp-color-swatch--active', s.dataset.color === dp.color);
+        });
+
+        const bgOpacity = dp.bg_opacity != null ? dp.bg_opacity : 80;
+        document.getElementById('dp-bg-color').value = dp.bg_color || '';
+        document.getElementById('dp-bg-opacity').value = bgOpacity;
+        document.getElementById('dp-bg-opacity-val').textContent = bgOpacity;
+        _buildCircleSwatches('dp-bg-swatches', 'dp-bg-color', dp.bg_color || '', _updateDpMarkerIcon);
+
+        const bdOpacity = dp.border_opacity != null ? dp.border_opacity : 100;
+        document.getElementById('dp-border-color').value = dp.border_color || '';
+        document.getElementById('dp-border-opacity').value = bdOpacity;
+        document.getElementById('dp-border-opacity-val').textContent = bdOpacity;
+        _buildCircleSwatches('dp-border-swatches', 'dp-border-color', dp.border_color || '', _updateDpMarkerIcon);
+
+        document.getElementById('detail-pin-panel').style.display = '';
+
+        // Manipulate the pin's real marker directly rather than a stand-in - it's
+        // already draggable and self-saving (see loadDetailPins); this just keeps
+        // the panel's hidden lat/lon fields in sync with it while open.
+        _dpActiveMarker = dp.marker;
+        dp.marker.on('dragend', _onDpMarkerDragEnd);
+        map.on('click', _onMainMapClickForDp);
+    }
+
+    function closeDetailPinPanel() {
+        document.getElementById('detail-pin-panel').style.display = 'none';
+        map.off('click', _onMainMapClickForDp);
+        if (_dpActiveMarker) {
+            _dpActiveMarker.off('dragend', _onDpMarkerDragEnd);
+            if (_dpMode === 'add') map.removeLayer(_dpActiveMarker);
+        }
+        _dpActiveMarker = null;
+        _dpMode = null;
+        _editingDp = null;
+    }
+
+    document.getElementById('dp-icon-picker').addEventListener('click', function (e) {
+        const btn = e.target.closest('.dp-icon-btn');
+        if (!btn) return;
+        this.querySelectorAll('.dp-icon-btn').forEach(b => b.classList.remove('dp-icon-btn--active'));
+        btn.classList.add('dp-icon-btn--active');
+        document.getElementById('dp-icon').value = btn.dataset.icon;
+        _updateDpMarkerIcon();
+    });
+    document.getElementById('dp-color-picker').addEventListener('click', function (e) {
+        const sw = e.target.closest('.dp-color-swatch');
+        if (!sw) return;
+        this.querySelectorAll('.dp-color-swatch').forEach(s => s.classList.remove('dp-color-swatch--active'));
+        sw.classList.add('dp-color-swatch--active');
+        document.getElementById('dp-color').value = sw.dataset.color;
+        _updateDpMarkerIcon();
+    });
+    document.getElementById('dp-bg-opacity').addEventListener('input', function () {
+        document.getElementById('dp-bg-opacity-val').textContent = this.value;
+        _updateDpMarkerIcon();
+    });
+    document.getElementById('dp-border-opacity').addEventListener('input', function () {
+        document.getElementById('dp-border-opacity-val').textContent = this.value;
+        _updateDpMarkerIcon();
+    });
+    document.getElementById('dp-type').addEventListener('change', _updateDpMarkerIcon);
+
+    document.getElementById('detail-pin-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const lat = document.getElementById('dp-lat').value;
+        const lon = document.getElementById('dp-lon').value;
+        if (!lat || !lon) { toastr.warning('Click a point on the map to set the location first.'); return; }
+        const submitBtn = document.getElementById('detail-pin-submit-btn');
+        submitBtn.disabled = true;
+        const data = {
+            name:           document.getElementById('dp-name').value.trim(),
+            description:    document.getElementById('dp-description').value.trim(),
+            pin_type:       document.getElementById('dp-type').value,
+            icon:           document.getElementById('dp-icon').value || null,
+            color:          document.getElementById('dp-color').value || null,
+            bg_color:       document.getElementById('dp-bg-color').value || null,
+            bg_opacity:     parseInt(document.getElementById('dp-bg-opacity').value, 10),
+            border_color:   document.getElementById('dp-border-color').value || null,
+            border_opacity: parseInt(document.getElementById('dp-border-opacity').value, 10),
+            latitude:       lat,
+            longitude:      lon,
+        };
+        const url = _dpMode === 'edit' ? (_dpEditBase + _editingDp.uuid + '/') : "{{ detail_pin_create_url }}";
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json().then(resp => { if (!r.ok || resp.ok === false) throw resp; return resp; }))
+        .then(() => {
+            toastr.success(_dpMode === 'edit' ? 'Detail pin updated.' : 'Detail pin added.');
+            closeDetailPinPanel();
+            loadDetailPins();
+        })
+        .catch((resp) => {
+            toastr.error((resp && resp.error) || 'Failed to save detail pin.');
+            submitBtn.disabled = false;
+        });
+    });
+
+    document.getElementById('detail-pin-delete-btn').addEventListener('click', async function () {
+        if (!_editingDp) return;
+        if (!await confirmDialog({title:'Delete Pin', message:`Delete "${_editingDp.name}"?`, confirmLabel:'Delete'})) return;
+        fetch(_dpEditBase + _editingDp.uuid + '/', { method: 'DELETE', headers: { 'X-CSRFToken': csrftoken } })
+            .then(r => { if (!r.ok) throw new Error(); closeDetailPinPanel(); loadDetailPins(); toastr.success('Detail pin deleted.'); })
+            .catch(() => toastr.error('Failed to delete detail pin.'));
+    });
+
+    // -- Campus boundary: click a polygon for an Edit/Delete context menu -----
+    // Leaflet's event system has no jQuery-style dot-namespacing - a listener
+    // registered for the literal string 'click.openEditor' never matches a real
+    // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
+    // handler under the real event name instead.
+    function _onBoundaryLayerClick(e) {
+        if (campusDrawControl) return;
+        // Don't hijack a click that's actually meant to draw a shape onto (or drop
+        // a detail pin inside) this boundary - without this, clicking a boundary
+        // while a tool is armed always opened the context menu instead of placing
+        // the point, making it impossible to draw into a boundary polygon at all.
+        // Not stopping propagation here lets the click keep bubbling to the map's
+        // own click handler (the draw session / detail-pin placement listener).
+        if ((_drawSession && _drawSession.getCurrentTool()) || _dpMode === 'add') return;
+        L.DomEvent.stopPropagation(e);
+        _openBoundaryCtxMenu(e.target, e.latlng);
+    }
+    function _attachCampusClickHandlers() {
+        campusItems.eachLayer(layer => {
+            layer.off('click', _onBoundaryLayerClick);
+            layer.on('click', _onBoundaryLayerClick);
+        });
+    }
+
+    // Outside-click handler for the currently-open boundary context menu, so it
+    // behaves like a normal context menu: any interaction elsewhere on the page
+    // (another shape, a toolbar button, a plain map click) dismisses it. Tracked
+    // so a re-opened menu doesn't pile up duplicate listeners.
+    let _boundaryCtxOutsideHandler = null;
+
+    function _openBoundaryCtxMenu(layer, latlng) {
+        if (_boundaryCtxOutsideHandler) {
+            document.removeEventListener('click', _boundaryCtxOutsideHandler, true);
+            _boundaryCtxOutsideHandler = null;
+        }
+
+        const content = document.createElement('div');
+        content.className = 'boundary-ctx-menu';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'boundary-ctx-menu__item';
+        editBtn.innerHTML = '<i class="material-icons">edit</i> Edit';
+        editBtn.addEventListener('click', () => { map.closePopup(); startEditCampus(); });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'boundary-ctx-menu__item boundary-ctx-menu__item--danger';
+        delBtn.innerHTML = '<i class="material-icons">delete_outline</i> Delete';
+        delBtn.addEventListener('click', async () => {
+            map.closePopup();
+            if (!await confirmDialog({ title: 'Delete Boundary', message: 'Delete this boundary polygon?', confirmLabel: 'Delete' })) return;
+            campusItems.removeLayer(layer);
+            if (campusItems.getLayers().length === 0) _setMainMarkerVisible(true);
+            saveCampus({ exitEdit: false });
+        });
+
+        content.append(editBtn, delBtn);
+        L.popup({ closeButton: false, className: 'boundary-ctx-menu-popup', offset: [0, -2] })
+            .setLatLng(latlng)
+            .setContent(content)
+            .openOn(map);
+
+        // The click that opened this menu already had propagation stopped (see
+        // _onBoundaryLayerClick), so it's safe to attach this immediately - it
+        // only fires on the *next* click anywhere in the document.
+        _boundaryCtxOutsideHandler = function (e) {
+            document.removeEventListener('click', _boundaryCtxOutsideHandler, true);
+            _boundaryCtxOutsideHandler = null;
+            if (content.contains(e.target)) return;  // the button's own handler drives this close
+            map.closePopup();
+        };
+        document.addEventListener('click', _boundaryCtxOutsideHandler, true);
+    }
+</script>
