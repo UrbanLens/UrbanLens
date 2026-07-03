@@ -17,28 +17,28 @@
     <div class="map-buttons" id="map-buttons">
         <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
                 data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
-            <i class="material-icons">chevron_right</i>
+            <i class="material-symbols-outlined">chevron_right</i>
         </button>
         <div class="map-buttons-content">
             <button id="add-pin-button" class="map-btn-icon"
                     data-tooltip="Drop a new pin on the map" data-tooltip-float="true"
                     aria-label="Add pin"
                     onclick="openAddPinDialog()">
-                <i class="material-icons">add_location</i>
+                <i class="material-symbols-outlined">add_location</i>
             </button>
             <button id="import-pins-button" class="map-btn-icon"
                     data-tooltip="Import pins from Google Takeout" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Import pins"
                     hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
-                <i class="material-icons">upload</i>
+                <i class="material-symbols-outlined">upload</i>
             </button>
             <button id="search-pins-button" class="map-btn-icon"
                     data-tooltip="Filter pins by name, rating, visits, badges, and more (F)" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Filter and search pins"
                     onclick="toggleFilterPanel()">
-                <i class="material-icons">search</i>
+                <i class="material-symbols-outlined">search</i>
                 <span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>
             </button>
         </div>
@@ -138,12 +138,12 @@
                autocomplete="off" spellcheck="false">
         <button type="button" class="addr-search-history" id="addr-search-history"
                 aria-label="Previous searches">
-            <i class="material-icons">arrow_upward</i>
+            <i class="material-symbols-outlined">arrow_upward</i>
         </button>
         <button type="button" class="addr-search-clear" id="addr-search-clear"
                 aria-label="Clear search"
                 onclick="clearAddrSearch()">
-            <i class="material-icons">close</i>
+            <i class="material-symbols-outlined">close</i>
         </button>
         <div id="addr-search-suggestions" hidden></div>
     </div>
@@ -208,7 +208,7 @@
                         </div>
                         <button type="button" class="fp-visits-reset" id="fp-visits-reset" style="display:none"
                                 title="Clear visit filter" onclick="_resetVisits()">
-                            <i class="material-icons">close</i>
+                            <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
                     <div class="fp-date-block" id="fp-visits-dates" style="display:none">
@@ -222,7 +222,7 @@
                         </div>
                         <button type="button" class="fp-date-reset" id="fp-visited-dates-reset" style="display:none"
                                 title="Clear date filters" onclick="_resetVisitDates()">
-                            <i class="material-icons">close</i>
+                            <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
                 </div>
@@ -246,7 +246,7 @@
                         </div>
                         <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
                                 title="Clear date filters" onclick="_resetCreatedDates()">
-                            <i class="material-icons">close</i>
+                            <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
                 </div>
@@ -270,7 +270,7 @@
                              ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
                              ondrop="_onBadgeColDrop(event, 'incl')">
                             <div class="fp-badge-col-label">
-                                <i class="material-icons">check_circle</i> Include
+                                <i class="material-symbols-outlined">check_circle</i> Include
                                 <button type="button" class="fp-badge-mode-btn" id="fp-incl-mode-btn"
                                         onclick="_toggleInclMode()" title="Switch include matching: AND requires all, OR requires any">AND</button>
                             </div>
@@ -280,7 +280,7 @@
                              ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
                              ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
                              ondrop="_onBadgeColDrop(event, 'excl')">
-                            <div class="fp-badge-col-label"><i class="material-icons">cancel</i> Exclude</div>
+                            <div class="fp-badge-col-label"><i class="material-symbols-outlined">cancel</i> Exclude</div>
                             <div class="fp-badge-chips" id="fp-badge-excl-chips"></div>
                         </div>
                     </div>
@@ -289,7 +289,7 @@
                     <div class="fp-formula-display" id="fp-formula-display" style="display:none">
                         <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
                         <button type="button" class="fp-formula-display-clear" onclick="_clearAllBadgeSelections()" title="Clear filter">
-                            <i class="material-icons">close</i>
+                            <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
 
@@ -327,7 +327,7 @@
             {% endif %}
 
             <button type="button" class="fp-reset" onclick="resetFilters()">
-                <i class="material-icons">refresh</i> Clear all filters
+                <i class="material-symbols-outlined">refresh</i> Clear all filters
             </button>
         </form>
     </div>
@@ -341,7 +341,7 @@
     <button id="pin-list-handle" class="pin-list-handle" onclick="_togglePinListPanel()"
             aria-label="Toggle pin list" aria-expanded="false"
             data-tooltip="Pin list" data-tooltip-pos="right">
-        <i class="material-icons">chevron_right</i>
+        <i class="material-symbols-outlined">chevron_right</i>
     </button>
 
     <div id="tile-fetch-indicator" aria-hidden="true">
@@ -361,7 +361,7 @@
 
     {# -- Offline indicator --------------------------------------------------- #}
     <div id="offline-indicator" aria-live="assertive" hidden>
-        <i class="material-icons">wifi_off</i>
+        <i class="material-symbols-outlined">wifi_off</i>
         <span>Offline</span>
     </div>
 
@@ -394,12 +394,12 @@
             <div class="apdlg-location-selected" id="apdlg-location-selected" hidden>
                 <button type="button" class="apdlg-location-selected__content" id="apdlg-location-edit"
                         title="Click to edit location" aria-label="Edit location">
-                    <i class="material-icons">place</i>
+                    <i class="material-symbols-outlined">place</i>
                     <span id="apdlg-location-text"></span>
                 </button>
                 <button type="button" class="apdlg-location-clear" id="apdlg-location-clear"
                         aria-label="Clear location" title="Clear location">
-                    <i class="material-icons">close</i>
+                    <i class="material-symbols-outlined">close</i>
                 </button>
             </div>
             <input type="hidden" id="apdlg-lat">
@@ -425,7 +425,7 @@
         {# Icon & color - optional per-pin override, collapsed by default #}
         <details class="apdlg-customize" id="apdlg-customize">
             <summary class="apdlg-customize-toggle">
-                <i class="material-icons">tune</i>
+                <i class="material-symbols-outlined">tune</i>
                 <span>Customize</span>
                 <i class="material-icons apdlg-customize-arrow">expand_more</i>
             </summary>
@@ -465,7 +465,7 @@
                 <span class="toggle-slider"></span>
             </label>
             <span class="apdlg-privacy-label">
-                <i class="material-icons">lock</i>
+                <i class="material-symbols-outlined">lock</i>
                 Private pin
                 {% include "dashboard/partials/ui/_tooltip_help.html" with text="Private pins are never linked to a community wiki." wide=True %}
             </span>
@@ -474,7 +474,7 @@
     </div>
     <div class="apdlg-footer">
         <button type="button" class="btn btn--danger" id="apdlg-delete" style="margin-right:auto;" onclick="_apdlgDeletePin()" hidden>
-            <i class="material-icons">delete</i>Delete
+            <i class="material-symbols-outlined">delete</i>Delete
         </button>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
@@ -494,15 +494,15 @@
             <div class="kind-toggle">
                 <label class="kind-toggle-option">
                     <input type="radio" name="apdlg-cb-kind" value="tag" checked>
-                    <span><i class="material-icons">label</i> Tag</span>
+                    <span><i class="material-symbols-outlined">label</i> Tag</span>
                 </label>
                 <label class="kind-toggle-option">
                     <input type="radio" name="apdlg-cb-kind" value="category">
-                    <span><i class="material-icons">category</i> Category</span>
+                    <span><i class="material-symbols-outlined">category</i> Category</span>
                 </label>
                 <label class="kind-toggle-option">
                     <input type="radio" name="apdlg-cb-kind" value="status">
-                    <span><i class="material-icons">flag</i> Status</span>
+                    <span><i class="material-symbols-outlined">flag</i> Status</span>
                 </label>
             </div>
         </div>
@@ -1135,7 +1135,7 @@
             const coordItem = document.createElement('button');
             coordItem.className = 'map-context-menu__item map-context-menu__coords';
             coordItem.title = 'Click to copy coordinates';
-            coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+            coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
             coordItem.addEventListener('click', () => {
                 navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
                     .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
@@ -1149,13 +1149,13 @@
 
             const addPinItem = document.createElement('button');
             addPinItem.className = 'map-context-menu__item';
-            addPinItem.innerHTML = '<i class="material-icons">add_location</i>Create pin';
+            addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Create pin';
             addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng, { defaultName: title || '' }); });
             menu.appendChild(addPinItem);
 
             const dismissItem = document.createElement('button');
             dismissItem.className = 'map-context-menu__item';
-            dismissItem.innerHTML = '<i class="material-icons">close</i>Dismiss marker';
+            dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
             dismissItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); });
             menu.appendChild(dismissItem);
 
@@ -1294,8 +1294,8 @@
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${pin.viewLocationUrl}" class="view-full-pin">View Details</a>
-                    <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-icons">edit</i></button>
-                    <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-icons">delete</i></button>
+                    <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
+                    <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
             </div>`;
         marker.bindPopup(popupContent);
@@ -1468,7 +1468,7 @@
                     <button type="button" class="map-onboarding-dismiss">Don't show again</button>
                 </div>
             </div>
-            <button type="button" class="map-onboarding-x" aria-label="Close onboarding tip"><i class="material-icons">close</i></button>`;
+            <button type="button" class="map-onboarding-x" aria-label="Close onboarding tip"><i class="material-symbols-outlined">close</i></button>`;
         host.appendChild(el);
         el.querySelector('.map-onboarding-primary')?.addEventListener('click', () => { _setOnboardingDismissed(card.id); _clearOnboarding(); card.action(); });
         el.querySelector('.map-onboarding-later')?.addEventListener('click', () => { _setOnboardingLater(); _clearOnboarding(); });
@@ -2144,7 +2144,7 @@
         const coordItem = document.createElement('button');
         coordItem.className = 'map-context-menu__item map-context-menu__coords';
         coordItem.title = 'Click to copy coordinates';
-        coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+        coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
         coordItem.addEventListener('click', function() {
             navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`).then(function() {
                 toastr.success('Coordinates copied to clipboard');
@@ -2166,7 +2166,7 @@
         svItem.target = '_blank';
         svItem.rel = 'noopener noreferrer';
         svItem.href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
-        svItem.innerHTML = '<i class="material-icons">streetview</i>Street View';
+        svItem.innerHTML = '<i class="material-symbols-outlined">streetview</i>Street View';
         svItem.style.display = 'none';
         menu.appendChild(svItem);
 
@@ -2181,7 +2181,7 @@
         dirItem.target = '_blank';
         dirItem.rel = 'noopener noreferrer';
         dirItem.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-        dirItem.innerHTML = '<i class="material-icons">directions</i>Directions here';
+        dirItem.innerHTML = '<i class="material-symbols-outlined">directions</i>Directions here';
         menu.appendChild(dirItem);
 
         // -- Separator --------------------------------------------------------
@@ -2192,7 +2192,7 @@
         // -- Add Pin ----------------------------------------------------------
         const addPinItem = document.createElement('button');
         addPinItem.className = 'map-context-menu__item';
-        addPinItem.innerHTML = '<i class="material-icons">add_location</i>Add Pin Here';
+        addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Add Pin Here';
         addPinItem.addEventListener('click', function() {
             const transferred = _contextMenuMarker;
             _contextMenuMarker = null;
@@ -2354,33 +2354,33 @@
 
         if (place.source === 'nps') {
             // Combine source label and website link into one row
-            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">travel_explore</i>National Park Service | More Information</a>`);
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">travel_explore</i>National Park Service | More Information</a>`);
         } else if (place.source === 'wikipedia') {
-            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">menu_book</i>Wikipedia | Read Article</a>`);
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">menu_book</i>Wikipedia | Read Article</a>`);
         } else {
             const source = _placeSourceLabel(place.source);
-            parts.push(`<div class="places-popup-detail"><i class="material-icons">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
+            parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
         }
 
         if (merged.formatted_address || merged.vicinity) {
-            parts.push(`<div class="places-popup-detail"><i class="material-icons">location_on</i><span>${_escapeHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
+            parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">location_on</i><span>${_escapeHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
         }
         if (merged.rating) {
             const total = merged.user_ratings_total ? ` (${_escapeHtml(String(merged.user_ratings_total))} reviews)` : '';
-            parts.push(`<div class="places-popup-detail"><i class="material-icons">star</i><span>${_escapeHtml(String(merged.rating))} ★${total}</span></div>`);
+            parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">star</i><span>${_escapeHtml(String(merged.rating))} ★${total}</span></div>`);
         }
         const typeLabel = _formatPlaceTypes(merged.types);
         const suppressType = place.source === 'wikipedia' ||
             (place.source === 'nps' && typeLabel.toLowerCase() === 'national park');
         if (typeLabel && !suppressType) {
-            parts.push(`<div class="places-popup-detail"><i class="material-icons">category</i><span>${_escapeHtml(typeLabel)}</span></div>`);
+            parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">category</i><span>${_escapeHtml(typeLabel)}</span></div>`);
         }
         const summary = merged.editorial_summary?.overview || merged.description;
         if (summary) {
             parts.push(`<div class="places-popup-summary">${_escapeHtml(summary)}</div>`);
         }
         if (place.source !== 'nps' && place.source !== 'wikipedia') {
-            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-icons">open_in_new</i>Website / more information</a>`);
+            parts.push(`<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">open_in_new</i>Website / more information</a>`);
         }
         return parts.join('');
     }
@@ -2456,7 +2456,7 @@
             const coordItem = document.createElement('button');
             coordItem.className = 'map-context-menu__item map-context-menu__coords';
             coordItem.title = 'Click to copy coordinates';
-            coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
+            coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
             coordItem.addEventListener('click', () => {
                 navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
                     .then(() => toastr.success('Coordinates copied'), () => toastr.error('Could not copy'));
@@ -2468,7 +2468,7 @@
             // Add to my map
             const addItem = document.createElement('button');
             addItem.className = 'map-context-menu__item';
-            addItem.innerHTML = '<i class="material-icons">add_location</i>Add to my map';
+            addItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Add to my map';
             addItem.addEventListener('click', () => {
                 menu.remove();
                 openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id });
@@ -2478,7 +2478,7 @@
             // More information
             const infoItem = document.createElement('button');
             infoItem.className = 'map-context-menu__item';
-            infoItem.innerHTML = '<i class="material-icons">info</i>More information';
+            infoItem.innerHTML = '<i class="material-symbols-outlined">info</i>More information';
             infoItem.addEventListener('click', () => {
                 menu.remove();
                 _showPlaceInfoPanel(place);
@@ -2533,7 +2533,7 @@
         // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
         if (place.source === 'nps' || place.source === 'wikipedia') {
             const parts = [];
-            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${place.vicinity}</div>`);
+            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${place.vicinity}</div>`);
             if (place.description) parts.push(`<div class="place-info-summary">${place.description}</div>`);
             if (place.url) parts.push(`<div class="place-info-link"><a href="${place.url}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
@@ -2548,7 +2548,7 @@
             const data = await resp.json();
             const d = data.place || {};
             const parts = [];
-            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-icons">location_on</i> ${d.formatted_address}</div>`);
+            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${d.formatted_address}</div>`);
             if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${d.rating} ★</div>`);
             if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${d.editorial_summary.overview}</div>`);
             if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
@@ -3216,7 +3216,7 @@
         const overlay = document.createElement('div');
         overlay.className = 'addr-no-results-overlay';
         overlay.innerHTML = `<div class="addr-no-results-card">
-            <i class="material-icons">search_off</i>
+            <i class="material-symbols-outlined">search_off</i>
             <p>${_escHtml(message)}</p>
             <button type="button">x</button>
         </div>`;
@@ -3340,7 +3340,7 @@
                                         const coordItem = document.createElement('button');
                                         coordItem.className = 'map-context-menu__item map-context-menu__coords';
                                         coordItem.title = 'Click to copy coordinates';
-                                        coordItem.innerHTML = `<i class="material-icons">gps_fixed</i><span>${mlat.toFixed(6)}, ${mlng.toFixed(6)}</span>`;
+                                        coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${mlat.toFixed(6)}, ${mlng.toFixed(6)}</span>`;
                                         coordItem.addEventListener('click', () => {
                                             navigator.clipboard.writeText(`${mlat.toFixed(6)}, ${mlng.toFixed(6)}`)
                                                 .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
@@ -3350,12 +3350,12 @@
                                         const sep = document.createElement('div'); sep.className = 'map-context-menu__sep'; menu.appendChild(sep);
                                         const addPinItem = document.createElement('button');
                                         addPinItem.className = 'map-context-menu__item';
-                                        addPinItem.innerHTML = '<i class="material-icons">add_location</i>Create pin';
+                                        addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Create pin';
                                         addPinItem.addEventListener('click', () => { menu.remove(); openAddPinDialog(mlat, mlng, { defaultName: mname }); });
                                         menu.appendChild(addPinItem);
                                         const dismissItem = document.createElement('button');
                                         dismissItem.className = 'map-context-menu__item';
-                                        dismissItem.innerHTML = '<i class="material-icons">close</i>Dismiss marker';
+                                        dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
                                         dismissItem.addEventListener('click', () => { menu.remove(); marker.remove(); });
                                         menu.appendChild(dismissItem);
                                         document.body.appendChild(menu);
@@ -5118,7 +5118,7 @@
         const createBtn = document.createElement('button');
         createBtn.type = 'button';
         createBtn.className = 'apdlg-badge-sugg-item apdlg-badge-sugg-create';
-        createBtn.innerHTML = '<i class="material-icons">add_circle_outline</i><span>Create a badge' + (q ? ` "${_escHtml(query.trim())}"` : '') + '</span>';
+        createBtn.innerHTML = '<i class="material-symbols-outlined">add_circle_outline</i><span>Create a badge' + (q ? ` "${_escHtml(query.trim())}"` : '') + '</span>';
         createBtn.addEventListener('mousedown', e => { e.preventDefault(); _apdlgPromptCreateBadge(query.trim()); });
         box.appendChild(createBtn);
         box.hidden = false;
@@ -5433,7 +5433,7 @@
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>
         <span>Multiple locations match this area</span>
         <button type="button" class="dialog-close" onclick="document.getElementById('loc-conflict-dialog').close()">
-            <i class="material-icons">close</i>
+            <i class="material-symbols-outlined">close</i>
         </button>
     </div>
     <div class="loc-conflict-body">

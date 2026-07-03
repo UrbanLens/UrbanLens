@@ -1,13 +1,13 @@
 <div id="trip-members-panel" class="trip-panel card"
      data-collapse-scope="trip" data-collapse-section="members">
     <div class="card-header">
-        <i class="material-icons">group</i>
+        <i class="material-symbols-outlined">group</i>
         <span>Members</span>
         {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
         {% if profile == trip.creator %}
         <button type="button" class="btn btn--sm btn--primary"
                 onclick="document.getElementById('add-member-dialog').showModal()">
-            <i class="material-icons">add</i>
+            <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}
     </div>
@@ -87,14 +87,14 @@
                         hx-swap="outerHTML"
                         hx-confirm="Remove {{ member.user.username }} from this trip?"
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
-                    <i class="material-icons">person_remove</i>
+                    <i class="material-symbols-outlined">person_remove</i>
                 </button>
                 {% elif membership.profile == profile and profile != trip.creator %}
                 <button type="button" class="detail-pin-action-btn"
                         title="Leave trip"
                         hx-delete="{% url 'trips.leave' trip.uuid %}"
                         hx-confirm="Leave this trip? You can be re-added by the creator.">
-                    <i class="material-icons">exit_to_app</i>
+                    <i class="material-symbols-outlined">exit_to_app</i>
                 </button>
                 {% endif %}
             </div>

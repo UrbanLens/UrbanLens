@@ -18,11 +18,11 @@ Includes hx-get polling while status is pending/running; removes itself when don
     </div>
     <div class="export-done-actions">
         <a href="{% url 'tools.export.download' job_id=job_id %}" class="btn btn--primary">
-            <i class="material-icons">download</i>
+            <i class="material-symbols-outlined">download</i>
             Download ZIP
         </a>
         <button type="button" class="btn btn--ghost" onclick="location.reload()">
-            <i class="material-icons">refresh</i>
+            <i class="material-symbols-outlined">refresh</i>
             New export
         </button>
     </div>
@@ -34,12 +34,12 @@ Includes hx-get polling while status is pending/running; removes itself when don
         <div class="export-progress-bar export-progress-bar--error" style="width: 100%;"></div>
     </div>
     <div class="export-error-msg">
-        <i class="material-icons">error</i>
+        <i class="material-symbols-outlined">error</i>
         <span>{{ message|default:"Export failed. Please try again." }}</span>
     </div>
     <div class="export-done-actions" style="margin-top: .75rem;">
         <button type="button" class="btn btn-secondary" onclick="location.reload()">
-            <i class="material-icons">refresh</i>
+            <i class="material-symbols-outlined">refresh</i>
             Try again
         </button>
     </div>

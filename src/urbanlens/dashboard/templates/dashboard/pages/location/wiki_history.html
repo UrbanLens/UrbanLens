@@ -4,13 +4,13 @@
     <li class="wiki-history-item {% if edit.reverted %}wiki-history-item--reverted{% endif %}">
         <div class="wiki-history-meta">
             <span class="wiki-history-editor">
-                <i class="material-icons">person</i>
+                <i class="material-symbols-outlined">person</i>
                 {% if edit.editor and edit.editor.user %}{{ edit.editor.user.username }}{% else %}Unknown{% endif %}
             </span>
             <span class="wiki-history-date">{{ edit.created|date:"M j, Y g:i A" }}</span>
             {% if edit.reverted %}
             <span class="wiki-history-badge wiki-history-badge--reverted">
-                <i class="material-icons">undo</i> Reverted
+                <i class="material-symbols-outlined">undo</i> Reverted
             </span>
             {% endif %}
         </div>
@@ -33,7 +33,7 @@
                 hx-target="closest .wiki-history-item"
                 hx-swap="outerHTML"
                 hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">
-            <i class="material-icons">undo</i> Revert
+            <i class="material-symbols-outlined">undo</i> Revert
         </button>
         {% endif %}
     </li>

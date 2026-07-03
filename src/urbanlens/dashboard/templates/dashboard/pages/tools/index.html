@@ -13,7 +13,7 @@
         {# -- Export card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="export-card">
             <div class="ul-card-header">
-                <i class="material-icons">download</i>
+                <i class="material-symbols-outlined">download</i>
                 <h3>Export Data</h3>
             </div>
 
@@ -52,7 +52,7 @@
                                         <input type="checkbox" name="export_types" value="profile" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">person</i>
+                                    <i class="material-symbols-outlined">person</i>
                                     <span>Profile</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -60,7 +60,7 @@
                                         <input type="checkbox" name="export_types" value="pins" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">place</i>
+                                    <i class="material-symbols-outlined">place</i>
                                     <span>Pins</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -68,7 +68,7 @@
                                         <input type="checkbox" name="export_types" value="badges" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">label</i>
+                                    <i class="material-symbols-outlined">label</i>
                                     <span>Badges</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -76,7 +76,7 @@
                                         <input type="checkbox" name="export_types" value="visit_history" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">history</i>
+                                    <i class="material-symbols-outlined">history</i>
                                     <span>Visit History</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -84,7 +84,7 @@
                                         <input type="checkbox" name="export_types" value="connections" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">people</i>
+                                    <i class="material-symbols-outlined">people</i>
                                     <span>Connections</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -92,7 +92,7 @@
                                         <input type="checkbox" name="export_types" value="comments" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">comment</i>
+                                    <i class="material-symbols-outlined">comment</i>
                                     <span>Comments</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -100,7 +100,7 @@
                                         <input type="checkbox" name="export_types" value="photos" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">photo_library</i>
+                                    <i class="material-symbols-outlined">photo_library</i>
                                     <span>Photos</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -108,7 +108,7 @@
                                         <input type="checkbox" name="export_types" value="trips" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">directions_car</i>
+                                    <i class="material-symbols-outlined">directions_car</i>
                                     <span>Trips</span>
                                 </label>
                                 <label class="export-checkbox-item">
@@ -116,7 +116,7 @@
                                         <input type="checkbox" name="export_types" value="settings" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">settings</i>
+                                    <i class="material-symbols-outlined">settings</i>
                                     <span>Settings</span>
                                 </label>
                             </div>
@@ -129,7 +129,7 @@
                                         <input type="checkbox" name="export_types" value="google_takeout" id="export-google-takeout">
                                         <span class="ul-checkbox"></span>
                                     </span>
-                                    <i class="material-icons">cloud_download</i>
+                                    <i class="material-symbols-outlined">cloud_download</i>
                                     <span>Google Takeout format
                                         <span class="export-format-hint">Also export pins as a Google Takeout-compatible CSV</span>
                                     </span>
@@ -139,7 +139,7 @@
 
                         <div class="export-actions">
                             <button type="submit" class="btn btn--primary export-submit-btn" id="export-submit-btn">
-                                <i class="material-icons">download</i>
+                                <i class="material-symbols-outlined">download</i>
                                 <span>Export</span>
                             </button>
                         </div>
@@ -153,7 +153,7 @@
         {# -- Import card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="import-card">
             <div class="ul-card-header">
-                <i class="material-icons">upload</i>
+                <i class="material-symbols-outlined">upload</i>
                 <h3>Import Data</h3>
             </div>
 
@@ -197,7 +197,7 @@
 
                         <div class="export-actions">
                             <button type="submit" class="btn btn--primary export-submit-btn" id="import-submit-btn" disabled>
-                                <i class="material-icons">upload</i>
+                                <i class="material-symbols-outlined">upload</i>
                                 <span>Import</span>
                             </button>
                         </div>
@@ -213,7 +213,7 @@
         {% if perms.dashboard.view_site_admin %}
         <div class="ul-card tools-card" id="admin-tools-card">
             <div class="ul-card-header">
-                <i class="material-icons">admin_panel_settings</i>
+                <i class="material-symbols-outlined">admin_panel_settings</i>
                 <h3>Admin Tools</h3>
             </div>
 
@@ -223,7 +223,7 @@
                 </p>
                 <div class="tools-card-actions">
                     <a href="{% url 'tools.admin.index' %}" class="btn btn--primary tools-admin-btn">
-                        <i class="material-icons">open_in_new</i>
+                        <i class="material-symbols-outlined">open_in_new</i>
                         <span>Open Admin Tools</span>
                     </a>
                 </div>
@@ -234,7 +234,7 @@
         {# -- Invite friend card ------------------------------------------------ #}
         <div class="ul-card tools-card" id="invite-friend-card">
             <div class="ul-card-header">
-                <i class="material-icons">person_add_alt</i>
+                <i class="material-symbols-outlined">person_add_alt</i>
                 <h3>Invite a Friend</h3>
             </div>
 
@@ -736,9 +736,9 @@
         const text = message || 'Export failed. Please try again.';
         poll.innerHTML =
             '<div class="export-progress-track"><div class="export-progress-bar export-progress-bar--error" style="width:100%;"></div></div>' +
-            '<div class="export-error-msg"><i class="material-icons">error</i><span></span></div>' +
+            '<div class="export-error-msg"><i class="material-symbols-outlined">error</i><span></span></div>' +
             '<div class="export-done-actions" style="margin-top:.75rem;">' +
-            '<button type="button" class="btn btn-secondary" onclick="location.reload()"><i class="material-icons">refresh</i> Try again</button></div>';
+            '<button type="button" class="btn btn-secondary" onclick="location.reload()"><i class="material-symbols-outlined">refresh</i> Try again</button></div>';
         poll.querySelector('.export-error-msg span').textContent = text;
         notifyExportError(text);
     }

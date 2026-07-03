@@ -37,7 +37,7 @@
 
     <div class="edit-profile-header">
         <a href="{% url 'profile.view' %}" class="edit-back-link">
-            <i class="material-icons">arrow_back</i> Back to Profile
+            <i class="material-symbols-outlined">arrow_back</i> Back to Profile
         </a>
         <h1 class="edit-profile-title">Edit Profile</h1>
     </div>
@@ -72,7 +72,7 @@
                     <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
                     {% else %}
                     <div class="edit-avatar-placeholder" id="avatar-preview">
-                        <i class="material-icons">person</i>
+                        <i class="material-symbols-outlined">person</i>
                     </div>
                     {% endif %}
                     <span class="field-status" data-field-status="avatar" style="display:block;text-align:center;margin-top:4px"></span>
@@ -83,7 +83,7 @@
 
                     {# Upload #}
                     <label class="edit-avatar-option" title="Upload your own photo">
-                        <i class="material-icons">upload</i>
+                        <i class="material-symbols-outlined">upload</i>
                         <span>Upload</span>
                         <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
                     </label>

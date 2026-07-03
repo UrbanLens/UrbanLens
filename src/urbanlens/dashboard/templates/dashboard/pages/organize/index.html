@@ -20,26 +20,26 @@
             <div class="btn-group" id="org-header-actions">
                 <div class="tag-view-toggle btn-togl" id="org-view-toggle" role="group" aria-label="View mode">
                     <button type="button" class="btn org-header-view-btn active" data-view="list" title="List view">
-                        <i class="material-icons">view_list</i>
+                        <i class="material-symbols-outlined">view_list</i>
                     </button>
                     <button type="button" class="btn org-header-view-btn" data-view="gallery" title="Gallery view">
-                        <i class="material-icons">grid_view</i>
+                        <i class="material-symbols-outlined">grid_view</i>
                     </button>
                     <button type="button" class="btn org-header-view-btn" data-view="tree" title="Tree view">
-                        <i class="material-icons">account_tree</i>
+                        <i class="material-symbols-outlined">account_tree</i>
                     </button>
                 </div>
                 <div class="tag-view-toggle--sel">
                     <button type="button" class="btn btn--sel" id="org-header-sel-all" title="Select all">
-                        <i class="material-icons">checklist</i>
+                        <i class="material-symbols-outlined">checklist</i>
                     </button>
                 </div>
                 <button type="button" class="btn btn--ghost btn--sm" id="org-header-filter-btn" title="Filter">
-                    <i class="material-icons">filter_list</i> Filter
+                    <i class="material-symbols-outlined">filter_list</i> Filter
                     <span class="org-filter-active-dot"></span>
                 </button>
                 <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" type="button" title="Create">
-                    <i class="material-icons">add</i>
+                    <i class="material-symbols-outlined">add</i>
                 </button>
             </div>
         </div>
@@ -50,27 +50,27 @@
     <div class="organize-tab-bar" role="tablist">
         <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
                 role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
-            <i class="material-icons">label</i> Tags
+            <i class="material-symbols-outlined">label</i> Tags
             <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
                 role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
-            <i class="material-icons">category</i> Categories
+            <i class="material-symbols-outlined">category</i> Categories
             <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
                 role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
-            <i class="material-icons">flag_circle</i> Statuses
+            <i class="material-symbols-outlined">flag_circle</i> Statuses
             <span class="org-tab-count" id="org-tab-count-status" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
                 role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
-            <i class="material-icons">people</i> People
+            <i class="material-symbols-outlined">people</i> People
             <span class="org-tab-count" id="org-tab-count-people" hidden></span>
         </button>
         <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                 role="tab" data-tab="priority" aria-controls="panel-priority">
-            <i class="material-icons">low_priority</i> Display Order
+            <i class="material-symbols-outlined">low_priority</i> Display Order
         </button>
     </div>
     {% endif %}
@@ -101,12 +101,12 @@
                 <span id="priority-sel-info" class="priority-sel-info" hidden></span>
                 <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-clear" hidden
                         onclick="window._clearPrioritySelection&&_clearPrioritySelection()">
-                    <i class="material-icons">close</i> Clear
+                    <i class="material-symbols-outlined">close</i> Clear
                 </button>
                 <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-toggle"
                         title="Select multiple items then drag any one to move them all together"
                         onclick="window._togglePrioritySelectMode&&_togglePrioritySelectMode()">
-                    <i class="material-icons">checklist</i> Select
+                    <i class="material-symbols-outlined">checklist</i> Select
                 </button>
             </div>
         </div>
@@ -117,7 +117,7 @@
             {% for item in priority_items %}
             <div class="priority-item" data-id="{{ item.id }}" data-kind="{{ item.kind }}">
                 <div class="priority-drag-handle" title="Drag to reorder">
-                    <i class="material-icons">drag_indicator</i>
+                    <i class="material-symbols-outlined">drag_indicator</i>
                 </div>
                 <label class="priority-sel-cb-wrap" title="Select for multi-drag">
                     <input type="checkbox" class="priority-sel-cb" data-id="{{ item.id }}">
@@ -147,14 +147,14 @@
                     </div>
                 </div>
                 <div class="priority-jump-actions">
-                    <button type="button" class="priority-jump-btn jump-top" data-priority-jump="top" title="Send to top"><i class="material-icons">vertical_align_top</i></button>
-                    <button type="button" class="priority-jump-btn jump-bottom" data-priority-jump="bottom" title="Send to bottom"><i class="material-icons">vertical_align_bottom</i></button>
+                    <button type="button" class="priority-jump-btn jump-top" data-priority-jump="top" title="Send to top"><i class="material-symbols-outlined">vertical_align_top</i></button>
+                    <button type="button" class="priority-jump-btn jump-bottom" data-priority-jump="bottom" title="Send to bottom"><i class="material-symbols-outlined">vertical_align_bottom</i></button>
                 </div>
                 {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and item.profile %}
                 <button type="button" class="priority-edit-btn" title="Edit {{ item.kind }}"
                         hx-get="{% url 'badge.edit' badge_kind=item.kind badge_id=item.id %}"
                         hx-target="#badge-edit-dialog-body" hx-swap="innerHTML">
-                    <i class="material-icons">edit</i>
+                    <i class="material-symbols-outlined">edit</i>
                 </button>
                 {% endif %}
                 <div class="priority-order-editor">
@@ -169,7 +169,7 @@
             </div>
             {% empty %}
             <div class="tag-empty">
-                <i class="material-icons">label_off</i>
+                <i class="material-symbols-outlined">label_off</i>
                 <p>No tags, categories, or statuses yet.</p>
             </div>
             {% endfor %}
@@ -189,20 +189,20 @@
     <span id="org-bulk-count" class="org-bulk-count"></span>
     <button type="button" class="org-bulk-deselect-btn" id="org-bulk-deselect-btn" title="Clear selection"
             onclick="window._orgBulk&&window._orgBulk.deselect&&window._orgBulk.deselect()">
-        <i class="material-icons">close</i>
+        <i class="material-symbols-outlined">close</i>
     </button>
     <div class="org-bulk-sep"></div>
     <button type="button" class="org-bulk-btn org-bulk-btn--edit" id="org-bulk-edit-btn"
             onclick="window._orgBulk&&window._orgBulk.edit&&window._orgBulk.edit()">
-        <i class="material-icons">edit</i> Edit
+        <i class="material-symbols-outlined">edit</i> Edit
     </button>
     <button type="button" class="org-bulk-btn org-bulk-btn--merge" id="org-bulk-merge-btn"
             onclick="window._orgBulk&&window._orgBulk.merge&&window._orgBulk.merge()">
-        <i class="material-icons">merge</i> Merge
+        <i class="material-symbols-outlined">merge</i> Merge
     </button>
     <button type="button" class="org-bulk-btn org-bulk-btn--delete" id="org-bulk-delete-btn"
             onclick="window._orgBulk&&window._orgBulk.del&&window._orgBulk.del()">
-        <i class="material-icons">delete</i> Delete
+        <i class="material-symbols-outlined">delete</i> Delete
     </button>
 </div>
 
@@ -278,7 +278,7 @@
             '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
             '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
             '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
-            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-symbols-outlined">close</i></button>';
         host.appendChild(el);
         el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
         el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
@@ -834,7 +834,7 @@ function _updateCrossTabCounts() {
             partsHtml = parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1];
         }
 
-        footer.innerHTML = '<i class="material-icons">info_outline</i><span>' + prefix + partsHtml + ' also match this search.</span>';
+        footer.innerHTML = '<i class="material-symbols-outlined">info</i><span>' + prefix + partsHtml + ' also match this search.</span>';
         footer.hidden = false;
     });
 }
@@ -1269,7 +1269,7 @@ window._orgBulkSync = function(n, opts) {
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _tagSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
         btn.title = allSel ? 'Deselect all' : 'Select all';
-        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+        btn.innerHTML = allSel ? '<i class="material-symbols-outlined">remove_done</i>' : '<i class="material-symbols-outlined">checklist</i>';
     }
 
     function _updateTagBar() {
@@ -1422,7 +1422,7 @@ window._orgBulkSync = function(n, opts) {
         var ih = d.customIcon
             ? '<img src="'+_escHtml(d.customIcon)+'" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">'
             : (d.icon ? (/^[a-z_]+$/.test(d.icon) ? '<i class="material-icons" style="'+ics+'">'+_escHtml(d.icon)+'</i>' : '<span class="tag-icon-emoji">'+_escHtml(d.icon)+'</span>') : '<i class="material-icons tag-icon-empty">label</i>');
-        var sb = isTarget ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving tag"><i class="material-icons">swap_vert</i></button>';
+        var sb = isTarget ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving tag"><i class="material-symbols-outlined">swap_vert</i></button>';
         return '<div class="cat-merge-mini-card'+(isTarget?' cat-merge-mini-card--target':'')+'" data-merge-id="'+d.id+'">'
             +'<div class="tag-card-icon cat-merge-mini-icon" style="'+cs+'">'+ih+'</div>'
             +'<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">'+_escHtml(d.name)+'</div>'
@@ -1719,7 +1719,7 @@ window._orgBulkSync = function(n, opts) {
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _catSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
         btn.title = allSel ? 'Deselect all' : 'Select all';
-        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+        btn.innerHTML = allSel ? '<i class="material-symbols-outlined">remove_done</i>' : '<i class="material-symbols-outlined">checklist</i>';
     }
 
     function _updateCatBar() {
@@ -1852,7 +1852,7 @@ window._orgBulkSync = function(n, opts) {
         var cs=d.color?'background:'+d.color+'22;border-color:'+d.color+'44;':'';
         var ics=d.color?'color:'+d.color:'';
         var ih=d.icon?(/^[a-z_]+$/.test(d.icon)?'<i class="material-icons" style="'+ics+'">'+_escHtml(d.icon)+'</i>':'<span class="tag-icon-emoji">'+_escHtml(d.icon)+'</span>'):'<i class="material-icons tag-icon-empty">category</i>';
-        var sb=isTarget?'':'<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving category"><i class="material-icons">swap_vert</i></button>';
+        var sb=isTarget?'':'<button type="button" class="cat-merge-swap-btn" data-swap-id="'+d.id+'" title="Make this the surviving category"><i class="material-symbols-outlined">swap_vert</i></button>';
         return '<div class="cat-merge-mini-card'+(isTarget?' cat-merge-mini-card--target':'')+'" data-merge-id="'+d.id+'">'
             +'<div class="tag-card-icon cat-merge-mini-icon" style="'+cs+'">'+ih+'</div>'
             +'<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">'+_escHtml(d.name)+'</div>'
@@ -2311,7 +2311,7 @@ window._orgBulkSync = function(n, opts) {
         var allSel = visIds.length > 0 && visIds.every(function(id) { return _statusSelected.has(id); });
         btn.classList.toggle('deselect-mode', allSel);
         btn.title = allSel ? 'Deselect all' : 'Select all';
-        btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+        btn.innerHTML = allSel ? '<i class="material-symbols-outlined">remove_done</i>' : '<i class="material-symbols-outlined">checklist</i>';
     }
 
     function _syncStatusSelBar() {
@@ -2363,7 +2363,7 @@ window._orgBulkSync = function(n, opts) {
         var ih = d.icon
             ? (/^[a-z_]+$/.test(d.icon) ? '<i class="material-icons" style="' + ics + '">' + _escHtml(d.icon) + '</i>' : '<span class="tag-icon-emoji">' + _escHtml(d.icon) + '</span>')
             : '<i class="material-icons tag-icon-empty">flag</i>';
-        var sb = (isTarget || hideSwap) ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + d.id + '" title="Make this the surviving status"><i class="material-icons">swap_vert</i></button>';
+        var sb = (isTarget || hideSwap) ? '' : '<button type="button" class="cat-merge-swap-btn" data-swap-id="' + d.id + '" title="Make this the surviving status"><i class="material-symbols-outlined">swap_vert</i></button>';
         return '<div class="cat-merge-mini-card' + (isTarget ? ' cat-merge-mini-card--target' : '') + '" data-merge-id="' + d.id + '">'
             + '<div class="tag-card-icon cat-merge-mini-icon" style="' + cs + '">' + ih + '</div>'
             + '<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">' + _escHtml(d.name) + '</div>'
@@ -3109,7 +3109,7 @@ window._orgBulkSync = function(n, opts) {
         filterTitle: 'Filter labels',
         viewAriaLabel: 'People view mode',
         createTitle: 'New Label',
-        createHtml: '<i class="material-icons">add</i>',
+        createHtml: '<i class="material-symbols-outlined">add</i>',
         getView: function() { return window._orgHeader.getSharedView(); },
         setView: function(v) { window._orgHeader.setSharedView(v); },
         applyView: _applyPeopleView,
@@ -3128,7 +3128,7 @@ window._orgBulkSync = function(n, opts) {
             var allSel = ids.length > 0 && ids.every(function(id) { return _peopleSelected.has(id); });
             btn.classList.toggle('deselect-mode', allSel);
             btn.title = allSel ? 'Deselect all' : 'Select all labels';
-            btn.innerHTML = allSel ? '<i class="material-icons">remove_done</i>' : '<i class="material-icons">checklist</i>';
+            btn.innerHTML = allSel ? '<i class="material-symbols-outlined">remove_done</i>' : '<i class="material-symbols-outlined">checklist</i>';
         },
         onCreate: function() {
             var f = document.getElementById('new-people-form');

@@ -24,7 +24,7 @@
                     onclick="window.tripToggleShowCompleted()"
                     data-tooltip="Toggle past activities on the trip map."
                     aria-label="Show completed activities">
-                <i class="material-icons">history</i>
+                <i class="material-symbols-outlined">history</i>
             </button>
         </div>
         <p class="trip-map-empty" id="trip-map-empty" hidden>No locations to display.</p>
@@ -36,7 +36,7 @@
         {# Activities #}
         <div class="trip-section" data-section="activities">
             <div class="trip-section-grip" title="Drag to reorder">
-                <i class="material-icons">drag_indicator</i>
+                <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <section class="trip-detail-section trip-detail-activities">
                 <div id="trip-activities-panel"
@@ -54,7 +54,7 @@
         {# Members #}
         <div class="trip-section" data-section="members">
             <div class="trip-section-grip" title="Drag to reorder">
-                <i class="material-icons">drag_indicator</i>
+                <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-members-panel"
                  hx-get="{% url 'trips.members' trip.uuid %}"
@@ -70,7 +70,7 @@
         {# Comments #}
         <div class="trip-section" data-section="comments">
             <div class="trip-section-grip" title="Drag to reorder">
-                <i class="material-icons">drag_indicator</i>
+                <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-comments-panel"
                  hx-get="{% url 'trips.comments' trip.uuid %}"
@@ -86,7 +86,7 @@
         {# Weather - default last per requirements #}
         <div class="trip-section" data-section="weather">
             <div class="trip-section-grip" title="Drag to reorder">
-                <i class="material-icons">drag_indicator</i>
+                <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-weather-panel"
                  hx-get="{% url 'trips.weather' trip.uuid %}"
@@ -227,18 +227,18 @@
             <div class="status-pill-toggle" role="group" aria-label="Activity status">
                 <button type="button" class="status-pill-btn is-active" data-value="proposed"
                         onclick="_setStatusPill('add', 'proposed')">
-                    <i class="material-icons">schedule</i> Proposed
+                    <i class="material-symbols-outlined">schedule</i> Proposed
                 </button>
                 <button type="button" class="status-pill-btn" data-value="confirmed"
                         onclick="_setStatusPill('add', 'confirmed')">
-                    <i class="material-icons">check_circle</i> Confirmed
+                    <i class="material-symbols-outlined">check_circle</i> Confirmed
                 </button>
             </div>
         </div>
         <div class="form-row form-row--toggle">
             <label class="activity-hide-label">
                 <input type="checkbox" name="location_hidden" id="add-activity-location-hidden" value="true">
-                <i class="material-icons">visibility_off</i>
+                <i class="material-symbols-outlined">visibility_off</i>
                 Hide location
             </label>
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
@@ -348,18 +348,18 @@
             <div class="status-pill-toggle" role="group" aria-label="Activity status">
                 <button type="button" class="status-pill-btn is-active" data-value="proposed"
                         onclick="_setStatusPill('edit', 'proposed')">
-                    <i class="material-icons">schedule</i> Proposed
+                    <i class="material-symbols-outlined">schedule</i> Proposed
                 </button>
                 <button type="button" class="status-pill-btn" data-value="confirmed"
                         onclick="_setStatusPill('edit', 'confirmed')">
-                    <i class="material-icons">check_circle</i> Confirmed
+                    <i class="material-symbols-outlined">check_circle</i> Confirmed
                 </button>
             </div>
         </div>
         <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
             <label class="activity-hide-label">
                 <input type="checkbox" name="location_hidden" id="edit-activity-location-hidden" value="true">
-                <i class="material-icons">visibility_off</i>
+                <i class="material-symbols-outlined">visibility_off</i>
                 Hide location
             </label>
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
@@ -367,7 +367,7 @@
         <div class="form-actions form-actions--split">
             <button type="button" class="btn btn--danger" id="edit-activity-delete-btn"
                     onclick="_deleteEditActivity()">
-                <i class="material-icons">delete</i> Delete
+                <i class="material-symbols-outlined">delete</i> Delete
             </button>
             <div class="form-actions-right">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>
@@ -497,7 +497,7 @@
             '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
             '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
             '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
-            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-symbols-outlined">close</i></button>';
         host.appendChild(el);
         el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
         el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
@@ -545,7 +545,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'trip-map-ctx-item';
-        btn.innerHTML = '<i class="material-icons">add_location</i> Add activity here';
+        btn.innerHTML = '<i class="material-symbols-outlined">add_location</i> Add activity here';
         btn.addEventListener('click', function () {
             _removeCtxMenu();
             _openAddActivityAtCoords(latlng.lat, latlng.lng);
@@ -1177,10 +1177,10 @@ function _renderTripCalendar() {
 
     var html = '<div class="cal-header">' +
         '<button type="button" class="cal-nav-btn" onclick="tripCalNav(-1)" aria-label="Previous">' +
-            '<i class="material-icons">chevron_left</i></button>' +
+            '<i class="material-symbols-outlined">chevron_left</i></button>' +
         '<span class="cal-month-label">' + navTitle + '</span>' +
         '<button type="button" class="cal-nav-btn" onclick="tripCalNav(1)" aria-label="Next">' +
-            '<i class="material-icons">chevron_right</i></button>' +
+            '<i class="material-symbols-outlined">chevron_right</i></button>' +
     '</div>';
 
     months.forEach(function (mo, idx) {

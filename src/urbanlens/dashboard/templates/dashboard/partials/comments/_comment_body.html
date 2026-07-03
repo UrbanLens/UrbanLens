@@ -21,7 +21,7 @@
             hx-swap="outerHTML"
             hx-confirm="Delete this comment?"
             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-      <i class="material-icons">delete</i>
+      <i class="material-symbols-outlined">delete</i>
     </button>
     {% endif %}
   </div>
@@ -34,7 +34,7 @@
     <div class="comment-map-thumb" id="comment-map-thumb-{{ comment.id }}"></div>
     <button type="button" class="comment-map-expand-btn"
             onclick="_expandCommentMap({{ comment.id }})">
-      <i class="material-icons">open_in_full</i>
+      <i class="material-symbols-outlined">open_in_full</i>
       Expand map
     </button>
   </div>
@@ -43,7 +43,7 @@
       <span>Map</span>
       <button type="button" class="dialog-close"
               onclick="document.getElementById('comment-map-dialog-{{ comment.id }}').close()">
-        <i class="material-icons">close</i>
+        <i class="material-symbols-outlined">close</i>
       </button>
     </div>
     <div id="comment-map-view-{{ comment.id }}" class="comment-map-view-body"></div>
@@ -55,7 +55,7 @@
   <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
     <span class="comment-image-blur-label">
-      <i class="material-icons">visibility_off</i> Photo hidden
+      <i class="material-symbols-outlined">visibility_off</i> Photo hidden
     </span>
   </div>
   {% else %}
@@ -85,7 +85,7 @@
     <div class="reaction-picker">
       <button type="button" class="reaction-add-btn" title="Add reaction"
               onclick="toggleReactionPicker(this)">
-        <i class="material-icons">add_reaction</i>
+        <i class="material-symbols-outlined">add_reaction</i>
       </button>
       <div class="reaction-picker-popup" hidden>
         {% for emoji in allowed_emojis %}
@@ -112,7 +112,7 @@
   {% if not is_reply %}
   <button type="button" class="comment-reply-btn"
           onclick="toggleReplyForm('reply-form-{{ comment.id }}')">
-    <i class="material-icons">reply</i> Reply
+    <i class="material-symbols-outlined">reply</i> Reply
     {% if replies %}<span class="reply-count">({{ replies|length }})</span>{% endif %}
   </button>
 

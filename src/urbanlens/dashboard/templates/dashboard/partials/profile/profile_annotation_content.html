@@ -2,7 +2,7 @@
 <div id="profile-annotation-inner">
 
     <div class="profile-annotation-header">
-        <i class="material-icons">lock</i>
+        <i class="material-symbols-outlined">lock</i>
         <span class="profile-annotation-title">My Private Notes</span>
         <span class="profile-annotation-badge">Only visible to you</span>
     </div>
@@ -34,7 +34,7 @@
                     hx-target="#profile-annotation-inner"
                     hx-swap="innerHTML"
                     title="Clear trust rating">
-                <i class="material-icons">close</i>
+                <i class="material-symbols-outlined">close</i>
             </button>
             {% endif %}
         </div>
@@ -64,7 +64,7 @@
             {% for badge in user_badges %}{% if badge.id not in assigned_badge_ids %}{% if forloop.first %}
             <details class="pab-add-picker">
                 <summary class="pab-add-btn" title="Add a label">
-                    <i class="material-icons">add</i> Add label
+                    <i class="material-symbols-outlined">add</i> Add label
                 </summary>
                 <div class="pab-add-list">
             {% endif %}
@@ -103,7 +103,7 @@
                     <button type="button" class="pan-note-edit-btn btn-icon"
                             title="Edit note"
                             onclick="panToggleEdit({{ note.pk }})">
-                        <i class="material-icons">edit</i>
+                        <i class="material-symbols-outlined">edit</i>
                     </button>
                     <button type="button" class="pan-note-delete-btn btn-icon btn-icon--danger"
                             hx-post="{% url 'profile.note.delete' subject.slug note.pk %}"
@@ -111,7 +111,7 @@
                             hx-swap="innerHTML"
                             hx-confirm="Delete this note?"
                             title="Delete note">
-                        <i class="material-icons">delete</i>
+                        <i class="material-symbols-outlined">delete</i>
                     </button>
                 </div>
             </div>
@@ -143,7 +143,7 @@
                       rows="2"></textarea>
             <div class="pan-compose-actions">
                 <button type="submit" class="pan-compose-submit">
-                    <i class="material-icons">add</i> Add Note
+                    <i class="material-symbols-outlined">add</i> Add Note
                 </button>
             </div>
         </form>

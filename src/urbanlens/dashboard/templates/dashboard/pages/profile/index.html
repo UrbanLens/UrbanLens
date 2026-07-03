@@ -18,7 +18,7 @@
                 <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
                     {% csrf_token %}
                     <label class="avatar-upload-btn" title="Change photo">
-                        <i class="material-icons">photo_camera</i>
+                        <i class="material-symbols-outlined">photo_camera</i>
                         <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
                     </label>
                 </form>
@@ -40,7 +40,7 @@
                 <div class="profile-friendship-actions">
                     {% if friendship_status == 'accepted' %}
                         <div class="friendship-chip friendship-chip--friend">
-                            <i class="material-icons">people</i>
+                            <i class="material-symbols-outlined">people</i>
                             Friends
                             {% if friends_since %}
                             <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
@@ -50,82 +50,82 @@
                             <form method="post" action="{% url 'friend.remove' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Remove friend">
-                                    <i class="material-icons">person_remove</i> Remove
+                                    <i class="material-symbols-outlined">person_remove</i> Remove
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.mute' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Mute this user">
-                                    <i class="material-icons">volume_off</i> Mute
+                                    <i class="material-symbols-outlined">volume_off</i> Mute
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.block' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="friendship-btn friendship-btn--danger" title="Block this user"
                                         onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
-                                    <i class="material-icons">block</i> Block
+                                    <i class="material-symbols-outlined">block</i> Block
                                 </button>
                             </form>
                         </div>
                     {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
                         <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-icons">hourglass_top</i> Request sent
+                            <i class="material-symbols-outlined">hourglass_top</i> Request sent
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
                             <button type="submit" class="friendship-btn friendship-btn btn--ghost">
-                                <i class="material-icons">cancel</i> Cancel request
+                                <i class="material-symbols-outlined">cancel</i> Cancel request
                             </button>
                         </form>
                     {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
                         <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-icons">person_add</i> Wants to connect
+                            <i class="material-symbols-outlined">person_add</i> Wants to connect
                         </div>
                         <div class="friendship-btn-group">
                             <form method="post" action="{% url 'friend.accept' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="friendship-btn friendship-btn btn--primary">
-                                    <i class="material-icons">check</i> Accept
+                                    <i class="material-symbols-outlined">check</i> Accept
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.reject' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="friendship-btn friendship-btn btn--ghost">
-                                    <i class="material-icons">close</i> Decline
+                                    <i class="material-symbols-outlined">close</i> Decline
                                 </button>
                             </form>
                         </div>
                     {% elif friendship_status == 'muted' %}
                         <div class="friendship-chip friendship-chip--muted">
-                            <i class="material-icons">volume_off</i> Muted
+                            <i class="material-symbols-outlined">volume_off</i> Muted
                         </div>
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
                             <button type="submit" class="friendship-btn friendship-btn btn--ghost">
-                                <i class="material-icons">volume_up</i> Unmute
+                                <i class="material-symbols-outlined">volume_up</i> Unmute
                             </button>
                         </form>
                     {% elif friendship_status == 'blocked' %}
                         <div class="friendship-chip friendship-chip--blocked">
-                            <i class="material-icons">block</i> Blocked
+                            <i class="material-symbols-outlined">block</i> Blocked
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
                             <button type="submit" class="friendship-btn friendship-btn btn--ghost">
-                                <i class="material-icons">lock_open</i> Unblock
+                                <i class="material-symbols-outlined">lock_open</i> Unblock
                             </button>
                         </form>
                     {% else %}
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
                             <button type="submit" class="friendship-btn friendship-btn btn--primary">
-                                <i class="material-icons">person_add</i> Add Friend
+                                <i class="material-symbols-outlined">person_add</i> Add Friend
                             </button>
                         </form>
                         <form method="post" action="{% url 'friend.block' profile.id %}">
                             {% csrf_token %}
                             <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Block this user">
-                                <i class="material-icons">block</i> Block
+                                <i class="material-symbols-outlined">block</i> Block
                             </button>
                         </form>
                     {% endif %}
@@ -134,7 +134,7 @@
 
                 {% if profile.user == request.user %}
                 <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
-                    <i class="material-icons">edit</i> Edit Profile
+                    <i class="material-symbols-outlined">edit</i> Edit Profile
                 </a>
                 {% endif %}
             </div>
@@ -148,17 +148,17 @@
             <div class="profile-meta-row">
                 {% if profile.area %}
                 <span class="profile-meta-item">
-                    <i class="material-icons">place</i>{{ profile.area }}
+                    <i class="material-symbols-outlined">place</i>{{ profile.area }}
                 </span>
                 {% endif %}
                 {% if profile.started_exploring %}
                 <span class="profile-meta-item">
-                    <i class="material-icons">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
+                    <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
                 </span>
                 {% endif %}
                 {% if profile.email %}
                 <span class="profile-meta-item">
-                    <i class="material-icons">email</i>{{ profile.email }}
+                    <i class="material-symbols-outlined">email</i>{{ profile.email }}
                 </span>
                 {% endif %}
             </div>
@@ -244,7 +244,7 @@
         <div class="contact-info-list">
             {% if ci.phone_number %}
             <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
-                <i class="material-icons">phone</i>
+                <i class="material-symbols-outlined">phone</i>
                 <span>{{ ci.phone_number }}</span>
             </a>
             {% endif %}

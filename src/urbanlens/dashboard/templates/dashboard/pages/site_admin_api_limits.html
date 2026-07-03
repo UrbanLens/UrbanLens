@@ -5,12 +5,12 @@
     <div class="site-admin-header">
         <div class="site-admin-breadcrumb">
             <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-icons">arrow_back</i>
+                <i class="material-symbols-outlined">arrow_back</i>
                 Admin Home
             </a>
         </div>
         <h1 class="site-admin-title">
-            <i class="material-icons">tune</i>
+            <i class="material-symbols-outlined">tune</i>
             API Rate Limits
         </h1>
         <p class="site-admin-subtitle">Configure per-service rate limits and geo-filtering.</p>
@@ -18,10 +18,10 @@
 
     <div class="api-limits-toolbar">
         <div class="ul-notice ul-notice--info">
-            <i class="material-icons">sync</i>
+            <i class="material-symbols-outlined">sync</i>
         </div>
         <span class="admin-home-meta-pill">
-            <i class="material-icons">cloud</i>
+            <i class="material-symbols-outlined">cloud</i>
             {{ services|length }} service{{ services|length|pluralize }}
         </span>
     </div>
@@ -61,7 +61,7 @@
             <div class="api-limit-stats">
                 {% if svc.calls_30d %}
                 <span class="ul-chip">
-                    <i class="material-icons">call_made</i>
+                    <i class="material-symbols-outlined">call_made</i>
                     {{ svc.calls_30d }} calls
                 </span>
                 {% endif %}
@@ -76,7 +76,7 @@
                 {% endif %}
                 {% if svc.avg_ms %}
                 <span class="ul-chip">
-                    <i class="material-icons">speed</i>
+                    <i class="material-symbols-outlined">speed</i>
                     ~{{ svc.avg_ms }}ms
                 </span>
                 {% endif %}
@@ -111,7 +111,7 @@
     {% endwith %}
     {% empty %}
     <div class="ul-empty">
-        <i class="material-icons">cloud_off</i>
+        <i class="material-symbols-outlined">cloud_off</i>
         <p>No service configurations found. They are created automatically on first API call.</p>
     </div>
     {% endfor %}

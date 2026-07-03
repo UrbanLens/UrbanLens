@@ -245,7 +245,7 @@ markup_border_color, markup_border_opacity.
                 <span class="detail-pin-list-item-name">${dp.name}</span>
                 ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? 'you' : dp.added_by}</span>` : ''}
                 <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
-                    <i class="material-icons">close</i>
+                    <i class="material-symbols-outlined">close</i>
                 </button>`;
             li.addEventListener('click', e => {
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
@@ -278,7 +278,7 @@ markup_border_color, markup_border_opacity.
                 <span class="material-icons detail-pin-list-item-icon" style="color:${item.color}">${_markupIcon[item.markup_type] || 'edit'}</span>
                 <span class="detail-pin-list-item-name">${displayName}</span>
                 <button type="button" class="detail-pin-list-item-delete" title="Delete">
-                    <i class="material-icons">close</i>
+                    <i class="material-symbols-outlined">close</i>
                 </button>`;
             li.addEventListener('click', e => {
                 if (e.target.closest('.detail-pin-list-item-delete')) return;
@@ -636,7 +636,7 @@ markup_border_color, markup_border_opacity.
             '<i class="material-icons markup-line-finish-tip__icon">gesture</i>' +
             '<span class="markup-line-finish-tip__text">Click that <strong>last point</strong> again to finish the shape</span>' +
             '<button type="button" class="markup-line-finish-tip__close" aria-label="Got it, don\'t show this again">' +
-            '<i class="material-icons">close</i></button>';
+            '<i class="material-symbols-outlined">close</i></button>';
         el.querySelector('.markup-line-finish-tip__close').addEventListener('click', _dismissLineFinishTip);
         wrapper.appendChild(el);
         setTimeout(_dismissLineFinishTip, 8000);
@@ -739,7 +739,7 @@ markup_border_color, markup_border_opacity.
         if (!_photoPanelItems.length) {
             const empty = document.createElement('li');
             empty.className = 'photo-panel-empty';
-            empty.innerHTML = '<i class="material-icons">photo_camera</i><span>No photos yet</span>';
+            empty.innerHTML = '<i class="material-symbols-outlined">photo_camera</i><span>No photos yet</span>';
             ul.appendChild(empty);
             return;
         }
@@ -1655,13 +1655,13 @@ markup_border_color, markup_border_opacity.
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.className = 'boundary-ctx-menu__item';
-        editBtn.innerHTML = '<i class="material-icons">edit</i> Edit';
+        editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i> Edit';
         editBtn.addEventListener('click', () => { map.closePopup(); startEditCampus(); });
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'boundary-ctx-menu__item boundary-ctx-menu__item--danger';
-        delBtn.innerHTML = '<i class="material-icons">delete_outline</i> Delete';
+        delBtn.innerHTML = '<i class="material-symbols-outlined">delete_outline</i> Delete';
         delBtn.addEventListener('click', async () => {
             map.closePopup();
             if (!await confirmDialog({ title: 'Delete Boundary', message: 'Delete this boundary polygon?', confirmLabel: 'Delete' })) return;

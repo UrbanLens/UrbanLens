@@ -14,15 +14,15 @@
         <div class="kind-toggle">
             <label class="kind-toggle-option">
                 <input type="radio" name="kind" value="tag" {% if badge.kind == 'tag' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
-                <span><i class="material-icons">label</i> Tag</span>
+                <span><i class="material-symbols-outlined">label</i> Tag</span>
             </label>
             <label class="kind-toggle-option">
                 <input type="radio" name="kind" value="category" {% if badge.kind == 'category' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
-                <span><i class="material-icons">category</i> Category</span>
+                <span><i class="material-symbols-outlined">category</i> Category</span>
             </label>
             <label class="kind-toggle-option">
                 <input type="radio" name="kind" value="status" {% if badge.kind == 'status' %}checked{% endif %}{% if badge.is_protected %} disabled{% endif %}>
-                <span><i class="material-icons">flag</i> Status</span>
+                <span><i class="material-symbols-outlined">flag</i> Status</span>
             </label>
         </div>
         <p class="form-hint">Changing the type will convert this item and migrate its memberships.</p>
@@ -90,12 +90,12 @@
                 <label class="kind-toggle-option">
                     <input type="radio" name="badge_rel_type_{{ badge.id }}" value="parent" checked
                            onchange="switchBadgeRelType(this)">
-                    <span><i class="material-icons">arrow_upward</i> Parents</span>
+                    <span><i class="material-symbols-outlined">arrow_upward</i> Parents</span>
                 </label>
                 <label class="kind-toggle-option">
                     <input type="radio" name="badge_rel_type_{{ badge.id }}" value="child"
                            onchange="switchBadgeRelType(this)">
-                    <span><i class="material-icons">arrow_downward</i> Children</span>
+                    <span><i class="material-symbols-outlined">arrow_downward</i> Children</span>
                 </label>
             </div>
         </div>

@@ -1,8 +1,8 @@
 <dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="invite-dialog ul-dialog">
     <div class="dialog-header">
-        <span><i class="material-icons">mail</i> Invite a Friend</span>
+        <span><i class="material-symbols-outlined">mail</i> Invite a Friend</span>
         <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">
-            <i class="material-icons">close</i>
+            <i class="material-symbols-outlined">close</i>
         </button>
     </div>
     <div class="invite-dialog-body">
@@ -19,7 +19,7 @@
                 placeholder="friend@example.com" required autocomplete="email">
             {% if perms.dashboard.view_site_admin %}
             <div class="invite-subscription-panel">
-                <label><i class="material-icons">workspace_premium</i> Optional subscription</label>
+                <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>
                 <select name="subscription_role">
                     <option value="">No subscription</option>
                     <option value="vip">VIP - SaaS features</option>
@@ -35,7 +35,7 @@
             {% endif %}
             <div class="invite-form-actions">
                 <button type="submit" class="btn btn--primary">
-                    <i class="material-icons">send</i> Send
+                    <i class="material-symbols-outlined">send</i> Send
                 </button>
             </div>
         </form>

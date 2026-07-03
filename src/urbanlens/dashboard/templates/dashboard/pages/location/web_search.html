@@ -8,7 +8,7 @@
           data-debug-count="{{ debug.count }}"></span>
     {% endif %}
     <div class="card-header">
-        <i class="material-icons">travel_explore</i>
+        <i class="material-symbols-outlined">travel_explore</i>
         <h3>Web Results</h3>
         {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
     </div>
@@ -24,7 +24,7 @@
                          onerror="urbanlensMediaThumbFallback(this, 'public', 'search-result-thumb search-result-thumb-fallback')">
                     {% else %}
                     <span class="search-result-thumb search-result-thumb-fallback" aria-hidden="true">
-                        <i class="material-icons">public</i>
+                        <i class="material-symbols-outlined">public</i>
                     </span>
                     {% endif %}
                 </div>
@@ -58,12 +58,12 @@
     {% include "dashboard/partials/ui/_pagination_controls.html" %}
     {% elif error %}
     <div class="view-unavailable">
-        <i class="material-icons">wifi_off</i>
+        <i class="material-symbols-outlined">wifi_off</i>
         <span>{{ error }}</span>
     </div>
     {% else %}
     <div class="view-unavailable">
-        <i class="material-icons">search_off</i>
+        <i class="material-symbols-outlined">search_off</i>
         <span>No results found.</span>
     </div>
     {% endif %}

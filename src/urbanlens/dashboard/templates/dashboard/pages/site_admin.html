@@ -5,12 +5,12 @@
     <div class="site-admin-header">
         <div class="site-admin-breadcrumb">
             <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-icons">arrow_back</i>
+                <i class="material-symbols-outlined">arrow_back</i>
                 Admin Home
             </a>
         </div>
         <h1 class="site-admin-title">
-            <i class="material-icons">tune</i>
+            <i class="material-symbols-outlined">tune</i>
             Site Settings
         </h1>
         <p class="site-admin-subtitle">Configure site-wide behaviour, branding, and security.</p>
@@ -18,14 +18,14 @@
 
     {% if saved %}
     <div class="site-admin-notice site-admin-notice--success">
-        <i class="material-icons">check_circle</i>
+        <i class="material-symbols-outlined">check_circle</i>
         Settings saved.
     </div>
     {% endif %}
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">settings_suggest</i>
+            <i class="material-symbols-outlined">settings_suggest</i>
             <span>Environment</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-environment">
@@ -60,7 +60,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">drive_file_rename_outline</i>
+            <i class="material-symbols-outlined">drive_file_rename_outline</i>
             <span>Branding</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-branding">
@@ -82,7 +82,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">group</i>
+            <i class="material-symbols-outlined">group</i>
             <span>Trip Settings</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
@@ -101,7 +101,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">search</i>
+            <i class="material-symbols-outlined">search</i>
             <span>Web Search</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
@@ -134,7 +134,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">backup</i>
+            <i class="material-symbols-outlined">backup</i>
             <span>Database Backups</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
@@ -167,7 +167,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">person_add_disabled</i>
+            <i class="material-symbols-outlined">person_add_disabled</i>
             <span>Registration</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
@@ -191,7 +191,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">lock_clock</i>
+            <i class="material-symbols-outlined">lock_clock</i>
             <span>Login Security</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
@@ -222,7 +222,7 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-icons">crop_free</i>
+            <i class="material-symbols-outlined">crop_free</i>
             <span>Location Bounding Box</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">

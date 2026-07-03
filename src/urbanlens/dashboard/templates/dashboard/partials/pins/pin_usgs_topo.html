@@ -7,7 +7,7 @@
           data-debug-count="{{ debug.count }}"></span>
     {% endif %}
     <div class="card-header">
-        <i class="material-icons">terrain</i>
+        <i class="material-symbols-outlined">terrain</i>
         <h3>USGS Historical Topo Maps</h3>
     </div>
     <div class="usgs-topo-grid">
@@ -18,7 +18,7 @@
             <img src="{{ map.previewGraphicURL }}" alt="{{ map.title }}" class="usgs-topo-thumb" loading="lazy">
             {% else %}
             <div class="usgs-topo-thumb-empty">
-                <i class="material-icons">terrain</i>
+                <i class="material-symbols-outlined">terrain</i>
             </div>
             {% endif %}
             <div class="usgs-topo-meta">
@@ -32,7 +32,7 @@
     </div>
     <p class="usgs-topo-footer">
         <a href="https://ngmdb.usgs.gov/topoview/" target="_blank" rel="noopener noreferrer">
-            <i class="material-icons">open_in_new</i>
+            <i class="material-symbols-outlined">open_in_new</i>
             View all on USGS TopoView
         </a>
     </p>

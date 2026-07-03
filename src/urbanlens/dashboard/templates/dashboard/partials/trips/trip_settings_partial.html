@@ -1,7 +1,7 @@
 <div id="trip-settings-content">
 	{% if saved %}
 	<div class="site-admin-notice site-admin-notice--success" style="margin-bottom:.75rem">
-		<i class="material-icons">check_circle</i> Settings saved.
+		<i class="material-symbols-outlined">check_circle</i> Settings saved.
 	</div>
 	{% endif %}
 	<form hx-post="{% url 'trips.settings' trip.uuid %}"

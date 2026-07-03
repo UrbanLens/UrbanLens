@@ -11,7 +11,7 @@ Context:
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery">
   <div class="card-header">
-    <i class="material-icons">photo_library</i>
+    <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
   </div>
@@ -35,14 +35,14 @@ Context:
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
         {% if img.latitude and img.longitude %}
         <span class="gallery-has-coords" title="Has GPS coordinates">
-          <i class="material-icons">place</i>
+          <i class="material-symbols-outlined">place</i>
         </span>
         {% endif %}
       </button>
       {% if img.profile == profile %}
       <button type="button" class="gallery-delete-btn" title="Delete photo"
               onclick="galleryDelete({{ img.pk }})">
-        <i class="material-icons">delete</i>
+        <i class="material-symbols-outlined">delete</i>
       </button>
       {% endif %}
       {% if img.caption %}
@@ -52,7 +52,7 @@ Context:
     {% empty %}
     <li class="gallery-empty" id="gallery-empty">
       <label for="gallery-file-input" class="gallery-empty-label">
-        <i class="material-icons">cloud_upload</i>
+        <i class="material-symbols-outlined">cloud_upload</i>
         <p>No photos yet - click to upload, or drag files here.</p>
       </label>
     </li>
@@ -61,7 +61,7 @@ Context:
     {% if images %}
     <li class="gallery-add-item" id="gallery-add-btn">
       <label for="gallery-file-input" class="gallery-add-label" title="Add more photos">
-        <i class="material-icons">add_photo_alternate</i>
+        <i class="material-symbols-outlined">add_photo_alternate</i>
       </label>
     </li>
     {% endif %}
@@ -73,14 +73,14 @@ Context:
 <dialog id="gallery-lightbox" class="gallery-lightbox ul-dialog">
   <div class="lightbox-inner">
     <button type="button" class="lightbox-close" onclick="document.getElementById('gallery-lightbox').close()">
-      <i class="material-icons">close</i>
+      <i class="material-symbols-outlined">close</i>
     </button>
     <button type="button" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
-      <i class="material-icons">chevron_left</i>
+      <i class="material-symbols-outlined">chevron_left</i>
     </button>
     <img id="lightbox-img" src="" alt="" class="lightbox-img">
     <button type="button" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
-      <i class="material-icons">chevron_right</i>
+      <i class="material-symbols-outlined">chevron_right</i>
     </button>
     <p id="lightbox-caption" class="lightbox-caption"></p>
   </div>
@@ -91,7 +91,7 @@ Context:
      ondragover="event.preventDefault()"
      ondrop="_galleryOverlayDrop(event)">
   <div class="gallery-drop-overlay-inner">
-    <i class="material-icons">cloud_upload</i>
+    <i class="material-symbols-outlined">cloud_upload</i>
     <p>Drop photos to upload</p>
     <div id="gallery-upload-progress" class="gallery-upload-progress" hidden>
       <div class="gallery-upload-bar" id="gallery-upload-bar"></div>
@@ -213,13 +213,13 @@ Context:
     li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
 
     var coordIcon = (img.latitude !== null && img.longitude !== null)
-      ? '<span class="gallery-has-coords" title="Has GPS coordinates"><i class="material-icons">place</i></span>'
+      ? '<span class="gallery-has-coords" title="Has GPS coordinates"><i class="material-symbols-outlined">place</i></span>'
       : '';
     li.innerHTML =
       '<button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox(' + img.id + ')">' +
       '<img src="' + img.url + '" alt="" class="gallery-thumb">' + coordIcon + '</button>' +
       '<button type="button" class="gallery-delete-btn" title="Delete photo" onclick="galleryDelete(' + img.id + ')">' +
-      '<i class="material-icons">delete</i></button>';
+      '<i class="material-symbols-outlined">delete</i></button>';
 
     // Insert before the add-photos button if it exists; append otherwise.
     var addBtn = document.getElementById('gallery-add-btn');
@@ -231,7 +231,7 @@ Context:
       var addLi = document.createElement('li');
       addLi.className = 'gallery-add-item';
       addLi.id = 'gallery-add-btn';
-      addLi.innerHTML = '<label for="gallery-file-input" class="gallery-add-label" title="Add more photos"><i class="material-icons">add_photo_alternate</i></label>';
+      addLi.innerHTML = '<label for="gallery-file-input" class="gallery-add-label" title="Add more photos"><i class="material-symbols-outlined">add_photo_alternate</i></label>';
       grid.appendChild(addLi);
     }
 
@@ -301,7 +301,7 @@ Context:
             var span = document.createElement('span');
             span.className = 'gallery-has-coords';
             span.title = 'Has GPS coordinates';
-            span.innerHTML = '<i class="material-icons">place</i>';
+            span.innerHTML = '<i class="material-symbols-outlined">place</i>';
             btn.appendChild(span);
           }
         }

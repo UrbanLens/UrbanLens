@@ -82,26 +82,26 @@
                     <div class="nav-dropdown-sep" role="separator"></div>
 
                     <a href="{% url 'profile.view' %}" class="nav-dropdown-item" role="menuitem">
-                        <i class="material-icons">person</i>
+                        <i class="material-symbols-outlined">person</i>
                         <span>Profile</span>
                     </a>
                     <a href="{% url 'settings.view' %}" class="nav-dropdown-item" role="menuitem">
-                        <i class="material-icons">settings</i>
+                        <i class="material-symbols-outlined">settings</i>
                         <span>Settings</span>
                     </a>
                     <a href="{% url 'tools.index' %}" class="nav-dropdown-item" role="menuitem">
-                        <i class="material-icons">build</i>
+                        <i class="material-symbols-outlined">build</i>
                         <span>Tools</span>
                     </a>
                     {% if user.is_superuser or perms.dashboard.view_site_admin %}
                     <a href="{% url 'site_admin_home' %}" class="nav-dropdown-item" role="menuitem">
-                        <i class="material-icons">admin_panel_settings</i>
+                        <i class="material-symbols-outlined">admin_panel_settings</i>
                         <span>Site Admin</span>
                     </a>
                     {% endif %}
                     {% if show_dev_toolbar %}
                     <button type="button" class="nav-dropdown-item nav-dropdown-item--devtools" id="nav-devtools-btn" role="menuitem" title="Toggle Dev Tools (Ctrl+Shift+.)">
-                        <i class="material-icons">terminal</i>
+                        <i class="material-symbols-outlined">terminal</i>
                         <span>Dev Tools</span>
                         <span class="nav-devtools-shortcut">Ctrl+⇧+.</span>
                     </button>
@@ -112,7 +112,7 @@
                     <form method="post" action="{% url 'logout' %}" class="nav-dropdown-logout-form">
                         {% csrf_token %}
                         <button type="submit" class="nav-dropdown-item nav-dropdown-item--signout" role="menuitem">
-                            <i class="material-icons">logout</i>
+                            <i class="material-symbols-outlined">logout</i>
                             <span>Sign out</span>
                         </button>
                     </form>

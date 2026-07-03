@@ -3,13 +3,13 @@
      data-collapse-scope="trip" data-collapse-section="weather">
 
     <div class="card-header">
-        <i class="material-icons">wb_cloudy</i>
+        <i class="material-symbols-outlined">wb_cloudy</i>
         <span>Weather</span>
     </div>
 
     {% if error %}
     <p class="trip-panel-empty">
-        <i class="material-icons">info_outline</i>
+        <i class="material-symbols-outlined">info</i>
         {{ error }}
     </p>
 
@@ -41,11 +41,11 @@
                             <div class="trip-weather-activity-forecast">
                                 {% if af.no_coords %}
                                 <span class="trip-weather-na">
-                                    <i class="material-icons">location_off</i> No location data
+                                    <i class="material-symbols-outlined">location_off</i> No location data
                                 </span>
                                 {% elif af.out_of_range %}
                                 <span class="trip-weather-na">
-                                    <i class="material-icons">event_busy</i> Outside 5-day forecast
+                                    <i class="material-symbols-outlined">event_busy</i> Outside 5-day forecast
                                 </span>
                                 {% elif af.slot %}
                                 {% with s=af.slot %}
@@ -61,16 +61,16 @@
                                     <div class="trip-weather-slot-right">
                                         <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
                                         <div class="trip-weather-slot-meta">
-                                            <span title="Humidity"><i class="material-icons">water_drop</i> {{ s.main.humidity }}%</span>
-                                            <span title="Wind"><i class="material-icons">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
-                                            {% if s.pop %}<span title="Precipitation probability"><i class="material-icons">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                                            <span title="Humidity"><i class="material-symbols-outlined">water_drop</i> {{ s.main.humidity }}%</span>
+                                            <span title="Wind"><i class="material-symbols-outlined">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
+                                            {% if s.pop %}<span title="Precipitation probability"><i class="material-symbols-outlined">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
                                         </div>
                                     </div>
                                 </div>
                                 {% endwith %}
                                 {% else %}
                                 <span class="trip-weather-na">
-                                    <i class="material-icons">cloud_off</i> No data
+                                    <i class="material-symbols-outlined">cloud_off</i> No data
                                 </span>
                                 {% endif %}
                             </div>

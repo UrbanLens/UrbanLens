@@ -16,30 +16,30 @@
     <div class="wiki-banner">
         <div class="wiki-banner-left">
             <span class="wiki-badge">
-                <i class="material-icons">public</i> Community Wiki
+                <i class="material-symbols-outlined">public</i> Community Wiki
             </span>
             <h1 class="wiki-title">{{ location.name }}</h1>
             {% if location.address %}
             <p class="wiki-address">
-                <i class="material-icons">place</i>
+                <i class="material-symbols-outlined">place</i>
                 {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
             </p>
             {% endif %}
         </div>
         <div class="wiki-banner-right">
             <div class="wiki-notice">
-                <i class="material-icons">public</i>
+                <i class="material-symbols-outlined">public</i>
                 <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
             </div>
             <div class="wiki-banner-actions">
                 <button type="button" class="wiki-edit-btn btn btn--primary"
                         onclick="document.getElementById('wiki-edit-dialog').showModal()">
-                    <i class="material-icons">edit_note</i>
+                    <i class="material-symbols-outlined">edit_note</i>
                     Suggest edits
                 </button>
                 {% if user_pin %}
                 <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
-                    <i class="material-icons">arrow_back</i> Back to my pin
+                    <i class="material-symbols-outlined">arrow_back</i> Back to my pin
                 </a>
                 {% endif %}
             </div>
@@ -79,7 +79,7 @@
         <button type="button" class="wiki-lcn-dismiss"
                 onclick="document.getElementById('wiki-location-conflict').remove()"
                 title="Dismiss">
-            <i class="material-icons">close</i>
+            <i class="material-symbols-outlined">close</i>
         </button>
     </div>
     {% endif %}
@@ -91,7 +91,7 @@
         {% if location.description or location.date_abandoned or location.effective_date_last_active %}
         <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
             <div class="card-header">
-                <i class="material-icons">info_outline</i>
+                <i class="material-symbols-outlined">info</i>
                 <h2>About</h2>
             </div>
             <div class="card__body wiki-meta-body">
@@ -101,10 +101,10 @@
                 {% if location.date_abandoned or location.effective_date_last_active %}
                 <div class="wiki-meta-dates">
                     {% if location.date_abandoned %}
-                    <span class="wiki-meta-date"><i class="material-icons">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
                     {% endif %}
                     {% if location.effective_date_last_active %}
-                    <span class="wiki-meta-date"><i class="material-icons">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -131,7 +131,7 @@
         {# -- Community stats card ------------------------------------------ #}
         <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
             <div class="card-header">
-                <i class="material-icons">people</i>
+                <i class="material-symbols-outlined">people</i>
                 <h2>Community</h2>
             </div>
             <div class="card__body wiki-stats-grid">
@@ -151,7 +151,7 @@
         {# -- Location map (boundary editor + community detail pins + markup) -- #}
         <div class="location-map pin-map card">
             <div class="card-header">
-                <i class="material-icons">place</i>
+                <i class="material-symbols-outlined">place</i>
                 <h3>Location</h3>
             </div>
             <div class="map-wrapper">
@@ -168,7 +168,7 @@
              id="location-aliases-panel"
              class="card wiki-card aliases-panel">
             <div class="card-header">
-                <i class="material-icons">label_important</i>
+                <i class="material-symbols-outlined">label_important</i>
                 <span>Aliases</span>
             </div>
             <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -181,7 +181,7 @@
              hx-swap="outerHTML">
             <div class="card">
                 <div class="card-header">
-                    <i class="material-icons">photo_library</i>
+                    <i class="material-symbols-outlined">photo_library</i>
                     <span>Photos</span>
                 </div>
                 <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -195,7 +195,7 @@
              hx-swap="outerHTML"
              class="card wiki-card">
             <div class="card-header">
-                <i class="material-icons">chat</i>
+                <i class="material-symbols-outlined">chat</i>
                 <h2>Discussion</h2>
             </div>
             <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -209,7 +209,7 @@
                         hx-target="#wiki-tab-content"
                         hx-swap="innerHTML"
                         hx-trigger="click, load">
-                    <i class="material-icons">history</i> Edit History
+                    <i class="material-symbols-outlined">history</i> Edit History
                 </button>
             </div>
             <div id="wiki-tab-content" class="card__body wiki-tab-content">
@@ -225,7 +225,7 @@
     <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggest Edits" %}
         <p class="wiki-edit-notice">
-            <i class="material-icons">public</i>
+            <i class="material-symbols-outlined">public</i>
             Changes apply immediately and are visible to everyone.
         </p>
         <form id="wiki-edit-form" class="wiki-edit-form">
@@ -393,7 +393,7 @@
                 '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
                 '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
                 '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
-                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-icons">close</i></button>';
+                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-symbols-outlined">close</i></button>';
             host.appendChild(el);
             el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
             el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));

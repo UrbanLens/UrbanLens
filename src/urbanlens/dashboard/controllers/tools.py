@@ -116,7 +116,7 @@ class ExportStartView(LoginRequiredMixin, View):
         # google_takeout is a format flag passed as a separate checkbox value in export_types.
         if not export_types:
             return HttpResponse(
-                '<p class="export-error"><i class="material-icons">error</i> Select at least one item to export.</p>',
+                '<p class="export-error"><i class="material-symbols-outlined">error</i> Select at least one item to export.</p>',
                 status=400,
             )
 
@@ -243,19 +243,19 @@ class ImportStartView(LoginRequiredMixin, View):
         upload = request.FILES.get("import_file")
         if not upload:
             return HttpResponse(
-                '<p class="import-error"><i class="material-icons">error</i> Please select a file to import.</p>',
+                '<p class="import-error"><i class="material-symbols-outlined">error</i> Please select a file to import.</p>',
                 status=400,
             )
 
         if not (upload.name and upload.name.lower().endswith(".zip")):
             return HttpResponse(
-                '<p class="import-error"><i class="material-icons">error</i> Only .zip export files are accepted.</p>',
+                '<p class="import-error"><i class="material-symbols-outlined">error</i> Only .zip export files are accepted.</p>',
                 status=400,
             )
 
         if upload.size and upload.size > _MAX_IMPORT_SIZE_BYTES:
             return HttpResponse(
-                '<p class="import-error"><i class="material-icons">error</i> File is too large (max 500 MB).</p>',
+                '<p class="import-error"><i class="material-symbols-outlined">error</i> File is too large (max 500 MB).</p>',
                 status=400,
             )
 

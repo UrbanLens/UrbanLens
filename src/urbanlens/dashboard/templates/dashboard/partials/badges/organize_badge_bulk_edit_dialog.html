@@ -7,14 +7,14 @@
             <label class="form-label">Type</label>
             <div class="kind-toggle">
                 {% if ns == 'tag' %}
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setTagBulkConvert('category')"><span><i class="material-icons">category</i> Category</span></button>
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setTagBulkConvert('status')"><span><i class="material-icons">flag</i> Status</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setTagBulkConvert('category')"><span><i class="material-symbols-outlined">category</i> Category</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setTagBulkConvert('status')"><span><i class="material-symbols-outlined">flag</i> Status</span></button>
                 {% elif ns == 'cat' %}
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')"><span><i class="material-icons">label</i> Tag</span></button>
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setCatBulkConvert('status')"><span><i class="material-icons">flag</i> Status</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setCatBulkConvert('tag')"><span><i class="material-symbols-outlined">label</i> Tag</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-status" onclick="_setCatBulkConvert('status')"><span><i class="material-symbols-outlined">flag</i> Status</span></button>
                 {% elif ns == 'status' %}
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setStatusBulkConvert('tag')"><span><i class="material-icons">label</i> Tag</span></button>
-                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setStatusBulkConvert('category')"><span><i class="material-icons">category</i> Category</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-tag" onclick="_setStatusBulkConvert('tag')"><span><i class="material-symbols-outlined">label</i> Tag</span></button>
+                <button type="button" class="kind-toggle-option" id="{{ ns }}-bulk-convert-to-category" onclick="_setStatusBulkConvert('category')"><span><i class="material-symbols-outlined">category</i> Category</span></button>
                 {% endif %}
             </div>
             <p class="form-hint" id="{{ ns }}-bulk-convert-hint" hidden></p>
@@ -57,11 +57,11 @@
                     <div class="kind-toggle badge-rel-toggle" role="group" aria-label="Relationship type">
                         <label class="kind-toggle-option">
                             <input type="radio" name="{{ ns }}_bulk_rel_type" value="parent" checked onchange="_setBulkRelType('{{ ns }}', 'parent')">
-                            <span><i class="material-icons">arrow_upward</i> Add as parents</span>
+                            <span><i class="material-symbols-outlined">arrow_upward</i> Add as parents</span>
                         </label>
                         <label class="kind-toggle-option">
                             <input type="radio" name="{{ ns }}_bulk_rel_type" value="child" onchange="_setBulkRelType('{{ ns }}', 'child')">
-                            <span><i class="material-icons">arrow_downward</i> Add as children</span>
+                            <span><i class="material-symbols-outlined">arrow_downward</i> Add as children</span>
                         </label>
                     </div>
                 </div>

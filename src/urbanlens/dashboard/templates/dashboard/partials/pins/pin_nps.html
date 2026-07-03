@@ -8,7 +8,7 @@
           data-debug-count="{{ debug.count }}"></span>
     {% endif %}
     <div class="card-header">
-        <i class="material-icons">park</i>
+        <i class="material-symbols-outlined">park</i>
         <h3>National Park Service</h3>
     </div>
 
@@ -53,7 +53,7 @@
             {% with hours=park.operatingHours.0 %}
             {% if hours.standardHours %}
             <div class="nps-hours">
-                <i class="material-icons">schedule</i>
+                <i class="material-symbols-outlined">schedule</i>
                 <span class="nps-hours-label">Standard hours vary - </span>
                 <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">check NPS.gov</a>
             </div>

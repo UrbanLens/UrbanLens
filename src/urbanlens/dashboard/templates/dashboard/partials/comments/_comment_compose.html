@@ -38,25 +38,25 @@
 
       {# Map preview chip - shown when a map is attached #}
       <div class="comment-map-chip" hidden>
-        <i class="material-icons">map</i>
+        <i class="material-symbols-outlined">map</i>
         <span class="comment-map-chip-label">Map attached</span>
         <button type="button" class="comment-map-chip-edit" title="Edit map">
-          <i class="material-icons">edit</i>
+          <i class="material-symbols-outlined">edit</i>
         </button>
         <button type="button" class="comment-map-chip-remove" title="Remove map">
-          <i class="material-icons">close</i>
+          <i class="material-symbols-outlined">close</i>
         </button>
       </div>
 
       <div class="comment-compose-actions">
         <label class="comment-image-label" title="Attach image">
-          <i class="material-icons">image</i>
+          <i class="material-symbols-outlined">image</i>
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
         <span class="comment-image-preview"></span>
         <button type="button" class="comment-map-btn" title="Attach map"
                 onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
-          <i class="material-icons">map</i>
+          <i class="material-symbols-outlined">map</i>
         </button>
         <button type="submit" class="btn btn--primary {% if is_reply %}btn--sm{% endif %}">
           {% if is_reply %}Reply{% else %}Post{% endif %}

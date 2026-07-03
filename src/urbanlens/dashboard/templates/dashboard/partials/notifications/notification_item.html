@@ -1,14 +1,14 @@
 {% if n.notification_type == 'pin_shared' and n.pin_share.is_actionable %}
 <li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem">
-  <div class="notif-item__icon-wrap notif-item__icon-wrap--pin_shared"><i class="material-icons">ios_share</i></div>
+  <div class="notif-item__icon-wrap notif-item__icon-wrap--pin_shared"><i class="material-symbols-outlined">ios_share</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
     <div class="notif-friend-actions">
-      <a class="btn-notif-friend" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-icons">visibility</i> View details</a>
-      <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "accept"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-icons">check</i> Accept</button>
-      <button type="button" class="btn-notif-friend btn-notif-friend--decline" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "reject"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-icons">close</i> Reject</button>
+      <a class="btn-notif-friend" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
+      <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "accept"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-symbols-outlined">check</i> Accept</button>
+      <button type="button" class="btn-notif-friend btn-notif-friend--decline" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "reject"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-symbols-outlined">close</i> Reject</button>
     </div>
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
@@ -25,7 +25,7 @@
     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
     {% endif %}>
   <div class="notif-item__icon-wrap notif-item__icon-wrap--friend_request">
-    <i class="material-icons">person_add</i>
+    <i class="material-symbols-outlined">person_add</i>
   </div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
@@ -40,7 +40,7 @@
               hx-target="#notif-dropdown-wrap"
               hx-swap="innerHTML"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <i class="material-icons">check</i> Accept
+        <i class="material-symbols-outlined">check</i> Accept
       </button>
       <button type="button" class="btn-notif-friend btn-notif-friend--decline"
               onclick="event.stopPropagation()"
@@ -49,7 +49,7 @@
               hx-target="#notif-dropdown-wrap"
               hx-swap="innerHTML"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <i class="material-icons">close</i> Decline
+        <i class="material-symbols-outlined">close</i> Decline
       </button>
     </div>
     {% endif %}

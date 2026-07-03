@@ -8,13 +8,13 @@
           data-debug-count="{{ debug.count }}"></span>
     {% endif %}
     <div class="card-header">
-        <i class="material-icons">business_center</i>
+        <i class="material-symbols-outlined">business_center</i>
         <h3>LoopNet Listings</h3>
     </div>
 
     <div class="card__body">
         <div class="loopnet-address-row">
-            <i class="material-icons">location_on</i>
+            <i class="material-symbols-outlined">location_on</i>
             <span>{{ address }}</span>
         </div>
 
@@ -37,7 +37,7 @@
 
                     {% if listing.price %}
                     <div class="loopnet-listing-price">
-                        <i class="material-icons">attach_money</i>
+                        <i class="material-symbols-outlined">attach_money</i>
                         {{ listing.price }}
                     </div>
                     {% endif %}
@@ -50,7 +50,7 @@
                     <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer"
                     class="loopnet-listing-url">
                         View listing
-                        <i class="material-icons">open_in_new</i>
+                        <i class="material-symbols-outlined">open_in_new</i>
                     </a>
                     {% endif %}
 

@@ -6,7 +6,7 @@
     <div class="tools-header">
         <div class="tools-header-top">
             <a href="{% url 'tools.index' %}" class="tools-back-link">
-                <i class="material-icons">arrow_back</i>
+                <i class="material-symbols-outlined">arrow_back</i>
                 <span>Tools</span>
             </a>
         </div>
@@ -19,7 +19,7 @@
         {# -- Database Backup card ----------------------------------------------- #}
         <div class="ul-card tools-card" id="backup-card">
             <div class="ul-card-header">
-                <i class="material-icons">backup</i>
+                <i class="material-symbols-outlined">backup</i>
                 <h3>Database Backup</h3>
             </div>
 
@@ -31,7 +31,7 @@
                 <div class="tools-card-actions">
                     <button type="button" class="btn btn--primary" id="manual-backup-btn"
                             data-url="{% url 'tools.backup.start' %}">
-                        <i class="material-icons">backup</i>
+                        <i class="material-symbols-outlined">backup</i>
                         <span>Run Backup</span>
                     </button>
                 </div>

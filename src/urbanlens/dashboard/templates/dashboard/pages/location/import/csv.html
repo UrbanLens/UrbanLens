@@ -486,7 +486,7 @@
         <div class="iw-body">
             <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
             <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
-                <i class="material-icons">help_outline</i>
+                <i class="material-symbols-outlined">help_outline</i>
                 <span>How do I get a Google Takeout file?</span>
             </button>
             <div class="iw-takeout-help" id="iw-takeout-help" hidden>
@@ -499,7 +499,7 @@
                 </ol>
             </div>
             <div class="iw-file-zone" id="iw-file-zone">
-                <i class="material-icons">cloud_upload</i>
+                <i class="material-symbols-outlined">cloud_upload</i>
                 <span class="iw-file-zone-label">
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
@@ -533,7 +533,7 @@
             <div id="iw-lists-container"></div>
             <div id="iw-private-info" hidden>
                 <div class="iw-private-info-box">
-                    <i class="material-icons">lock</i>
+                    <i class="material-symbols-outlined">lock</i>
                     <span><strong>Private pins</strong> are not linked to the community wiki. Their exact location is only visible to you.</span>
                 </div>
             </div>
@@ -689,7 +689,7 @@ function renderFileChips() {
         var chip = document.createElement('div');
         chip.className = 'iw-file-chip';
         chip.innerHTML =
-            '<i class="material-icons">insert_drive_file</i>' +
+            '<i class="material-symbols-outlined">insert_drive_file</i>' +
             '<span class="iw-file-chip-name">' + escHtml(f.name) + '</span>' +
             '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
         container.appendChild(chip);
@@ -820,7 +820,7 @@ function renderPreview(data) {
                 '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || '(unnamed)') + '">' +
                 escHtml(pin.name || '(unnamed)') + '</label>' +
                 '<button type="button" class="iw-pin-private-btn" title="Mark as private">' +
-                '<i class="material-icons">lock_open</i></button>';
+                '<i class="material-symbols-outlined">lock_open</i></button>';
             var cb = row.querySelector('input[type=checkbox]');
             cb.addEventListener('change', function () {
                 pin._selected = cb.checked;

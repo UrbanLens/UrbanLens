@@ -8,7 +8,7 @@
           data-debug-count="{{ entry.count }}"></span>
     {% endfor %}
     <div class="card-header">
-        <i class="material-icons">streetview</i>
+        <i class="material-symbols-outlined">streetview</i>
         <h3>Street View</h3>
     </div>
 
@@ -52,7 +52,7 @@
         <div class="sv-controls">
             <button class="sv-btn sv-prev" onclick="_svPrev()" aria-label="Previous image"
                     title="Previous image">
-                <i class="material-icons">chevron_left</i>
+                <i class="material-symbols-outlined">chevron_left</i>
             </button>
             <div class="sv-meta">
                 <span class="sv-source"></span>
@@ -61,7 +61,7 @@
             </div>
             <button class="sv-btn sv-next" onclick="_svNext()" aria-label="Next image"
                     title="Next image">
-                <i class="material-icons">chevron_right</i>
+                <i class="material-symbols-outlined">chevron_right</i>
             </button>
         </div>
 
@@ -116,7 +116,7 @@
             if (!slides.length) {
                 var c = document.getElementById('sv-carousel');
                 if (c) {
-                    c.innerHTML = '<div class="view-unavailable"><i class="material-icons">broken_image</i>'
+                    c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>'
                         + '<span>No street-level imagery available for this location.</span></div>';
                 }
                 return;
@@ -136,7 +136,7 @@
 
     {% else %}
     <div class="view-unavailable">
-        <i class="material-icons">broken_image</i>
+        <i class="material-symbols-outlined">broken_image</i>
         <span>{{ error|default:"Street view unavailable." }}</span>
     </div>
     {% endif %}

@@ -7,7 +7,7 @@
     <div class="admin-home-hero">
         <div class="admin-home-hero__left">
             <div class="admin-home-hero__icon">
-                <i class="material-icons">admin_panel_settings</i>
+                <i class="material-symbols-outlined">admin_panel_settings</i>
             </div>
             <div>
                 <h1 class="admin-home-hero__title">Admin Dashboard</h1>
@@ -15,18 +15,18 @@
                     Welcome back, {{ request.user.first_name|default:request.user.username }}.
                     {% if unhealthy_services %}
                     <span class="admin-home-status admin-home-status--warn">
-                        <i class="material-icons">warning</i>
+                        <i class="material-symbols-outlined">warning</i>
                         {{ unhealthy_services }} service{{ unhealthy_services|pluralize }} unhealthy
                     </span>
                     {% elif total_services %}
                     <span class="admin-home-status admin-home-status--ok">
-                        <i class="material-icons">check_circle</i>
+                        <i class="material-symbols-outlined">check_circle</i>
                         All services healthy
                     </span>
                     {% endif %}
                     {% if git_has_newer_commits %}
                     <span class="admin-home-status admin-home-status--warn">
-                        <i class="material-icons">new_releases</i>
+                        <i class="material-symbols-outlined">new_releases</i>
                         Update available
                     </span>
                     {% endif %}
@@ -35,17 +35,17 @@
         </div>
         <div class="admin-home-hero__meta">
             <span class="admin-home-meta-pill">
-                <i class="material-icons">sell</i>
+                <i class="material-symbols-outlined">sell</i>
                 v{{ app_version }}
             </span>
             {% if git_branch %}
             <span class="admin-home-meta-pill">
-                <i class="material-icons">call_split</i>
+                <i class="material-symbols-outlined">call_split</i>
                 {{ git_branch }}
             </span>
             {% endif %}
             <span class="admin-home-meta-pill">
-                <i class="material-icons">schedule</i>
+                <i class="material-symbols-outlined">schedule</i>
                 {{ server_time|date:"N j, Y" }}
             </span>
         </div>
@@ -104,7 +104,7 @@
 
     {# -- Navigation cards ------------------------------------------------------- #}
     <h2 class="admin-home-section-title">
-        <i class="material-icons">grid_view</i>
+        <i class="material-symbols-outlined">grid_view</i>
         Administration
     </h2>
     <div class="admin-home-nav-grid">

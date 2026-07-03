@@ -3,7 +3,7 @@
 {# -- Application Section ---------------------------------------------------- #}
 <div class="site-admin-card ul-section card">
     <div class="card-header">
-        <i class="material-icons">apps</i>
+        <i class="material-symbols-outlined">apps</i>
         <span>Application</span>
     </div>
     <div class="stats-health-grid">
@@ -105,13 +105,13 @@
             </div>
             <span class="stats-service-status stats-service-status--{{ service.status }}">
                 {% if service.status == "healthy" %}
-                <i class="material-icons">check_circle</i>
+                <i class="material-symbols-outlined">check_circle</i>
                 {% elif service.status == "unhealthy" %}
-                <i class="material-icons">error</i>
+                <i class="material-symbols-outlined">error</i>
                 {% elif service.status == "disabled" %}
-                <i class="material-icons">remove_circle_outline</i>
+                <i class="material-symbols-outlined">remove_circle_outline</i>
                 {% else %}
-                <i class="material-icons">help_outline</i>
+                <i class="material-symbols-outlined">help_outline</i>
                 {% endif %}
                 {{ service.status_label }}
             </span>
@@ -135,7 +135,7 @@
 {# -- Server health ----------------------------------------------------------- #}
 <div class="site-admin-card ul-section card">
     <div class="card-header">
-        <i class="material-icons">dns</i>
+        <i class="material-symbols-outlined">dns</i>
         <span>Server Health</span>
     </div>
     <div class="stats-health-grid">

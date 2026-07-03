@@ -22,7 +22,7 @@ Includes hx-get polling while status is pending/running; removes polling when do
         {% if result.created %}
         {% for key, count in result.created.items %}
         <div class="import-result-row">
-            <i class="material-icons">add_circle</i>
+            <i class="material-symbols-outlined">add_circle</i>
             <span>{{ count }} {{ key|title }} imported</span>
         </div>
         {% endfor %}
@@ -30,7 +30,7 @@ Includes hx-get polling while status is pending/running; removes polling when do
         {% if result.skipped %}
         {% for key, count in result.skipped.items %}
         <div class="import-result-row import-result-row--skipped">
-            <i class="material-icons">skip_next</i>
+            <i class="material-symbols-outlined">skip_next</i>
             <span>{{ count }} {{ key|title }} already existed (skipped)</span>
         </div>
         {% endfor %}
@@ -48,11 +48,11 @@ Includes hx-get polling while status is pending/running; removes polling when do
 
     <div class="export-done-actions">
         <button type="button" class="btn btn--ghost" onclick="location.reload()">
-            <i class="material-icons">refresh</i>
+            <i class="material-symbols-outlined">refresh</i>
             Import again
         </button>
         <a href="{% url 'map.index' %}" class="btn btn--primary">
-            <i class="material-icons">map</i>
+            <i class="material-symbols-outlined">map</i>
             View my map
         </a>
     </div>
@@ -64,12 +64,12 @@ Includes hx-get polling while status is pending/running; removes polling when do
         <div class="export-progress-bar export-progress-bar--error" style="width:100%;"></div>
     </div>
     <div class="export-error-msg">
-        <i class="material-icons">error</i>
+        <i class="material-symbols-outlined">error</i>
         <span>{{ message|default:"Import failed. Please try again." }}</span>
     </div>
     <div class="export-done-actions" style="margin-top:.75rem;">
         <button type="button" class="btn btn-secondary" onclick="location.reload()">
-            <i class="material-icons">refresh</i>
+            <i class="material-symbols-outlined">refresh</i>
             Try again
         </button>
     </div>

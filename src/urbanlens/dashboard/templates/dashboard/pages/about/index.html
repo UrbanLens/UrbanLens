@@ -15,22 +15,22 @@
         <div class="about-hero-actions">
             {% if not user.is_authenticated %}
             <a href="{% url 'signup' %}" class="about-btn btn btn--primary">
-                <i class="material-icons">person_add</i> Join UrbanLens
+                <i class="material-symbols-outlined">person_add</i> Join UrbanLens
             </a>
             <a href="{% url 'login' %}" class="about-btn btn btn--ghost">Sign in</a>
             {% else %}
             <a href="{% url 'map.view' %}" class="about-btn btn btn--primary">
-                <i class="material-icons">map</i> Open my map
+                <i class="material-symbols-outlined">map</i> Open my map
             </a>
             {% endif %}
         </div>
     </div>
     <div class="about-hero-visual" aria-hidden="true">
         <div class="about-map-mock">
-            <div class="about-map-dot about-map-dot--1"><i class="material-icons">place</i></div>
-            <div class="about-map-dot about-map-dot--2"><i class="material-icons">place</i></div>
-            <div class="about-map-dot about-map-dot--3"><i class="material-icons">place</i></div>
-            <div class="about-map-dot about-map-dot--4"><i class="material-icons">photo_camera</i></div>
+            <div class="about-map-dot about-map-dot--1"><i class="material-symbols-outlined">place</i></div>
+            <div class="about-map-dot about-map-dot--2"><i class="material-symbols-outlined">place</i></div>
+            <div class="about-map-dot about-map-dot--3"><i class="material-symbols-outlined">place</i></div>
+            <div class="about-map-dot about-map-dot--4"><i class="material-symbols-outlined">photo_camera</i></div>
             <div class="about-map-line about-map-line--1"></div>
             <div class="about-map-line about-map-line--2"></div>
         </div>
@@ -55,17 +55,17 @@
 
         <div class="about-pillars">
             <div class="about-pillar">
-                <div class="about-pillar-icon"><i class="material-icons">lock</i></div>
+                <div class="about-pillar-icon"><i class="material-symbols-outlined">lock</i></div>
                 <h3 class="about-pillar-title">Privacy by default</h3>
                 <p class="about-pillar-body">Your pins are private. Granular visibility controls let you share selectively - with friends, with trip members, or with no one.</p>
             </div>
             <div class="about-pillar">
-                <div class="about-pillar-icon"><i class="material-icons">history_edu</i></div>
+                <div class="about-pillar-icon"><i class="material-symbols-outlined">history_edu</i></div>
                 <h3 class="about-pillar-title">Document history</h3>
                 <p class="about-pillar-body">Each location has a community wiki for collectively recording history, access notes, hazards, and architectural details before they disappear.</p>
             </div>
             <div class="about-pillar">
-                <div class="about-pillar-icon"><i class="material-icons">group</i></div>
+                <div class="about-pillar-icon"><i class="material-symbols-outlined">group</i></div>
                 <h3 class="about-pillar-title">Trusted community</h3>
                 <p class="about-pillar-body">Trip planning, RSVPs, and shared itineraries - coordinate expeditions with people you trust without exposing location details to the world.</p>
             </div>
@@ -147,7 +147,7 @@
 
             <div class="about-feature-row">
                 <div class="about-feature-visual">
-                    <div class="about-feature-icon-lg"><i class="material-icons">map</i></div>
+                    <div class="about-feature-icon-lg"><i class="material-symbols-outlined">map</i></div>
                 </div>
                 <div class="about-feature-text">
                     <h3 class="about-feature-title">Interactive map</h3>
@@ -167,7 +167,7 @@
 
             <div class="about-feature-row about-feature-row--flip">
                 <div class="about-feature-visual">
-                    <div class="about-feature-icon-lg"><i class="material-icons">public</i></div>
+                    <div class="about-feature-icon-lg"><i class="material-symbols-outlined">public</i></div>
                 </div>
                 <div class="about-feature-text">
                     <h3 class="about-feature-title">Community location wiki</h3>
@@ -186,7 +186,7 @@
 
             <div class="about-feature-row">
                 <div class="about-feature-visual">
-                    <div class="about-feature-icon-lg"><i class="material-icons">hiking</i></div>
+                    <div class="about-feature-icon-lg"><i class="material-symbols-outlined">hiking</i></div>
                 </div>
                 <div class="about-feature-text">
                     <h3 class="about-feature-title">Trip planning</h3>
@@ -205,7 +205,7 @@
 
             <div class="about-feature-row about-feature-row--flip">
                 <div class="about-feature-visual">
-                    <div class="about-feature-icon-lg"><i class="material-icons">photo_library</i></div>
+                    <div class="about-feature-icon-lg"><i class="material-symbols-outlined">photo_library</i></div>
                 </div>
                 <div class="about-feature-text">
                     <h3 class="about-feature-title">Photo management</h3>
@@ -263,11 +263,11 @@
         <p class="about-cta-body">It's free, private, and built for people who explore with care.</p>
         {% if not user.is_authenticated %}
         <a href="{% url 'signup' %}" class="about-btn btn btn--primary btn--lg">
-            <i class="material-icons">rocket_launch</i> Create an account
+            <i class="material-symbols-outlined">rocket_launch</i> Create an account
         </a>
         {% else %}
         <a href="{% url 'map.view' %}" class="about-btn btn btn--primary btn--lg">
-            <i class="material-icons">map</i> Open my map
+            <i class="material-symbols-outlined">map</i> Open my map
         </a>
         {% endif %}
     </div>

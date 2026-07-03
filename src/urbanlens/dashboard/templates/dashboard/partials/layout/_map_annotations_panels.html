@@ -13,17 +13,17 @@ _map_annotations_script.html for the parameterized JS half.
 {# -- Map sidebar panel (Details + Photos tabs) -- #}
 <div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
     <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
-        <i class="material-icons">layers</i>
+        <i class="material-symbols-outlined">layers</i>
         <span id="detail-pin-count-label">0 Layers</span>
         <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
     </button>
     <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
         <div class="map-panel-tabs">
             <button type="button" class="map-panel-tab is-active" data-tab="details">
-                <i class="material-icons">layers</i>Details
+                <i class="material-symbols-outlined">layers</i>Details
             </button>
             <button type="button" class="map-panel-tab" data-tab="photos" id="map-panel-tab-photos">
-                <i class="material-icons">photo_library</i>Photos
+                <i class="material-symbols-outlined">photo_library</i>Photos
             </button>
         </div>
         <div id="map-panel-details" class="map-panel-body">
@@ -40,44 +40,44 @@ _map_annotations_script.html for the parameterized JS half.
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
     <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
-        <i class="material-icons">pentagon</i> Edit Boundary
+        <i class="material-symbols-outlined">pentagon</i> Edit Boundary
     </button>
     <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
-            <i class="material-icons">delete_outline</i> Clear
+            <i class="material-symbols-outlined">delete_outline</i> Clear
         </button>
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
-            <i class="material-icons">close</i> Cancel
+            <i class="material-symbols-outlined">close</i> Cancel
         </button>
     </div>
     {# "Add Detail" dropdown ----------------------------------- #}
     <div class="map-add-detail-wrap" id="add-detail-wrap">
         <div id="add-detail-menu" class="add-detail-menu" style="display:none">
             <button type="button" class="add-detail-item" onclick="openAddPinDialog()">
-                <i class="material-icons">place</i> Pin
+                <i class="material-symbols-outlined">place</i> Pin
             </button>
             <button type="button" class="add-detail-item" onclick="startMarkupDraw('line')">
-                <i class="material-icons">show_chart</i> Line
+                <i class="material-symbols-outlined">show_chart</i> Line
             </button>
             <button type="button" class="add-detail-item" onclick="startMarkupDraw('arrow')">
-                <i class="material-icons">arrow_forward</i> Arrow
+                <i class="material-symbols-outlined">arrow_forward</i> Arrow
             </button>
             <button type="button" class="add-detail-item" onclick="startTextPlacement()">
-                <i class="material-icons">title</i> Text
+                <i class="material-symbols-outlined">title</i> Text
             </button>
             <button type="button" class="add-detail-item" onclick="startShapeDraw('square')">
-                <i class="material-icons">crop_square</i> Square
+                <i class="material-symbols-outlined">crop_square</i> Square
             </button>
             <button type="button" class="add-detail-item" onclick="startShapeDraw('circle')">
-                <i class="material-icons">circle</i> Circle
+                <i class="material-symbols-outlined">circle</i> Circle
             </button>
             <button type="button" class="add-detail-item" onclick="startShapeDraw('polygon')">
-                <i class="material-icons">format_shapes</i> Polygon
+                <i class="material-symbols-outlined">format_shapes</i> Polygon
             </button>
         </div>
         <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
                 id="add-detail-btn" onclick="toggleAddDetailMenu()">
-            <i class="material-icons">add_location_alt</i> Add Detail
+            <i class="material-symbols-outlined">add_location_alt</i> Add Detail
             <i class="material-icons add-detail-chevron">expand_less</i>
         </button>
     </div>
@@ -88,7 +88,7 @@ _map_annotations_script.html for the parameterized JS half.
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Draw Arrow" title_id="markup-panel-title" closefn="closeMarkupPanel" %}
     <div class="markup-form-body">
         <p id="markup-panel-hint" class="markup-place-hint" hidden>
-            <i class="material-icons">touch_app</i>
+            <i class="material-symbols-outlined">touch_app</i>
             <span id="markup-panel-hint-text"></span>
         </p>
         <label class="markup-form-label-row">
@@ -159,7 +159,7 @@ _map_annotations_script.html for the parameterized JS half.
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Detail Pin" title_id="detail-pin-panel-title" closefn="closeDetailPinPanel" %}
     <div class="detail-pin-add-body">
     <p id="detail-pin-place-hint" class="detail-pin-add-hint">
-        <i class="material-icons">place</i>
+        <i class="material-symbols-outlined">place</i>
         <span id="detail-pin-place-hint-text">Click anywhere on the map to place the pin.</span>
     </p>
     <form id="detail-pin-form" class="detail-pin-add-form" novalidate>

@@ -5,7 +5,7 @@
         {% if notes %}<span class="badge">{{ notes|length }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm" title="Add note"
                 onclick="this.closest('.pin-notes-panel').querySelector('.pin-note-input').focus()">
-            <i class="material-icons">add</i>
+            <i class="material-symbols-outlined">add</i>
         </button>
     </div>
 
@@ -25,7 +25,7 @@
                     hx-swap="outerHTML"
                     hx-confirm="Delete this note?"
                     hx-on::before-request="this.closest('li').classList.add('is-deleting')">
-                <i class="material-icons">delete_outline</i>
+                <i class="material-symbols-outlined">delete_outline</i>
             </button>
         </li>
         {% endfor %}

@@ -4,7 +4,7 @@
         <span>All locations covering these coordinates</span>
         <button type="button" class="pin-loc-picker-close"
                 onclick="document.getElementById('pin-location-picker').innerHTML=''">
-            <i class="material-icons">close</i>
+            <i class="material-symbols-outlined">close</i>
         </button>
     </div>
 
@@ -18,7 +18,7 @@
         </div>
         <div class="pin-loc-option-actions">
             <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn btn--ghost btn--sm" title="Open wiki">
-                <i class="material-icons">open_in_new</i>
+                <i class="material-symbols-outlined">open_in_new</i>
             </a>
             {% if not pin.location or loc.slug != pin.location.slug %}
             <button type="button" class="btn btn--primary btn--sm"
@@ -34,7 +34,7 @@
     </div>
     {% empty %}
     <p class="pin-loc-picker-empty">
-        <i class="material-icons">search_off</i>
+        <i class="material-symbols-outlined">search_off</i>
         No shared locations found at these coordinates.
     </p>
     {% endfor %}

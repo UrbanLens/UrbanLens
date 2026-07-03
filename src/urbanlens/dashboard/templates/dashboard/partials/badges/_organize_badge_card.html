@@ -34,9 +34,9 @@
             </div>
             {% if badge.description %}<div class="tag-card-desc">{{ badge.description }}</div>{% endif %}
             <div class="tag-card-meta">
-                {% if kind != 'people' %}<span class="tag-stat" title="Pins"><i class="material-icons">push_pin</i>{{ badge.pin_count }}</span>{% endif %}
-                {% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child badges"><i class="material-icons">account_tree</i>{{ child_count }}</span>{% endif %}{% endwith %}
-                {% if kind == 'tag' %}{% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--total" title="Total pins including sub-tags"><i class="material-icons">functions</i>{{ badge|tag_total_pins }}</span>{% endif %}{% endwith %}{% endif %}
+                {% if kind != 'people' %}<span class="tag-stat" title="Pins"><i class="material-symbols-outlined">push_pin</i>{{ badge.pin_count }}</span>{% endif %}
+                {% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child badges"><i class="material-symbols-outlined">account_tree</i>{{ child_count }}</span>{% endif %}{% endwith %}
+                {% if kind == 'tag' %}{% with child_count=badge.children.count %}{% if child_count %}<span class="tag-stat tag-stat--total" title="Total pins including sub-tags"><i class="material-symbols-outlined">functions</i>{{ badge|tag_total_pins }}</span>{% endif %}{% endwith %}{% endif %}
                 {% if display_color %}<span class="tag-color-dot" style="background:{{ display_color }};" title="{{ display_color }}"></span>{% endif %}
                 {% if badge.parents.exists %}<span class="tag-parents-summary"><i class="material-icons" style="font-size:.9rem;">subdirectory_arrow_right</i>{% for parent in badge.parents.all %}{{ parent.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
             </div>
@@ -44,13 +44,13 @@
 
         <div class="tag-card-actions">
             {% if kind != 'people' and not badge.profile %}
-                <button type="button" class="btn btn--icon{% if badge.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global badge" hx-get="{% url 'badge.customize' badge_kind=kind badge_id=badge.id %}" hx-target="#badge-edit-dialog-body" hx-swap="innerHTML"><i class="material-icons">tune</i></button>
-                {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global badge" hx-get="{% url 'badge.edit' badge_kind=kind badge_id=badge.id %}" hx-target="#badge-edit-dialog-body" hx-swap="innerHTML"><i class="material-icons">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-icons">delete</i></button></form>{% endif %}
+                <button type="button" class="btn btn--icon{% if badge.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global badge" hx-get="{% url 'badge.customize' badge_kind=kind badge_id=badge.id %}" hx-target="#badge-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>
+                {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global badge" hx-get="{% url 'badge.edit' badge_kind=kind badge_id=badge.id %}" hx-target="#badge-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}
             {% elif editable %}
-                <button type="button" class="btn btn--icon" title="Edit" hx-get="{{ edit_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-icons">edit</i></button>
-                {% if merge_url %}<button type="button" class="btn btn--icon" title="Merge" hx-get="{{ merge_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-icons">merge</i></button>{% elif kind == 'people' %}<button type="button" class="btn btn--icon" title="Merge" onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')"><i class="material-icons">merge</i></button>{% endif %}
+                <button type="button" class="btn btn--icon" title="Edit" hx-get="{{ edit_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button>
+                {% if merge_url %}<button type="button" class="btn btn--icon" title="Merge" hx-get="{{ merge_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-symbols-outlined">merge</i></button>{% elif kind == 'people' %}<button type="button" class="btn btn--icon" title="Merge" onclick="peopleMergeSingle({{ badge.id }}, '{{ badge.name|escapejs }}')"><i class="material-symbols-outlined">merge</i></button>{% endif %}
             {% endif %}
-            {% if deletable %}<form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-icons">delete</i></button></form>{% endif %}
+            {% if deletable %}<form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ badge.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}
         </div>
     </div>
 </div>

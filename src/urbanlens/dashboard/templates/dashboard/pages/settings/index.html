@@ -10,7 +10,7 @@
     {# -- Privacy ------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
-            <i class="material-icons">lock</i>
+            <i class="material-symbols-outlined">lock</i>
             <div>
                 <h2 class="settings-section-title">Privacy</h2>
                 <p class="settings-section-desc">Control who can see your profile and activity.</p>
@@ -107,7 +107,7 @@
     {# -- Style --------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
-            <i class="material-icons">palette</i>
+            <i class="material-symbols-outlined">palette</i>
             <div>
                 <h2 class="settings-section-title">Style</h2>
                 <p class="settings-section-desc">Site-wide appearance.</p>
@@ -126,21 +126,21 @@
                         <input type="radio" name="theme_mode" value="system"
                                {% if style_form.instance.theme_mode == 'system' %}checked{% endif %}
                                onchange="applyThemePreview('system')">
-                        <i class="material-icons">brightness_auto</i>
+                        <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
                     <label class="settings-theme-option {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
                         <input type="radio" name="theme_mode" value="light"
                                {% if style_form.instance.theme_mode == 'light' %}checked{% endif %}
                                onchange="applyThemePreview('light')">
-                        <i class="material-icons">light_mode</i>
+                        <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
                     <label class="settings-theme-option {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
                         <input type="radio" name="theme_mode" value="dark"
                                {% if style_form.instance.theme_mode == 'dark' %}checked{% endif %}
                                onchange="applyThemePreview('dark')">
-                        <i class="material-icons">dark_mode</i>
+                        <i class="material-symbols-outlined">dark_mode</i>
                         <span>Dark</span>
                     </label>
                 </div>
@@ -157,21 +157,21 @@
                         <input type="radio" name="map_dark_mode" value="system"
                                {% if style_form.instance.map_dark_mode == 'system' %}checked{% endif %}
                                onchange="applyMapDarkPreview('system')">
-                        <i class="material-icons">brightness_auto</i>
+                        <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
                     <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
                         <input type="radio" name="map_dark_mode" value="light"
                                {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
                                onchange="applyMapDarkPreview('light')">
-                        <i class="material-icons">light_mode</i>
+                        <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
                     <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
                         <input type="radio" name="map_dark_mode" value="dark"
                                {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
                                onchange="applyMapDarkPreview('dark')">
-                        <i class="material-icons">dark_mode</i>
+                        <i class="material-symbols-outlined">dark_mode</i>
                         <span>Dark</span>
                     </label>
                 </div>
@@ -190,11 +190,11 @@
                            onclick="applyGuidancePreview('{{ radio.data.value }}')">
                         {{ radio.tag }}
                         {% if radio.data.value == "all" %}
-                            <i class="material-icons">school</i><span>Guides &amp; hints</span>
+                            <i class="material-symbols-outlined">school</i><span>Guides &amp; hints</span>
                         {% elif radio.data.value == "tooltips" %}
-                            <i class="material-icons">info_outline</i><span>Hints only</span>
+                            <i class="material-symbols-outlined">info</i><span>Hints only</span>
                         {% else %}
-                            <i class="material-icons">block</i><span>Off</span>
+                            <i class="material-symbols-outlined">block</i><span>Off</span>
                         {% endif %}
                     </label>
                     {% endfor %}
@@ -222,7 +222,7 @@
     {# -- Map ----------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
-            <i class="material-icons">map</i>
+            <i class="material-symbols-outlined">map</i>
             <div>
                 <h2 class="settings-section-title">Map</h2>
                 <p class="settings-section-desc">Display, performance, and starting point.</p>
@@ -247,9 +247,9 @@
                     <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
                         {{ radio.tag }}
                         {% if radio.data.value == "satellite" %}<i class="material-symbols-outlined">globe</i>
-                        {% elif radio.data.value == "topographic" %}<i class="material-icons">terrain</i>
-                        {% elif radio.data.value == "remember" %}<i class="material-icons">history</i>
-                        {% else %}<i class="material-icons">map</i>{% endif %}
+                        {% elif radio.data.value == "topographic" %}<i class="material-symbols-outlined">terrain</i>
+                        {% elif radio.data.value == "remember" %}<i class="material-symbols-outlined">history</i>
+                        {% else %}<i class="material-symbols-outlined">map</i>{% endif %}
                         <span>{{ radio.choice_label }}</span>
                     </label>
                     {% endfor %}
@@ -270,13 +270,13 @@
                            onclick="selectMapMode('{{ radio.data.value }}')">
                         {{ radio.tag }}
                         {% if radio.data.value == 'auto' %}
-                            <i class="material-icons">push_pin</i><span>My Pins</span>
+                            <i class="material-symbols-outlined">push_pin</i><span>My Pins</span>
                         {% elif radio.data.value == 'gps' %}
-                            <i class="material-icons">gps_fixed</i><span>My Location</span>
+                            <i class="material-symbols-outlined">gps_fixed</i><span>My Location</span>
                         {% elif radio.data.value == 'remember' %}
-                            <i class="material-icons">history</i><span>Remember</span>
+                            <i class="material-symbols-outlined">history</i><span>Remember</span>
                         {% else %}
-                            <i class="material-icons">place</i><span>Custom</span>
+                            <i class="material-symbols-outlined">place</i><span>Custom</span>
                         {% endif %}
                     </label>
                     {% endfor %}
@@ -323,13 +323,13 @@
                     <label class="settings-map-view-option ul-radio-button{% if not is_custom %} active{% endif %}"
                            id="cluster-auto-label" onclick="setClusterMode('auto')">
                         <input type="radio" name="_cluster_mode" value="auto"{% if not is_custom %} checked{% endif %}>
-                        <i class="material-icons">auto_awesome</i>
+                        <i class="material-symbols-outlined">auto_awesome</i>
                         <span>Auto</span>
                     </label>
                     <label class="settings-map-view-option ul-radio-button{% if is_custom %} active{% endif %}"
                            id="cluster-custom-label" onclick="setClusterMode('custom')">
                         <input type="radio" name="_cluster_mode" value="custom"{% if is_custom %} checked{% endif %}>
-                        <i class="material-icons">tune</i>
+                        <i class="material-symbols-outlined">tune</i>
                         <span>Custom</span>
                     </label>
                 </div>
@@ -380,7 +380,7 @@
     {% if show_places_layer %}
     <section class="settings-section ul-section" id="places-layer-settings-section">
         <div class="settings-section-header">
-            <i class="material-icons">place</i>
+            <i class="material-symbols-outlined">place</i>
             <div>
                 <h2 class="settings-section-title">Places Layer</h2>
                 <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
@@ -440,7 +440,7 @@
     {# -- Pin Detail Defaults ----------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
-            <i class="material-icons">draw</i>
+            <i class="material-symbols-outlined">draw</i>
             <div>
                 <h2 class="settings-section-title">Markup</h2>
                 <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
@@ -505,7 +505,7 @@
     {% if can_use_ai_features %}
     <section class="settings-section ul-section" id="ai-settings-section">
         <div class="settings-section-header">
-            <i class="material-icons">auto_awesome</i>
+            <i class="material-symbols-outlined">auto_awesome</i>
             <div>
                 <h2 class="settings-section-title">AI Features</h2>
                 <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
@@ -573,7 +573,7 @@
     {# -- Notifications ------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
-            <i class="material-icons">notifications</i>
+            <i class="material-symbols-outlined">notifications</i>
             <div>
                 <h2 class="settings-section-title">Notifications</h2>
                 <p class="settings-section-desc">How you receive alerts.</p>

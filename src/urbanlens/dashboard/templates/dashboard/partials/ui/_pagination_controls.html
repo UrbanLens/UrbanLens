@@ -22,11 +22,11 @@ Conventions relied on:
             hx-get="{{ request.path }}?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             aria-label="Previous page">
-        <i class="material-icons">chevron_left</i>
+        <i class="material-symbols-outlined">chevron_left</i>
     </button>
     {% else %}
     <button type="button" class="pagination-btn" disabled aria-label="Previous page">
-        <i class="material-icons">chevron_left</i>
+        <i class="material-symbols-outlined">chevron_left</i>
     </button>
     {% endif %}
     <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
@@ -35,11 +35,11 @@ Conventions relied on:
             hx-get="{{ request.path }}?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}"
             hx-target="closest .card" hx-swap="outerHTML"
             aria-label="Next page">
-        <i class="material-icons">chevron_right</i>
+        <i class="material-symbols-outlined">chevron_right</i>
     </button>
     {% else %}
     <button type="button" class="pagination-btn" disabled aria-label="Next page">
-        <i class="material-icons">chevron_right</i>
+        <i class="material-symbols-outlined">chevron_right</i>
     </button>
     {% endif %}
 </div>
