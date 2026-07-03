@@ -473,6 +473,9 @@
 
     </div>
     <div class="apdlg-footer">
+        <button type="button" class="btn btn--danger" id="apdlg-delete" style="margin-right:auto;" onclick="_apdlgDeletePin()" hidden>
+            <i class="material-icons">delete</i>Delete
+        </button>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
@@ -525,7 +528,7 @@
         </p>
         <p class="page-footer__github">
             <i class="material-icons" aria-hidden="true">code</i>
-            <span class="page-footer__github-text">This project is open source. Check out our</span> <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>
+            <span class="page-footer__github-text">This project is open source. Check out our</span> <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>
         </p>
     </div>
 </footer>
@@ -2665,35 +2668,44 @@
     });
     L.Marker.prototype.options.icon = newIcon;
 
-    async function deletePin(button) {
-        const popup = button.closest('.pin-popup');
-        const pinUuid = popup.dataset.uuid;
-        const pinName = popup.querySelector('.popup-title')?.textContent?.trim() || 'this pin';
+    async function _deletePinByUuid(pinUuid, pinName) {
         if (!await confirmDialog({
             title: 'Delete Pin',
             message: `Delete "${pinName}"?\n\nThis cannot be undone.`,
             confirmLabel: 'Delete',
-        })) return;
-        fetch(`/dashboard/rest/pins/${pinUuid}/`, {
-            method: 'DELETE',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-        })
-        .then(response => {
-            if (response.ok) {
-                toastr.success('Location deleted successfully');
-                if (pinUuid && _markerMap.has(pinUuid)) {
-                    clusterGroup.removeLayer(_markerMap.get(pinUuid));
-                    _markerMap.delete(pinUuid);
-                }
-                if (pinUuid) _pinStore.delete(pinUuid);
-                _scheduleCache();
-                map.closePopup();
-                updatePinCounter();
-            } else {
-                toastr.error('Failed to delete pin');
-            }
-        })
-        .catch(() => toastr.error('Failed to delete pin'));
+        })) return false;
+        let response;
+        try {
+            response = await fetch(`/dashboard/rest/pins/${pinUuid}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            });
+        } catch {
+            toastr.error('Failed to delete pin');
+            return false;
+        }
+        if (!response.ok) {
+            toastr.error('Failed to delete pin');
+            return false;
+        }
+        toastr.success('Location deleted successfully');
+        if (pinUuid && _markerMap.has(pinUuid)) {
+            clusterGroup.removeLayer(_markerMap.get(pinUuid));
+            _markerMap.delete(pinUuid);
+        }
+        if (pinUuid) _pinStore.delete(pinUuid);
+        _scheduleCache();
+        map.closePopup();
+        updatePinCounter();
+        _refreshPinList();
+        return true;
+    }
+
+    async function deletePin(button) {
+        const popup = button.closest('.pin-popup');
+        const pinUuid = popup.dataset.uuid;
+        const pinName = popup.querySelector('.popup-title')?.textContent?.trim() || 'this pin';
+        await _deletePinByUuid(pinUuid, pinName);
     }
 
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
@@ -4810,6 +4822,16 @@
         const btn = document.getElementById('apdlg-submit');
         btn.disabled = false;
         btn.textContent = 'Add Pin';
+
+        const deleteBtn = document.getElementById('apdlg-delete');
+        if (deleteBtn) deleteBtn.hidden = true;
+    }
+
+    async function _apdlgDeletePin() {
+        if (!_editPinUuid) return;
+        const pin = _pinStore.get(_editPinUuid);
+        const pinName = (pin && pin.name) || 'this pin';
+        if (await _deletePinByUuid(_editPinUuid, pinName)) closeAddPinDialog();
     }
 
     function openAddPinDialog(lat = null, lng = null, opts = {}) {
@@ -4900,6 +4922,9 @@
         const btn = document.getElementById('apdlg-submit');
         btn.disabled = false;
         btn.textContent = 'Save Changes';
+
+        const deleteBtn = document.getElementById('apdlg-delete');
+        if (deleteBtn) deleteBtn.hidden = false;
 
         document.getElementById('add-pin-dialog').showModal();
     }

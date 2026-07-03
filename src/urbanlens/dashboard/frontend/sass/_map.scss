@@ -1443,14 +1443,20 @@
         }
     }
     
-    &:hover .pin-list-item__edit,
-    &:focus-within .pin-list-item__edit {
-        opacity: 1;
+    @include up($breakpoint-sm) {
+        &__edit {
+            align-self: center;
+            display: none;
+        }
+
+        &:active .pin-list-item__edit,
+        &:hover .pin-list-item__edit,
+        &:focus-within .pin-list-item__edit {
+            opacity: 1;
+            display: block;
+        }
     }
 
-    &__edit {
-        align-self: center;
-    }
 }
 
 .pin-list-icon {

@@ -1358,12 +1358,13 @@ body.page-location-details {
 
     &--private,
     &--unlinked {
-        color: var(--ul-grey-6);
+        background: $color-blue-500;
+        color: $color-grey-0;
         font-size: .82rem;
 
         > .material-icons {
             font-size: 1.05rem;
-            color: var(--ul-grey-3);
+            color: $color-grey-0;
         }
 
         > span {

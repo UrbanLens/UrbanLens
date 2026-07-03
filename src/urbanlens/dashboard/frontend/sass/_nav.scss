@@ -352,7 +352,7 @@ nav {
 
 // -- Site footer --------------------------------------------------------------
 // Mobile-first flex layout: version sits at the start, everything else
-// (GitHub link, and on the map page the live attribution text) sits at the
+// (Github link, and on the map page the live attribution text) sits at the
 // end, on every page - not just the map page.
 .page-footer {
     background-color: #{$color-indigo-900};
@@ -399,14 +399,6 @@ nav {
     }
 
     &__github {
-        flex-shrink: 0;
-        margin: 0;
-        padding: 0;
-        font-size: 0.78rem;
-        font-weight: 400;
-        line-height: 1.4;
-        display: inline-flex;
-        align-items: center;
         gap: 0.4rem;
 
         .material-icons {
@@ -420,67 +412,61 @@ nav {
     }
 
     // -- Map page modifier: adds a live tile-attribution slot between the
-    // version tag and the GitHub link. Alignment itself is shared above.
-    &--map {
-        .page-footer__meta {
-            flex: 1 1 auto;
-            min-width: 0;
+    // version tag and the Github link. Alignment itself is shared above.
+    &__meta {
+        flex: 1 1 auto;
+        min-width: 0;
 
-            @include down($breakpoint-xs) {
-                order: -1;
-            }
+        @include down($breakpoint-xs) {
+            order: -1;
+        }
+    }
+
+    &__version,
+    &__meta {
+        font-size: 0.75rem;
+    }
+
+    &__github,
+    &__attribution {
+        margin: 0;
+        line-height: 1.4;
+        color: var(--ul-grey-4);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        text-align: right;
+
+        @include down($breakpoint-xs) {
+            text-align: center;
+            white-space: normal;
         }
 
-        .page-footer__version,
-        .page-footer__meta,
-        .page-footer__attribution,
-        .page-footer__github {
-            font-size: 0.75rem;
-        }
-
-        .page-footer__github,
-        .page-footer__attribution {
-            margin: 0;
-            padding: 0;
-            line-height: 1.4;
-            color: var(--ul-grey-4);
+        a {
+            margin-left: 0.35rem;
+            font-weight: 600;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: right;
 
-            @include down($breakpoint-xs) {
-                text-align: center;
-                white-space: normal;
-            }
-
-            a {
-                margin-left: 0.35rem;
-                font-weight: 600;
-                white-space: nowrap;
-
-                &::before {
-                    content: '·';
-                    margin-right: 0.35rem;
-                    font-weight: 400;
-                    opacity: 0.65;
-                }
+            &::before {
+                content: '·';
+                margin-right: 0.35rem;
+                font-weight: 400;
+                opacity: 0.65;
             }
         }
+    }
 
-        // .page-footer__github is inline-flex at the base selector (so its
-        // icon/text/link line up when it's a direct flex child of the plain
-        // footer). Here it's nested inside .page-footer__meta, a block div,
-        // so an inline-flex box just shrinks to content and sits left,
-        // ignoring the text-align: right above. Force it block-level and
-        // right-justify its flex children directly instead.
-        .page-footer__github {
-            display: flex;
-            justify-content: flex-end;
+    // .page-footer__github is inline-flex at the base selector (so its
+    // icon/text/link line up when it's a direct flex child of the plain
+    // footer). Here it's nested inside .page-footer__meta, a block div,
+    // so an inline-flex box just shrinks to content and sits left,
+    // ignoring the text-align: right above. Force it block-level and
+    // right-justify its flex children directly instead.
+    .page-footer__github {
+        display: flex;
+        justify-content: flex-end;
 
-            @include down($breakpoint-xs) {
-                justify-content: center;
-            }
+        @include down($breakpoint-xs) {
+            justify-content: center;
         }
     }
 }

@@ -204,8 +204,7 @@ def _run_export_steps(
 def _resolve_target(obj: Any) -> tuple[str, str]:
     """Return (target_type, target_name) for an object with a pin or location FK."""
     if obj.pin:
-        name = obj.pin.name or (obj.pin.location.name if obj.pin.location else "")
-        return "pin", name
+        return "pin", obj.pin.effective_name
     if obj.location:
         return "location", obj.location.name
     return "", ""
@@ -365,7 +364,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     writer.writerow(["Title", "Note", "URL", "Tags", "Comment"])
 
     for pin in pins:
-        name = pin.name or (pin.location.name if pin.location else "")
+        name = pin.effective_name
         note = pin.description or ""
         url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
         tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))

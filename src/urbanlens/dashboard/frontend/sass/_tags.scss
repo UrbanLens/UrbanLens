@@ -1469,6 +1469,12 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.priority-item {
+    [type="checkbox"]+span:not(.lever)::before {
+        display: none;
+    }
+}
+
 // Visual star rating display (pin details page, etc.)
 .star-rating-display {
     display: inline-flex;

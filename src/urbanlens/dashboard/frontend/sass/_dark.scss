@@ -191,7 +191,7 @@
         background-color: $dk-nav-bg;
         color: var(--ul-grey-6);
 
-        &__github {
+        &__meta {
             a {
                 color: var(--ul-grey-8);
             }
@@ -366,23 +366,6 @@
     .profile-section,
     .profile-hero {
         @include standard-section;
-    }
-
-    .profile-full-name {
-        color: var(--ul-grey-1);
-    }
-
-    .profile-bio {
-        color: var(--ul-grey-2);
-
-        &.empty {
-            color: var(--ul-grey-6b);
-        }
-    }
-
-    .profile-username,
-    .profile-meta-item {
-        color: var(--ul-grey-5a);
     }
 
     .social-link {

@@ -113,14 +113,14 @@
 .profile-full-name {
     font-size: 1.6rem;
     font-weight: 700;
-    color: $text-primary;
+    color: var(--ul-grey-9);
     margin: 0 0 0.1rem;
     line-height: 1.2;
 }
 
 .profile-username {
     font-size: 0.95rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6b);
     margin: 0;
 }
 
@@ -241,12 +241,12 @@
 
 .profile-bio {
     font-size: 0.95rem;
-    color: $text-primary;
+    color: var(--ul-grey-8);
     line-height: 1.6;
     margin: 0.5rem 0 0.75rem;
 
     &.empty {
-        color: $text-muted;
+        color: var(--ul-grey-6b);
         font-style: italic;
     }
 }
@@ -2470,18 +2470,6 @@ a.profile-stat--link {
 // -- Friend action buttons -----------------------------------------------------
 
 .btn-friend {
-    @include btn-base;
-    padding: .3rem .65rem;
-    border-radius: 6px;
-    border: 1px solid;
-    font-size: .78rem;
-    font-weight: 600;
-    outline: none;
-
-    .material-icons {
-        font-size: .9rem;
-    }
-
     &--accept {
         background: var(--ul-grey-0);
         border-color: $color-green-300;

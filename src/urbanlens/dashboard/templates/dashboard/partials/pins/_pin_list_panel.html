@@ -33,9 +33,9 @@ resend the filter-form fields on every page click, so filters stay applied.
                 {% endif %}
                 <span class="pin-list-info">
                     <span class="pin-list-name">{{ pin.display_label }}</span>
-                    {% if pin.location.city or pin.location.state or pin.location.country %}
+                    {% if pin.effective_city or pin.effective_state or pin.effective_country %}
                     <span class="pin-list-meta"
-                        >{% if pin.location.city %}{{ pin.location.city }}{% endif %}{% if pin.location.city and pin.location.state %}, {% endif %}{% if pin.location.state %}{{ pin.location.state }}{% endif %}{% if pin.location.country %} · {{ pin.location.country }}{% endif %}</span>
+                        >{% if pin.effective_city %}{{ pin.effective_city }}{% endif %}{% if pin.effective_city and pin.effective_state %}, {% endif %}{% if pin.effective_state %}{{ pin.effective_state }}{% endif %}{% if pin.effective_country %} · {{ pin.effective_country }}{% endif %}</span>
                     {% endif %}
                     {% if pin.badges.all %}
                     <span class="pin-list-badges">
