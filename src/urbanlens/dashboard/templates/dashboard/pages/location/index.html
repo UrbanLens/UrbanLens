@@ -115,8 +115,7 @@
 
             {# ── Map sidebar panel (Details + Photos tabs) ── #}
             <div id="detail-pin-list-panel" class="detail-pin-list-panel" style="display:none">
-                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle"
-                        data-tooltip="Show or hide your personal detail markers and annotations for this location.">
+                <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
                     <i class="material-icons">layers</i>
                     <span id="detail-pin-count-label">0 Layers</span>
                     <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
@@ -143,9 +142,7 @@
 
             {# ── Bottom-left map controls ── #}
             <div class="map-bottom-controls">
-                <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()"
-                        data-tooltip="Change the boundary polygon for this location."
-                        data-tooltip-pos="below">
+                <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
                     <i class="material-icons">pentagon</i> Edit Boundary
                 </button>
                 <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
@@ -182,9 +179,7 @@
                         </button>
                     </div>
                     <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
-                            id="add-detail-btn" onclick="toggleAddDetailMenu()"
-                            data-tooltip="Add a personal detail marker, shape, or text to this map. Only you can see theses details."
-                            data-tooltip-pos="below">
+                            id="add-detail-btn" onclick="toggleAddDetailMenu()">
                         <i class="material-icons">add_location_alt</i> Add Detail
                         <i class="material-icons add-detail-chevron">expand_less</i>
                     </button>
@@ -1859,6 +1854,18 @@
     let campusDrawControl = null;
     let _savedCampusGeoJSON = null;
 
+    // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
+    if (!window._boundaryDrawToggleWired) {
+        window._boundaryDrawToggleWired = true;
+        [L.Draw.Polygon, L.EditToolbar.Edit].forEach(Ctor => {
+            const _origEnable = Ctor.prototype.enable;
+            Ctor.prototype.enable = function () {
+                if (this._enabled) { this.disable(); return this; }
+                return _origEnable.call(this);
+            };
+        });
+    }
+
     function _setPinMarkerVisible(visible) {
         if (visible && !map.hasLayer(_pinMarker)) {
             _pinMarker.addTo(map);
@@ -1936,10 +1943,9 @@
                 },
                 marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
             },
-            edit: { featureGroup: campusItems },
+            edit: { featureGroup: campusItems, remove: false },
         });
         map.addControl(campusDrawControl);
-        setTimeout(() => document.querySelectorAll('#map .leaflet-draw-actions').forEach(el => { el.style.display = 'none'; }), 0);
         map.on(L.Draw.Event.CREATED, function (e) {
             // Add the new polygon to the existing set - never clear others.
             campusItems.addLayer(e.layer);
@@ -2245,14 +2251,45 @@
         document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
     }());
 
-    // ── Campus boundary: click to open editor ────────────────────────────────
+    // ── Campus boundary: click a polygon for an Edit/Delete context menu ─────
     function _attachCampusClickHandlers() {
         campusItems.eachLayer(layer => {
             layer.off('click.openEditor');
-            layer.on('click.openEditor', () => {
-                if (!campusDrawControl) startEditCampus();
+            layer.on('click.openEditor', (e) => {
+                if (campusDrawControl) return;
+                L.DomEvent.stopPropagation(e);
+                _openBoundaryCtxMenu(layer, e.latlng);
             });
         });
+    }
+
+    function _openBoundaryCtxMenu(layer, latlng) {
+        const content = document.createElement('div');
+        content.className = 'boundary-ctx-menu';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'boundary-ctx-menu__item';
+        editBtn.innerHTML = '<i class="material-icons">edit</i> Edit';
+        editBtn.addEventListener('click', () => { map.closePopup(); startEditCampus(); });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'boundary-ctx-menu__item boundary-ctx-menu__item--danger';
+        delBtn.innerHTML = '<i class="material-icons">delete_outline</i> Delete';
+        delBtn.addEventListener('click', async () => {
+            map.closePopup();
+            if (!await confirmDialog({ title: 'Delete Boundary', message: 'Delete this boundary polygon?', confirmLabel: 'Delete' })) return;
+            campusItems.removeLayer(layer);
+            if (campusItems.getLayers().length === 0) _setPinMarkerVisible(true);
+            saveCampus({ exitEdit: false });
+        });
+
+        content.append(editBtn, delBtn);
+        L.popup({ closeButton: false, className: 'boundary-ctx-menu-popup', offset: [0, -2] })
+            .setLatLng(latlng)
+            .setContent(content)
+            .openOn(map);
     }
 
     // ── Detail-pin add dialog ─────────────────────────────────────────────────

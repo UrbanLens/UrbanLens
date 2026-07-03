@@ -427,6 +427,18 @@
     let bboxDrawControl = null;
     let _savedBboxGeoJSON = null;
 
+    // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
+    if (!window._boundaryDrawToggleWired) {
+        window._boundaryDrawToggleWired = true;
+        [L.Draw.Polygon, L.EditToolbar.Edit].forEach(Ctor => {
+            const _origEnable = Ctor.prototype.enable;
+            Ctor.prototype.enable = function () {
+                if (this._enabled) { this.disable(); return this; }
+                return _origEnable.call(this);
+            };
+        });
+    }
+
     setTimeout(() => bboxMap.invalidateSize(), 300);
 
     function _loadSavedBbox(geojson) {
@@ -438,6 +450,47 @@
             }
         }
         bboxMap.invalidateSize();
+        _attachBboxClickHandlers();
+    }
+
+    // ── Boundary: click the polygon for an Edit/Delete context menu ──────────
+    function _attachBboxClickHandlers() {
+        bboxItems.eachLayer(layer => {
+            layer.off('click.openEditor');
+            layer.on('click.openEditor', (e) => {
+                if (bboxDrawControl) return;
+                L.DomEvent.stopPropagation(e);
+                _openBboxCtxMenu(layer, e.latlng);
+            });
+        });
+    }
+
+    function _openBboxCtxMenu(layer, latlng) {
+        const content = document.createElement('div');
+        content.className = 'boundary-ctx-menu';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'boundary-ctx-menu__item';
+        editBtn.innerHTML = '<i class="material-icons">edit</i> Edit';
+        editBtn.addEventListener('click', () => { bboxMap.closePopup(); startBboxEdit(); });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'boundary-ctx-menu__item boundary-ctx-menu__item--danger';
+        delBtn.innerHTML = '<i class="material-icons">delete_outline</i> Delete';
+        delBtn.addEventListener('click', async () => {
+            bboxMap.closePopup();
+            if (!await confirmDialog({ title: 'Delete Boundary', message: 'Delete this boundary polygon?', confirmLabel: 'Delete' })) return;
+            bboxItems.removeLayer(layer);
+            saveBbox();
+        });
+
+        content.append(editBtn, delBtn);
+        L.popup({ closeButton: false, className: 'boundary-ctx-menu-popup', offset: [0, -2] })
+            .setLatLng(latlng)
+            .setContent(content)
+            .openOn(bboxMap);
     }
 
     fetch(bboxApiUrl)
@@ -464,10 +517,9 @@
                 },
                 marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
             },
-            edit: { featureGroup: bboxItems },
+            edit: { featureGroup: bboxItems, remove: false },
         });
         bboxMap.addControl(bboxDrawControl);
-        setTimeout(() => document.querySelectorAll('#bbox-map .leaflet-draw-actions').forEach(el => { el.style.display = 'none'; }), 0);
         bboxMap.on(L.Draw.Event.CREATED, function (e) {
             bboxItems.clearLayers();
             bboxItems.addLayer(e.layer);

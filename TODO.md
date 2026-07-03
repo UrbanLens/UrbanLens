@@ -15,6 +15,7 @@ Features planned for this release.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
 * Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc)
 * Main map > Edit pin dialog should have link to view full pin details.
+* Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School")
 
 ## Medium Features
 
