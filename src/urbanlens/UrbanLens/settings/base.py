@@ -26,15 +26,12 @@ _is_dev = ENVIRONMENT_NAME in {"local", "development"}
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "True" if _is_dev else "False").lower() in {"true", "1", "yes"}
 
-# ALLOWED_HOSTS: override via UL_ALLOWED_HOSTS (comma-separated list).
-# Local environment defaults to wildcard so developers can access the site
-# immediately without any configuration.
-if _allowed_hosts_env := os.getenv("UL_ALLOWED_HOSTS", ""):
-    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(",") if h.strip()]
-elif _is_local:
-    ALLOWED_HOSTS = ["urbanlens.org", "localhost", "127.0.0.1"]
-else:
-    ALLOWED_HOSTS = ["urbanlens.org"]
+# ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
+# a comma-separated list). Local environment defaults to wildcard-friendly hosts so
+# developers can access the site immediately without any configuration.
+from urbanlens.UrbanLens.settings.app import settings as _app_settings  # noqa: E402
+
+ALLOWED_HOSTS = _app_settings.allowed_hosts
 
 # Application definition
 INSTALLED_APPS = [

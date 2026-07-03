@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 from django import conf
 from django.conf import LazySettings
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.factory import select_environment
@@ -24,6 +25,13 @@ _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT, ".env"),
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
+
+
+def _default_allowed_hosts() -> list[str]:
+    """Local dev defaults to a wildcard-friendly host list; other environments lock down to the canonical domain."""
+    if os.getenv("UL_ENVIRONMENT", EnvironmentTypes.LOCAL).lower() == EnvironmentTypes.LOCAL:
+        return ["urbanlens.org", "localhost", "127.0.0.1"]
+    return ["urbanlens.org"]
 
 
 class AppSettingsMeta(ModelMetaclass):
@@ -54,8 +62,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
-    # TODO: Change default
-    allowed_hosts: list[str] = Field(default=["urbanlens.org"], description="The allowed hosts")
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=_default_allowed_hosts, description="The allowed hosts")
     language_code: str = Field(default="en-us", description="The language code")
     time_zone: str = Field(default="EST", description="The time zone")
     use_i18n: bool = Field(default=True, description="Whether or not to use i18n")
@@ -204,6 +211,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     @property
     def django(self) -> LazySettings:
         return conf.settings
+
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def _split_allowed_hosts(cls, value: Any) -> Any:
+        """Allow ALLOWED_HOSTS to be provided as a comma-separated string via env vars."""
+        if isinstance(value, str):
+            return [host.strip() for host in value.split(",") if host.strip()]
+        return value
 
     @model_validator(mode="after")
     def _resolve_version_metadata(self) -> Self:
