@@ -167,8 +167,8 @@ window.MarkupEngine = (function () {
                     opts.onHintChange(msgs[_tool] || '');
                 }
             }
-            if (opts.onPointsChange) {
-                opts.onPointsChange(!!(_state && _state.points && _state.points.length));
+            if (opts.onPointCountChange) {
+                opts.onPointCountChange(_tool, _state ? _state.points.length : 0);
             }
         }
 
@@ -275,19 +275,6 @@ window.MarkupEngine = (function () {
             if (_tool === 'circle' && n >= 1 && _lastCursorLL) {
                 _commit('circle', [_state.points[0], [_lastCursorLL.lat, _lastCursorLL.lng]]); return;
             }
-        }
-
-        // -- Public: remove the last placed point without cancelling the whole shape --
-        function undoLastPoint() {
-            if (!_state || !_state.points.length) return;
-            _state.points.pop();
-            if (!_state.points.length) {
-                _state = null;
-                _clearPrev();
-            } else if (_lastCursorLL) {
-                _preview(_lastCursorLL);
-            }
-            _hint();
         }
 
         // -- Click -------------------------------------------------------------
@@ -464,7 +451,7 @@ window.MarkupEngine = (function () {
             document.addEventListener('mouseup', onUp, { once: true });
         }
 
-        // -- Keyboard: Escape cancels, Enter finishes, Backspace undoes a point --
+        // -- Keyboard: Escape cancels, Enter finishes -------------------------
         function _onKeyDown(e) {
             if (!_tool) return;
             if (e.key === 'Escape') {
@@ -479,10 +466,6 @@ window.MarkupEngine = (function () {
                 e.stopImmediatePropagation();
                 e.preventDefault();
                 finishCurrent();
-            } else if (e.key === 'Backspace' || e.key === 'Delete') {
-                e.stopImmediatePropagation();
-                e.preventDefault();
-                undoLastPoint();
             }
         }
 
@@ -508,7 +491,6 @@ window.MarkupEngine = (function () {
             getCurrentTool:  getCurrentTool,
             canFinish:       canFinish,
             finishCurrent:   finishCurrent,
-            undoLastPoint:   undoLastPoint,
             destroy:         destroy,
         };
     }

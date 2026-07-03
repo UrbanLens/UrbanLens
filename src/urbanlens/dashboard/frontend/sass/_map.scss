@@ -203,6 +203,7 @@
         .detail-pin-add-body {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             min-height: 0; // required for a flex child to shrink below its content size
         }
     }
@@ -650,10 +651,86 @@
     display: block;
 }
 
+// -- One-time "click the last point again to finish" tip --------------------
+// Floats top-center of the map, never blocking clicks (pointer-events: none on
+// the pill itself - only its close button is clickable) so it can't get in the
+// way of the click-to-place-points gesture it's explaining.
+@keyframes markup-tip-in {
+    from { opacity: 0; transform: translate(-50%, -14px) scale(.94); }
+    to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+@keyframes markup-tip-glow {
+    0%, 100% { box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 0 rgba(99, 102, 241, .55); }
+    50%      { box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 8px rgba(99, 102, 241, 0); }
+}
+
+.markup-line-finish-tip {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    z-index: 1050;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    max-width: min(90%, 420px);
+    padding: .55rem .5rem .55rem .9rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, $color-indigo-600, $color-blue-600);
+    color: #fff;
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 1.25;
+    animation: markup-tip-in .35s ease-out, markup-tip-glow 1.8s ease-in-out .35s 3;
+
+    &__icon {
+        font-size: 1.15rem;
+        flex-shrink: 0;
+        transform: rotate(-8deg);
+    }
+
+    &__text {
+        strong {
+            text-decoration: underline;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 2px;
+        }
+    }
+
+    &__close {
+        pointer-events: auto;
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, .18);
+        color: #fff;
+        cursor: pointer;
+        transition: background .12s;
+
+        .material-icons {
+            font-size: 15px;
+        }
+
+        &:hover, &:focus {
+            background: rgba(255, 255, 255, .32);
+            outline: none;
+        }
+    }
+}
+
 // -- Map text labels and arrow decorations ----------------------------------
 
 .map-text-label {
-    display: inline-block;
+    // Default caption style for shape/arrow/line names - always black-on-white
+    // regardless of the shape's own color, so it stays legible against any map
+    // background. A dedicated Text markup item overrides color/background inline.
+    color: #000;
     font-weight: 600;
     white-space: nowrap;
     background: rgba(255, 255, 255, .94);
