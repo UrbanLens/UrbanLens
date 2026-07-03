@@ -72,7 +72,9 @@
       "Bash(curl -s \"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&titles=Cincinnati&explaintext=1&exintro=1&format=json\" -H \"User-Agent: UrbanLens/1.0 test\")",
       "Bash(.venv_windows/Scripts/python.exe -m py_compile src/urbanlens/dashboard/services/apis/assets/wikipedia.py)",
       "Bash(python3 -)",
-      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\jessa\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-jessa-Work-UrbanLens\\\\597b6d69-a20e-43e0-92b4-1651a10243d5\\\\scratchpad\\\\test_wiki_extract.py\")"
+      "PowerShell(.venv_windows\\\\Scripts\\\\python.exe \"C:\\\\Users\\\\jessa\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-jessa-Work-UrbanLens\\\\597b6d69-a20e-43e0-92b4-1651a10243d5\\\\scratchpad\\\\test_wiki_extract.py\")",
+      "PowerShell(.venv_windows\\\\Scripts\\\\uv.exe --version)",
+      "PowerShell(.venv_windows\\\\Scripts\\\\uv.exe lock --exclude-newer 2026-06-18 2>&1)"
     ]
   }
 }
