@@ -693,6 +693,14 @@
     .wikipedia-body {
         display: flex;
         flex-direction: column;
+        // Without a cap here, this card's natural height grows with however long the
+        // article extract is, which is also what `.pin-aux-grid` uses to size the whole
+        // row - so a long article stretches every sibling card in the row to match. The
+        // JS clamp (see index.html) measures its "available" budget from this element's
+        // own bottom edge, which only works if that edge is fixed independently of the
+        // extract's length instead of growing to contain it.
+        max-height: 20rem;
+        overflow: hidden;
     }
 
     // The extract now contains real block markup (headings/paragraphs/lists)
