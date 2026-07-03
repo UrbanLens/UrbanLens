@@ -466,6 +466,21 @@ nav {
                 }
             }
         }
+
+        // .page-footer__github is inline-flex at the base selector (so its
+        // icon/text/link line up when it's a direct flex child of the plain
+        // footer). Here it's nested inside .page-footer__meta, a block div,
+        // so an inline-flex box just shrinks to content and sits left,
+        // ignoring the text-align: right above. Force it block-level and
+        // right-justify its flex children directly instead.
+        .page-footer__github {
+            display: flex;
+            justify-content: flex-end;
+
+            @include down($breakpoint-xs) {
+                justify-content: center;
+            }
+        }
     }
 }
 

@@ -92,9 +92,40 @@
 .iw-hint {
     color: #5f6368;
     font-size: .83rem;
-    margin: 0 0 18px;
+    margin: 0 0 8px;
     line-height: 1.5;
 }
+.iw-takeout-help-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0 0 18px;
+    color: var(--ul-primary-color);
+    font-size: .83rem;
+    cursor: pointer;
+}
+.iw-takeout-help-toggle i { font-size: 1rem; }
+.iw-takeout-help-toggle:hover { text-decoration: underline; }
+.iw-takeout-help {
+    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0 0 18px;
+    font-size: .83rem;
+    color: var(--ul-grey-9, #333);
+    line-height: 1.5;
+}
+.iw-takeout-help ol {
+    margin: 0;
+    padding-left: 1.2em;
+}
+.iw-takeout-help li { margin-bottom: 6px; }
+.iw-takeout-help li:last-child { margin-bottom: 0; }
+.iw-takeout-help a { color: var(--ul-primary-color); }
 .iw-file-zone {
     border: 1.5px dashed var(--ul-grey-1a);
     border-radius: 10px;
@@ -454,6 +485,19 @@
     <div id="iw-step-1">
         <div class="iw-body">
             <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
+            <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
+                <i class="material-icons">help_outline</i>
+                <span>How do I get a Google Takeout file?</span>
+            </button>
+            <div class="iw-takeout-help" id="iw-takeout-help" hidden>
+                <ol>
+                    <li>Go to <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a> and sign in with the Google account that has your saved places.</li>
+                    <li>Click <strong>Deselect all</strong>, then scroll down and check only <strong>Saved</strong> (this covers your Google Maps lists).</li>
+                    <li>Click <strong>Next step</strong>, choose how you'd like to receive the export (an emailed download link is simplest), and click <strong>Create export</strong>.</li>
+                    <li>Google will email you a download link, usually within a few minutes. Download the .zip file it sends you.</li>
+                    <li>Come back here and drop that .zip file into the upload area below - no need to unzip it first.</li>
+                </ol>
+            </div>
             <div class="iw-file-zone" id="iw-file-zone">
                 <i class="material-icons">cloud_upload</i>
                 <span class="iw-file-zone-label">
@@ -599,6 +643,14 @@ window.addEventListener('beforeunload', beforeUnloadHandler);
 
 $('import-screen').addEventListener('click', closeDialog);
 $('closeImportDialog').addEventListener('click', closeDialog);
+
+/* -- Step 1: Takeout help toggle ---------------------------------------- */
+$('iw-takeout-help-toggle').addEventListener('click', function () {
+    var help = $('iw-takeout-help');
+    var expanded = !help.hidden;
+    help.hidden = expanded;
+    $('iw-takeout-help-toggle').setAttribute('aria-expanded', String(!expanded));
+});
 
 /* -- Step 1: File picking ---------------------------------------------- */
 var fileInput = $('iw-file-input');
