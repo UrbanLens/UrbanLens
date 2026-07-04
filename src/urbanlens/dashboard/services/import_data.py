@@ -255,6 +255,8 @@ def _import_badges(
     badge_uuid_map: dict[str, int],
 ) -> None:
     """Import user-owned badge definitions. Global badges are matched by name."""
+    from uuid import UUID, uuid4
+
     from urbanlens.dashboard.models.badges.model import Badge
 
     rows = _read_json(data_dir, "badges.json")
@@ -268,47 +270,58 @@ def _import_badges(
             result.inc_skipped("badges")
             continue
 
+        kind = row.get("kind", "tag")
         is_user_badge = row.get("is_user_badge", True)
 
+        try:
+            badge_uuid = UUID(uuid_str)
+        except (ValueError, AttributeError, TypeError):
+            badge_uuid = uuid4()
+
         if is_user_badge:
-            # Match by UUID first (same user restoring their own data).
-            existing = Badge.objects.filter(uuid=uuid_str, profile=profile).first()
+            # Match by UUID first (re-importing the same export), then by name+kind
+            # (the import may be re-run against data that was already imported, or
+            # the export UUID may not round-trip - either way, don't duplicate).
+            existing = Badge.objects.filter(uuid=badge_uuid, profile=profile).first() or Badge.objects.filter(profile=profile, name=name, kind=kind).first()
             if existing:
                 badge_uuid_map[uuid_str] = existing.pk
                 result.inc_skipped("badges")
                 continue
 
             badge = Badge.objects.create(
+                uuid=badge_uuid,
                 profile=profile,
                 name=name,
                 description=row.get("description") or "",
                 color=row.get("color") or None,
                 icon=row.get("icon") or None,
-                kind=row.get("kind", "tag"),
+                kind=kind,
                 order=row.get("order", 0),
             )
             badge_uuid_map[uuid_str] = badge.pk
             result.inc_created("badges")
         else:
-            # Global badge: match by name first, then fall back to creating as user badge.
-            existing = Badge.objects.filter(profile__isnull=True, name=name).first()
+            # Global badge: match by name+kind first, then fall back to a user-owned
+            # badge with the same name+kind, then create as user-owned if neither exists.
+            existing = Badge.objects.filter(profile__isnull=True, name=name, kind=kind).first()
             if existing:
                 badge_uuid_map[uuid_str] = existing.pk
                 result.inc_skipped("badges")
             else:
                 # Re-create as a user-owned badge (global doesn't exist on this instance).
-                user_existing = Badge.objects.filter(profile=profile, name=name).first()
+                user_existing = Badge.objects.filter(profile=profile, name=name, kind=kind).first()
                 if user_existing:
                     badge_uuid_map[uuid_str] = user_existing.pk
                     result.inc_skipped("badges")
                 else:
                     badge = Badge.objects.create(
+                        uuid=badge_uuid,
                         profile=profile,
                         name=name,
                         description=row.get("description") or "",
                         color=row.get("color") or None,
                         icon=row.get("icon") or None,
-                        kind=row.get("kind", "tag"),
+                        kind=kind,
                         order=row.get("order", 0),
                     )
                     badge_uuid_map[uuid_str] = badge.pk
