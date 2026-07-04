@@ -78,27 +78,27 @@ class BoundaryProviderChainTests(TestCase):
 
         expected = default_bbox(40.0, -74.0)
         provider = mock.Mock(name="provider")
-        provider.name = "mock"
-        provider.boundary_for_point.return_value = expected
+        provider.service_key = "mock"
+        provider.get_boundary.return_value = expected
 
-        boundary = BoundaryProviderChain(providers=(provider,)).boundary_for_point(40.0, -74.0, name="Factory")
+        boundary = BoundaryProviderChain(providers=(provider,)).get_boundary(40.0, -74.0, name="Factory")
 
         self.assertEqual(boundary, expected)
-        provider.boundary_for_point.assert_called_once_with(40.0, -74.0, name="Factory")
+        provider.get_boundary.assert_called_once_with(40.0, -74.0, name="Factory")
 
     def test_chain_falls_back_when_provider_returns_none(self) -> None:
         from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain, default_bbox
 
         provider = mock.Mock(name="provider")
-        provider.name = "mock"
-        provider.boundary_for_point.return_value = None
+        provider.service_key = "mock"
+        provider.get_boundary.return_value = None
 
-        boundary = BoundaryProviderChain(providers=(provider,)).boundary_for_point(40.0, -74.0)
+        boundary = BoundaryProviderChain(providers=(provider,)).get_boundary(40.0, -74.0)
 
         self.assertEqual(boundary, default_bbox(40.0, -74.0))
 
-    def test_overpass_provider_selects_smallest_polygon_containing_point(self) -> None:
-        from urbanlens.dashboard.services.locations.boundaries import OverpassBoundaryProvider
+    def test_overpass_gateway_selects_smallest_polygon_containing_point(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
         elements = [
             {
@@ -124,10 +124,10 @@ class BoundaryProviderChainTests(TestCase):
                 ],
             },
         ]
-        gateway = mock.Mock()
-        gateway.nearby_boundary_candidates.return_value = elements
+        gateway = OverpassGateway(session=mock.Mock())
 
-        boundary = OverpassBoundaryProvider(gateway=gateway).boundary_for_point(40.0, -74.0)
+        with mock.patch.object(gateway, "nearby_boundary_candidates", return_value=elements):
+            boundary = gateway.get_boundary(40.0, -74.0)
 
         self.assertIsNotNone(boundary)
         self.assertAlmostEqual(boundary.area, 0.000004, places=8)
@@ -137,7 +137,7 @@ class OverpassGatewayTests(TestCase):
     """Overpass helpers build bounded, reusable API requests."""
 
     def test_nearby_features_query_can_include_nodes_without_geometry(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.overpass import OverpassGateway
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
         query = OverpassGateway._nearby_features_query(
             40.0,
@@ -152,8 +152,31 @@ class OverpassGatewayTests(TestCase):
         self.assertIn("way(around:250,40.0000000,-74.0000000)", query)
         self.assertIn("out center tags qt", query)
 
+    def test_default_tag_filter_splits_into_valid_clauses(self) -> None:
+        """Regression test: Overpass QL has no `|` OR-operator between bracket filters.
+
+        A previous version of `_DEFAULT_FEATURE_TAG_FILTER` chained filters with a bare
+        `|` directly inside a single statement, which Overpass rejects with a parse
+        error on every request. Clauses must instead be split into separate unioned
+        statements.
+        """
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _DEFAULT_FEATURE_TAG_FILTER, OverpassGateway
+
+        query = OverpassGateway._nearby_features_query(
+            40.0,
+            -74.0,
+            radius_meters=100,
+            tag_filter=_DEFAULT_FEATURE_TAG_FILTER,
+            include_nodes=True,
+            include_geometry=True,
+        )
+
+        self.assertNotIn("]|[", query)
+        self.assertIn('["railway"="station"]', query)
+        self.assertIn('~"^(building|amenity', query)
+
     def test_element_returns_first_result(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.overpass import OverpassGateway
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
         gateway = OverpassGateway(session=mock.Mock())
         with mock.patch.object(gateway, "elements_for_query", return_value=[{"type": "way", "id": 123}]):

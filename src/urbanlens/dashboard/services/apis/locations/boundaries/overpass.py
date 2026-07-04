@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import logging
+import re
 from typing import Any, ClassVar, Literal, Protocol
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
@@ -17,10 +18,16 @@ logger = logging.getLogger(__name__)
 
 _API_URL = "https://overpass-api.de/api/interpreter"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
+# Overpass QL has no OR operator to chain bracket filters within one statement, so
+# each top-level `|`-separated clause here becomes its own unioned statement per
+# element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The
+# split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex
+# alternation below is left intact.
 _DEFAULT_FEATURE_TAG_FILTER = (
-    '["building"]|["amenity"]|["tourism"]|["historic"]|["leisure"]|'
-    '["landuse"]|["industrial"]|["man_made"]|["shop"]|["office"]|["railway"="station"]'
+    '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]'
+    '|["railway"="station"]'
 )
+_TAG_FILTER_CLAUSE_SPLIT = re.compile(r"(?<=\])\|(?=\[)")
 OsmElementType = Literal["node", "way", "relation"]
 
 
@@ -156,19 +163,26 @@ class OverpassGateway(Gateway, BoundaryProvider):
         include_nodes: bool,
         include_geometry: bool,
     ) -> str:
-        """Build an Overpass QL query constrained to useful place tags."""
+        """Build an Overpass QL query constrained to useful place tags.
+
+        ``tag_filter`` may contain multiple ``|``-separated Overpass filter clauses;
+        each becomes its own unioned statement per element type, since Overpass QL
+        has no OR operator for chaining bracket filters within a single statement.
+        """
         radius = max(10, min(int(radius_meters), 250))
         lat = float(latitude)
         lon = float(longitude)
+        clauses = _TAG_FILTER_CLAUSE_SPLIT.split(tag_filter)
         selectors = []
-        if include_nodes:
-            selectors.append(f"  node(around:{radius},{lat:.7f},{lon:.7f}){tag_filter};")
-        selectors.extend(
-            [
-                f"  way(around:{radius},{lat:.7f},{lon:.7f}){tag_filter};",
-                f'  relation(around:{radius},{lat:.7f},{lon:.7f})["type"="multipolygon"]{tag_filter};',
-            ],
-        )
+        for clause in clauses:
+            if include_nodes:
+                selectors.append(f"  node(around:{radius},{lat:.7f},{lon:.7f}){clause};")
+            selectors.extend(
+                [
+                    f"  way(around:{radius},{lat:.7f},{lon:.7f}){clause};",
+                    f'  relation(around:{radius},{lat:.7f},{lon:.7f})["type"="multipolygon"]{clause};',
+                ],
+            )
         out_clause = "out tags geom qt;" if include_geometry else "out center tags qt;"
         return f"""
 [out:json][timeout:8];

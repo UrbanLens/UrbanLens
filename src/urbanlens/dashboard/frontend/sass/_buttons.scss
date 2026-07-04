@@ -244,6 +244,7 @@ input[type="submit"] {
         align-items: center;
         justify-content: center;
         transition: background .12s, color .12s;
+		border-radius: 0;
         border-right: 1px solid var(--ul-grey-1a);
 
         &:last-child {

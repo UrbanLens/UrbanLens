@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
 import logging
@@ -13,6 +14,8 @@ import zipfile
 from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
+
+ProgressReporter = Callable[[int, int], None]
 
 IMPORT_TTL_SECONDS = 3600
 SUPPORTED_FORMATS = {"urbanlens_v1"}
@@ -106,6 +109,29 @@ def schedule_import_cleanup(import_dir_path: str, job_status: ImportJobStatus | 
         logger.warning("Unable to schedule cleanup for import directory %s", import_dir_path)
 
 
+def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pct: int, end_pct: int) -> ProgressReporter:
+    """Return a throttled callback that reports (done, count) progress within [start_pct, end_pct].
+
+    Writes to the cache-backed job status at most once per whole-percentage-point change
+    (so a 4000-row step doesn't issue 4000 cache writes), but always writes on the final
+    item so the step reliably lands on ``end_pct`` before the next step starts.
+    """
+    step_message = _STEP_MESSAGES.get(key, f"Importing {key}...")
+    last_reported_pct = -1
+
+    def report(done: int, count: int) -> None:
+        nonlocal last_reported_pct
+        if count <= 0:
+            return
+        pct = start_pct + int((done / count) * (end_pct - start_pct))
+        if pct == last_reported_pct and done != count:
+            return
+        last_reported_pct = pct
+        job_status.write("running", pct, f"{step_message} ({done}/{count})")
+
+    return report
+
+
 def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user.
 
@@ -154,13 +180,15 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         badge_uuid_map: dict[str, int] = {}
 
         for i, key in enumerate(steps):
-            progress = 10 + int((i / total) * 80)
-            job_status.write("running", progress, _STEP_MESSAGES.get(key, f"Importing {key}..."))
+            step_start = 10 + int((i / total) * 80)
+            step_end = 10 + int(((i + 1) / total) * 80)
+            job_status.write("running", step_start, _STEP_MESSAGES.get(key, f"Importing {key}..."))
 
             importer = _IMPORTERS.get(key)
             if importer is None:
                 continue
-            importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, badge_uuid_map=badge_uuid_map)
+            report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
+            importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, badge_uuid_map=badge_uuid_map, report_progress=report_progress)
 
         job_status.write("done", 100, "Import complete!", result=result.to_dict())
         return True
@@ -253,6 +281,7 @@ def _import_badges(
     *,
     pin_uuid_map: dict[str, int],
     badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user-owned badge definitions. Global badges are matched by name."""
     from uuid import UUID, uuid4
@@ -262,8 +291,11 @@ def _import_badges(
     rows = _read_json(data_dir, "badges.json")
     if not rows:
         return
+    total_rows = len(rows)
 
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
         name = row.get("name", "").strip()
         if not name:
@@ -351,6 +383,7 @@ def _import_pins(
     *,
     pin_uuid_map: dict[str, int],
     badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user pins.
 
@@ -378,8 +411,11 @@ def _import_pins(
     rows = _read_json(data_dir, "pins.json")
     if not rows:
         return
+    total_rows = len(rows)
 
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
 
         # Idempotency: skip pins that already exist for this user.
@@ -445,6 +481,7 @@ def _import_visit_history(
     *,
     pin_uuid_map: dict[str, int],
     badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import visit history records, skipping duplicates by (pin, visited_at)."""
     from django.utils.dateparse import parse_datetime
@@ -455,8 +492,11 @@ def _import_visit_history(
     rows = _read_json(data_dir, "visit_history.json")
     if not rows:
         return
+    total_rows = len(rows)
 
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
         pin_uuid = row.get("pin_uuid", "")
         visited_at_str = row.get("visited_at", "")
 
@@ -496,6 +536,7 @@ def _import_connections(
     *,
     pin_uuid_map: dict[str, int],
     badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import friendship connections. Skips connections to users not on this instance."""
     from urbanlens.dashboard.models.friendship.model import Friendship
@@ -504,8 +545,11 @@ def _import_connections(
     rows = _read_json(data_dir, "connections.json")
     if not rows:
         return
+    total_rows = len(rows)
 
-    for row in rows:
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
         other_uuid = row.get("other_user_uuid", "")
         direction = row.get("direction", "outgoing")
 
@@ -545,6 +589,7 @@ def _import_settings(
     *,
     pin_uuid_map: dict[str, int],
     badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user settings, overwriting the current profile settings."""
     from urbanlens.dashboard.models.profile.model import Profile

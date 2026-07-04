@@ -12,7 +12,7 @@ resend the filter-form fields on every page click, so filters stay applied.
 {% endcomment %}
 <div id="pin-list-results" class="card pin-list-results" hx-include="#filter-form">
     <div class="pin-list-count">
-        <strong>{{ total_count }}</strong> location{{ total_count|pluralize }}
+        <strong>{{ total_count }}</strong> place{{ total_count|pluralize }}
     </div>
     {% if pins %}
     <ul class="pin-list">
