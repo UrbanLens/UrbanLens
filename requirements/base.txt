@@ -42,3 +42,4 @@ tiktoken~=0.13.0
 openai~=2.43.0
 gevent~=26.5.0
 lxml~=6.1.1
+overturemaps~=1.0.1
