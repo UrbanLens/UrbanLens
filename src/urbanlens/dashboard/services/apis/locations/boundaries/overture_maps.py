@@ -68,11 +68,6 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         # rebuilds the class object, invalidating the implicit __class__ cell.
         # Call the parent explicitly instead.
         Gateway.__post_init__(self)
-        if _overture_geodataframe is None:
-            raise ImportError(
-                "OvertureMapsGateway requires the 'overturemaps' package: "
-                "`pip install overturemaps[geopandas]`.",
-            )
 
     def _fetch(self, overture_type: str, bbox: BBox | None):
         if bbox is not None:
