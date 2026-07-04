@@ -8,12 +8,12 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, TypedDict
 
-import requests
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
+import requests
 
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings

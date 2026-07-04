@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 import json
 import logging
 import math
 import re
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fastkml import kml

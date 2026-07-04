@@ -45,7 +45,7 @@ jobs:
 
             - name: Linting with Ruff
               run: |
-                  pip install ruff==0.7.0
+                  pip install ruff==0.15.20
                   cd $GITHUB_WORKSPACE/src
                   ruff check .
 
