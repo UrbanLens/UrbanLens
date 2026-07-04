@@ -348,13 +348,6 @@ REST_FRAMEWORK = {
     },
 }
 
-# Logging. Django's own default LOGGING config only sends request-level
-# exceptions (5xx) to mail_admins when DEBUG=False, and its console handler is
-# filtered out entirely outside DEBUG - so without this, unhandled errors in
-# staging/production vanish silently unless email is configured. The app and
-# celery containers already mount a shared /var/log volume (see
-# docker-compose.yml, and celery-beat's --schedule path); this wires Django
-# into it so tracebacks are always visible via `docker logs` and on disk.
 LOG_DIR = os.getenv("UL_LOG_DIR", "/var/log/urbanlens")
 _log_handlers = ["console"]
 try:
