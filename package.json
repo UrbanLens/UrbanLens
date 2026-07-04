@@ -30,7 +30,7 @@
     "dependencies": {
         "bun": "^1.0.15",
         "dotenv": "^10.0.0",
-        "dotenv-expand": "^5.1.0",
+        "dotenv-expand": "^13.0.0",
         "sass": "^1.69.5",
         "sass-loader": "^12.3.0",
         "semver": "^7.3.5",
