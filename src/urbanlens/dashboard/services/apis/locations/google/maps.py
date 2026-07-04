@@ -15,6 +15,7 @@ from fastkml import kml
 import requests
 
 from urbanlens.core.cache_keys import make_cache_key
+from urbanlens.dashboard.models.badges.meta import KIND_TAG
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
@@ -438,12 +439,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         file_tag = Badge.objects.filter(
                             profile=user_profile,
                             name__iexact=tag_name,
+                            kind=KIND_TAG,
                         ).first()
                         if file_tag is None:
                             style = suggest_badge_style(tag_name, user_profile)
                             file_tag = Badge.objects.create(
                                 profile=user_profile,
-                                kind="category",
+                                kind=KIND_TAG,
                                 name=tag_name,
                                 icon=style.icon,
                                 color=style.color,

@@ -64,7 +64,7 @@ class DomainExtractionTests(TestCase):
 
     @given(
         scheme=st.sampled_from(["http", "https"]),
-        domain=st.from_regex(r"[a-z]{3,10}\.[a-z]{2,4}", fullmatch=True),
+        domain=st.from_regex(r"[a-z]{3,10}\.[a-z]{2,4}", fullmatch=True).filter(lambda d: not d.startswith("www.")),
         path=st.text(alphabet=st.characters(whitelist_categories=("L", "N")), max_size=20),
     )
     @_hyp
@@ -166,6 +166,7 @@ class WebSearchViewTests(TestCase):
             latitude=41.0,
             longitude=-81.5,
         )
+        baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
         user = baker.make("auth.User")
         # The post_save signal creates a Profile automatically; retrieve it rather
         # than letting baker create a second one (which would violate the unique constraint).

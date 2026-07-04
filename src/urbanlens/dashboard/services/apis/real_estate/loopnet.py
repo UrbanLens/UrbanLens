@@ -367,7 +367,9 @@ def _parse_property_page(html: str) -> dict[str, str] | None:
     try:
         parser = HTMLParser()
         tree = defused_fromstring(html.encode(), parser=parser)
-    except LxmlError:
+    except (LxmlError, AttributeError):
+        # defusedxml.lxml.fromstring raises AttributeError (not LxmlError) when
+        # the underlying lxml parse yields no root element, e.g. for empty HTML.
         logger.debug("LoopNet property page parse failed")
         return None
 

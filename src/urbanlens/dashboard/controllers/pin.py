@@ -306,6 +306,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
+        # Only search when we have an official identifier for the place -- a
+        # personal pin label alone produces noisy, irrelevant search results.
+        if not pin.meaningful_official_name:
+            return HttpResponse("", status=204)
+
         search_name = pin.get_unique_search_name(quote_name=True)
         if not search_name:
             return HttpResponse("", status=204)

@@ -23,6 +23,13 @@ ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
 
+# Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
+# redirects in setup_test_environment(), but pytest-django imports settings
+# directly and does not run that project test runner hook.
+TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} or any(
+    arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
+)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "True" if _is_dev else "False").lower() in {"true", "1", "yes"}
 
@@ -210,12 +217,15 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, "frontend", "static")
 STATICFILES_DIRS = [
     os.path.join(PROJECT_ROOT, "dashboard/frontend/static"),
 ]
+# CompressedManifestStaticFilesStorage requires collectstatic to have been run
+# to generate the manifest; the test suite never runs collectstatic, so fall
+# back to plain (non-hashed) storage there.
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if TESTING else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
@@ -226,13 +236,6 @@ MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
-# redirects in setup_test_environment(), but pytest-django imports settings
-# directly and does not run that project test runner hook.
-TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} or any(
-    arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
-)
 
 # Reject plain HTTP in production. Local and development environments allow it
 # by default so developers can access the site without TLS configuration.

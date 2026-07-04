@@ -263,7 +263,7 @@ class DedupeAndEnrichTests(TestCase):
             _listing("https://www.loopnet.com/Listing/3500-Montgomery-Rd-Cincinnati-OH/11085087/", "is no longer being advertised on LoopNet.com.", "C"),
             _listing("https://loopnet.com/Listing/3500-Montgomery-Rd-Cincinnati-OH/23839564", "currently available.", "D"),
         ]
-        with patch.object(self.gw, "_fetch_property_details", return_value=None):
+        with patch.object(LoopNetGateway, "_fetch_property_details", return_value=None):
             primary_listings, duplicate_links = self.gw._dedupe_and_enrich(listings)
         self.assertEqual(len(primary_listings), 1)
         self.assertEqual(primary_listings[0]["title"], "A")
@@ -275,7 +275,7 @@ class DedupeAndEnrichTests(TestCase):
             _listing("https://www.loopnet.com/property/100-main-st/1/", "property info.", "parcel"),
             _listing("https://www.loopnet.com/Listing/100-Main-St/2/", "is no longer being advertised on LoopNet.com.", "expired"),
         ]
-        with patch.object(self.gw, "_fetch_property_details", return_value=None):
+        with patch.object(LoopNetGateway, "_fetch_property_details", return_value=None):
             _, duplicate_links = self.gw._dedupe_and_enrich(listings)
         labels = {link["label"] for link in duplicate_links}
         self.assertEqual(labels, {"Parcel record", "Archived listing"})
@@ -285,14 +285,14 @@ class DedupeAndEnrichTests(TestCase):
             _listing("https://www.loopnet.com/Listing/100-Main-St/1/", "currently available.", "active"),
             _listing("https://www.loopnet.com/property/100-main-st/1/", "property info.", "parcel"),
         ]
-        with patch.object(self.gw, "_fetch_property_details", return_value={"APN/Parcel ID": "1-2-3"}) as mock_fetch:
+        with patch.object(LoopNetGateway, "_fetch_property_details", return_value={"APN/Parcel ID": "1-2-3"}) as mock_fetch:
             primary_listings, _ = self.gw._dedupe_and_enrich(listings)
         mock_fetch.assert_called_once_with("https://www.loopnet.com/property/100-main-st/1/")
         self.assertEqual(primary_listings[0]["property_details"], {"APN/Parcel ID": "1-2-3"})
 
     def test_no_property_details_key_when_no_property_page_in_group(self):
         listings = [_listing("https://www.loopnet.com/Listing/100-Main-St/1/", "currently available.", "active")]
-        with patch.object(self.gw, "_fetch_property_details") as mock_fetch:
+        with patch.object(LoopNetGateway, "_fetch_property_details") as mock_fetch:
             primary_listings, _ = self.gw._dedupe_and_enrich(listings)
         mock_fetch.assert_not_called()
         self.assertNotIn("property_details", primary_listings[0])
@@ -302,7 +302,7 @@ class DedupeAndEnrichTests(TestCase):
             _listing("https://www.loopnet.com/Listing/100-Main-St/1/", title="X"),
             _listing("https://www.loopnet.com/Listing/200-Elm-St/2/", title="Y"),
         ]
-        with patch.object(self.gw, "_fetch_property_details", return_value=None):
+        with patch.object(LoopNetGateway, "_fetch_property_details", return_value=None):
             primary_listings, duplicate_links = self.gw._dedupe_and_enrich(listings)
         self.assertEqual({p["title"] for p in primary_listings}, {"X", "Y"})
         self.assertEqual(duplicate_links, [])

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import decimal
 import json
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -26,6 +27,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _db_settings = settings(
     max_examples=20,
@@ -191,7 +193,9 @@ class ShowPinCountTests(TestCase):
         user: User = baker.make(User)
         self._SiteSettings.objects.filter(pk=1).update(environment_override=self._dev)
         self.client.force_login(user)
-        resp = self.client.get(_MAP_URL)
+        # Independent of the local .env's UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS.
+        with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=False):
+            resp = self.client.get(_MAP_URL)
         self.assertFalse(resp.context["show_pin_count"])
 
     def test_hidden_for_site_admin_in_production(self) -> None:
