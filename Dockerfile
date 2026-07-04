@@ -53,6 +53,12 @@ ENV LANG=en_US.UTF-8 \
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 
+# Create a non-root user before the source tree is copied in, so COPY --chown
+# below can set ownership at copy time instead of needing a separate `chown -R`
+# afterward. 
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
+
 # Handle Python requirements
 COPY requirements /tmp/pip-tmp/requirements/
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -71,24 +77,27 @@ COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
-# Copy all source files into the container
-COPY . /app
+# Copy all source files into the container, setting ownership at copy time
+# (avoids a slow recursive chown - see the useradd comment above).
+COPY --chown=appuser:appuser . /app
 
 # Install the package in editable mode
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -e .
 
-# Create a non-root user. Pre-create every directory written to at runtime so
-# appuser never needs write access to root-owned parent dirs.
-#
-# Three categories handled here (volume mounts are handled by docker-entrypoint.sh):
+# Pre-create every directory appuser writes to at runtime, so it never needs
+# write access to root-owned parent dirs (volume mounts are handled separately
+# by docker-entrypoint.sh):
 #   - AppSettings.ensure_paths() dirs: /app/src/urbanlens/ (capital-U, legacy
 #     runtime-data tree distinct from the lowercase source), /app/src/logs/,
 #     /app/src/backups/
 #   - bun build output: dashboard/frontend and core/frontend inside the source tree
-RUN groupadd --gid 1001 appuser && \
-    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser && \
-    mkdir -p \
+#
+# Most of these paths already exist in the source tree and were already given
+# to appuser by the COPY --chown above, so mkdir -p is a no-op for them; only
+# backups/ and the downloads/ subfolders (gitignored) are genuinely new here,
+# so only those need an explicit chown.
+RUN mkdir -p \
         /app/src/urbanlens/downloads/downloads \
         /app/src/urbanlens/downloads/exports \
         /app/src/urbanlens/frontend/static \
@@ -100,12 +109,7 @@ RUN groupadd --gid 1001 appuser && \
         /app/src/logs/app.log \
         /app/src/logs/debugging.log \
         /app/src/logs/test.log && \
-    chown -R appuser:appuser \
-        /app/src/urbanlens \
-        /app/src/backups \
-        /app/src/logs \
-        /app/src/urbanlens/dashboard/frontend \
-        /app/src/urbanlens/core/frontend
+    chown -R appuser:appuser /app/src/urbanlens/downloads /app/src/backups
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
 # COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
