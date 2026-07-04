@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.db import IntegrityError, transaction
 
+from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService, normalize_coordinate
@@ -61,9 +62,12 @@ class LocationCreationService:
                         latitude=latitude,
                         longitude=longitude,
                         point=point,
-                        bounding_box=self.boundary_resolver.get_boundary(latitude, longitude, name=name),
                         google_place=google_place,
                     )
+                    boundary = self.boundary_resolver.get_boundary(latitude, longitude, name=name)
+                    if isinstance(boundary, Polygon):
+                        boundary = MultiPolygon(boundary, srid=boundary.srid)
+                    Campus.objects.create(location=location, generated_polygon=boundary)
             except IntegrityError:
                 location = Location.objects.get_for_point(latitude, longitude)
                 if location is None:
