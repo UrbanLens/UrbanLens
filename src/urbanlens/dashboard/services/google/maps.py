@@ -386,9 +386,7 @@ class GoogleMapsGateway(Gateway):
                             pin_data.pop("latitude", None)
                             pin_data.pop("longitude", None)
 
-                        pin_name = (
-                            pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
-                        )
+                        pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
@@ -602,11 +600,7 @@ class GoogleMapsGateway(Gateway):
 
                     try:
                         # Private pins are never linked to a shared Location.
-                        location = (
-                            None
-                            if is_private
-                            else (Location.objects.by_cid(cid).first() if cid else None)
-                        )
+                        location = None if is_private else (Location.objects.by_cid(cid).first() if cid else None)
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,

@@ -51,7 +51,7 @@ jobs:
 
             - name: Unit Tests
               run: |
-                  cd $GITHUB_WORKSPACE/src
+                  cd $GITHUB_WORKSPACE/src/urbanlens
                   python manage.py test
 
             - name: Static Type Checking

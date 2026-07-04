@@ -77,9 +77,7 @@ class GoogleGeocodingGateway(Gateway):
             raise ValueError("Latitude and longitude must be provided to retrieve_place_name.")
 
         # Check if the geocoded data for the given place name already exists in the database
-        geocoded_location: GeocodedLocation = (
-            GeocodedLocation.objects.all().filter(latitude=latitude, longitude=longitude).first()
-        )
+        geocoded_location: GeocodedLocation = GeocodedLocation.objects.all().filter(latitude=latitude, longitude=longitude).first()
         if geocoded_location:
             # parse json_response
             try:

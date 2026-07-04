@@ -97,7 +97,9 @@ class CategoryCreateView(LoginRequiredMixin, View):
             category.parents.set(valid_parents)
 
         return render(
-            request, "dashboard/partials/category_rows.html", _rows_ctx(profile, {"new_category_id": category.id}),
+            request,
+            "dashboard/partials/category_rows.html",
+            _rows_ctx(profile, {"new_category_id": category.id}),
         )
 
 
