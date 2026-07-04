@@ -989,6 +989,14 @@
     &:focus-within {
         border-color: var(--primary-color);
     }
+
+    &:hover,
+    &:active,
+    &:focus {
+        border-color: var(--ul-grey-2);
+        color: var(--ul-grey-8);
+        background-color: var(--ul-grey-0b);
+    }
 }
 
 .apdlg-badge-chips {

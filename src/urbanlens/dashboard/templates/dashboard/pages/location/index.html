@@ -472,7 +472,7 @@
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
                 body: 'Add Detail lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
                 button: 'Add a detail', watchSelector: '#add-detail-btn',
-                action: function () { document.getElementById('add-detail-btn')?.click(); },
+                action: function () { document.getElementById('add-detail-btn')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('add-detail-btn')?.click(), 100 ); },
                 ready: function () { return !!document.getElementById('add-detail-btn'); },
             },
             {
