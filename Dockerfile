@@ -119,7 +119,7 @@ RUN mkdir -p \
 # COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
 # Writing to /etc/gitconfig (--system) applies the exception to all users.
 RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
-        git config --system safe.directory /app \
+        git config --system safe.directory /app; \
     fi
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
