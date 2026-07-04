@@ -338,6 +338,21 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         return None
 
     @property
+    def categories(self):
+        """Badges of kind "category" attached to this pin."""
+        return self.badges.all().categories()
+
+    @property
+    def tags(self):
+        """Badges of kind "tag" attached to this pin."""
+        return self.badges.all().tags()
+
+    @property
+    def statuses(self):
+        """Badges of kind "status" attached to this pin."""
+        return self.badges.all().statuses()
+
+    @property
     def rating(self) -> int:
         try:
             review = self.reviews.all().latest()

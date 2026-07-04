@@ -2,6 +2,7 @@ import logging
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.models.badges.serializer import BadgeSerializer
 from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,10 @@ class PinSerializer(serializers.ModelSerializer):
 
     effective_* fields are read-only - they resolve overrides against the linked
     Location and should be preferred by the frontend over the raw nullable fields.
+
+    categories/tags are read-only views of the pin's badges, filtered by kind.
+    Badge assignment is handled by the dedicated badges controller/endpoints,
+    not through this serializer.
     """
 
     effective_name = serializers.ReadOnlyField()
@@ -25,6 +30,9 @@ class PinSerializer(serializers.ModelSerializer):
     effective_icon = serializers.ReadOnlyField()
     effective_latitude = serializers.ReadOnlyField()
     effective_longitude = serializers.ReadOnlyField()
+    categories = BadgeSerializer(many=True, read_only=True)
+    tags = BadgeSerializer(many=True, read_only=True)
+    statuses = BadgeSerializer(many=True, read_only=True)
 
     class Meta:
         model = Pin
@@ -49,6 +57,7 @@ class PinSerializer(serializers.ModelSerializer):
             "profile",
             "tags",
             "rating",
+            "statuses",
         ]
 
     def create(self, validated_data):

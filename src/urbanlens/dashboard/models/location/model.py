@@ -89,6 +89,21 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         return " ".join(parts)
     
     @property
+    def categories(self):
+        """Badges of kind "category" attached to this location."""
+        return self.badges.all().categories()
+
+    @property
+    def tags(self):
+        """Badges of kind "tag" attached to this location."""
+        return self.badges.all().tags()
+    
+    @property
+    def statuses(self):
+        """Badges of kind "status" attached to this location."""
+        return self.badges.all().statuses()
+
+    @property
     def effective_date_last_active(self):
         """Date the place was last active, inferred from date_abandoned if not set explicitly."""
         from datetime import timedelta
