@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.2.0"
+version = "0.2.1"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -19,7 +19,6 @@ dependencies = [
     "django-pandas~=0.6.7",
     "django-picklefield~=3.4.0",
     "django-postgres-extra~=2.0.4",
-    "django-stubs~=6.0.5",
     "djangofoundry~=0.0.10",
     "djangorestframework~=3.17.1",
     "fastkml~=1.4.0",
@@ -27,15 +26,15 @@ dependencies = [
     "geopy~=2.4.1",
     "gevent~=26.5.0",
     "gunicorn~=26.0.0",
-    "humanize~=4.15.0",
+    "humanize>=4.15,<4.17",
     "jinja2~=3.1.6",
     "lxml~=6.1.1",
     "defusedxml~=0.7.1",
     "nh3~=0.3.5",
-    "openai~=2.43.0",
+    "openai>=2.43,<2.45",
     "orjson~=3.11.9",
     "pandas~=3.0.3",
-    "pillow~=12.2.0",
+    "pillow>=12.2,<12.4",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
     "pydantic-settings~=2.14.1",
@@ -49,11 +48,11 @@ dependencies = [
     "s2sphere~=0.2.5",
     "shapely~=2.1.2",
     "simplejson~=4.1.1",
-    "social-auth-app-django~=5.9.0",
+    "social-auth-app-django>=5.9,<6.1",
     "sqlalchemy~=2.0.51",
     "statsmodels~=0.14.6",
     "tiktoken~=0.13.0",
-    "typing-extensions~=4.15.0",
+    "typing-extensions>=4.15,<4.17",
     "whitenoise~=6.12.0",
     "esprima~=4.0.1",
     "overturemaps>=1.0.1",
@@ -72,7 +71,7 @@ packages = ["src/urbanlens"]
 [tool.pydoctor]
 add-package = ["./src"]
 project-name = "Urban Lens"
-project-version = "0.2.0"
+project-version = "0.2.1"
 project-url = "https://github.com/UrbanLens/UrbanLens"
 html-output = "../docs/API"
 project-base-dir = "./UrbanLens"
@@ -719,13 +718,14 @@ line-ending = "auto"
 select = ["ALL"]
 
 # Turn on preview rules (newer checks; can be a bit more volatile)
-preview = true
+#preview = true
 
 ignore = [
     # Keep these off
     "TRY300",  # Consider moving to else -- this discourages final unindented returns for future proofing
     "ARG002",  # unused method argument: `kwargs`
     "E501",    # Line too long
+    "COM812",  # Recommended to turn off by pre-commit ruff hook
     "FIX002",  # TODOs
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link for this TODO
@@ -744,13 +744,11 @@ ignore = [
     "PLR0913", # too-many-arguments
     "PLR0914", # too-many-locals
     "PLR0915", # too-many-statements
-    "PLW0717", # too-many-statements-in-try-clause
     "PLR1702", # too many nested blocks
     "D2",      # One-line docstring..., 1 blank line, etc
     "D400",    # first line should...
     "D401",    # first line should...
     "D415",    # first line should...
-    "D420",    # Incorrect doc section order
     "D421",    # Docstring should not begin with verb
     "CPY001",  # Missing copyright notice at top of file
     "DOC502",  # This discourages reporting raises from ancestors
@@ -785,7 +783,7 @@ ignore = [
     "BLE001",  # catch blind Exception
     "PLW1641", # implement __hash__
     "ISC003",  # implicit string concat
-    "SIM102",  # nested 
+    "SIM102",  # nested
     "TRY401",  # redundant exception object
     "RUF012",  # mutable class attributes -> ClassVar
     "FBT001",  # boolean position argument
@@ -828,127 +826,30 @@ max-args = 6
 convention = "google"
 
 [dependency-groups]
+# Dev-only additions on top of [project.dependencies] - `uv sync` installs both by default.
 dev = [
-    "celery~=5.6.3",
-    "channels~=4.3.2",
-    "channels-redis~=4.3.0",
-    "coverage~=7.14.1",
+    "coverage>=7.14.1,<7.16.0",
     "daphne~=4.2.2",
-    "dateparser~=1.4.1",
-    "django~=6.0.6",
-    "django-auto-prefetch~=1.14.0",
-    "django-cors-headers~=4.9.0",
     "django-debug-toolbar~=7.0.0",
-    "django-dirtyfields~=1.9.9",
-    "django-extensions~=4.1",
-    "django-filter~=25.2",
-    "django-pandas~=0.6.7",
-    "django-picklefield~=3.4.0",
-    "django-postgres-extra~=2.0.4",
     "django-stubs~=6.0.5",
     "django-stubs-ext~=6.0.5",
-    "djangofoundry~=0.0.10",
-    "djangorestframework~=3.17.1",
-    "fastkml~=1.4.0",
-    "geopandas~=1.1.3",
-    "geopy~=2.4.1",
-    "gevent~=26.5.0",
-    "gunicorn~=26.0.0",
-    "humanize~=4.15.0",
+    "faker~=40.23.0",
+    "hypothesis[django]>=6.155.5,<6.157.0",
     "icecream~=2.2.0",
-    "jinja2~=3.1.6",
     "kombu~=5.6.2",
     "libcst~=1.8.6",
-    "lxml~=6.1.1",
-    "defusedxml~=0.7.1",
-    "hypothesis[django]~=6.155.5",
     "model-bakery~=1.23.5",
     "mypy~=2.1.0",
-    "nh3~=0.3.5",
-    "openai~=2.43.0",
-    "orjson~=3.11.9",
-    "pandas~=3.0.3",
-    "pillow~=12.2.0",
     "pre-commit~=4.6.0",
-    "prospector~=1.18.0",
-    "psycopg2-binary~=2.9.12",
-    "pydantic~=2.13.4",
-    "pydantic-settings~=2.14.1",
+    "prospector>=1.18,<1.20",
     "pytest-django~=4.12.0",
-    "python-dateutil~=2.9.0",
-    "python-decouple~=3.8",
-    "python-dotenv~=1.2.2",
-    "pyyaml~=6.0.3",
-    "redis~=8.0.0",
-    "requests~=2.34.2",
-    "rich~=15.0.0",
-    "ruff~=0.15.18",
+    "ruff~=0.15.20",
     "setuptools~=82.0.1",
-    "shapely~=2.1.2",
-    "simplejson~=4.1.1",
-    "social-auth-app-django~=5.9.0",
     "sphinx~=9.1.0",
     "sphinx-rtd-theme~=3.1.0",
-    "sqlalchemy~=2.0.51",
-    "statsmodels~=0.14.6",
-    "tiktoken~=0.13.0",
     "tqdm~=4.68.3",
     "types-requests~=2.33.0.20260518",
-    "typing-extensions~=4.15.0",
     "uv~=0.11.22",
-    "whitenoise~=6.12.0",
-    "faker~=40.23.0",
-]
-prod = [
-    "celery~=5.6.3",
-    "channels~=4.3.2",
-    "channels-redis~=4.3.0",
-    "daphne~=4.2.2",
-    "dateparser~=1.4.1",
-    "django~=6.0.6",
-    "django-auto-prefetch~=1.14.0",
-    "django-cors-headers~=4.9.0",
-    "django-dirtyfields~=1.9.9",
-    "django-extensions~=4.1",
-    "django-filter~=25.2",
-    "django-pandas~=0.6.7",
-    "django-picklefield~=3.4.0",
-    "django-postgres-extra~=2.0.4",
-    "djangofoundry~=0.0.10",
-    "djangorestframework~=3.17.1",
-    "fastkml~=1.4.0",
-    "geopandas~=1.1.3",
-    "geopy~=2.4.1",
-    "gevent~=26.5.0",
-    "gunicorn~=26.0.0",
-    "humanize~=4.15.0",
-    "jinja2~=3.1.6",
-    "lxml~=6.1.1",
-    "defusedxml~=0.7.1",
-    "nh3~=0.3.5",
-    "openai~=2.43.0",
-    "orjson~=3.11.9",
-    "pandas~=3.0.3",
-    "pillow~=12.2.0",
-    "psycopg2-binary~=2.9.12",
-    "pydantic~=2.13.4",
-    "pydantic-settings~=2.14.1",
-    "python-dateutil~=2.9.0",
-    "python-decouple~=3.8",
-    "python-dotenv~=1.2.2",
-    "pyyaml~=6.0.3",
-    "redis~=8.0.0",
-    "requests~=2.34.2",
-    "rich~=15.0.0",
-    "s2sphere~=0.2.5",
-    "shapely~=2.1.2",
-    "simplejson~=4.1.1",
-    "social-auth-app-django~=5.9.0",
-    "sqlalchemy~=2.0.51",
-    "statsmodels~=0.14.6",
-    "tiktoken~=0.13.0",
-    "typing-extensions~=4.15.0",
-    "whitenoise~=6.12.0",
 ]
 #max-complexity = 10
 #show-source = true

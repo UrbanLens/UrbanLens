@@ -33,6 +33,6 @@
       }
     }
   },
-  "postCreateCommand": "pip install --no-cache-dir -e . && bun install",
+  "postCreateCommand": "uv sync --frozen && bun install",
   "postStartCommand": "git config --global --add safe.directory /app"
 }

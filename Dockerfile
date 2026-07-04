@@ -3,10 +3,10 @@ ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 
 FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
-# Controls which requirements file gets installed below. staging/production
-# install only prod.txt (no linters/test tools/debug toolbar); everything
-# else (local, development, testing) installs dev.txt, which pulls in prod.txt
-# via -r plus the dev-only tooling.
+# Controls which dependency groups uv installs below. staging/production
+# install only [project.dependencies] (--no-dev, no linters/test tools/debug
+# toolbar); everything else (local, development, testing) also installs the
+# `dev` dependency-group from pyproject.toml.
 ARG UL_ENVIRONMENT=production
 
 # Ensure logging dir exists at /var/log/urbanlens
@@ -53,23 +53,29 @@ ENV LANG=en_US.UTF-8 \
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 
+# Install uv (Python package/dependency manager) the same way.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Create a non-root user before the source tree is copied in, so COPY --chown
 # below can set ownership at copy time instead of needing a separate `chown -R`
-# afterward. 
+# afterward.
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
 
-# Handle Python requirements
-COPY requirements /tmp/pip-tmp/requirements/
-RUN --mount=type=cache,target=/root/.cache/pip \
-    if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
-        pip install -r /tmp/pip-tmp/requirements/prod.txt; \
-    else \
-        pip install -r /tmp/pip-tmp/requirements/dev.txt; \
-    fi
-
 # Set the working directory
 WORKDIR /app
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install Python dependencies from pyproject.toml/uv.lock only, so this layer
+# is cached independently of unrelated source changes below.
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
+        uv sync --frozen --no-install-project --no-dev; \
+    else \
+        uv sync --frozen --no-install-project; \
+    fi
 
 # Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
 # so this layer is cached independently of unrelated source changes below.
@@ -81,9 +87,13 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 # (avoids a slow recursive chown - see the useradd comment above).
 COPY --chown=appuser:appuser . /app
 
-# Install the package in editable mode
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e .
+# Install the package itself (editable) into the same venv
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
+        uv sync --frozen --no-dev; \
+    else \
+        uv sync --frozen; \
+    fi
 
 # Pre-create every directory appuser writes to at runtime, so it never needs
 # write access to root-owned parent dirs (volume mounts are handled separately

@@ -1,7 +1,7 @@
 # Shared build configuration - all three app containers use the same image.
 # UL_ENVIRONMENT is passed as a build arg (not just a runtime env var) so the
-# Dockerfile can install requirements/prod.txt for staging/production builds
-# instead of requirements/dev.txt (which pulls in linters, mypy, pytest, etc).
+# Dockerfile can `uv sync --no-dev` for staging/production builds instead of
+# `uv sync` (which pulls in the `dev` dependency-group: linters, mypy, pytest, etc).
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile

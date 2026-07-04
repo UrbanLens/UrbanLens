@@ -426,7 +426,8 @@ class DjangoProjectInitializer:
 
         try:
             Path(pgpass).write_text(
-                f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n", encoding="utf-8",
+                f"{self.db_host}:{self.db_port}:*:{self.db_user}:{self.db_pass}\n",
+                encoding="utf-8",
             )
             os.chmod(pgpass, 0o600)
             # file_contents = open(pgpass, 'r').read()

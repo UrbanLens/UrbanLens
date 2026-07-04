@@ -13,4 +13,3 @@
 ## Release notes
 
 - [ ] User-visible change documented, or not applicable
-- [ ] Conventional Commit style title/body used if this should appear in release notes

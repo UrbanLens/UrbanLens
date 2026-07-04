@@ -58,23 +58,6 @@ class Db:
     def log_path(self) -> str:
         return self._log_path
 
-    @property
-    def data_path(self) -> str:
-        return self._data_path
-
-    @property
-    def user(self) -> str:
-        return self._user
-
-    @property
-    def database(self) -> str:
-        return self._database
-
-    @property
-    def socket_dir(self) -> Path:
-        """Local directory for postgres socket/lock files (avoids /var/run/postgresql permission issues)."""
-        return Path(self._data_path).parent / "tmp" / "socket"
-
     @log_path.setter
     def log_path(self, user_input_path: str) -> None:
         """
@@ -89,6 +72,10 @@ class Db:
         """
         self._log_path = self.sanitize_path(user_input_path)
 
+    @property
+    def data_path(self) -> str:
+        return self._data_path
+
     @data_path.setter
     def data_path(self, user_input_path: str) -> None:
         """
@@ -102,6 +89,19 @@ class Db:
 
         """
         self._data_path = self.sanitize_path(user_input_path)
+
+    @property
+    def user(self) -> str:
+        return self._user
+
+    @property
+    def database(self) -> str:
+        return self._database
+
+    @property
+    def socket_dir(self) -> Path:
+        """Local directory for postgres socket/lock files (avoids /var/run/postgresql permission issues)."""
+        return Path(self._data_path).parent / "tmp" / "socket"
 
     def __init__(self, data_path: str = DEFAULT_DATA_PATH, log_path: str = DEFAULT_LOG_PATH):
         """
@@ -239,8 +239,7 @@ class Db:
     def long_queries(self) -> int:
         """Report queries running longer than 5 minutes."""
         return self.execute_sql(
-            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query "
-            "FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
+            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
         )
 
     def locks(self) -> int:

@@ -35,19 +35,13 @@ class Settings:
     _logging_setup: bool = False
 
     @classmethod
-    @property
     def settings(cls) -> SettingsFile:
         # If settings has never been loaded, then load it.
-        if cls._settings is None:
-            cls.load_config()
-
-        # It should exist now
-        return cls._settings or {}
+        return cls._settings or cls.load_config()
 
     @classmethod
-    @property
     def logging(cls) -> SettingsLog:
-        return cls.settings.get("logging")
+        return cls.settings().get("logging")
 
     @classmethod
     def get_logger(cls, namespace: str):
@@ -56,7 +50,8 @@ class Settings:
         """
         # Setup logging if it isn't already
         if cls._logging_setup is not True:
-            logging.config.dictConfig(Settings.logging)
+            # dictConfig allows TypedDicts, but mypy doesn't know that.
+            logging.config.dictConfig(Settings.logging())  # type: ignore[arg-type]
             cls._logging_setup = True
 
         # Create a new logger
@@ -77,7 +72,7 @@ class Settings:
             raise FileNotFoundError(f"Could not load bin settings from {filepath}")
 
         # Validate contents of settings file.
-        if cls._settings == {}:
+        if not cls._settings:
             raise FileEmptyError(f"No data in settings file at f{filepath}")
 
         return cls._settings
@@ -85,13 +80,13 @@ class Settings:
     @classmethod
     def all(cls) -> SettingsFile:
         """
-        Makes the syntax for getting the settings dict a little less clunky (i.e. Settings.all() instead of Settings.settings)
+        Makes the syntax for getting the settings dict a little less clunky (i.e. Settings.all() instead of Settings.settings())
 
         Returns:
             SettingsFile: A dictionary of settings.
 
         """
-        return cls.settings
+        return cls.settings()
 
     @classmethod
     def get(cls, key: str) -> Any:
@@ -105,9 +100,9 @@ class Settings:
                 Any: The value stored at the provided key
 
         """
-        return cls.settings.get(key)
+        return cls.settings().get(key)
 
 
 if __name__ == "__main__":
-    conf = Settings.settings
+    conf = Settings.settings()
     print(conf)
