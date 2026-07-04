@@ -109,7 +109,7 @@ RUN mkdir -p \
         /app/src/logs/app.log \
         /app/src/logs/debugging.log \
         /app/src/logs/test.log && \
-    chown -R appuser:appuser /app/src/urbanlens/downloads /app/src/backups /app/src/urbanlens/**/frontend/static
+    chown -R appuser:appuser /app/src/urbanlens/downloads /app/src/backups /app/src/**/frontend/static /app/src/logs
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
 # COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
