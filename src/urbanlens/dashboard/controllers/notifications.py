@@ -49,9 +49,7 @@ class NotificationDropdownView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile = request.user.profile
-        notifications = (
-            NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
-        )
+        notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
         unread_count = NotificationLog.objects.for_profile(profile).unread().count()
         return render(
             request,
@@ -94,9 +92,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
-                "notifications": NotificationLog.objects.for_profile(profile)
-                .select_related("source_profile")
-                .order_by("-created")[:20],
+                "notifications": NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20],
                 "unread_count": 0,
             },
         )

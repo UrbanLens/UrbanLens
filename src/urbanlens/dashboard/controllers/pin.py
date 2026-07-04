@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAeri
 from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError
+from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -535,9 +536,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
-            except OSError as exc:
+            except OSError as e:
+                logger.exception("Failed to read uploaded file %s -> %s", uploaded_file.name, e)
                 return JsonResponse(
-                    {"error": f"Failed to read {uploaded_file.name}: {exc}"},
+                    {"error": f"Failed to read {uploaded_file.name}."},
                     status=400,
                 )
 
@@ -686,11 +688,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "administrative_area_level_1": location.administrative_area_level_1 or "",
         }
         name = pin.meaningful_official_name or pin.meaningful_name or ""
-        address_bits = ", ".join(filter(None, [
-            " ".join(filter(None, [location.street_number, location.route])),
-            location.locality,
-            location.administrative_area_level_1,
-        ]))
+        address_bits = ", ".join(
+            filter(
+                None,
+                [
+                    " ".join(filter(None, [location.street_number, location.route])),
+                    location.locality,
+                    location.administrative_area_level_1,
+                ],
+            )
+        )
         query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
         cached = LocationCache.get_fresh(location, "wikipedia")
         if cached is None:
@@ -870,7 +877,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         useful_fields = ("website", "phone", "opening_hours", "operator", "wikipedia")
         if not data or not any(data.get(k) for k in useful_fields):
-            logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, lat, lng)
+            logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
             return HttpResponse(status=204)
 
         context = {"place": data, "debug": self._debug_entry(request, "nominatim", query_key, from_cache=cached is not None, count=1)}

@@ -1,4 +1,5 @@
 """Serializer for the Image model."""
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.images.model import Image

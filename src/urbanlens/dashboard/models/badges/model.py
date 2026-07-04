@@ -43,6 +43,7 @@ class Badge(abstract.Model):
     of the former PinList model: they carry an icon, custom icon, color, description,
     and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
+
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
@@ -68,7 +69,7 @@ class Badge(abstract.Model):
         blank=True,
         related_name="custom_tags",
     )
-    
+
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
     parents: ManyToManyField[Badge, Badge] = ManyToManyField(
         "self",
@@ -146,11 +147,7 @@ class Badge(abstract.Model):
         """
         if not parent_ids:
             return None
-        result = (
-            cls.objects.visible_to(profile)
-            .filter(id__in=parent_ids)
-            .aggregate(reference_order=Min("order"))
-        )
+        result = cls.objects.visible_to(profile).filter(id__in=parent_ids).aggregate(reference_order=Min("order"))
         reference_order = result["reference_order"]
         if reference_order is None:
             return None

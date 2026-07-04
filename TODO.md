@@ -38,6 +38,8 @@ Features planned for this release.
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
 * Pin details page: Plus buttons don't look good again.
+* On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background.
+* Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh"
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". 

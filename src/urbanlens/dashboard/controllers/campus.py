@@ -167,20 +167,16 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         if profile:
             pin_campuses = list(
-                Campus.objects.filter(profile=profile, pin__isnull=False)
-                .select_related("location"),
+                Campus.objects.filter(profile=profile, pin__isnull=False).select_related("location"),
             )
             covered_location_ids = {c.location_id for c in pin_campuses}
             location_defaults = list(
-                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
-                .exclude(location_id__in=covered_location_ids)
-                .select_related("location"),
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True).exclude(location_id__in=covered_location_ids).select_related("location"),
             )
             campuses = pin_campuses + location_defaults
         else:
             campuses = list(
-                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
-                .select_related("location"),
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True).select_related("location"),
             )
 
         result = []

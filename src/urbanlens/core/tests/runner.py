@@ -127,5 +127,3 @@ class TestRunner(DiscoverRunner):
 
         # Teardown the databases
         super().teardown_databases(old_config, **kwargs)
-
-

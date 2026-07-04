@@ -139,11 +139,7 @@ def setup_app_title_value(request: HttpRequest, user: User, current_title: str) 
     return current_title
 
 
-URBANLENS_TITLE_NOTICE = (
-    "UrbanLens is the name of the public project at urbanlens.org. "
-    "For your private instance, please choose a different name so visitors "
-    "are not confused about which site they are on."
-)
+URBANLENS_TITLE_NOTICE = "UrbanLens is the name of the public project at urbanlens.org. For your private instance, please choose a different name so visitors are not confused about which site they are on."
 
 
 def _build_feature_groups(app_settings) -> list[dict]:

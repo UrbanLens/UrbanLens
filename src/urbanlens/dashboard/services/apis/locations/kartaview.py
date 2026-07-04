@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.rate_limiter import ServiceDisabledError
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -100,7 +101,7 @@ class KartaViewGateway(StreetViewProvider):
             return
         except Exception as exc:
             # TODO: Catch specific exception
-            logger.warning("KartaView search failed for %s, %s: %s", latitude, longitude, exc)
+            logger.warning("KartaView search failed for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 
         current_page_items = data.get("currentPageItems") or []

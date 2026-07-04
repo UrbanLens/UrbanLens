@@ -1,4 +1,5 @@
 """QuerySet and Manager for Comment."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
@@ -11,7 +12,6 @@ if TYPE_CHECKING:
 
 
 class CommentQuerySet(QuerySet):
-
     def top_level(self) -> Self:
         """Return only top-level comments (not replies)."""
         return self.filter(parent__isnull=True)

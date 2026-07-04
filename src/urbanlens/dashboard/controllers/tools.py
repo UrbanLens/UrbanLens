@@ -93,9 +93,13 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
-        return render(request, "dashboard/pages/tools/index.html", {
-            "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
-        })
+        return render(
+            request,
+            "dashboard/pages/tools/index.html",
+            {
+                "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
+            },
+        )
 
 
 class ExportStartView(LoginRequiredMixin, View):
@@ -205,7 +209,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
             FileResponse with the ZIP, or redirect to tools page on error.
         """
         try:
-            uuid.UUID(job_id)
+            job_id = str(uuid.UUID(job_id))
         except ValueError:
             logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
             return redirect("tools.index")

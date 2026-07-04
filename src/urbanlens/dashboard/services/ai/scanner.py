@@ -11,6 +11,7 @@ Integrate at two levels:
   - Construction level: call wrap_user_data() on each user-supplied field before
     embedding it in the prompt, so the model knows to treat it as inert data.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,19 +29,15 @@ _PATTERNS: list[tuple[re.Pattern, str, str]] = [
     # -- Instruction override family -------------------------------------------
     (re.compile(r"(?i)ignore\s+(?:all\s+)?(?:previous|prior|above|your)\s+instructions?"), "instruction override", _HIGH),
     (re.compile(r"(?i)(?:disregard|forget|bypass|override)\s+(?:all\s+)?(?:previous|prior|above|your)?\s*instructions?"), "instruction override", _HIGH),
-
     # -- New-instructions injection --------------------------------------------
     (re.compile(r"(?im)(?:^|(?<=\.\s)|(?<=\n))new\s+instructions?\s*:"), "instruction injection", _HIGH),
     (re.compile(r"(?i)(?:here\s+are|these\s+are)\s+(?:your\s+)?new\s+instructions?"), "instruction injection", _HIGH),
     (re.compile(r"(?i)\byour\s+new\s+(?:task|goal|role|purpose|instructions?)\s+(?:is|are)\b"), "role override", _HIGH),
-
     # -- Jailbreak keywords ----------------------------------------------------
     (re.compile(r"(?i)\b(?:jailbreak|dan\s+mode|developer\s+mode|god\s+mode|unrestricted\s+mode|uncensored\s+mode)\b"), "jailbreak attempt", _HIGH),
-
     # -- System-prompt probing -------------------------------------------------
     (re.compile(r"(?i)\b(?:reveal|repeat|print|output|show|display)\s+(?:your\s+)?(?:system\s+)?(?:prompt|instructions?)"), "system prompt probe", _HIGH),
     (re.compile(r"(?i)what\s+(?:are|is)\s+your\s+(?:system\s+)?(?:prompt|instructions?)"), "system prompt probe", _HIGH),
-
     # -- Delimiter injection ---------------------------------------------------
     (re.compile(r"(?i)</?system>"), "delimiter injection", _HIGH),
     (re.compile(r"(?i)</?instructions?>"), "delimiter injection", _HIGH),
@@ -48,12 +45,10 @@ _PATTERNS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"(?im)^###\s*(?:system|instructions?|prompt)\b"), "delimiter injection", _HIGH),
     (re.compile(r"(?i)\[system\]"), "delimiter injection", _HIGH),
     (re.compile(r"(?i)<</?SYS>>"), "delimiter injection", _HIGH),
-
     # -- Role override ---------------------------------------------------------
     (re.compile(r"(?i)\bpretend\s+(?:you\s+are|to\s+be)\b"), "role override", _HIGH),
     (re.compile(r"(?i)\byou\s+(?:are|must)\s+now\s+(?:act|be|behave|ignore)\b"), "role override", _HIGH),
     (re.compile(r"(?i)\bact\s+as\s+(?:an?\s+)?(?:ai|gpt|claude|llm|chatbot|uncensored\s+ai)\b"), "role override", _HIGH),
-
     # -- Medium confidence -----------------------------------------------------
     (re.compile(r"(?i)\bdo\s+not\s+(?:follow|obey|adhere\s+to|comply\s+with)\s+(?:your|these|any)\s+(?:instruction|rule|guideline|constraint)"), "constraint bypass", _MED),
     (re.compile(r"(?i)\bsystem\s+prompt\b"), "system prompt mention", _MED),
@@ -73,6 +68,7 @@ _ESCAPE_PATTERN = re.compile(r"(?i)</?USER_DATA>")
 @dataclass
 class InjectionMatch:
     """A single pattern match found during scanning."""
+
     description: str
     matched_text: str
     confidence: str
@@ -81,6 +77,7 @@ class InjectionMatch:
 @dataclass
 class ScanResult:
     """Full result of a prompt-injection scan."""
+
     original: str
     sanitized: str
     is_suspicious: bool

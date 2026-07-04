@@ -33,7 +33,7 @@ class VestigialAssetCleanupResult:
             "skipped": self.skipped,
             "errors": self.errors,
         }
-        
+
     @property
     def total(self) -> int:
         """Return the total number of artifacts scanned."""

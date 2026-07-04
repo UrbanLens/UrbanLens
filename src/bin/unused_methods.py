@@ -154,7 +154,9 @@ class FileAnalysis:
 
 
 def _iter_python_files(
-    root: str, exclude_dirs: set[str], exclude_files: set[str],
+    root: str,
+    exclude_dirs: set[str],
+    exclude_files: set[str],
 ) -> Iterator[str]:
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
@@ -482,10 +484,25 @@ FRAMEWORK_CLASS_HINTS = re.compile(
 # e.g. a custom DRF @action method or a CBV-style entry point with a name
 # this script hasn't specifically special-cased.
 DISPATCH_PRONE_NAMES = {
-    "save", "run", "execute", "process", "render", "dispatch", "perform",
-    "perform_create", "perform_update", "perform_destroy", "get_object",
-    "get_queryset", "get_context_data", "get_serializer_class",
-    "form_valid", "form_invalid", "pre_save", "post_save", "pre_delete",
+    "save",
+    "run",
+    "execute",
+    "process",
+    "render",
+    "dispatch",
+    "perform",
+    "perform_create",
+    "perform_update",
+    "perform_destroy",
+    "get_object",
+    "get_queryset",
+    "get_context_data",
+    "get_serializer_class",
+    "form_valid",
+    "form_invalid",
+    "pre_save",
+    "post_save",
+    "pre_delete",
     "post_delete",
 }
 
@@ -517,9 +534,7 @@ def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) ->
         if hint_source:
             score -= 40
             reasons.append(
-                f"method on '{d.class_name}', which looks like a Django/DRF view, form, admin, "
-                "or similar framework class - these are often dispatched by name/string convention "
-                "in ways this script can't fully trace",
+                f"method on '{d.class_name}', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace",
             )
 
     if d.simple_name in DISPATCH_PRONE_NAMES:
@@ -530,8 +545,7 @@ def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) ->
     if dupes > 1:
         score -= 20
         reasons.append(
-            f"'{d.simple_name}' is defined {dupes} times across the codebase, so this reference "
-            "count is shared across all of them - a use of any one of them hides this one too",
+            f"'{d.simple_name}' is defined {dupes} times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too",
         )
 
     score = max(score, 0)
@@ -664,10 +678,7 @@ def find_unused_functions(  # noqa: PLR0917
             test_only,
             result.test_counts,
             name_definition_counts,
-            extra_reason_fn=lambda d: (
-                f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) "
-                "- not referenced anywhere in production code"
-            ),
+            extra_reason_fn=lambda d: f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) - not referenced anywhere in production code",
         ),
         "rare": _build_findings(rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note),
     }
@@ -813,7 +824,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Don't treat a string literal that exactly matches a function/method name "
         "as a use. By default these count, to catch dispatch-by-string patterns like "
-        "Django/DRF's as_view({\"get\": \"method_name\"}) and getattr(obj, \"name\"). "
+        'Django/DRF\'s as_view({"get": "method_name"}) and getattr(obj, "name"). '
         "Disable for a stricter, reference-only count (risk: more false positives for "
         "those patterns, but no risk of an unrelated string coincidentally matching a "
         "generically-named function).",
@@ -867,8 +878,7 @@ def main(argv: list[str] | None = None) -> int:
         write_text_report(results, args.output)
 
     print(
-        f"Done. {len(results['unused'])} unused, {len(results['test_only'])} test-only, "
-        f"{len(results['rare'])} rarely-used. Report written to {args.output}",
+        f"Done. {len(results['unused'])} unused, {len(results['test_only'])} test-only, {len(results['rare'])} rarely-used. Report written to {args.output}",
     )
     return 0
 

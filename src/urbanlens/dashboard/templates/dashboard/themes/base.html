@@ -13,9 +13,9 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
 
-    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js" integrity="sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
 
     {% load static %}
     {# -- Shared markup engine - must load before {% block content %} scripts -- #}
@@ -456,7 +456,8 @@
             var a = e.target.closest ? e.target.closest('a[href]') : null;
             if (!a) return;
             var href = a.getAttribute('href');
-            if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+            var scheme = href ? href.trim().toLowerCase() : '';
+            if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
             e.preventDefault();
             var proceed = window.confirmDialog ? window.confirmDialog({
                 title: 'Leave page?',

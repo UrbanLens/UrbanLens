@@ -14,6 +14,7 @@ from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -249,17 +250,21 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
             lat_f, lon_f = float(latitude), float(longitude)
         except (TypeError, ValueError):
             logger.warning(
-                "get_nearby_or_create called with non-numeric coordinates (%s, %s), skipping.",
-                latitude,
-                longitude,
+                "get_nearby_or_create called with non-numeric coordinates (type %s, %s -> %s, %s), skipping.",
+                type(latitude),
+                type(longitude),
+                redact_coordinate(latitude),
+                redact_coordinate(longitude),
             )
             return None, False
 
         if math.isnan(lat_f) or math.isnan(lon_f) or math.isinf(lat_f) or math.isinf(lon_f):
             logger.warning(
-                "get_nearby_or_create called with invalid coordinates (%s, %s), skipping.",
-                latitude,
-                longitude,
+                "get_nearby_or_create called with invalid coordinates (type %s, %s -> %s, %s), skipping.",
+                type(latitude),
+                type(longitude),
+                redact_coordinate(latitude),
+                redact_coordinate(longitude),
             )
             return None, False
 

@@ -13,6 +13,7 @@ import requests
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -80,9 +81,9 @@ class BingMapsGateway(SatelliteViewProvider):
             resp.raise_for_status()
             b64 = base64.b64encode(resp.content).decode("ascii")
         except requests.exceptions.RequestException as exc:
-            logger.warning("Bing Maps satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
+            logger.warning("Bing Maps satellite image unavailable for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
-        
+
         yield SatelliteSlide(
             img_src=f"data:image/jpeg;base64,{b64}",
             source="Bing Maps Aerial",

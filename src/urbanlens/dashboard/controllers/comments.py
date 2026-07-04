@@ -185,7 +185,11 @@ class WikiCommentsView(LoginRequiredMixin, View):
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, location=location)
         comment = Comment.objects.create(
-            location=location, profile=profile, text=text, parent=parent, map_data=map_data,
+            location=location,
+            profile=profile,
+            text=text,
+            parent=parent,
+            map_data=map_data,
         )
         if image:
             comment.image = image

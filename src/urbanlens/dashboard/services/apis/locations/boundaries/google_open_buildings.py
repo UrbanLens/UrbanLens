@@ -43,7 +43,7 @@ try:
 except ImportError:  # pragma: no cover
     shapely_wkt = None
     shapely_mapping = None
-    
+
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
@@ -55,8 +55,7 @@ S2_COVERING_LEVEL = 4
 def _s2_tokens_for_bbox(bbox: BBox) -> list[str]:
     if s2sphere is None:
         raise ImportError(
-            "GoogleOpenBuildingsGateway requires the 's2sphere' package to compute "
-            "S2 cell coverings. Install with `pip install s2sphere`.",
+            "GoogleOpenBuildingsGateway requires the 's2sphere' package to compute S2 cell coverings. Install with `pip install s2sphere`.",
         )
     min_lon, min_lat, max_lon, max_lat = bbox
     region = s2sphere.LatLngRect(
@@ -97,8 +96,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         """Building centroid points overlapping ``bbox`` (smaller/faster than polygons)."""
         return self._download_shards(bbox, POINTS_BASE_URL, has_geometry=False, as_geojson=False)
 
-    def _download_shards(self, bbox: BBox, base_url: str, *, has_geometry: bool,
-                          as_geojson: bool) -> list[dict]:
+    def _download_shards(self, bbox: BBox, base_url: str, *, has_geometry: bool, as_geojson: bool) -> list[dict]:
         validate_bbox(bbox)
         min_lon, min_lat, max_lon, max_lat = bbox
         results: list[dict] = []
@@ -134,8 +132,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
             }
         if shapely_wkt is None or shapely_mapping is None:
             raise ImportError(
-                "Converting Google Open Buildings polygons to GeoJSON requires shapely "
-                "(`pip install shapely`), or call get_buildings(..., as_geojson=False).",
+                "Converting Google Open Buildings polygons to GeoJSON requires shapely (`pip install shapely`), or call get_buildings(..., as_geojson=False).",
             )
         return {
             "type": "Feature",

@@ -58,11 +58,7 @@ class CampusManager(abstract.Manager.from_queryset(CampusQuerySet)):
         Returns:
             Campus | None
         """
-        return (
-            self.filter(location=location, profile__isnull=True, pin__isnull=True)
-            .select_related("location")
-            .first()
-        )
+        return self.filter(location=location, profile__isnull=True, pin__isnull=True).select_related("location").first()
 
     def effective_for_pin(self, pin):
         """Return the Campus to display for a given pin.
@@ -82,9 +78,5 @@ class CampusManager(abstract.Manager.from_queryset(CampusQuerySet)):
         if pin_campus:
             return pin_campus
         if pin.location_id:
-            return (
-                self.filter(location_id=pin.location_id, profile__isnull=True, pin__isnull=True)
-                .select_related("location")
-                .first()
-            )
+            return self.filter(location_id=pin.location_id, profile__isnull=True, pin__isnull=True).select_related("location").first()
         return None

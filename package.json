@@ -17,7 +17,8 @@
         "up": "git pull && sudo docker compose build && sudo docker compose up",
         "test": "python -m coverage run --source='src' src/urbanlens/manage.py test",
         "coverage": "python -m coverage report",
-        "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\""
+        "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
+        "pre-commit": "pre-commit run --all-files && act pull_request"
     },
     "author": "Jess Mann",
     "license": "N/A",
@@ -25,16 +26,16 @@
         "bun-types": "latest"
     },
     "peerDependencies": {
-        "typescript": "^5.0.0"
+        "typescript": "^6.0.3"
     },
     "dependencies": {
         "bun": "^1.0.15",
-        "dotenv": "^10.0.0",
-        "dotenv-expand": "^5.1.0",
-        "sass": "^1.69.5",
-        "sass-loader": "^12.3.0",
+        "dotenv": "^17.4.2",
+        "dotenv-expand": "^13.0.0",
+        "sass": "^1.101.0",
+        "sass-loader": "^17.0.0",
         "semver": "^7.3.5",
-        "typescript": "^5.0.0",
+        "typescript": "^6.0.3",
         "yarn": "^1.22.19"
     },
     "browserslist": {

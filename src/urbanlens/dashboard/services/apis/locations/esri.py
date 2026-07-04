@@ -20,23 +20,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_WORLD_IMAGERY_EXPORT = (
-    "https://server.arcgisonline.com/arcgis/rest/services"
-    "/World_Imagery/MapServer/export"
-)
-_USGS_EXPORT = (
-    "https://basemap.nationalmap.gov/arcgis/rest/services"
-    "/USGSImageryOnly/MapServer/export"
-)
+_WORLD_IMAGERY_EXPORT = "https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export"
+_USGS_EXPORT = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
 
-_WAYBACK_CONFIG_URL = (
-    "https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com"
-    "/waybackconfig.json"
-)
-_WAYBACK_EXPORT = (
-    "https://wayback.maptiles.arcgis.com/arcgis/rest/services"
-    "/World_Imagery/MapServer/export"
-)
+_WAYBACK_CONFIG_URL = "https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json"
+_WAYBACK_EXPORT = "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/export"
 
 _WAYBACK_CACHE_KEY = "satellite_esri_wayback_releases_v3"
 _WAYBACK_CACHE_TTL = 24 * 3600
@@ -99,15 +87,7 @@ class EsriGateway(SatelliteViewProvider):
     ) -> SatelliteSlide:
         """Return a current Esri World Imagery slide."""
         return SatelliteSlide(
-            img_src=(
-                f"{_WORLD_IMAGERY_EXPORT}"
-                f"?f=image"
-                f"&imageSR=4326"
-                f"&bboxSR=4326"
-                f"&bbox={bbox}"
-                f"&size={width},{height}"
-                f"&format=jpg"
-            ),
+            img_src=(f"{_WORLD_IMAGERY_EXPORT}?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size={width},{height}&format=jpg"),
             source="Esri World Imagery",
             date="Current",
             detail="High resolution - current imagery",
@@ -122,15 +102,7 @@ class EsriGateway(SatelliteViewProvider):
     ) -> SatelliteSlide:
         """Return a current USGS National Map imagery slide."""
         return SatelliteSlide(
-            img_src=(
-                f"{_USGS_EXPORT}"
-                f"?f=image"
-                f"&imageSR=4326"
-                f"&bboxSR=4326"
-                f"&bbox={bbox}"
-                f"&size={width},{height}"
-                f"&format=jpg"
-            ),
+            img_src=(f"{_USGS_EXPORT}?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size={width},{height}&format=jpg"),
             source="USGS National Map",
             date="Current",
             detail="High resolution - US coverage only",
@@ -165,16 +137,7 @@ class EsriGateway(SatelliteViewProvider):
 
             slides.append(
                 SatelliteSlide(
-                    img_src=(
-                        f"{_WAYBACK_EXPORT}"
-                        f"?f=image"
-                        f"&imageSR=4326"
-                        f"&bboxSR=4326"
-                        f"&bbox={bbox}"
-                        f"&size={width},{height}"
-                        f"&format=jpg"
-                        f"&time={release_num}"
-                    ),
+                    img_src=(f"{_WAYBACK_EXPORT}?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size={width},{height}&format=jpg&time={release_num}"),
                     source="Esri Wayback",
                     date=date_label,
                     detail="High resolution - historical World Imagery release",

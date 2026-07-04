@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 from requests import HTTPError
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -16,14 +17,6 @@ logger = logging.getLogger(__name__)
 
 class BraveSearchError(RuntimeError):
     """Raised when the Brave Search API cannot complete a request."""
-
-
-def _mask_secret(value: str | None) -> str:
-    if not value:
-        return "<missing>"
-    if len(value) <= 8:
-        return "<redacted>"
-    return f"{value[:4]}...{value[-4:]}"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -75,7 +68,7 @@ class BraveSearchGateway(Gateway):
             logger.warning(
                 "Brave Search request failed with status %s; key=%s",
                 response.status_code,
-                _mask_secret(self.api_key),
+                redact_secret(self.api_key),
             )
             raise BraveSearchError(
                 f"Brave Search request failed with status {response.status_code}",

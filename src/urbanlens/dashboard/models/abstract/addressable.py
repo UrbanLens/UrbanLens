@@ -131,6 +131,7 @@ class AddressableModel(Model):
     def cached_place_name(self, value: str | None) -> None:
         """Assign a cached place name by creating or updating the shared GooglePlace row."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
         if value is None and not self.google_place_id:
             return
         service = GooglePlaceService()
@@ -156,6 +157,7 @@ class AddressableModel(Model):
     def cid(self, value: int | Decimal | None) -> None:
         """Store a Google Maps CID on the shared cache row for these coordinates."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
         if value is None:
             return
         GooglePlaceService().set_cid_for_entity(self, value)
@@ -169,6 +171,7 @@ class AddressableModel(Model):
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
         if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
             return "No Information Available"
         service = GooglePlaceService()
@@ -182,6 +185,7 @@ class AddressableModel(Model):
     def has_place_name(self) -> bool:
         """True when the cached or resolved Google place name is useful for queries."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
         return is_meaningful_name(self.place_name)
 
     def __setattr__(self, name: str, value) -> None:
@@ -195,6 +199,7 @@ class AddressableModel(Model):
         """
         if name == "google_place" and value is not None:
             from urbanlens.dashboard.models.google_place.model import GooglePlace
+
             if not isinstance(value, GooglePlace) and hasattr(value, "cached_place_name"):
                 self.__dict__["_google_place_stub"] = value
                 self.__dict__["google_place_id"] = getattr(value, "pk", None)

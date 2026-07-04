@@ -931,7 +931,7 @@
         font-size: inherit;
 
         &:hover {
-            i { color: darken($primary-color, 10%); }
+            i { color: #{$primary-color} }
             span { text-decoration: underline; text-decoration-color: var(--ul-grey-1a); }
         }
 

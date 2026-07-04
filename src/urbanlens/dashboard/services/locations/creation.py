@@ -78,11 +78,7 @@ class LocationCreationService:
             service.ensure_linked(pin)
 
         pin_updates: dict[str, object] = {"location": location}
-        if (
-            normalize_coordinate(pin.latitude) == normalize_coordinate(location.latitude)
-            and normalize_coordinate(pin.longitude) == normalize_coordinate(location.longitude)
-            and pin.google_place_id != location.google_place_id
-        ):
+        if normalize_coordinate(pin.latitude) == normalize_coordinate(location.latitude) and normalize_coordinate(pin.longitude) == normalize_coordinate(location.longitude) and pin.google_place_id != location.google_place_id:
             pin_updates["google_place"] = location.google_place
         Pin.objects.filter(pk=pin.pk, location__isnull=True).update(**pin_updates)
         return location

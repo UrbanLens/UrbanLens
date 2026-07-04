@@ -13,12 +13,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_YEARS: tuple[int, ...] = (2019, 2016, 2013, 2011)
 
-_WMS_BASE = (
-    "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
-    "?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0"
-    "&LAYERS=Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual"
-    "&CRS=CRS:84&WIDTH=640&HEIGHT=400&FORMAT=image/jpeg"
-)
+_WMS_BASE = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual&CRS=CRS:84&WIDTH=640&HEIGHT=400&FORMAT=image/jpeg"
 
 
 @dataclass(slots=True, kw_only=True)

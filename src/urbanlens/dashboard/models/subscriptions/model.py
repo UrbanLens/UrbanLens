@@ -135,10 +135,14 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
     if user.has_perm("dashboard.view_site_admin"):
         return True
     now = timezone.now()
-    subscriptions = UserSubscription.objects.filter(
-        user=user,
-        revoked_at__isnull=True,
-    ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).select_related("role")
+    subscriptions = (
+        UserSubscription.objects.filter(
+            user=user,
+            revoked_at__isnull=True,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .select_related("role")
+    )
     return any(subscription.role.grants(feature) for subscription in subscriptions)
 
 

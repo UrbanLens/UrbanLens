@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # -- Login rate limiting helpers ------------------------------------------------
 
+
 def _attempts_key(username: str) -> str:
     """Cache key for the failed-attempt counter for a given username."""
     return f"login_attempts:{username.strip().lower()}"
@@ -157,6 +158,7 @@ class SignupView(generic.CreateView):
         if request.user.is_authenticated:
             return redirect("map.view")
         from urbanlens.dashboard.models.site_settings import SiteSettings
+
         settings = SiteSettings.get_current()
         if settings.signup_restricted:
             invite_token = request.GET.get("invite") or request.POST.get("invite")
@@ -187,11 +189,7 @@ class SignupView(generic.CreateView):
         )
         context = {"user": user, "verify_url": verify_url}
         subject = "Verify your UrbanLens account"
-        text_body = (
-            f"Hi {user.username},\n\n"
-            f"Please verify your email by visiting:\n{verify_url}\n\n"
-            "This link expires in 48 hours.\n\n- UrbanLens"
-        )
+        text_body = f"Hi {user.username},\n\nPlease verify your email by visiting:\n{verify_url}\n\nThis link expires in 48 hours.\n\n- UrbanLens"
         html_body = render_to_string("registration/email/verify_email.html", context)
 
         try:
@@ -288,11 +286,7 @@ class ResendVerificationView(View):
             # Delete old token and create a fresh one while preserving any
             # signup invite token captured before the verification resend.
             existing_verification = EmailVerification.objects.filter(user=user).first()
-            pending_invite_token = (
-                existing_verification.pending_invite_token
-                if existing_verification
-                else None
-            )
+            pending_invite_token = existing_verification.pending_invite_token if existing_verification else None
             EmailVerification.objects.filter(user=user).delete()
             verification = EmailVerification.objects.create(
                 user=user,
@@ -311,11 +305,7 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
     )
     context = {"user": user, "verify_url": verify_url}
     subject = "Verify your UrbanLens account"
-    text_body = (
-        f"Hi {user.username},\n\n"
-        f"Please verify your email by visiting:\n{verify_url}\n\n"
-        "This link expires in 48 hours.\n\n- UrbanLens"
-    )
+    text_body = f"Hi {user.username},\n\nPlease verify your email by visiting:\n{verify_url}\n\nThis link expires in 48 hours.\n\n- UrbanLens"
     html_body = render_to_string("registration/email/verify_email.html", context)
     try:
         msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[user.email])
@@ -394,8 +384,7 @@ class CustomLoginView(LoginView):
                     form.errors["__all__"] = form.error_class(
                         [
                             format_html(
-                                'Your email address hasn\'t been verified yet. '
-                                '<a href="{}" class="auth-inline-link">Resend verification email</a>',
+                                'Your email address hasn\'t been verified yet. <a href="{}" class="auth-inline-link">Resend verification email</a>',
                                 resend_url,
                             ),
                         ],

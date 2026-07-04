@@ -59,10 +59,7 @@ class LocalhostOnlyNetwork:
         self._original_create_connection = socket.create_connection
 
     def _blocked_message(self, host: Any) -> str:
-        return (
-            "External network access is disabled during tests. "
-            f"Attempted to connect to {host!r}; mock this integration or use localhost."
-        )
+        return f"External network access is disabled during tests. Attempted to connect to {host!r}; mock this integration or use localhost."
 
     def _guarded_connect(self, sock: socket.socket, address: Any) -> Any:
         host = _address_host(address)
@@ -120,18 +117,14 @@ def verify_external_network_blocked(
         if "External network access is disabled during tests" in str(exc):
             return
         raise ExternalNetworkGuardVerificationError(
-            "Network guard verification failed: unexpected RuntimeError while probing "
-            f"{host!r}: {exc}",
+            f"Network guard verification failed: unexpected RuntimeError while probing {host!r}: {exc}",
         ) from exc
     except OSError as exc:
         raise ExternalNetworkGuardVerificationError(
-            "Network guard verification failed: connection to external host "
-            f"{host!r} reached the OS network stack instead of being blocked by "
-            f"LocalhostOnlyNetwork ({exc}).",
+            f"Network guard verification failed: connection to external host {host!r} reached the OS network stack instead of being blocked by LocalhostOnlyNetwork ({exc}).",
         ) from exc
     else:
         connection.close()
         raise ExternalNetworkGuardVerificationError(
-            "Network guard verification failed: connection to external host "
-            f"{host!r} succeeded while tests require blocked external access.",
+            f"Network guard verification failed: connection to external host {host!r} succeeded while tests require blocked external access.",
         )

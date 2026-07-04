@@ -1,4 +1,3 @@
-
 KIND_TAG = "tag"
 KIND_CATEGORY = "category"
 KIND_STATUS = "status"
@@ -1669,7 +1668,6 @@ ICON_KEYWORDS: dict[str, str] = {
     "Σ": "greek sigma letter math",
     "Ω": "greek omega letter",
     "🌷": "spring season flower",
-
 }
 
 

@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, Sat
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
+from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
@@ -62,7 +63,7 @@ def _google_maps_api_key() -> str:
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """
     Gateway for the Google Maps API.
-    
+
     Defaults to the settings.google_unrestricted_api_key, but the app
     occasionally passes a different api key (e.g. street_view_api_key)
     """
@@ -88,7 +89,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         response = self.session.get(directions_url, params=params)
         response.raise_for_status()
         return response.json()
-    
+
     def _generate_satellite_slides(
         self,
         latitude: float,
@@ -130,7 +131,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             resp.raise_for_status()
             google_b64 = base64.b64encode(resp.content).decode("ascii")
         except requests.exceptions.RequestException as exc:
-            logger.warning("Google satellite image unavailable for %s, %s: %s", latitude, longitude, exc)
+            logger.warning("Google satellite image unavailable for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 
         yield SatelliteSlide(
@@ -156,7 +157,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Get the closest Street View image to the given latitude and longitude.
         """
         street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
-        logger.debug("Getting street view for %s, %s", latitude, longitude)
+        logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
 
         while radius <= max_radius:
             params = {
@@ -383,9 +384,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             pin_data.pop("latitude", None)
                             pin_data.pop("longitude", None)
 
-                        pin_name = (
-                            pin_data.get("name") or (location.name if location else "")
-                        )
+                        pin_name = pin_data.get("name") or (location.name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
@@ -413,7 +412,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             else:
                                 skipped_count += 1
                         except (DatabaseError, ValueError, OSError) as exc:
-                            logger.warning("Failed to create pin '%s': %s", pin_name, exc)
+                            logger.warning("Failed to create pin '%s': %s", redact_text(pin_name), exc)
                             skipped_count += 1
 
                     percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
@@ -457,7 +456,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         logger.exception("Unable to add badge to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
-            yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
+            yield sse({"type": "error", "message": "Import failed unexpectedly."})
             return
 
         yield sse(
@@ -607,11 +606,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
                     try:
                         # Private pins are never linked to a shared Location.
-                        location = (
-                            None
-                            if is_private
-                            else (Location.objects.by_cid(cid).first() if cid else None)
-                        )
+                        location = None if is_private else (Location.objects.by_cid(cid).first() if cid else None)
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,
@@ -682,7 +677,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during preview import: %s", exc)
-            yield sse({"type": "error", "message": f"Import failed unexpectedly: {exc}"})
+            yield sse({"type": "error", "message": "Import failed unexpectedly."})
             return
 
         yield sse(
@@ -790,5 +785,5 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             raise
 
         logger.info("Converted %s pins from CSV file to dicts.", len(pins))
-            
+
         return pins

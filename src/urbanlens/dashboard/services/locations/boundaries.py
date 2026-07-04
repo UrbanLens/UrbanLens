@@ -12,6 +12,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.google_open_building
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class BoundaryProviderChain:
                 boundary = provider.get_boundary(latitude, longitude, name=name)
             except Exception:
                 # TODO: Catch specific exception
-                logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, latitude, longitude)
+                logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
                 continue
             if boundary is not None:
                 return boundary

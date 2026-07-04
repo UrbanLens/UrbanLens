@@ -520,13 +520,15 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
 
         extra = {cfg.new_id_key: badge.id} if cfg.new_id_key else None
         if request.headers.get("Accept") == "application/json":
-            return JsonResponse({
-                "id": badge.id,
-                "name": badge.name,
-                "kind": badge.kind,
-                "icon": badge.icon or "",
-                "color": badge.color or "",
-            })
+            return JsonResponse(
+                {
+                    "id": badge.id,
+                    "name": badge.name,
+                    "kind": badge.kind,
+                    "icon": badge.icon or "",
+                    "color": badge.color or "",
+                }
+            )
         return _render_rows(request, self.kind, profile, extra)
 
 
@@ -868,11 +870,7 @@ class BadgeBulkConvertView(_BadgeKindMixin, LoginRequiredMixin, View):
         badges = list(Badge.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             badges = [badge for badge in badges if not badge.is_protected]
-        valid_parents = (
-            list(Badge.objects.visible_to(profile).filter(id__in=payload["add_parent_ids"]))
-            if payload["add_parent_ids"]
-            else []
-        )
+        valid_parents = list(Badge.objects.visible_to(profile).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
         for badge in badges:
             _apply_bulk_fields(badge, payload)
             badge.kind = new_kind
@@ -1112,4 +1110,3 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
                 empty_text="No badges. Click + to add one.",
             ),
         )
-

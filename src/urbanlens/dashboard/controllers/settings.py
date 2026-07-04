@@ -111,7 +111,6 @@ class SettingsView(LoginRequiredMixin, View):
                     return redirect("settings.view")
 
         elif section == "ai":
-
             if user_has_feature(request.user, SiteFeature.AI):
                 ai_form = AISettingsForm(request.POST, instance=profile)
                 if ai_form.is_valid():

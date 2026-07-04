@@ -38,9 +38,11 @@ def get_search_gateway() -> SearchGateway:
 
     if provider == SearchProviderChoice.GOOGLE:
         from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchGateway
+
         return GoogleCustomSearchGateway()
 
     from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
+
     return BraveSearchGateway()
 
 

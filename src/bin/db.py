@@ -239,8 +239,7 @@ class Db:
     def long_queries(self) -> int:
         """Report queries running longer than 5 minutes."""
         return self.execute_sql(
-            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query "
-            "FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
+            "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';",
         )
 
     def locks(self) -> int:
