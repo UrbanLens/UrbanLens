@@ -393,7 +393,7 @@
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
 
     .material-icons {
         font-size: 1.1rem;
@@ -411,7 +411,7 @@
 .settings-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: $text-color;
+    color: var(--ul-grey-9);
     margin: 0 0 0.25rem;
 }
 
@@ -494,7 +494,7 @@
     display: block;
     font-weight: 600;
     font-size: 0.9rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     margin-bottom: 0.25rem;
 }
 
@@ -525,7 +525,7 @@
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     background: var(--ul-grey-0);
     appearance: auto;
 
@@ -552,7 +552,7 @@
 .settings-toggle-label {
     font-weight: 600;
     font-size: 0.9rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     cursor: pointer;
     margin: 0;
 }
@@ -777,7 +777,7 @@
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     background: var(--ul-grey-0);
 
     &:focus {
@@ -1017,7 +1017,7 @@ textarea.edit-textarea {
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.95rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     background: var(--ul-grey-0);
     box-sizing: border-box;
 
@@ -1239,7 +1239,7 @@ body .edit-profile-page .edit-username-input {
 .edit-link-handle {
     flex: 1;
     font-size: 0.9rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     text-decoration: none;
     @include truncate;
 
@@ -1292,7 +1292,7 @@ body .edit-profile-page .edit-username-input {
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     font-size: 0.9rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     background: var(--ul-grey-0);
 
     &::placeholder {
@@ -1337,7 +1337,7 @@ body .edit-profile-page .edit-username-input {
     padding: 4px 0;
 
     &:hover {
-        color: $text-color;
+        color: var(--ul-grey-9);
     }
 }
 
@@ -1933,7 +1933,7 @@ body .edit-profile-page .edit-username-input {
 
 .ext-warn-url {
     font-size: 0.85rem;
-    color: $text-color;
+    color: var(--ul-grey-9);
     background: var(--ul-grey-1);
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
