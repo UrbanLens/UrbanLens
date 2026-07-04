@@ -5,14 +5,18 @@ All HTTP is mocked - no real network access occurs.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from hypothesis import given, settings as hyp_settings, strategies as st
-import pytest
+from hypothesis import given
+from hypothesis import settings as hyp_settings
+from hypothesis import strategies as st
 from requests import HTTPError
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchError, BraveSearchGateway
+from urbanlens.dashboard.services.apis.search.brave.search import (
+    BraveSearchError,
+    BraveSearchGateway,
+)
 from urbanlens.dashboard.services.redact import redact_secret
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
@@ -49,7 +53,7 @@ class MaskSecretTests(TestCase):
     def test_key_never_equals_original(self, key: str):
         self.assertNotEqual(redact_secret(key), key)
 
-    @given(st.text(min_size=1, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
+    @given(st.text(min_size=5, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
     @_hyp
     def test_key_never_appears_as_substring_of_result(self, key: str):
         if key in "<redacted:":

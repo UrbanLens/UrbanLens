@@ -12,6 +12,7 @@ ARG GIT_NAME
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
+    PATH=/app/.venv/bin:$PATH \
     UL_ENVIRONMENT=development \
     NODE_ENV=development \
     UL_DB_HOST=urbanlens_db \
@@ -69,13 +70,15 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Use the same reproducible Bun binary source as the production Dockerfile.
+# Use the same reproducible Bun and uv binary sources as the production Dockerfile.
 COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
-
-COPY requirements /tmp/pip-tmp/requirements/
-RUN pip --no-cache-dir install -r /tmp/pip-tmp/requirements/dev.txt
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
+
+# Install Python dependencies (including the `dev` group) from pyproject.toml/uv.lock.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
 
 RUN mkdir -p \
         /app/src/urbanlens/downloads/downloads \

@@ -3,7 +3,7 @@ default_language_version:
     python: python3.12
 
 default_install_hook_types: [pre-commit, pre-push]
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml)|.+/requirements/.*\.txt)$'
+files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
 # GITHUB
@@ -22,7 +22,6 @@ repos:
     -   id: detect-private-key
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
-    -   id: requirements-txt-fixer
     -   id: mixed-line-ending
         args: [--fix=lf]
     -   id: debug-statements
