@@ -284,7 +284,17 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export all user pins as a rich JSON file (UrbanLens custom format)."""
+    """Export all user pins as a rich JSON file (UrbanLens custom format).
+
+    Only personal Pin data is exported here - never the shared Location it may
+    be linked to. Location is community wiki data (canonical name, address,
+    description) that belongs to the instance, not to any one user's export.
+    Each pin's *effective* coordinates are exported instead of its raw
+    lat/lng override, so a pin that currently relies on its Location for
+    placement still has somewhere to land on import. On import, pins are
+    re-linked to an existing nearby Location or get a new one created, the
+    same way a manually-added pin or a Google Takeout import would be.
+    """
     from urbanlens.dashboard.models.pin.model import Pin
 
     pins = (
@@ -296,28 +306,6 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
     rows = []
     for pin in pins:
-        location_data = None
-        if pin.location:
-            loc = pin.location
-            location_data = {
-                "uuid": str(loc.uuid),
-                "name": loc.name,
-                "description": loc.description or "",
-                "latitude": str(loc.latitude),
-                "longitude": str(loc.longitude),
-                "street_number": loc.street_number or "",
-                "route": loc.route or "",
-                "locality": loc.locality or "",
-                "administrative_area_level_1": loc.administrative_area_level_1 or "",
-                "administrative_area_level_2": loc.administrative_area_level_2 or "",
-                "administrative_area_level_3": loc.administrative_area_level_3 or "",
-                "country": loc.country or "",
-                "zipcode": loc.zipcode or "",
-                "zipcode_suffix": loc.zipcode_suffix or "",
-                "date_abandoned": str(loc.date_abandoned) if loc.date_abandoned else None,
-                "date_last_active": str(loc.date_last_active) if loc.date_last_active else None,
-            }
-
         rows.append(
             {
                 "uuid": str(pin.uuid),
@@ -328,8 +316,8 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "priority": pin.priority,
                 "is_private": pin.is_private,
                 "pin_type": pin.pin_type,
-                "latitude": str(pin.latitude) if pin.latitude else None,
-                "longitude": str(pin.longitude) if pin.longitude else None,
+                "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
+                "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
                 "last_visited": str(pin.last_visited) if pin.last_visited else None,
                 "date_abandoned": str(pin.date_abandoned) if pin.date_abandoned else None,
                 "date_last_active": str(pin.date_last_active) if pin.date_last_active else None,
@@ -340,7 +328,6 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "created": str(pin.created),
                 "updated": str(pin.updated),
                 "badge_uuids": [str(b.uuid) for b in pin.badges.all()],
-                "location": location_data,
             },
         )
 
