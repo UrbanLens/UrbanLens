@@ -173,6 +173,14 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         logger.exception("Import failed for user %s", user_id)
         job_status.write("error", 0, "Import failed. Please check the file and try again.")
         return False
+    except Exception:
+        # Catch-all so an unanticipated exception from an individual importer (e.g. a
+        # malformed field in one row) can never leave the job stuck at "running" forever -
+        # without this, the status cache is never written to "error" and the frontend
+        # polls indefinitely with no feedback to the user.
+        logger.exception("Unexpected import failure for user %s", user_id)
+        job_status.write("error", 0, "Import failed unexpectedly. Please check the file and try again.")
+        return False
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
         schedule_import_cleanup(os.path.dirname(zip_path), job_status)

@@ -167,21 +167,28 @@ class ExportStatusView(LoginRequiredMixin, View):
             logger.error("Invalid job ID: %s", job_id)  # noqa: TRY400
             return _export_error_partial(request, job_id, "Invalid export job. Please start a new export.")
 
-        data = ExportJobStatus(job_id).read()
+        try:
+            data = ExportJobStatus(job_id).read()
 
-        if not data:
-            logger.debug("Job not found or expired: job %s, user %s", job_id, request.user.pk)
-            return _export_error_partial(request, job_id, "Export job not found or expired. Please start a new export.")
+            if not data:
+                logger.debug("Job not found or expired: job %s, user %s", job_id, request.user.pk)
+                return _export_error_partial(request, job_id, "Export job not found or expired. Please start a new export.")
 
-        if data.get("user_id") != request.user.pk:
-            logger.warning("Attempting to view export for unauthorized user: job %s, user %s", job_id, request.user.pk)
-            return _export_error_partial(
-                request,
-                job_id,
-                "Could not verify export ownership. Please start a new export.",
-            )
+            if data.get("user_id") != request.user.pk:
+                logger.warning("Attempting to view export for unauthorized user: job %s, user %s", job_id, request.user.pk)
+                return _export_error_partial(
+                    request,
+                    job_id,
+                    "Could not verify export ownership. Please start a new export.",
+                )
 
-        return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
+            return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
+        except Exception:
+            # Surface a friendly, non-polling error state instead of letting HTMX's poller
+            # hang on a raw 500 with no feedback to the user (see ImportStatusView for the
+            # same pattern - the fragment's "error" state removes the hx-get polling attrs).
+            logger.exception("Unexpected error rendering export status: job %s, user %s", job_id, request.user.pk)
+            return _export_error_partial(request, job_id, "Something went wrong checking export status. Please try again.")
 
 
 class ExportDownloadView(LoginRequiredMixin, View):
@@ -313,16 +320,24 @@ class ImportStatusView(LoginRequiredMixin, View):
             logger.error("Invalid import job ID: %s", job_id)  # noqa: TRY400
             return _import_error_partial(request, job_id, "Invalid import job. Please try again.")
 
-        data = ImportJobStatus(job_id).read()
+        try:
+            data = ImportJobStatus(job_id).read()
 
-        if not data:
-            return _import_error_partial(request, job_id, "Import job not found or expired. Please try again.")
+            if not data:
+                return _import_error_partial(request, job_id, "Import job not found or expired. Please try again.")
 
-        if data.get("user_id") != request.user.pk:
-            logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
-            return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
+            if data.get("user_id") != request.user.pk:
+                logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
+                return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
 
-        return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
+            return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
+        except Exception:
+            # Never let an unexpected error surface as a raw 500 to the HTMX poller - it has
+            # no error handling and will just silently stop, leaving the progress bar spinning
+            # forever with no feedback to the user. Render the error state instead, which
+            # drops the hx-get polling attributes and shows a message.
+            logger.exception("Unexpected error rendering import status: job %s, user %s", job_id, request.user.pk)
+            return _import_error_partial(request, job_id, "Something went wrong checking import status. Please try again.")
 
 
 class AdminToolsView(LoginRequiredMixin, PermissionRequiredMixin, View):

@@ -347,3 +347,65 @@ REST_FRAMEWORK = {
         "user": "600/minute",
     },
 }
+
+# Logging. Django's own default LOGGING config only sends request-level
+# exceptions (5xx) to mail_admins when DEBUG=False, and its console handler is
+# filtered out entirely outside DEBUG - so without this, unhandled errors in
+# staging/production vanish silently unless email is configured. The app and
+# celery containers already mount a shared /var/log volume (see
+# docker-compose.yml, and celery-beat's --schedule path); this wires Django
+# into it so tracebacks are always visible via `docker logs` and on disk.
+LOG_DIR = os.getenv("UL_LOG_DIR", "/var/log/urbanlens")
+_log_handlers = ["console"]
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+except OSError:
+    pass
+else:
+    _log_handlers.append("file")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname} {name} [{module}:{lineno}] {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.path.join(LOG_DIR, "django.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": _log_handlers,
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": _log_handlers,
+            "level": "INFO",
+            "propagate": False,
+        },
+        # Full tracebacks for unhandled view exceptions (5xx responses).
+        "django.request": {
+            "handlers": _log_handlers,
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "urbanlens": {
+            "handlers": _log_handlers,
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+    },
+}
