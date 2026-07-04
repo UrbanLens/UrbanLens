@@ -93,10 +93,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 #     /app/src/backups/
 #   - bun build output: dashboard/frontend and core/frontend inside the source tree
 #
-# Most of these paths already exist in the source tree and were already given
-# to appuser by the COPY --chown above, so mkdir -p is a no-op for them; only
-# backups/ and the downloads/ subfolders (gitignored) are genuinely new here,
-# so only those need an explicit chown.
+# These are all gitignored (bun build output, logs, downloads, backups), so
+# git never tracks them and they don't exist after COPY --chown above
 RUN mkdir -p \
         /app/src/urbanlens/downloads/downloads \
         /app/src/urbanlens/downloads/exports \
@@ -109,12 +107,20 @@ RUN mkdir -p \
         /app/src/logs/app.log \
         /app/src/logs/debugging.log \
         /app/src/logs/test.log && \
-    chown -R appuser:appuser /app/src/urbanlens/downloads /app/src/backups /app/src/**/frontend/static /app/src/logs
+    chown -R appuser:appuser \
+        /app/src/urbanlens/downloads \
+        /app/src/urbanlens/frontend \
+        /app/src/urbanlens/dashboard/frontend \
+        /app/src/urbanlens/core/frontend \
+        /app/src/backups \
+        /app/src/logs
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
 # COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
 # Writing to /etc/gitconfig (--system) applies the exception to all users.
-RUN git config --system safe.directory /app
+RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
+        git config --system safe.directory /app \
+    fi
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
