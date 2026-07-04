@@ -174,10 +174,12 @@ body.page-auth {
 .auth-submit-btn {
     background-color: $color-indigo-600;
     font-size: 1rem;
+    color: $color-grey-0a;
 
     &:hover {
         background: $color-indigo-700;
         box-shadow: 0 4px 12px rgba(79, 70, 229, .4);
+        color: $color-grey-0;
     }
 
     &:active {

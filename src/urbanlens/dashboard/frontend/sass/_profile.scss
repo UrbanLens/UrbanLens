@@ -354,20 +354,22 @@
     align-items: center;
     gap: 7px;
     padding: 7px 16px;
-    border-radius: 20px;
-    border: 1.5px solid var(--ul-grey-1a);
     font-size: 0.875rem;
-    color: $text-secondary;
     text-decoration: none;
     transition: border-color 0.15s ease, color 0.15s ease;
+
+    border-radius: 20px;
+    border: 1.5px solid var(--ul-grey-4);
+    color: var(--ul-black);
+    background-color: var(--ul-grey-3);
 
     i {
         font-size: 1rem;
     }
 
     &:hover {
-        border-color: var(--primary-color);
-        color: var(--primary-color);
+        border-color: var(--ul-grey-5);
+        background-color: var(--ul-grey-4);
     }
 }
 
@@ -916,16 +918,16 @@
 .edit-field {
     margin-bottom: 1.1rem;
     flex: 1;
-
-    + .edit-field {
-        margin-left: 1rem;
-    }
 }
 
 .edit-field-row {
     display: flex;
     gap: 1rem;
     flex-wrap: wrap;
+
+    input[type="text"] {
+        width: calc(100% - 1rem);
+    }
 }
 
 .edit-label {
@@ -1022,25 +1024,6 @@
     }
 }
 
-.edit-input,
-input.edit-input,
-textarea.edit-textarea {
-    width: 100%;
-    padding: 9px 12px;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
-    font-size: 0.95rem;
-    color: var(--ul-grey-9);
-    background: var(--ul-grey-0);
-    box-sizing: border-box;
-
-    &:focus {
-        outline: none;
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 2px rgba($primary-color, 0.15);
-    }
-}
-
 textarea.edit-textarea {
     resize: vertical;
     min-height: 80px;
@@ -1121,21 +1104,32 @@ textarea.edit-textarea {
     height: 3rem;
     flex: 0 0 auto;
     padding: 0 10px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-grey-1);
     border-right: none;
+    border-top: none;
     border-radius: $radius-sm 0 0 $radius-sm;
     font-size: .9rem;
-    background: var(--ul-grey-1);
+    background: var(--ul-grey-0);
     color: var(--ul-grey-6);
     white-space: nowrap;
     user-select: none;
+}
+
+.edit-username-wrap {
+    &:hover {
+        .edit-username-input, 
+        .edit-username-at {
+            background-color: var(--ul-grey-0b);
+            border-color: var(--ul-grey-2);
+            color: var(--ul-grey-8);
+        }
+    }
 }
 
 body div.container .edit-profile-page input[type=text].edit-username-input {
     height: 3rem;
     border-left: none;
     border-radius: 0 $radius-sm $radius-sm 0;
-    background-color: var(--ul-grey-1);
     flex: 1;
     margin-bottom: 0;
     padding: 0;
@@ -1359,7 +1353,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 // -- Profile page modernization ------------------------------------------------
 
 .profile-hero {
-    background: linear-gradient(135deg, var(--ul-grey-0) 0%, var(--ul-grey-1) 100%);
+    background: linear-gradient(135deg, var(--ul-grey-0a) 0%, var(--ul-grey-0b) 40%);
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     box-shadow: 0 2px 12px rgba(0, 0, 0, .08);

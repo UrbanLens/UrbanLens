@@ -165,13 +165,6 @@
         background: rgba(0, 0, 0, .7);
     }
 
-    .edit-input,
-    input.edit-input,
-    textarea.edit-textarea {
-        color: var(--ul-grey-1);
-        border-color: var(--ul-grey-7b);
-    }
-
     .edit-avatar-placeholder {
         background: var(--ul-grey-0);
         border-color: var(--ul-grey-7b);
@@ -329,16 +322,6 @@
     .profile-section,
     .profile-hero {
         @include standard-section;
-    }
-
-    .social-link {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-3b);
-
-        &:hover {
-            border-color: var(--primary-color);
-            color: var(--primary-color);
-        }
     }
 
     .shared-visited-item {
