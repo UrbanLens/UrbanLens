@@ -35,8 +35,7 @@ class AppleMapsGateway(Gateway):
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
             raise ValueError(
-                "Apple Maps JWT is not set. Set UL_APPLE_MAPS_API_KEY to a signed JWT. "
-                "See https://developer.apple.com/documentation/applemapsserverapi/",
+                "Apple Maps JWT is not set. Set UL_APPLE_MAPS_API_KEY to a signed JWT. See https://developer.apple.com/documentation/applemapsserverapi/",
             )
         return {"Authorization": f"Bearer {self.api_key}"}
 

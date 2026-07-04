@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import logging
 import math
@@ -9,7 +9,6 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from fastkml import kml
-import requests
 from tqdm import tqdm
 
 from urbanlens.dashboard.models.badges.model import Badge
@@ -387,9 +386,7 @@ class GoogleMapsGateway(Gateway):
                             pin_data.pop("latitude", None)
                             pin_data.pop("longitude", None)
 
-                        pin_name = (
-                            pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
-                        )
+                        pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
@@ -603,11 +600,7 @@ class GoogleMapsGateway(Gateway):
 
                     try:
                         # Private pins are never linked to a shared Location.
-                        location = (
-                            None
-                            if is_private
-                            else (Location.objects.by_cid(cid).first() if cid else None)
-                        )
+                        location = None if is_private else (Location.objects.by_cid(cid).first() if cid else None)
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,
@@ -716,7 +709,8 @@ class GoogleMapsGateway(Gateway):
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except Exception as e:
-            logger.exception("Failed to import pins from KML: %s", str(e))
+            # TODO: specify exception type
+            logger.exception("Failed to import pins from KML: %s", e)
             raise
 
         return pins
@@ -754,7 +748,8 @@ class GoogleMapsGateway(Gateway):
             logger.info("Converted %s pins from JSON file to dicts.", len(pins))
 
         except Exception as e:
-            logger.exception("Failed to import pins from JSON: %s", str(e))
+            # TODO: specify exception type
+            logger.exception("Failed to import pins from JSON: %s", e)
             raise
 
         return pins
@@ -786,7 +781,8 @@ class GoogleMapsGateway(Gateway):
 
             logger.info("Converted %s pins from CSV file to dicts.", len(pins))
         except Exception as e:
-            logger.exception("Failed to import pins from CSV: %s", str(e))
+            # TODO: specify exception type
+            logger.exception("Failed to import pins from CSV: %s", e)
             raise
 
         return pins

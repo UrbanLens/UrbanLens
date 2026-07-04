@@ -1,61 +1,64 @@
 """Tests for BraveSearchGateway.
 
-Covers _mask_secret, _validate, _parse, and search().
+Covers redact_secret, _validate, _parse, and search().
 All HTTP is mocked - no real network access occurs.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-from hypothesis import given, settings as hyp_settings
+from hypothesis import given
+from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 from requests import HTTPError
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchError, BraveSearchGateway, _mask_secret
-
+from urbanlens.dashboard.services.apis.search.brave.search import (
+    BraveSearchError,
+    BraveSearchGateway,
+)
+from urbanlens.dashboard.services.redact import redact_secret
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
 
 
 # ---------------------------------------------------------------------------
-# _mask_secret
+# redact_secret
 # ---------------------------------------------------------------------------
 
 class MaskSecretTests(TestCase):
-    """_mask_secret redacts API keys safely."""
+    """redact_secret fingerprints API keys without ever revealing them."""
 
     def test_none_returns_missing(self):
-        self.assertEqual(_mask_secret(None), "<missing>")
+        self.assertEqual(redact_secret(None), "<missing>")
 
     def test_empty_string_returns_missing(self):
-        self.assertEqual(_mask_secret(""), "<missing>")
+        self.assertEqual(redact_secret(""), "<missing>")
 
-    def test_short_key_returns_redacted(self):
-        self.assertEqual(_mask_secret("abc"), "<redacted>")
-        self.assertEqual(_mask_secret("12345678"), "<redacted>")
-
-    def test_long_key_shows_first_and_last_four(self):
-        result = _mask_secret("ABCDEFGHIJ1234")
-        self.assertTrue(result.startswith("ABCD"))
-        self.assertTrue(result.endswith("1234"))
-        self.assertIn("...", result)
-
-    def test_long_key_never_reveals_middle(self):
+    def test_key_never_reveals_any_substring(self):
         key = "ABCD_MIDDLE_1234"
-        result = _mask_secret(key)
+        result = redact_secret(key)
+        self.assertNotIn("ABCD", result)
+        self.assertNotIn("1234", result)
         self.assertNotIn("_MIDDLE_", result)
 
-    @given(st.text(min_size=9, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
-    @_hyp
-    def test_long_key_always_contains_ellipsis(self, key: str):
-        self.assertIn("...", _mask_secret(key))
+    def test_same_key_produces_same_fingerprint(self):
+        self.assertEqual(redact_secret("some-key"), redact_secret("some-key"))
 
-    @given(st.text(min_size=9, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
+    def test_different_keys_produce_different_fingerprints(self):
+        self.assertNotEqual(redact_secret("some-key"), redact_secret("other-key"))
+
+    @given(st.text(min_size=1, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
     @_hyp
-    def test_long_key_never_equals_original(self, key: str):
-        self.assertNotEqual(_mask_secret(key), key)
+    def test_key_never_equals_original(self, key: str):
+        self.assertNotEqual(redact_secret(key), key)
+
+    @given(st.text(min_size=5, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
+    @_hyp
+    def test_key_never_appears_as_substring_of_result(self, key: str):
+        if key in "<redacted:":
+            self.skipTest("False positive if key is in <redacted:...> prefix")
+        self.assertNotIn(key, redact_secret(key))
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from requests import HTTPError
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -19,15 +20,6 @@ logger = logging.getLogger(__name__)
 
 class GoogleCustomSearchError(RuntimeError):
     """Raised when Google Custom Search cannot complete a request safely."""
-
-
-def _mask_secret(value: str | None) -> str:
-    """Return a log-safe representation of a Google API key or CSE id."""
-    if not value:
-        return "<missing>"
-    if len(value) <= 8:
-        return "<redacted>"
-    return f"{value[:4]}...{value[-4:]}"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -70,8 +62,8 @@ class GoogleCustomSearchGateway(Gateway):
             logger.warning(
                 "Google Custom Search request failed with status %s; key=%s cx=%s reason=%s",
                 response.status_code,
-                _mask_secret(self.api_key),
-                _mask_secret(self.cx),
+                redact_secret(self.api_key),
+                redact_secret(self.cx),
                 detail,
             )
             raise GoogleCustomSearchError(

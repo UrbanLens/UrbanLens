@@ -916,6 +916,10 @@
 .edit-field {
     margin-bottom: 1.1rem;
     flex: 1;
+
+    + .edit-field {
+        margin-left: 1rem;
+    }
 }
 
 .edit-field-row {
@@ -1127,14 +1131,14 @@ textarea.edit-textarea {
     user-select: none;
 }
 
-body .edit-profile-page .edit-username-input {
+body div.container .edit-profile-page input[type=text].edit-username-input {
     height: 3rem;
     border-left: none;
     border-radius: 0 $radius-sm $radius-sm 0;
     background-color: var(--ul-grey-1);
-    // TODO: There's a visual display bug here with borders, alignment, and bg colors
     flex: 1;
     margin-bottom: 0;
+    padding: 0;
 }
 
 .edit-username-hint {

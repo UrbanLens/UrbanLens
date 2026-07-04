@@ -46,11 +46,7 @@ def normalize_username_key(username: str) -> str:
     Returns:
         Normalized key suitable for equality checks.
     """
-    return "".join(
-        _CONFUSABLE_CHAR_MAP.get(ch, ch)
-        for ch in username.casefold()
-        if ch != "_"
-    )
+    return "".join(_CONFUSABLE_CHAR_MAP.get(ch, ch) for ch in username.casefold() if ch != "_")
 
 
 def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> bool:
@@ -71,10 +67,7 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
     queryset = User.objects.all()
     if exclude_user_id is not None:
         queryset = queryset.exclude(pk=exclude_user_id)
-    return any(
-        normalize_username_key(existing) == candidate_key
-        for existing in queryset.values_list("username", flat=True)
-    )
+    return any(normalize_username_key(existing) == candidate_key for existing in queryset.values_list("username", flat=True))
 
 
 class UsernameGenerator:
@@ -89,27 +82,143 @@ class UsernameGenerator:
     """
 
     ADJECTIVES: tuple[str, ...] = (
-        "agile", "amber", "ancient", "bold", "brave", "bright", "calm", "clear",
-        "cool", "cosmic", "crisp", "daring", "deep", "deft", "dynamic", "early",
-        "earthy", "epic", "fierce", "fleet", "free", "fresh", "golden", "grand",
-        "green", "hollow", "humble", "keen", "kind", "late",
-        "leafy", "light", "lofty", "lone", "loyal", "lucid", "lunar", "misty",
-        "noble", "north", "open", "prime", "quick", "quiet", "rapid", "raw",
-        "regal", "roaming", "rugged", "sharp", "silent", "silver", "sleek",
-        "solar", "stark", "steady", "still", "stone", "stormy", "swift", "tall",
-        "vast", "vivid", "warm", "wide", "wild", "wise", "worthy",
+        "agile",
+        "amber",
+        "ancient",
+        "bold",
+        "brave",
+        "bright",
+        "calm",
+        "clear",
+        "cool",
+        "cosmic",
+        "crisp",
+        "daring",
+        "deep",
+        "deft",
+        "dynamic",
+        "early",
+        "earthy",
+        "epic",
+        "fierce",
+        "fleet",
+        "free",
+        "fresh",
+        "golden",
+        "grand",
+        "green",
+        "hollow",
+        "humble",
+        "keen",
+        "kind",
+        "late",
+        "leafy",
+        "light",
+        "lofty",
+        "lone",
+        "loyal",
+        "lucid",
+        "lunar",
+        "misty",
+        "noble",
+        "north",
+        "open",
+        "prime",
+        "quick",
+        "quiet",
+        "rapid",
+        "raw",
+        "regal",
+        "roaming",
+        "rugged",
+        "sharp",
+        "silent",
+        "silver",
+        "sleek",
+        "solar",
+        "stark",
+        "steady",
+        "still",
+        "stone",
+        "stormy",
+        "swift",
+        "tall",
+        "vast",
+        "vivid",
+        "warm",
+        "wide",
+        "wild",
+        "wise",
+        "worthy",
     )
 
     ANIMALS: tuple[str, ...] = (
-        "badger", "bear", "beetle", "bison", "bobcat", "buck", "crane",
-        "crow", "deer", "dove", "duck", "eagle", "elk", "falcon", "ferret",
-        "finch", "fox", "gecko", "goat", "grouse", "hawk", "heron", "ibis",
-        "jackal", "jaguar", "jay", "kestrel", "kite", "lark", "linnet",
-        "lynx", "mink", "mole", "moose", "moth", "newt", "nighthawk", "otter",
-        "owl", "peregrine", "pika", "pine", "puma", "quail", "raven", "robin",
-        "salamander", "shrew", "skunk", "snipe", "sparrow", "starling",
-        "stoat", "stork", "swift", "thrush", "toad", "viper", "vole",
-        "wagtail", "warbler", "weasel", "whippet", "widgeon", "wolf", "wren",
+        "badger",
+        "bear",
+        "beetle",
+        "bison",
+        "bobcat",
+        "buck",
+        "crane",
+        "crow",
+        "deer",
+        "dove",
+        "duck",
+        "eagle",
+        "elk",
+        "falcon",
+        "ferret",
+        "finch",
+        "fox",
+        "gecko",
+        "goat",
+        "grouse",
+        "hawk",
+        "heron",
+        "ibis",
+        "jackal",
+        "jaguar",
+        "jay",
+        "kestrel",
+        "kite",
+        "lark",
+        "linnet",
+        "lynx",
+        "mink",
+        "mole",
+        "moose",
+        "moth",
+        "newt",
+        "nighthawk",
+        "otter",
+        "owl",
+        "peregrine",
+        "pika",
+        "pine",
+        "puma",
+        "quail",
+        "raven",
+        "robin",
+        "salamander",
+        "shrew",
+        "skunk",
+        "snipe",
+        "sparrow",
+        "starling",
+        "stoat",
+        "stork",
+        "swift",
+        "thrush",
+        "toad",
+        "viper",
+        "vole",
+        "wagtail",
+        "warbler",
+        "weasel",
+        "whippet",
+        "widgeon",
+        "wolf",
+        "wren",
     )
 
     FALLBACK_PREFIX: str = "explorer"
@@ -137,7 +246,7 @@ class UsernameGenerator:
 
         logger.warning("All username candidates collided; falling back to %s", cls.FALLBACK_PREFIX)
         now = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
-        
+
         for _ in range(cls.MAX_RETRIES):
             fallback = f"{cls.FALLBACK_PREFIX}{now}{secrets.randbelow(8_000) + 1_000}"
             if not username_is_taken(fallback):

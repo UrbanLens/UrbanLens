@@ -91,7 +91,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
     point = PointField(geography=True, default=Point(0, 0))
-    
+
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
     color = CharField(max_length=20, null=True, blank=True)
@@ -259,7 +259,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         if include_country and country:
             parts.append(country)
         return " ".join(parts)
-    
+
     @property
     def effective_icon(self) -> str | None:
         """Icon to display for this pin following the priority chain."""
@@ -306,7 +306,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     def meaningful_official_name(self) -> str | None:
         """Official name only when it is useful for external API searches."""
         return self.effective_official_name if is_meaningful_name(self.effective_official_name) else None
-    
+
     @property
     def meaningful_name(self) -> str | None:
         """The pin's name, or the location's canonical name if the pin has no name."""
@@ -368,7 +368,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     def change_category(self, category_id: int) -> None:
         # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-        
+
         from urbanlens.dashboard.models.badges.model import Badge
 
         category = Badge.objects.get(id=category_id, kind="category")
@@ -397,14 +397,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     def __str__(self) -> str:
         status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) if self.pk else "None"
-        
-        return (
-            f"Name: {self.effective_name}\n"
-            f"Description: {self.description or ''}\n"
-            f"Priority: {self.priority}\n"
-            f"Last Visited: {self.last_visited}\n"
-            f"Status: {status_labels}"
-        )
+
+        return f"Name: {self.effective_name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {status_labels}"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -430,10 +424,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [
-                {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
-                for t in self.badges.filter(kind="tag")
-            ],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.badges.filter(kind="tag")],
         }
 
     def to_detail_json(self) -> dict:

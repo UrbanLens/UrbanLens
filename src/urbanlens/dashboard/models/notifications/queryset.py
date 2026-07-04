@@ -1,4 +1,5 @@
 """QuerySet and Manager for NotificationLog."""
+
 from __future__ import annotations
 
 from typing import Self
@@ -12,6 +13,7 @@ class NotificationQuerySet(abstract.QuerySet):
     def unread(self) -> Self:
         """Return only unread notifications."""
         from urbanlens.dashboard.models.notifications.meta import Status
+
         return self.filter(status=Status.UNREAD)
 
     def for_profile(self, profile) -> Self:
@@ -21,6 +23,7 @@ class NotificationQuerySet(abstract.QuerySet):
     def mark_read(self) -> int:
         """Mark all matching notifications as read. Returns updated count."""
         from urbanlens.dashboard.models.notifications.meta import Status
+
         return self.update(status=Status.READ)
 
 

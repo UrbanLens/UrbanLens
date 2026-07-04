@@ -42,39 +42,11 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
-    tags = (
-        Badge.objects.tags()
-        .visible_to(profile)
-        .ordered()
-        .with_customizations_for(profile)
-        .with_pin_counts()
-    )
-    categories = (
-        Badge.objects.categories()
-        .for_profile(profile)
-        .ordered()
-        .with_customizations_for(profile)
-        .with_pin_counts()
-    )
-    statuses = (
-        Badge.objects.statuses()
-        .for_profile(profile)
-        .ordered()
-        .with_customizations_for(profile)
-        .with_pin_counts()
-    )
-    user_badges = (
-        Badge.objects.user_badges()
-        .visible_to(profile)
-        .ordered()
-        .with_customizations_for(profile)
-    )
-    priority_items = (
-        Badge.objects.visible_to(profile)
-        .exclude(kind=KIND_USER)
-        .ordered()
-        .with_pin_counts()
-    )
+    tags = Badge.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    categories = Badge.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    statuses = Badge.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    user_badges = Badge.objects.user_badges().visible_to(profile).ordered().with_customizations_for(profile)
+    priority_items = Badge.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
 
     return {
         **_BASE_CTX,

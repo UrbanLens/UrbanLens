@@ -70,10 +70,7 @@ KNOWN_PLATFORMS: frozenset[str] = frozenset(PLATFORM_URL_TEMPLATE)
 # "website" gets a friendlier label here instead of just "Website".
 # When adding a new URL-parseable platform, append its key to this tuple and the label
 # will appear automatically everywhere the hint is rendered.
-URL_INPUT_PLATFORM_LABELS: list[str] = [
-    PLATFORM_DISPLAY_NAME[p]
-    for p in ("instagram", "bluesky", "uer", "facebook", "flickr", "youtube", "tiktok", "reddit")
-] + ["any website URL"]
+URL_INPUT_PLATFORM_LABELS: list[str] = [PLATFORM_DISPLAY_NAME[p] for p in ("instagram", "bluesky", "uer", "facebook", "flickr", "youtube", "tiktok", "reddit")] + ["any website URL"]
 
 
 class _HandleRule(NamedTuple):

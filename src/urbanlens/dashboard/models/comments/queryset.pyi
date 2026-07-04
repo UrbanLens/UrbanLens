@@ -1,6 +1,0 @@
-from urbanlens.dashboard.models.abstract import Manager, QuerySet
-
-class CommentQuerySet(QuerySet): ...
-
-class CommentManager(Manager, CommentQuerySet):
-    def all(self) -> CommentQuerySet: ...

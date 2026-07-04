@@ -44,3 +44,4 @@ src/urbanlens/frontend/static/dashboard/images/
 .claude/settings.local.json
 .vscode/settings.json
 .cursor/
+src/urbanlens/frontend/static/icons/unused/

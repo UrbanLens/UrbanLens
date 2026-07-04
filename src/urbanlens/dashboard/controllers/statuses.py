@@ -11,7 +11,12 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, Badge
+from urbanlens.dashboard.models.badges.model import (
+    COLOR_CHOICES,
+    ICON_CATEGORIES,
+    ICON_CHOICES,
+    Badge,
+)
 from urbanlens.dashboard.models.pin.model import Pin
 
 if TYPE_CHECKING:
@@ -27,12 +32,7 @@ _BASE_CTX = {
 
 
 def _rows_ctx(profile: Profile, extra: dict | None = None) -> dict:
-    statuses = (
-        Badge.objects.statuses()
-        .for_profile(profile)
-        .ordered()
-        .with_pin_counts()
-    )
+    statuses = Badge.objects.statuses().for_profile(profile).ordered().with_pin_counts()
     ctx = {**_BASE_CTX, "statuses": statuses}
     if extra:
         ctx.update(extra)

@@ -421,45 +421,47 @@ urlpatterns = [
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
-        include([
-            path("", badges.BadgeKindIndexView.as_view(), name="badge.index"),
-            path("create/", badges.BadgeCreateView.as_view(), name="badge.create"),
-            path("rows/", badges.BadgeRowsView.as_view(), name="badge.rows"),
-            path("<int:badge_id>/edit/", badges.BadgeEditView.as_view(), name="badge.edit"),
-            path("<int:badge_id>/delete/", badges.BadgeDeleteView.as_view(), name="badge.delete"),
-            path("<int:badge_id>/merge/", badges.BadgeMergeView.as_view(), name="badge.merge"),
-            path("<int:badge_id>/customize/", badges.BadgeCustomizeView.as_view(), name="badge.customize"),
-            path("reorder/", badges.BadgeReorderView.as_view(), name="badge.reorder"),
-            path("bulk-delete/", badges.BadgeBulkDeleteView.as_view(), name="badge.bulk_delete"),
-            path("bulk-edit/", badges.BadgeBulkEditView.as_view(), name="badge.bulk_edit"),
-            path(
-                "bulk-convert/",
-                badges.BadgeBulkConvertView.as_view(),
-                name="badge.bulk_convert",
-            ),
-            path(
-                "bulk-convert-status/",
-                badges.BadgeBulkConvertView.as_view(target_kind=KIND_STATUS),
-                name="badge.bulk_convert_status",
-            ),
-            path(
-                "bulk-convert-tag/",
-                badges.BadgeBulkConvertView.as_view(target_kind=KIND_TAG),
-                name="badge.bulk_convert_tag",
-            ),
-            path(
-                "bulk-convert-category/",
-                badges.BadgeBulkConvertView.as_view(target_kind=KIND_CATEGORY),
-                name="badge.bulk_convert_category",
-            ),
-            path("multi-merge/", badges.BadgeMultiMergeView.as_view(), name="badge.multi_merge"),
-            path("pin/<slug:pin_slug>/", badges.BadgePinMembershipView.as_view(), name="badge.pin"),
-            path(
-                "location/<slug:location_slug>/",
-                badges.BadgeLocationMembershipView.as_view(),
-                name="badge.location",
-            ),
-        ]),
+        include(
+            [
+                path("", badges.BadgeKindIndexView.as_view(), name="badge.index"),
+                path("create/", badges.BadgeCreateView.as_view(), name="badge.create"),
+                path("rows/", badges.BadgeRowsView.as_view(), name="badge.rows"),
+                path("<int:badge_id>/edit/", badges.BadgeEditView.as_view(), name="badge.edit"),
+                path("<int:badge_id>/delete/", badges.BadgeDeleteView.as_view(), name="badge.delete"),
+                path("<int:badge_id>/merge/", badges.BadgeMergeView.as_view(), name="badge.merge"),
+                path("<int:badge_id>/customize/", badges.BadgeCustomizeView.as_view(), name="badge.customize"),
+                path("reorder/", badges.BadgeReorderView.as_view(), name="badge.reorder"),
+                path("bulk-delete/", badges.BadgeBulkDeleteView.as_view(), name="badge.bulk_delete"),
+                path("bulk-edit/", badges.BadgeBulkEditView.as_view(), name="badge.bulk_edit"),
+                path(
+                    "bulk-convert/",
+                    badges.BadgeBulkConvertView.as_view(),
+                    name="badge.bulk_convert",
+                ),
+                path(
+                    "bulk-convert-status/",
+                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_STATUS),
+                    name="badge.bulk_convert_status",
+                ),
+                path(
+                    "bulk-convert-tag/",
+                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_TAG),
+                    name="badge.bulk_convert_tag",
+                ),
+                path(
+                    "bulk-convert-category/",
+                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_CATEGORY),
+                    name="badge.bulk_convert_category",
+                ),
+                path("multi-merge/", badges.BadgeMultiMergeView.as_view(), name="badge.multi_merge"),
+                path("pin/<slug:pin_slug>/", badges.BadgePinMembershipView.as_view(), name="badge.pin"),
+                path(
+                    "location/<slug:location_slug>/",
+                    badges.BadgeLocationMembershipView.as_view(),
+                    name="badge.location",
+                ),
+            ]
+        ),
     ),
     path(
         "friendship/",
@@ -728,7 +730,6 @@ urlpatterns = [
             ],
         ),
     ),
-
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
     path(

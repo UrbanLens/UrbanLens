@@ -45,10 +45,7 @@ class GoogleEarthGateway(Gateway):
         """
         if not self.api_key:
             raise ValueError(
-                "Google Earth Engine OAuth2 token is not set. "
-                "Set UL_GOOGLE_EARTH_API_KEY to an OAuth2 Bearer token obtained "
-                "from Application Default Credentials or a service account. "
-                "See https://developers.google.com/earth-engine/guides/auth",
+                "Google Earth Engine OAuth2 token is not set. Set UL_GOOGLE_EARTH_API_KEY to an OAuth2 Bearer token obtained from Application Default Credentials or a service account. See https://developers.google.com/earth-engine/guides/auth",
             )
         return {"Authorization": f"Bearer {self.api_key}"}
 

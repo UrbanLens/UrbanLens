@@ -1,4 +1,5 @@
 """QuerySet and Manager for the Image model."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
@@ -54,9 +55,14 @@ class ImageQuerySet(QuerySet):
         from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
         # Fetch all uploaders who have at least one image (excluding the viewer themselves).
-        uploaders = Profile.objects.exclude(pk=viewer_profile.pk).filter(
-            uploaded_images__isnull=False,
-        ).distinct().values_list("pk", "photo_upload_visibility")
+        uploaders = (
+            Profile.objects.exclude(pk=viewer_profile.pk)
+            .filter(
+                uploaded_images__isnull=False,
+            )
+            .distinct()
+            .values_list("pk", "photo_upload_visibility")
+        )
 
         viewer_friend_ids = self._get_friend_ids(viewer_profile)
         viewer_loc_ids = self._get_location_ids(viewer_profile)
@@ -66,14 +72,22 @@ class ImageQuerySet(QuerySet):
         for uploader_id, upload_vis in uploaders:
             # a) Uploader's own restriction
             if not self._uploader_allows(
-                upload_vis, viewer_profile, uploader_id,
-                viewer_friend_ids, viewer_loc_ids, viewer_trip_ids,
+                upload_vis,
+                viewer_profile,
+                uploader_id,
+                viewer_friend_ids,
+                viewer_loc_ids,
+                viewer_trip_ids,
             ):
                 continue
             # b) Viewer's own filter
             if not self._viewer_allows(
-                viewer_filter, viewer_profile, uploader_id,
-                viewer_friend_ids, viewer_loc_ids, viewer_trip_ids,
+                viewer_filter,
+                viewer_profile,
+                uploader_id,
+                viewer_friend_ids,
+                viewer_loc_ids,
+                viewer_trip_ids,
             ):
                 continue
             allowed.add(uploader_id)
@@ -83,18 +97,18 @@ class ImageQuerySet(QuerySet):
 
     def _get_friend_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
         accepted = FriendshipStatus.ACCEPTED
-        return (
-            set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True))
-            | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
-        )
+        return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
 
     def _get_location_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.pin.model import Pin
+
         return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
 
     def _get_trip_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
+
         return set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
 
     def _uploader_allows(
@@ -107,6 +121,7 @@ class ImageQuerySet(QuerySet):
         viewer_trip_ids: set[int],
     ) -> bool:
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
         if upload_vis == VisibilityChoice.ANYONE:
             return True
         if upload_vis == VisibilityChoice.NO_ONE:
@@ -115,6 +130,7 @@ class ImageQuerySet(QuerySet):
             return uploader_id in viewer_friend_ids
         if upload_vis == VisibilityChoice.COMMON_PIN:
             from urbanlens.dashboard.models.pin.model import Pin
+
             uploader_loc_ids = set(Pin.objects.filter(profile_id=uploader_id, location__isnull=False).values_list("location_id", flat=True))
             return bool(viewer_loc_ids & uploader_loc_ids)
         if upload_vis == VisibilityChoice.COMMON_FRIEND:
@@ -135,6 +151,7 @@ class ImageQuerySet(QuerySet):
         viewer_trip_ids: set[int],
     ) -> bool:
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
         if viewer_filter == VisibilityChoice.ANYONE:
             return True
         if viewer_filter == VisibilityChoice.NO_ONE:
@@ -143,6 +160,7 @@ class ImageQuerySet(QuerySet):
             return uploader_id in viewer_friend_ids
         if viewer_filter == VisibilityChoice.COMMON_PIN:
             from urbanlens.dashboard.models.pin.model import Pin
+
             uploader_loc_ids = set(Pin.objects.filter(profile_id=uploader_id, location__isnull=False).values_list("location_id", flat=True))
             return bool(viewer_loc_ids & uploader_loc_ids)
         if viewer_filter == VisibilityChoice.COMMON_FRIEND:
@@ -155,14 +173,13 @@ class ImageQuerySet(QuerySet):
 
     def _get_friend_ids_by_id(self, profile_id: int) -> set[int]:
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
         accepted = FriendshipStatus.ACCEPTED
-        return (
-            set(Friendship.objects.filter(from_profile_id=profile_id, status=accepted).values_list("to_profile_id", flat=True))
-            | set(Friendship.objects.filter(to_profile_id=profile_id, status=accepted).values_list("from_profile_id", flat=True))
-        )
+        return set(Friendship.objects.filter(from_profile_id=profile_id, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile_id=profile_id, status=accepted).values_list("from_profile_id", flat=True))
 
     def _get_trip_ids_by_id(self, profile_id: int) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
+
         return set(TripMembership.objects.filter(profile_id=profile_id).values_list("trip_id", flat=True))
 
     def with_coords(self) -> Self:

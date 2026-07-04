@@ -54,7 +54,7 @@ class BadgeQuerySet(abstract.QuerySet):
         """Return only items with kind='user' (for annotating profiles privately)."""
         # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
-    
+
     def location_badges(self) -> Self:
         """Return only items with kind='location'."""
         # TODO: Don't hardcode 'location' string

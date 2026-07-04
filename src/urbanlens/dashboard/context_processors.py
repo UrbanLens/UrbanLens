@@ -26,6 +26,7 @@ def add_site_settings(request: HttpRequest) -> dict[str, str]:
 
     try:
         from urbanlens.dashboard.models.site_settings import SiteSettings
+
         site = SiteSettings.get_current()
         site_title = site.app_title
     except (ImportError, DatabaseError):

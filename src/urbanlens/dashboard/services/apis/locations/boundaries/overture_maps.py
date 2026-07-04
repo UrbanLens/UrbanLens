@@ -74,8 +74,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             validate_bbox(bbox)
         if _overture_geodataframe is None:
             raise ImportError(
-                "OvertureMapsGateway requires the 'overturemaps' package: "
-                "`pip install overturemaps[geopandas]`.",
+                "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
             )
         return _overture_geodataframe(
             overture_type,

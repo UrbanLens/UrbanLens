@@ -109,10 +109,7 @@ class SiteSettings(abstract.Model):
         max_length=20,
         choices=EnvironmentOverrideChoice.choices,
         default=EnvironmentOverrideChoice.DEFAULT,
-        help_text=(
-            "Override the deployment environment. "
-            "Default uses the UL_ENVIRONMENT variable (or local when unset)."
-        ),
+        help_text=("Override the deployment environment. Default uses the UL_ENVIRONMENT variable (or local when unset)."),
         verbose_name="Environment",
     )
 
@@ -129,10 +126,7 @@ class SiteSettings(abstract.Model):
 
     login_max_attempts = IntegerField(
         default=5,
-        help_text=(
-            "Maximum number of consecutive failed login attempts before an account is temporarily locked. "
-            "Set to 0 to disable rate limiting."
-        ),
+        help_text=("Maximum number of consecutive failed login attempts before an account is temporarily locked. Set to 0 to disable rate limiting."),
         verbose_name="Max failed login attempts",
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
@@ -177,10 +171,7 @@ class SiteSettings(abstract.Model):
 
     signup_restricted = BooleanField(
         default=False,
-        help_text=(
-            "When enabled, new accounts cannot be created via the public sign-up page. "
-            "Only users invited by an existing member can join."
-        ),
+        help_text=("When enabled, new accounts cannot be created via the public sign-up page. Only users invited by an existing member can join."),
         verbose_name="Restrict sign-ups (invite-only)",
     )
 

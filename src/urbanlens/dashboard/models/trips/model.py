@@ -222,6 +222,7 @@ class TripActivity(abstract.Model):
     def effective_title(self) -> str:
         """Display label: custom title, linked pin name/address, location name/address, or fallback."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
         if self.title:
             return self.title
         if self.pin:
@@ -229,7 +230,6 @@ class TripActivity(abstract.Model):
             if pin_label:
                 return pin_label
         if self.location:
-
             name = self.location.name
             if is_meaningful_name(name):
                 return name

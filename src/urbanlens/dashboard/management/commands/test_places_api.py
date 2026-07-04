@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.redact import redact_coordinate, redact_secret
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 # A well-known place with a stable place_id and URL (Empire State Building)
@@ -19,14 +20,6 @@ KNOWN_URL = "https://www.google.com/maps/place/Empire+State+Building/@40.7484405
 PLACES_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 NEARBY_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 FIND_PLACE_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-
-
-def _mask(key: str | None) -> str:
-    if not key:
-        return "(not set)"
-    if len(key) <= 8:
-        return "***"
-    return key[:3] + "..." + key[-3:]
 
 
 def _print_result(label: str, response: requests.Response) -> None:
@@ -83,9 +76,9 @@ class Command(BaseCommand):
         print("=" * 60)
         print("  Google Places API Diagnostic")
         print("=" * 60)
-        print(f"  google_places_api_key : {_mask(app_settings.google_unrestricted_api_key)}")
-        print(f"  google_maps_api_key   : {_mask(app_settings.google_unrestricted_api_key)}")
-        print(f"  Using key             : {_mask(key)}")
+        print(f"  google_places_api_key : {redact_secret(app_settings.google_unrestricted_api_key)}")
+        print(f"  google_maps_api_key   : {redact_secret(app_settings.google_unrestricted_api_key)}")
+        print(f"  Using key             : {redact_secret(key)}")
         print(f"  Test CID              : {cid}")
         print()
 
@@ -194,7 +187,7 @@ class Command(BaseCommand):
         # Test 7: Exercise the real GoogleGeocodingGateway code paths
         # ------------------------------------------------------------------
         print("--- Test 7: App code - GoogleGeocodingGateway ---")
-        print(f"  Note: gateway uses google_maps_api_key ({_mask(app_settings.google_unrestricted_api_key)})")
+        print(f"  Note: gateway uses google_maps_api_key ({redact_secret(app_settings.google_unrestricted_api_key)})")
         print("        (not google_places_api_key - CID lookups go through the Maps key)")
         print()
 
@@ -214,7 +207,7 @@ class Command(BaseCommand):
                 try:
                     lat, lon = gateway.get_coordinates_by_cid(cid)
                     if lat is not None and lon is not None:
-                        print(f"  [PASS] Resolved to ({lat}, {lon})")
+                        print(f"  [PASS] Resolved to ({redact_coordinate(lat)}, {redact_coordinate(lon)})")
                     else:
                         print("  [FAIL] Returned (None, None) - CID not in Places database or key rejected")
                 except (OSError, ValueError) as exc:
@@ -227,7 +220,7 @@ class Command(BaseCommand):
                 try:
                     lat, lon = gateway.extract_coordinates_from_url(url)
                     if lat is not None and lon is not None:
-                        print(f"  [PASS] Resolved to ({lat}, {lon})")
+                        print(f"  [PASS] Resolved to ({redact_coordinate(lat)}, {redact_coordinate(lon)})")
                     else:
                         print("  [FAIL] Returned (None, None) - both CID lookup and name geocoding failed")
                 except (OSError, ValueError) as exc:

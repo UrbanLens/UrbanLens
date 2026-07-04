@@ -1,5 +1,6 @@
 @use "tokens" as *;
 @use 'sass:color';
+@use "sass:list";
 
 $inputs: (
     "input:not([type])",
@@ -22,8 +23,8 @@ $inputs: (
 // @include input-selectors(".disabled") { color: blue; }
 // @include input-selectors(".disabled", ".readonly") { color: green; }
 @mixin input-selectors($suffixes...) {
-    @if length($suffixes) == 0 {
-        $suffixes: ("");
+	@if list.length($suffixes) == 0 {
+		$suffixes: ("");
     }
     @each $suffix in $suffixes {
         @each $selector in $inputs {

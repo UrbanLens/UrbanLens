@@ -179,23 +179,15 @@ class ViewProfileView(LoginRequiredMixin, View):
         # TODO: Whatever is happening here is probably wrong.
         visited_filter = Q(badges__name="Visited", badges__kind=KIND_STATUS) | Q(last_visited__isnull=False)
         their_visited_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False)
-            .filter(visited_filter)
-            .values_list("location_id", flat=True),
+            Pin.objects.filter(profile=profile, location__isnull=False).filter(visited_filter).values_list("location_id", flat=True),
         )
         my_visited_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False)
-            .filter(visited_filter)
-            .values_list("location_id", flat=True),
+            Pin.objects.filter(profile=my_profile, location__isnull=False).filter(visited_filter).values_list("location_id", flat=True),
         )
         shared_visited_ids = their_visited_ids & my_visited_ids
 
         context["common_pin_count"] = len(common_ids)
-        context["shared_visited"] = (
-            Location.objects.filter(id__in=shared_visited_ids).order_by("name")
-            if shared_visited_ids
-            else Location.objects.none()
-        )
+        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).order_by("name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship
         from urbanlens.dashboard.models.friendship.model import Friendship
@@ -203,20 +195,21 @@ class ViewProfileView(LoginRequiredMixin, View):
         friendship = Friendship.objects.all().between(my_profile, profile)
         context["friendship"] = friendship
         context["friendship_status"] = friendship.status if friendship else None
-        context["friends_since"] = (
-            friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
-        )
+        context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
 
         # Trips in common
         from urbanlens.dashboard.models.trips.model import TripMembership
+
         my_trip_ids = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
         their_trip_ids = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
         common_trip_ids = my_trip_ids & their_trip_ids
         if common_trip_ids:
             from urbanlens.dashboard.models.trips.model import Trip
+
             context["trips_in_common"] = Trip.objects.filter(id__in=common_trip_ids).order_by("name")
         else:
             from urbanlens.dashboard.models.trips.model import Trip
+
             context["trips_in_common"] = Trip.objects.none()
 
         # Private annotations (notes, user badges, trust rating) - only when viewing someone else
@@ -229,7 +222,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["user_badges"] = Badge.objects.user_badges().visible_to(my_profile).ordered()
         context["assigned_badge_ids"] = set(
             ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
-                "badge_id", flat=True,
+                "badge_id",
+                flat=True,
             ),
         )
         trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
@@ -568,11 +562,7 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
     """
 
     _TIMEOUT_SECONDS = 5
-    _USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    )
+    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
     def get(self, request: HttpRequest) -> HttpResponse:
         """Verify the platform+handle pair and return an optional toast trigger.

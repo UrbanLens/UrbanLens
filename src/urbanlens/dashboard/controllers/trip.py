@@ -17,7 +17,12 @@ import requests
 
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
+from urbanlens.dashboard.models.trips.model import (
+    Trip,
+    TripActivity,
+    TripComment,
+    TripMembership,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -27,7 +32,6 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
     from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
 
 logger = logging.getLogger(__name__)
@@ -85,8 +89,7 @@ def _apply_trip_visibility_filter(
         adder_ids = {a.added_by_id for a in friends_acts}
         accepted_friend_adder_ids = set(
             Friendship.objects.filter(
-                Q(from_profile=viewer, to_profile_id__in=adder_ids)
-                | Q(to_profile=viewer, from_profile_id__in=adder_ids),
+                Q(from_profile=viewer, to_profile_id__in=adder_ids) | Q(to_profile=viewer, from_profile_id__in=adder_ids),
                 status=FriendshipStatus.ACCEPTED,
             ).values_list("from_profile_id", "to_profile_id"),
         )
@@ -212,11 +215,7 @@ def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int,
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
-        if (
-            _activity_coords(act) is not None
-            and not act.location_hidden
-            and act.status != TripActivity.STATUS_COMPLETED
-        ):
+        if _activity_coords(act) is not None and not act.location_hidden and act.status != TripActivity.STATUS_COMPLETED:
             index_map[act.id] = idx
             idx += 1
     return index_map
@@ -342,16 +341,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
     # Determine which activities have their location hidden from this viewer
     # based on the adder's trip_pin_location_visibility privacy setting.
     viewer_hidden: set[int] = set()
-    sensitive = [
-        act
-        for act in activities
-        if not act.location_hidden
-        and act.added_by_id
-        and act.added_by_id != profile.id
-        and act.added_by
-        and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE
-        and act.location_id
-    ]
+    sensitive = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
     if sensitive:
         _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
 
@@ -368,9 +358,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
         }
         for act in activities
     ]
-    all_activities_completed = bool(activities) and all(
-        act.status == TripActivity.STATUS_COMPLETED for act in activities
-    )
+    all_activities_completed = bool(activities) and all(act.status == TripActivity.STATUS_COMPLETED for act in activities)
     return render(
         request,
         "dashboard/partials/trips/trip_activities_panel.html",
@@ -726,8 +714,14 @@ class TripActivityVoteView(LoginRequiredMixin, View):
 
 def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Build comment panel context with activity mentions and re-render."""
-    from urbanlens.dashboard.controllers.comments import _ALLOWED_EMOJIS, _aggregate_reactions
-    from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
+    from urbanlens.dashboard.controllers.comments import (
+        _ALLOWED_EMOJIS,
+        _aggregate_reactions,
+    )
+    from urbanlens.dashboard.services.mentions import (
+        render_comment_text,
+        viewer_pinned_uuids,
+    )
 
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
@@ -736,12 +730,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(profile)
-    top_comments = (
-        trip.comments.filter(parent__isnull=True)
-        .select_related("author__user")
-        .prefetch_related("reactions", "replies__reactions", "replies__author__user")
-        .order_by("created")
-    )
+    top_comments = trip.comments.filter(parent__isnull=True).select_related("author__user").prefetch_related("reactions", "replies__reactions", "replies__author__user").order_by("created")
 
     rendered: list[_CommentData] = []
     for c in top_comments:
@@ -972,7 +961,11 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
 
-        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$", q)
+        # The separator is a single merged character class rather than
+        # `\s*[, ]\s*` - adjacent `\s*` groups flanking a class that also
+        # matches whitespace let a run of spaces be split among the three
+        # groups in many equivalent ways, which is a polynomial ReDoS.
+        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)\s*$", q) if len(q) <= 64 else None
         coordinate_results: list[dict] = []
         if coordinate_match:
             lat = float(coordinate_match.group(1))
@@ -982,9 +975,7 @@ class TripLocationSearchView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_rows = list(
-            Pin.objects.filter(profile=profile)
-            .filter(Q(name__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q))
-            .select_related("location")[:5],
+            Pin.objects.filter(profile=profile).filter(Q(name__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q)).select_related("location")[:5],
         )
         pin_results = [
             {
@@ -1064,16 +1055,7 @@ class TripMapDataView(LoginRequiredMixin, View):
 
         # Determine activities viewer-hidden due to adder's privacy setting
         viewer_hidden_map: set[int] = set()
-        sensitive_map = [
-            act
-            for act in activities
-            if not act.location_hidden
-            and act.added_by_id
-            and act.added_by_id != profile.id
-            and act.added_by
-            and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE
-            and act.location_id
-        ]
+        sensitive_map = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
         if sensitive_map:
             _apply_trip_visibility_filter(sensitive_map, profile, viewer_hidden_map)
 
@@ -1473,7 +1455,9 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import (
+            OpenWeatherMapGateway,
+        )
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -1489,12 +1473,7 @@ class TripWeatherView(LoginRequiredMixin, View):
             error = "Weather API key not configured."
         else:
             today = datetime.date.today()
-            activities = [
-                act
-                for act in _activity_qs(trip)
-                if act.status != TripActivity.STATUS_COMPLETED
-                and (act.scheduled_at is None or act.scheduled_at.date() >= today)
-            ]
+            activities = [act for act in _activity_qs(trip) if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:

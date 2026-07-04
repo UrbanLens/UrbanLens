@@ -31,17 +31,17 @@ class TestCases(Iterable):
                 yield TestEntry(entry.params, output, entry.message)
             else:
                 yield entry
-    
+
     def __getitem__(self, index):
         return self.entries[index]
-    
+
     def __len__(self):
         return len(self.entries)
-    
+
     def __add__(self, other):
         self.entries = self.entries + getattr(other, 'entries',  other)
         return self
-    
+
 class TestCasesTemplate(TestCases):
 
     def __init__(self, entries: Iterable[TestEntry | tuple], substitutions: dict[str, str] | Callable[..., Any], callback: Callable[..., Any] | None = None):
@@ -83,8 +83,8 @@ class TestEntry(NamedTuple):
 
 class TestCase(_HypothesisMixin, test.TestCase):
     '''
-    Provides additional functionality to the django unittest TestCase. 
-    
+    Provides additional functionality to the django unittest TestCase.
+
     - Adds a default message to all assertions.
     '''
     # Deprecated, in favor of fn

@@ -11,6 +11,7 @@ import lxml.html as lxml_html  # nosec B410 - only ever parses markup already ru
 import nh3
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,30 @@ _EXTENDED_EXTRACT_CHARS = 5000
 # to this small allowlist before anything else touches it. Links are dropped
 # (unwrapped to plain text) rather than allowed through, since MediaWiki's
 # internal hrefs are relative and meaningless outside Wikipedia.
-_ALLOWED_TAGS = frozenset({
-    "p", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li", "dl", "dt", "dd",
-    "b", "i", "em", "strong", "sup", "sub", "blockquote", "br",
-})
+_ALLOWED_TAGS = frozenset(
+    {
+        "p",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "ul",
+        "ol",
+        "li",
+        "dl",
+        "dt",
+        "dd",
+        "b",
+        "i",
+        "em",
+        "strong",
+        "sup",
+        "sub",
+        "blockquote",
+        "br",
+    }
+)
 # Tags whose contents are dropped along with the tag itself, rather than
 # unwrapped - these are non-prose widgets (embedded population-graph SVGs,
 # stray <style>/<script>/<table> blocks) whose inner text would otherwise leak
@@ -54,10 +74,19 @@ _HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 # Sections whose content reads poorly as prose (bibliography entries, bare
 # citation text, etc.) - the extended extract is truncated at the first
 # heading matching one of these rather than including them.
-_STOP_HEADING_TITLES = frozenset({
-    "references", "external links", "see also", "notes",
-    "bibliography", "further reading", "sources", "gallery", "footnotes",
-})
+_STOP_HEADING_TITLES = frozenset(
+    {
+        "references",
+        "external links",
+        "see also",
+        "notes",
+        "bibliography",
+        "further reading",
+        "sources",
+        "gallery",
+        "footnotes",
+    }
+)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -115,7 +144,7 @@ class WikipediaGateway(Gateway):
             resp.raise_for_status()
             results = resp.json().get("query", {}).get("geosearch", [])
         except Exception:
-            logger.exception("Wikipedia nearby search failed for %s,%s", latitude, longitude)
+            logger.exception("Wikipedia nearby search failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
             return []
 
         places = []
@@ -124,18 +153,20 @@ class WikipediaGateway(Gateway):
             page_id = item.get("pageid")
             if not title or page_id is None:
                 continue
-            places.append({
-                "place_id": f"wiki_{page_id}",
-                "name": title,
-                "lat": item.get("lat"),
-                "lng": item.get("lon"),
-                "source": "wikipedia",
-                "description": "",
-                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
-                "types": ["wikipedia"],
-                "rating": None,
-                "vicinity": "",
-            })
+            places.append(
+                {
+                    "place_id": f"wiki_{page_id}",
+                    "name": title,
+                    "lat": item.get("lat"),
+                    "lng": item.get("lon"),
+                    "source": "wikipedia",
+                    "description": "",
+                    "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    "types": ["wikipedia"],
+                    "rating": None,
+                    "vicinity": "",
+                }
+            )
         return places
 
     def get_article_for_location(
@@ -261,7 +292,7 @@ class WikipediaGateway(Gateway):
             resp.raise_for_status()
             return resp.json().get("query", {}).get("geosearch", [])
         except Exception:
-            logger.exception("Wikipedia geo search failed for %s,%s", lat, lng)
+            logger.exception("Wikipedia geo search failed for %s,%s", redact_coordinate(lat), redact_coordinate(lng))
             return []
 
     def _fetch_summary(self, title: str) -> dict | None:

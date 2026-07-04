@@ -61,9 +61,10 @@ class Service(ABC, metaclass=ServiceMeta):
         service_key: Unique identifier for this service (e.g. ``"nps"``).
             Must be set to enable automatic rate limiting and call logging.
     """
+
     paid_service: ClassVar[bool] = False
     service_key: ClassVar[str | None] = None
-    
+
 
 @dataclass(slots=True, kw_only=True)
 class Gateway(Service, ABC):
@@ -72,6 +73,7 @@ class Gateway(Service, ABC):
     Attributes:
         session: The HTTP session used for all requests.
     """
+
     session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self) -> None:
@@ -83,6 +85,7 @@ class Gateway(Service, ABC):
         key = type(self).service_key
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.rate_limiter import _RateLimitedSession
+
             object.__setattr__(self, "session", _RateLimitedSession(key))
 
 

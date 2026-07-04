@@ -7,6 +7,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class NominatimGateway(Gateway):
             resp.raise_for_status()
             raw = resp.json()
         except Exception:
-            logger.exception("Nominatim reverse geocode failed for %s,%s", latitude, longitude)
+            logger.exception("Nominatim reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
             return None
 
         if "error" in raw:
@@ -124,13 +125,7 @@ class NominatimGateway(Gateway):
 
         osm_url = f"https://www.openstreetmap.org/{osm_type}/{osm_id}" if osm_type and osm_id else ""
 
-        name = (
-            (raw.get("namedetails") or {}).get("name")
-            or raw.get("name")
-            or address.get("amenity")
-            or address.get("building")
-            or ""
-        )
+        name = (raw.get("namedetails") or {}).get("name") or raw.get("name") or address.get("amenity") or address.get("building") or ""
 
         return {
             "name": name,

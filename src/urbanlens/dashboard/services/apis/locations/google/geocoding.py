@@ -12,6 +12,7 @@ import s2sphere
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_coordinate, redact_params
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -81,15 +82,20 @@ class GoogleGeocodingGateway(Gateway):
             raise ValueError("Latitude and longitude must be provided to retrieve_place_name.")
 
         # Check if the geocoded data for the given place name already exists in the database
-        geocoded_location: GeocodedLocation = (
-            GeocodedLocation.objects.all().filter(latitude=latitude, longitude=longitude).first()
-        )
+        geocoded_location: GeocodedLocation = GeocodedLocation.objects.all().filter(latitude=latitude, longitude=longitude).first()
         if geocoded_location:
             # parse json_response
             try:
                 return json.loads(geocoded_location.json_response or "null")
             except json.JSONDecodeError as e:
-                logger.exception('Error decoding json_response for %s, %s -> Message: "%s"', latitude, longitude, e)
+                logger.exception(
+                    'Error decoding json_response for (type: %s, %s -> %s, %s) -> Message: "%s"',
+                    type(latitude),
+                    type(longitude),
+                    redact_coordinate(latitude),
+                    redact_coordinate(longitude),
+                    e,
+                )
                 logger.exception("json_response: %s", geocoded_location.json_response)
                 # Remove it from the cache
                 geocoded_location.delete()
@@ -118,7 +124,7 @@ class GoogleGeocodingGateway(Gateway):
         if getattr(response, "status_code", None) != 200 or getattr(response, "error_message", None) is not None:
             logger.error(
                 'Error getting place name for %s -> Message: "%s"',
-                request_data,
+                redact_params(request_data),
                 getattr(response, "error_message", None),
             )
             return None
@@ -134,7 +140,8 @@ class GoogleGeocodingGateway(Gateway):
                 longitude = results[0].get("geometry", {}).get("location", {}).get("lng")
 
         except (json.JSONDecodeError, KeyError):
-            logger.exception("Error parsing json response for %s", request_data)
+            logger.exception("Error parsing json response for %s", redact_params(request_data))
+            logger.info("json response type: %s", type(response))
             return None
 
         try:
@@ -146,7 +153,7 @@ class GoogleGeocodingGateway(Gateway):
                 json_response=json.dumps(body),
             )
         except DatabaseError:
-            logger.exception("Error caching geocoded location for %s", request_data)
+            logger.exception("Error caching geocoded location for %s", redact_params(request_data))
 
         return body
 
@@ -171,8 +178,8 @@ class GoogleGeocodingGateway(Gateway):
         except KeyError:
             logger.exception(
                 "Error getting place name for latitude: %s, longitude: %s",
-                latitude,
-                longitude,
+                redact_coordinate(latitude),
+                redact_coordinate(longitude),
             )
             return None
 

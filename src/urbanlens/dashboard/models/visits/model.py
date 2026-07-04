@@ -1,4 +1,5 @@
 """PinVisit model - records each visit a user made to a pinned location."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -54,7 +54,7 @@ class CloudflareGateway(LLMGateway[Response]):
 
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        message_input = {"messages": message_queue.messages}
+        message_input: dict[str, Any] = {"messages": message_queue.messages}
         url = f"{str(self.api_url).rstrip('/')}/{self.model.lstrip('/')}"
 
         try:

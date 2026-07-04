@@ -1,2 +1,0 @@
--r base.txt
-daphne~=4.2.2

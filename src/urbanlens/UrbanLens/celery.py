@@ -19,7 +19,7 @@ app.autodiscover_tasks()
 
 
 @task_failure.connect
-def log_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **_extra) -> None:  # noqa: PLR0917
+def log_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **_extra) -> None:
     """Log Celery task failures with enough context for operations debugging."""
     logger.error(
         "Celery task failed: task=%s id=%s args=%s kwargs=%s exception=%s",

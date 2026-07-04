@@ -1,4 +1,5 @@
 """Image model for pin and location photo uploads."""
+
 from __future__ import annotations
 
 from uuid import uuid4

@@ -72,32 +72,42 @@ _MEANINGLESS_NAME_PHRASES: frozenset[str] = frozenset(
 _STRIP_NAME_PATTERN = re.compile(r"[^a-z0-9]", re.IGNORECASE)
 
 _DECIMAL_COORDINATE_PATTERN = re.compile(
-    r"^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*(?:,|\s)\s*"
+    r"^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?[\s,]+"
     r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$",
     re.IGNORECASE,
 )
 
+# Whitespace around each optional degree/minute/second marker uses possessive
+# quantifiers (`\s*+`). A plain `\s*` next to an optional literal that isn't
+# in `\s` still lets a run of spaces be split between the two `\s*` groups in
+# many equivalent ways once the group in between matches empty - a classic
+# polynomial ReDoS. Possessive quantifiers commit to the maximal match and
+# never backtrack into it, which removes that ambiguity without changing
+# which strings match.
 _DMS_COORDINATE_PATTERN = re.compile(
     r"""
-    ^\s*
-    \d{1,2}\s*°?\s*
-    \d{1,2}\s*['′]?\s*
-    \d+(?:\.\d+)?\s*(?:"|″)?\s*[NS]
-    \s*,?\s*
-    \d{1,3}\s*°?\s*
-    \d{1,2}\s*['′]?\s*
-    \d+(?:\.\d+)?\s*(?:"|″)?\s*[EW]
-    \s*$
+    ^\s*+
+    \d{1,2}\s*+°?\s*+
+    \d{1,2}\s*+['′]?\s*+
+    \d+(?:\.\d+)?\s*+(?:"|″)?\s*+[NS]
+    \s*+,?\s*+
+    \d{1,3}\s*+°?\s*+
+    \d{1,2}\s*+['′]?\s*+
+    \d+(?:\.\d+)?\s*+(?:"|″)?\s*+[EW]
+    \s*+$
     """,
     re.IGNORECASE | re.VERBOSE,
 )
 
+# Longest plausible decimal/DMS coordinate string is well under this; kept as
+# a cheap early-reject before running the regexes, not as a ReDoS mitigation.
+_MAX_COORDINATE_NAME_LENGTH = 64
+
 
 def is_coordinate_name(name: str) -> bool:
-    return (
-        _DECIMAL_COORDINATE_PATTERN.match(name) is not None
-        or _DMS_COORDINATE_PATTERN.match(name) is not None
-    )
+    if len(name) > _MAX_COORDINATE_NAME_LENGTH:
+        return False
+    return _DECIMAL_COORDINATE_PATTERN.match(name) is not None or _DMS_COORDINATE_PATTERN.match(name) is not None
 
 
 def normalize_name_for_comparison(name: str | None) -> str:

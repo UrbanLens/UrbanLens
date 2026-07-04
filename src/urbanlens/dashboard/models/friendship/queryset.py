@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class QuerySet(abstract.QuerySet):
+class QuerySet(abstract.QuerySet["Friendship"]):
     def profile(self, profile: Profile | int) -> Self:
         """
         Return a list of all friendships for a given profile.
@@ -55,8 +55,7 @@ class QuerySet(abstract.QuerySet):
             q2["from_profile"] = to_profile
 
         try:
-            # TODO: type: ignore can be removed once abstract.QuerySet is made generic
-            return self.filter(Q(**q1) | Q(**q2)).get()  # type: ignore[return-value]
+            return self.filter(Q(**q1) | Q(**q2)).get()
         except ObjectDoesNotExist:
             return None
 

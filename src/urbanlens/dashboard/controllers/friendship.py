@@ -27,12 +27,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     - viewer_friendship_status: status of the friendship between viewer and this profile
     - viewer_can_request: whether the viewer can send a friend request to this profile
     """
-    friendships = (
-        Friendship.objects.all()
-        .profile(profile.pk)
-        .is_friend()
-        .select_related("from_profile__user", "to_profile__user")
-    )
+    friendships = Friendship.objects.all().profile(profile.pk).is_friend().select_related("from_profile__user", "to_profile__user")
 
     friend_profiles: list[Profile] = []
     for f in friendships:
@@ -65,13 +60,9 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
 
             # Compute mutual friends (profile's friends that viewer is also friends with)
             profile_friend_ids = {fp.pk for fp in friend_profiles}
-            viewer_friendships = (
-                Friendship.objects.all().profile(viewer.pk).is_friend().values_list("from_profile_id", "to_profile_id")
-            )
+            viewer_friendships = Friendship.objects.all().profile(viewer.pk).is_friend().values_list("from_profile_id", "to_profile_id")
             viewer_friend_ids: set[int] = set()
-            viewer_friend_ids.update(
-                to_id if from_id == viewer.pk else from_id for from_id, to_id in viewer_friendships
-            )
+            viewer_friend_ids.update(to_id if from_id == viewer.pk else from_id for from_id, to_id in viewer_friendships)
 
             mutual_ids = profile_friend_ids & viewer_friend_ids
             mutual_friends = [fp for fp in friend_profiles if fp.pk in mutual_ids]
@@ -134,14 +125,10 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.pin.model import Pin
 
             req_locs = set(
-                Pin.objects.filter(profile=requesting)
-                .exclude(location__isnull=True)
-                .values_list("location_id", flat=True),
+                Pin.objects.filter(profile=requesting).exclude(location__isnull=True).values_list("location_id", flat=True),
             )
             their_locs = set(
-                Pin.objects.filter(profile=to_profile)
-                .exclude(location__isnull=True)
-                .values_list("location_id", flat=True),
+                Pin.objects.filter(profile=to_profile).exclude(location__isnull=True).values_list("location_id", flat=True),
             )
             if not req_locs & their_locs:
                 return HttpResponse(
@@ -397,11 +384,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         ).update(status=Status.READ)
 
         # Return refreshed notification dropdown
-        notifications = (
-            NotificationLog.objects.for_profile(viewer_profile)
-            .select_related("source_profile")
-            .order_by("-created")[:20]
-        )
+        notifications = NotificationLog.objects.for_profile(viewer_profile).select_related("source_profile").order_by("-created")[:20]
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
         response = render(
             request,
@@ -509,13 +492,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             "signup_url": signup_url,
         }
         subject = f"{inviter.username} invited you to join UrbanLens"
-        text_body = (
-            f"Hi,\n\n"
-            f"{inviter.username} invited you to join UrbanLens - a private mapping platform "
-            f"for urban explorers and photographers.\n\n"
-            f"Accept the invitation:\n{signup_url}\n\n"
-            f"- UrbanLens"
-        )
+        text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
         html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
         try:

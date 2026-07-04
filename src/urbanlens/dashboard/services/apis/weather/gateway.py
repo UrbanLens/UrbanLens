@@ -8,6 +8,7 @@ from typing import ClassVar
 import requests
 
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class OpenWeatherMapGateway(Gateway):
 
         result = self.get(params)
         if result is None:
-            logger.error("Failed to retrieve weather forecast for coordinates (%s, %s)", latitude, longitude)
+            logger.error("Failed to retrieve weather forecast for coordinates (%s, %s)", redact_coordinate(latitude), redact_coordinate(longitude))
             return None
 
         # OpenWeatherMap returns a 4-hour forecast. We only want morning and evening for each day.
