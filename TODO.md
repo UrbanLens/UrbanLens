@@ -213,6 +213,7 @@ Features planned for future releases.
 * Automatically mark nearby PD, public parking, etc.
 * On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated")
 * Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/
+* Visit log can include "with another user", which logs it / visually shows it, and notifies the other user to optionally accept the visit log as well.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
