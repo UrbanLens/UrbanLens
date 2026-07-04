@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.apis.assets.base import MediaProvider
+    from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 
 logger = logging.getLogger(__name__)
@@ -277,10 +277,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             if narrow_term and narrow_term not in search_terms:
                 search_terms.append(narrow_term)
 
+        empty_media: list[MediaItem] = []
         items, from_cache = call_with_deadline(
             lambda: gateway.get_media(location, search_terms),
             timeout=20,
-            default=([], False),
+            default=(empty_media, False),
         )
 
         # Render even when a provider found nothing, so admins can see what was

@@ -355,7 +355,7 @@ REST_FRAMEWORK = {
     },
 }
 
-LOG_DIR = os.getenv("UL_LOG_DIR", "/var/log/urbanlens")
+LOG_DIR = os.getenv("UL_LOG_DIR", os.path.join(PROJECT_ROOT, "logs"))
 _log_file_path = os.path.join(LOG_DIR, "django.log")
 _log_handlers = ["console"]
 try:

@@ -37,7 +37,8 @@ class _PermissionCheckableUser(Protocol):
     ``AbstractBaseUser`` alone doesn't define ``has_perm``.
     """
 
-    is_authenticated: bool
+    @property
+    def is_authenticated(self) -> bool: ...
 
     def has_perm(self, perm: str) -> bool: ...
 
