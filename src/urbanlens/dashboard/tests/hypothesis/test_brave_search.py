@@ -52,6 +52,8 @@ class MaskSecretTests(TestCase):
     @given(st.text(min_size=1, max_size=64, alphabet=st.characters(whitelist_categories=("L", "N"))))
     @_hyp
     def test_key_never_appears_as_substring_of_result(self, key: str):
+        if key in "<redacted:":
+            self.skipTest("False positive if key is in <redacted:...> prefix")
         self.assertNotIn(key, redact_secret(key))
 
 
