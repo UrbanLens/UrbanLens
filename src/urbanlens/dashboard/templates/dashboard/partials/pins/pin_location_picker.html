@@ -1,0 +1,41 @@
+{# Location picker - rendered by PinRelinkView.get() and swapped into #pin-location-picker #}
+<div class="pin-loc-picker" id="pin-location-picker">
+    <div class="pin-loc-picker-header">
+        <span>All locations covering these coordinates</span>
+        <button type="button" class="pin-loc-picker-close"
+                onclick="document.getElementById('pin-location-picker').innerHTML=''">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+
+    {% for loc in locations %}
+    <div class="pin-loc-option {% if pin.location and loc.slug == pin.location.slug %}pin-loc-option--current{% endif %}">
+        <div class="pin-loc-option-info">
+            <span class="pin-loc-option-name">{{ loc.name }}</span>
+            {% if pin.location and loc.slug == pin.location.slug %}
+            <span class="pin-loc-option-badge">Current</span>
+            {% endif %}
+        </div>
+        <div class="pin-loc-option-actions">
+            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn btn--ghost btn--sm" title="Open wiki">
+                <i class="material-symbols-outlined">open_in_new</i>
+            </a>
+            {% if not pin.location or loc.slug != pin.location.slug %}
+            <button type="button" class="btn btn--primary btn--sm"
+                    hx-post="{% url 'pin.link.to' pin.slug loc.slug %}"
+                    hx-target="#pin-overview"
+                    hx-swap="outerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-indicator="#pin-overview">
+                Use this
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="pin-loc-picker-empty">
+        <i class="material-symbols-outlined">search_off</i>
+        No shared locations found at these coordinates.
+    </p>
+    {% endfor %}
+</div>

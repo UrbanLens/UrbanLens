@@ -1,0 +1,18 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Sign-ups Restricted - {{ site_title }}{% endblock %}
+
+{% block auth_header %}
+<h1 class="auth-title">Sign-ups are restricted</h1>
+<p class="auth-subtitle">This site is currently invite-only</p>
+{% endblock %}
+
+{% block content %}
+<p style="text-align:center;color:var(--ul-text-muted);margin-bottom:1.5rem">
+    New accounts can only be created via an invitation link from an existing member.
+    If you were invited, please use the link from your invitation email.
+</p>
+<div style="text-align:center">
+    <a href="{% url 'login' %}" class="btn btn--primary">Back to Login</a>
+</div>
+{% endblock %}

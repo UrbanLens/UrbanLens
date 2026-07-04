@@ -1,0 +1,140 @@
+"""Controllers for sharing a single pin with one friend."""
+from __future__ import annotations
+
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views import View
+
+from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
+from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
+from urbanlens.dashboard.models.profile.model import Profile
+
+
+def _accepted_friend_profiles(profile: Profile):
+    friendships = Friendship.objects.profile(profile.pk).is_friend().select_related("from_profile__user", "to_profile__user")
+    return [f.to_profile if f.from_profile_id == profile.pk else f.from_profile for f in friendships]
+
+
+def _are_friends(a: Profile, b: Profile) -> bool:
+    friendship = Friendship.objects.all().between(a, b)
+    return bool(friendship and friendship.status == FriendshipStatus.ACCEPTED)
+
+
+def _recipient_has_pin(profile: Profile, source: Pin) -> bool:
+    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_location__isnull=True)
+    if source.location_id and qs.filter(location_id=source.location_id).exists():
+        return True
+    lat, lng = source.effective_latitude, source.effective_longitude
+    return lat is not None and lng is not None and qs.filter(latitude=lat, longitude=lng).exists()
+
+
+def _create_pin_from_share(share: PinShare) -> Pin:
+    source = share.pin
+    new_pin = Pin.objects.create(
+        profile=share.to_profile,
+        location=source.location,
+        latitude=source.latitude,
+        longitude=source.longitude,
+        is_private=source.is_private,
+        name=source.name,
+        name_is_user_provided=source.name_is_user_provided,
+        icon=source.icon,
+        description=source.description,
+        priority=source.priority,
+        vulnerability=source.vulnerability,
+        danger=source.danger,
+        pin_type=source.pin_type,
+        color=source.color,
+        date_abandoned=source.date_abandoned,
+        date_last_active=source.date_last_active,
+        fences=source.fences,
+        alarms=source.alarms,
+        cameras=source.cameras,
+        security=source.security,
+        signs=source.signs,
+        vps=source.vps,
+        plywood=source.plywood,
+        locked=source.locked,
+    )
+    new_pin.badges.set(source.badges.all())
+    return new_pin
+
+
+class PinShareDialogView(LoginRequiredMixin, View):
+    def get(self, request, pin_slug):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile=request.user.profile)
+        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": _accepted_friend_profiles(request.user.profile)})
+
+
+class PinShareCreateView(LoginRequiredMixin, View):
+    def post(self, request, pin_slug):
+        sender = request.user.profile
+        pin = get_object_or_404(Pin, slug=pin_slug, profile=sender)
+        recipient = get_object_or_404(Profile, pk=request.POST.get("profile_id"))
+        if recipient == sender or not _are_friends(sender, recipient):
+            return HttpResponse("Pins can only be shared with connected friends.", status=403)
+
+        already_pinned = _recipient_has_pin(recipient, pin)
+        share = PinShare.objects.create(
+            pin=pin,
+            from_profile=sender,
+            to_profile=recipient,
+            status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
+        )
+        notification = NotificationLog.objects.create(
+            profile=recipient,
+            source_profile=sender,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.PIN_SHARED,
+            title="Pin shared with you",
+            message=(
+                f"{sender.username} shared {pin.display_label} with you. You already have this location pinned."
+                if already_pinned else f"{sender.username} shared {pin.display_label} with you."
+            ),
+            url=reverse("pin.share.detail", kwargs={"share_id": share.id}),
+        )
+        share.notification = notification
+        share.save(update_fields=["notification", "updated"])
+        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": _accepted_friend_profiles(sender), "shared_to": recipient})
+
+
+class PinShareDetailView(LoginRequiredMixin, View):
+    def get(self, request, share_id):
+        share = get_object_or_404(PinShare.objects.select_related("pin__location", "from_profile__user", "to_profile"), pk=share_id, to_profile=request.user.profile)
+        return render(request, "dashboard/pages/pin_share/detail.html", {"share": share, "pin": share.pin})
+
+
+class PinShareRespondView(LoginRequiredMixin, View):
+    def post(self, request, share_id):
+        share = get_object_or_404(PinShare.objects.select_related("pin"), pk=share_id, to_profile=request.user.profile)
+        action = request.POST.get("action")
+        if share.status != PinShareStatus.PENDING:
+            messages.info(request, "This shared pin has already been handled.")
+            return redirect("pin.share.detail", share_id=share.id)
+        if action == "accept":
+            with transaction.atomic():
+                if not _recipient_has_pin(share.to_profile, share.pin):
+                    _create_pin_from_share(share)
+                share.status = PinShareStatus.ACCEPTED
+                share.save(update_fields=["status", "updated"])
+            messages.success(request, "Pin added to your map.")
+        elif action == "reject":
+            share.status = PinShareStatus.REJECTED
+            share.save(update_fields=["status", "updated"])
+            messages.info(request, "Shared pin rejected.")
+        if share.notification_id:
+            NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
+        if request.headers.get("HX-Request"):
+            from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+            notifications = NotificationLog.objects.for_profile(request.user.profile).select_related("source_profile").order_by("-created")[:20]
+            response = render(request, "dashboard/partials/notifications/notification_dropdown.html", {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()})
+            return _trigger_badge_refresh(response)
+        return redirect("pin.share.detail", share_id=share.id)

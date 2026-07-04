@@ -1,0 +1,6 @@
+from urbanlens.dashboard.models.abstract import Manager, QuerySet
+
+class CategoryQuerySet(QuerySet): ...
+
+class CategoryManager(Manager, CategoryQuerySet):
+    def all(self) -> CategoryQuerySet: ...

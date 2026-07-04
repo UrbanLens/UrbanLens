@@ -1,0 +1,1082 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="settings-page page-content">
+    <div class="settings-header">
+        <h1 class="settings-title">Settings</h1>
+        <p class="settings-subtitle">Manage your account preferences</p>
+    </div>
+
+    {# -- Privacy ------------------------------------------------------------- #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">lock</i>
+            <div>
+                <h2 class="settings-section-title">Privacy</h2>
+                <p class="settings-section-desc">Control who can see your profile and activity.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="privacy-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="privacy">
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.profile_visibility.id_for_label }}">
+                    {{ privacy_form.profile_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.profile_visibility.help_text }}</p>
+                {{ privacy_form.profile_visibility }}
+                {% if privacy_form.profile_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.profile_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.comment_visibility.id_for_label }}">
+                    {{ privacy_form.comment_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.comment_visibility.help_text }}</p>
+                {{ privacy_form.comment_visibility }}
+                {% if privacy_form.comment_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.comment_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.friend_request_visibility.id_for_label }}">
+                    {{ privacy_form.friend_request_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.friend_request_visibility.help_text }}</p>
+                {{ privacy_form.friend_request_visibility }}
+                {% if privacy_form.friend_request_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.friend_request_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.photo_upload_visibility.id_for_label }}">
+                    {{ privacy_form.photo_upload_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.photo_upload_visibility.help_text }}</p>
+                {{ privacy_form.photo_upload_visibility }}
+                {% if privacy_form.photo_upload_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.photo_upload_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.viewer_photo_filter.id_for_label }}">
+                    {{ privacy_form.viewer_photo_filter.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.viewer_photo_filter.help_text }}</p>
+                {{ privacy_form.viewer_photo_filter }}
+                {% if privacy_form.viewer_photo_filter.errors %}
+                <p class="settings-error">{{ privacy_form.viewer_photo_filter.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.trip_pin_location_visibility.id_for_label }}">
+                    {{ privacy_form.trip_pin_location_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.trip_pin_location_visibility.help_text }}</p>
+                {{ privacy_form.trip_pin_location_visibility }}
+                {% if privacy_form.trip_pin_location_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.contact_visibility.id_for_label }}">
+                    {{ privacy_form.contact_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.contact_visibility.help_text }}</p>
+                {{ privacy_form.contact_visibility }}
+                {% if privacy_form.contact_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.contact_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- Style --------------------------------------------------------------- #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">palette</i>
+            <div>
+                <h2 class="settings-section-title">Style</h2>
+                <p class="settings-section-desc">Site-wide appearance.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="style-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="style">
+
+            <div class="settings-field">
+                <label class="settings-label">Color Theme</label>
+                <p class="settings-help">System follows your OS preference automatically.</p>
+                <div class="settings-theme-row">
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
+                        <input type="radio" name="theme_mode" value="system"
+                               {% if style_form.instance.theme_mode == 'system' %}checked{% endif %}
+                               onchange="applyThemePreview('system')">
+                        <i class="material-symbols-outlined">brightness_auto</i>
+                        <span>System</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
+                        <input type="radio" name="theme_mode" value="light"
+                               {% if style_form.instance.theme_mode == 'light' %}checked{% endif %}
+                               onchange="applyThemePreview('light')">
+                        <i class="material-symbols-outlined">light_mode</i>
+                        <span>Light</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
+                        <input type="radio" name="theme_mode" value="dark"
+                               {% if style_form.instance.theme_mode == 'dark' %}checked{% endif %}
+                               onchange="applyThemePreview('dark')">
+                        <i class="material-symbols-outlined">dark_mode</i>
+                        <span>Dark</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">
+                    Map Dark Mode
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
+                </label>
+                <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
+                <div class="settings-theme-row">
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
+                        <input type="radio" name="map_dark_mode" value="system"
+                               {% if style_form.instance.map_dark_mode == 'system' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('system')">
+                        <i class="material-symbols-outlined">brightness_auto</i>
+                        <span>System</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
+                        <input type="radio" name="map_dark_mode" value="light"
+                               {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('light')">
+                        <i class="material-symbols-outlined">light_mode</i>
+                        <span>Light</span>
+                    </label>
+                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
+                        <input type="radio" name="map_dark_mode" value="dark"
+                               {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
+                               onchange="applyMapDarkPreview('dark')">
+                        <i class="material-symbols-outlined">dark_mode</i>
+                        <span>Dark</span>
+                    </label>
+                </div>
+                {% if style_form.map_dark_mode.errors %}
+                <p class="settings-error">{{ style_form.map_dark_mode.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">{{ style_form.guidance_level.label }}</label>
+                <p class="settings-help">{{ style_form.guidance_level.help_text }}</p>
+                <div class="settings-map-view-row">
+                    {% for radio in style_form.guidance_level %}
+                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
+                           id="guidance-opt-{{ radio.data.value }}"
+                           onclick="applyGuidancePreview('{{ radio.data.value }}')">
+                        {{ radio.tag }}
+                        {% if radio.data.value == "all" %}
+                            <i class="material-symbols-outlined">school</i><span>Guides &amp; hints</span>
+                        {% elif radio.data.value == "tooltips" %}
+                            <i class="material-symbols-outlined">info</i><span>Hints only</span>
+                        {% else %}
+                            <i class="material-symbols-outlined">block</i><span>Off</span>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+                <p class="settings-help" id="guidance-help-detail" style="margin-top:.5rem">
+                    {% if style_form.instance.guidance_level == "all" %}
+                    Walkthrough cards on key pages, plus short hover hints on buttons.
+                    {% elif style_form.instance.guidance_level == "tooltips" %}
+                    Hover hints on buttons only - no walkthrough cards.
+                    {% else %}
+                    No walkthroughs or hover hints anywhere on the site.
+                    {% endif %}
+                </p>
+                {% if style_form.guidance_level.errors %}
+                <p class="settings-error">{{ style_form.guidance_level.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- Map ----------------------------------------------------------------- #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">map</i>
+            <div>
+                <h2 class="settings-section-title">Map</h2>
+                <p class="settings-section-desc">Display, performance, and starting point.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="map-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="map">
+            {{ map_center_form.map_custom_latitude }}
+            {{ map_center_form.map_custom_longitude }}
+            {{ map_center_form.map_default_zoom }}
+
+            <div class="settings-field">
+                <label class="settings-label">
+                    Default Map View
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="The basemap shown when you open the map. Remember keeps whichever view you used last." %}
+                </label>
+                <p class="settings-help">{{ map_display_form.default_map_view.help_text }}</p>
+                <div class="settings-map-view-row">
+                    {% for radio in map_display_form.default_map_view %}
+                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
+                        {{ radio.tag }}
+                        {% if radio.data.value == "satellite" %}<i class="material-symbols-outlined">globe</i>
+                        {% elif radio.data.value == "topographic" %}<i class="material-symbols-outlined">terrain</i>
+                        {% elif radio.data.value == "remember" %}<i class="material-symbols-outlined">history</i>
+                        {% else %}<i class="material-symbols-outlined">map</i>{% endif %}
+                        <span>{{ radio.choice_label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% if map_display_form.default_map_view.errors %}
+                <p class="settings-error">{{ map_display_form.default_map_view.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">
+                    Starting Point
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
+                </label>
+                <div class="settings-map-view-row">
+                    {% for radio in map_center_form.map_center_mode %}
+                    <label class="settings-map-view-option ul-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                           onclick="selectMapMode('{{ radio.data.value }}')">
+                        {{ radio.tag }}
+                        {% if radio.data.value == 'auto' %}
+                            <i class="material-symbols-outlined">push_pin</i><span>My Pins</span>
+                        {% elif radio.data.value == 'gps' %}
+                            <i class="material-symbols-outlined">gps_fixed</i><span>My Location</span>
+                        {% elif radio.data.value == 'remember' %}
+                            <i class="material-symbols-outlined">history</i><span>Remember</span>
+                        {% else %}
+                            <i class="material-symbols-outlined">place</i><span>Custom</span>
+                        {% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="settings-field" id="custom-location-field" style="display:none">
+                <label class="settings-label">Custom Location</label>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+                    <input type="text" id="map-center-address" class="settings-input" style="flex:1; min-width:200px"
+                           placeholder="e.g. Albany, NY  or  42.6526, -73.7562">
+                    <button type="button" class="settings-reset-btn ul-radio-button" onclick="geocodeAddress()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">search</i> Find
+                    </button>
+                    <button type="button" class="settings-reset-btn ul-radio-button" onclick="useDeviceLocation()">
+                        <i class="material-icons" style="font-size:16px;vertical-align:middle">my_location</i> Use Current
+                    </button>
+                </div>
+                <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
+                <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
+                <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">
+                    {{ map_display_form.cluster_radius.label }}
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Nearby pins group into a cluster badge at this pixel radius. Auto adjusts with zoom level." wide=True %}
+                </label>
+                <p class="settings-help">Group pins within this radius. "Auto" adjusts the radius based on zoom level.</p>
+
+                {# Actual hidden form field - updated by JS below #}
+                <input type="hidden"
+                       name="{{ map_display_form.cluster_radius.html_name }}"
+                       id="{{ map_display_form.cluster_radius.id_for_label }}"
+                       value="{{ map_display_form.cluster_radius.value|default:'' }}">
+
+                {# Auto / Custom mode pills #}
+                {% with is_custom=map_display_form.cluster_radius.value %}
+                <div class="settings-map-view-row" style="margin-top:.5rem">
+                    <label class="settings-map-view-option ul-radio-button{% if not is_custom %} active{% endif %}"
+                           id="cluster-auto-label" onclick="setClusterMode('auto')">
+                        <input type="radio" name="_cluster_mode" value="auto"{% if not is_custom %} checked{% endif %}>
+                        <i class="material-symbols-outlined">auto_awesome</i>
+                        <span>Auto</span>
+                    </label>
+                    <label class="settings-map-view-option ul-radio-button{% if is_custom %} active{% endif %}"
+                           id="cluster-custom-label" onclick="setClusterMode('custom')">
+                        <input type="radio" name="_cluster_mode" value="custom"{% if is_custom %} checked{% endif %}>
+                        <i class="material-symbols-outlined">tune</i>
+                        <span>Custom</span>
+                    </label>
+                </div>
+
+                <div id="cluster-radius-wrap" class="settings-cluster-slider-wrap"{% if not is_custom %} style="display:none"{% endif %}>
+                    <input type="range" id="cluster-radius-slider"
+                           min="10" max="200" step="5"
+                           value="{{ is_custom|default:80 }}"
+                           oninput="updateClusterRadius(this.value)">
+                    <span class="settings-cluster-value">
+                        <span id="cluster-radius-display">{{ is_custom|default:80 }}</span> px
+                    </span>
+                </div>
+                {% endwith %}
+
+                {% if map_display_form.cluster_radius.errors %}
+                <p class="settings-error">{{ map_display_form.cluster_radius.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ map_display_form.use_pin_cache }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ map_display_form.use_pin_cache.label }}</span>
+                        <p class="settings-help">{{ map_display_form.use_pin_cache.help_text }}</p>
+                        {% if not map_display_form.use_pin_cache.value %}
+                        <span class="settings-warning">
+                            <i class="material-icons" style="font-size:0.9rem;vertical-align:-0.15em;">warning</i>
+                            Caching is off - map loads will be slower.
+                        </span>
+                        {% endif %}
+                    </span>
+                </label>
+                {% if map_display_form.use_pin_cache.errors %}
+                <p class="settings-error">{{ map_display_form.use_pin_cache.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- Places Layer Sources ---------------------------------------------- #}
+    {% if show_places_layer %}
+    <section class="settings-section ul-section" id="places-layer-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">place</i>
+            <div>
+                <h2 class="settings-section-title">Places Layer</h2>
+                <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="places-layer-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="places_layer">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_google_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_google_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_nps_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_nps_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ places_layer_form.places_wikipedia_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
+                        <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if places_layer_form.places_wikipedia_enabled.errors %}
+                <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {# -- Pin Detail Defaults ----------------------------------------------- #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">draw</i>
+            <div>
+                <h2 class="settings-section-title">Markup</h2>
+                <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="markup-defaults-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="markup_defaults">
+            {{ markup_defaults_form.markup_fill_color }}
+            {{ markup_defaults_form.markup_fill_opacity }}
+            {{ markup_defaults_form.markup_border_color }}
+            {{ markup_defaults_form.markup_border_opacity }}
+
+            <div class="settings-field">
+                <label class="settings-label">Fill Color &amp; Opacity</label>
+                <p class="settings-help">The main color of arrows, shapes, and text.</p>
+                <div class="cop-widget" id="cop-fill">
+                    <div class="cop-preview-wrap">
+                        <div class="cop-checkerboard"></div>
+                        <div class="cop-preview" id="cop-fill-preview"></div>
+                    </div>
+                    <div class="cop-controls">
+                        <div class="markup-color-swatches" id="cop-fill-swatches"></div>
+                        <div class="cop-alpha-row">
+                            <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
+                                   min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
+                                   oninput="copUpdate('fill')">
+                            <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">Border Color &amp; Opacity</label>
+                <p class="settings-help">Outline color for shapes and arrows. Leave as "None" for no border.</p>
+                <div class="cop-widget" id="cop-border">
+                    <div class="cop-preview-wrap">
+                        <div class="cop-checkerboard"></div>
+                        <div class="cop-preview" id="cop-border-preview"></div>
+                    </div>
+                    <div class="cop-controls">
+                        <div class="markup-color-swatches" id="cop-border-swatches"></div>
+                        <div class="cop-alpha-row">
+                            <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
+                                   min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
+                                   oninput="copUpdate('border')">
+                            <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- AI Features --------------------------------------------------------- #}
+    {% if can_use_ai_features %}
+    <section class="settings-section ul-section" id="ai-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">auto_awesome</i>
+            <div>
+                <h2 class="settings-section-title">AI Features</h2>
+                <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="ai-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="ai">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ ai_form.ai_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ ai_form.ai_enabled.label }}</strong>
+                        <span class="settings-help">{{ ai_form.ai_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if ai_form.ai_enabled.errors %}
+                <p class="settings-error">{{ ai_form.ai_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-ai-sub-options" id="ai-sub-options">
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these badge types:</p>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_categories }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_categories.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_categories.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_tags }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_tags.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_tags.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_statuses }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_statuses.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_statuses.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {# -- Notifications ------------------------------------------------------- #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">notifications</i>
+            <div>
+                <h2 class="settings-section-title">Notifications</h2>
+                <p class="settings-section-desc">How you receive alerts.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <form method="post" class="settings-form" id="contact-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="contact">
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
+                        {{ contact_form.email.label }}
+                    </label>
+                    <p class="settings-help">{{ contact_form.email.help_text }}</p>
+                    {{ contact_form.email }}
+                    {% if contact_form.email.errors %}
+                    <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+
+            <div hx-get="{% url 'notifications.preferences' %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+function applyThemePreview(theme) {
+    var root = document.getElementById('html-root');
+    if (theme === 'system') {
+        var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    } else {
+        root.setAttribute('data-theme', theme);
+    }
+    ['theme-opt-system', 'theme-opt-light', 'theme-opt-dark'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    var optMap = { system: 'theme-opt-system', light: 'theme-opt-light', dark: 'theme-opt-dark' };
+    var opt = document.getElementById(optMap[theme]);
+    if (opt) opt.classList.add('active');
+}
+
+function applyMapDarkPreview(mode) {
+    ['map-dark-opt-system', 'map-dark-opt-light', 'map-dark-opt-dark'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    var optMap = { system: 'map-dark-opt-system', light: 'map-dark-opt-light', dark: 'map-dark-opt-dark' };
+    var opt = document.getElementById(optMap[mode]);
+    if (opt) opt.classList.add('active');
+}
+
+var _guidanceHelpText = {
+    all: 'Walkthrough cards on key pages, plus short hover hints on buttons.',
+    tooltips: 'Hover hints on buttons only - no walkthrough cards.',
+    none: 'No walkthroughs or hover hints anywhere on the site.',
+};
+
+function applyGuidancePreview(level) {
+    var root = document.getElementById('html-root');
+    if (root) root.classList.toggle('tooltips-disabled', level === 'none');
+    ['guidance-opt-all', 'guidance-opt-tooltips', 'guidance-opt-none'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    var opt = document.getElementById('guidance-opt-' + level);
+    if (opt) opt.classList.add('active');
+    var detail = document.getElementById('guidance-help-detail');
+    if (detail && _guidanceHelpText[level]) detail.textContent = _guidanceHelpText[level];
+}
+
+// -- Map Center Preview --------------------------------------------------------
+(function () {
+    var GEOCODE_URL = '{% url "settings.geocode" %}';
+    var currentMode = '{{ map_center_form.instance.map_center_mode|default:"gps" }}';
+
+    // Server-provided starting coordinates for the preview.
+    var previewLat  = {{ preview_lat|default:"null" }};
+    var previewLng  = {{ preview_lng|default:"null" }};
+    var previewZoom = {{ preview_zoom|default:13 }};
+
+    // Clustering centroid passed from the server - used when switching to Auto mode.
+    var _PIN_CENTROID_LAT = {{ pin_centroid_lat|default:"null" }};
+    var _PIN_CENTROID_LNG = {{ pin_centroid_lng|default:"null" }};
+
+    // Fallback when there is no server-provided center yet (new user with no pins).
+    if (previewLat === null) { previewLat = 40.7128; previewLng = -74.0060; }
+
+    // Tile layer URLs for each view mode.
+    var _TILE_URLS = {
+        street:      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        satellite:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        topographic: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    };
+    var _TILE_ATTRIBS = {
+        street:      '© OpenStreetMap contributors',
+        satellite:   'Tiles © Esri',
+        topographic: '© OpenTopoMap contributors',
+    };
+
+    // Detect the user's current default map view from the selected radio.
+    var _currentMapViewTile = (function () {
+        var checked = document.querySelector('input[name="default_map_view"]:checked');
+        return checked ? checked.value : 'satellite';
+    }());
+
+    // Initialise the preview Leaflet map.
+    var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
+    var _previewTileLayer = L.tileLayer(_TILE_URLS[_currentMapViewTile] || _TILE_URLS.street, {
+        attribution: _TILE_ATTRIBS[_currentMapViewTile] || _TILE_ATTRIBS.street,
+        maxZoom: 19,
+    }).addTo(previewMap);
+
+    // Switch the preview tile layer when the user picks a different map view.
+    document.querySelectorAll('input[name="default_map_view"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            var view = radio.value;
+            var url  = _TILE_URLS[view] || _TILE_URLS.street;
+            var attr = _TILE_ATTRIBS[view] || _TILE_ATTRIBS.street;
+            _previewTileLayer.setUrl(url);
+            previewMap.attributionControl.addAttribution(attr);
+        });
+    });
+
+    // Marker that the user can drag to pick a location.
+    var marker = L.marker([previewLat, previewLng], { draggable: true }).addTo(previewMap);
+
+    function syncHiddenFields(lat, lng) {
+        document.getElementById('id_map_custom_latitude').value  = lat.toFixed(6);
+        document.getElementById('id_map_custom_longitude').value = lng.toFixed(6);
+    }
+
+    function syncZoom() {
+        document.getElementById('id_map_default_zoom').value = previewMap.getZoom();
+    }
+
+    function coordsToText(lat, lng) {
+        return lat.toFixed(6) + ', ' + lng.toFixed(6);
+    }
+
+    // Keep hidden fields in sync whenever the map or marker changes.
+    // Dragging or clicking auto-switches to Custom so the chosen position is saved.
+    marker.on('dragend', function (e) {
+        var pos = e.target.getLatLng();
+        previewMap.setView(pos);
+        syncHiddenFields(pos.lat, pos.lng);
+        document.getElementById('map-center-address').value = coordsToText(pos.lat, pos.lng);
+        if (currentMode !== 'custom') selectMapMode('custom');
+    });
+    previewMap.on('click', function (e) {
+        marker.setLatLng(e.latlng);
+        previewMap.setView(e.latlng);
+        syncHiddenFields(e.latlng.lat, e.latlng.lng);
+        document.getElementById('map-center-address').value = coordsToText(e.latlng.lat, e.latlng.lng);
+        if (currentMode !== 'custom') selectMapMode('custom');
+    });
+    previewMap.on('zoomend', syncZoom);
+
+    // Only write the custom coordinate hidden fields when already in custom mode.
+    // In GPS/AUTO modes the form must keep whatever custom coords were previously
+    // saved - overwriting them here would corrupt the stored custom location.
+    if (currentMode === 'custom') {
+        syncHiddenFields(previewLat, previewLng);
+    }
+    syncZoom();
+
+    // Show / hide the custom-location input row and enable / disable the marker.
+    function applyMode(mode) {
+        currentMode = mode;
+        var customField = document.getElementById('custom-location-field');
+        var isDraggable = mode === 'custom';
+        if (isDraggable) {
+            marker.dragging.enable();
+            customField.style.display = '';
+        } else {
+            marker.dragging.disable();
+            customField.style.display = 'none';
+        }
+        // Update active pill styling.
+        document.querySelectorAll('.settings-map-view-option').forEach(function (el) {
+            var radio = el.querySelector('input[type=radio]');
+            el.classList.toggle('active', radio && radio.value === mode);
+        });
+    }
+
+    var _GPS_ZOOM  = 13;  // street/neighbourhood - appropriate for "where am I now"
+    var _AUTO_ZOOM = 11;  // slightly wider - shows a whole pin cluster
+
+    window.selectMapMode = function (mode) {
+        // Select the matching hidden radio input.
+        var radio = document.querySelector('input[name="map_center_mode"][value="' + mode + '"]');
+        if (radio) radio.checked = true;
+        applyMode(mode);
+
+        if (mode === 'gps') {
+            previewMap.setZoom(_GPS_ZOOM);
+            document.getElementById('id_map_default_zoom').value = _GPS_ZOOM;
+            useDeviceLocation();
+        } else if (mode === 'auto') {
+            previewMap.setZoom(_AUTO_ZOOM);
+            document.getElementById('id_map_default_zoom').value = _AUTO_ZOOM;
+            // Move the preview to the server-computed pin centroid for visual reference.
+            // Don't sync the custom hidden fields - this is not a custom location.
+            if (_PIN_CENTROID_LAT !== null && _PIN_CENTROID_LNG !== null) {
+                var centroid = L.latLng(_PIN_CENTROID_LAT, _PIN_CENTROID_LNG);
+                marker.setLatLng(centroid);
+                previewMap.setView(centroid, _AUTO_ZOOM);
+            }
+        }
+        // Custom: keep whatever zoom the user last set.
+    };
+
+    // Geocode an address string and move the preview map there.
+    window.geocodeAddress = function () {
+        var address = document.getElementById('map-center-address').value.trim();
+        if (!address) return;
+        var errEl = document.getElementById('geocode-error');
+        errEl.style.display = 'none';
+
+        fetch(GEOCODE_URL + '?address=' + encodeURIComponent(address))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    errEl.textContent = data.error;
+                    errEl.style.display = '';
+                    return;
+                }
+                var latlng = L.latLng(data.lat, data.lng);
+                marker.setLatLng(latlng);
+                previewMap.setView(latlng, previewMap.getZoom());
+                syncHiddenFields(data.lat, data.lng);
+            })
+            .catch(function () {
+                errEl.textContent = 'Geocoding request failed.';
+                errEl.style.display = '';
+            });
+    };
+
+    // Allow pressing Enter to trigger geocode.
+    document.getElementById('map-center-address').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); geocodeAddress(); }
+    });
+
+    // Use the browser's GPS to move the preview marker.
+    // Hidden custom-coordinate fields are only updated in CUSTOM mode - in GPS
+    // mode this just gives a visual preview of where the map will open.
+    window.useDeviceLocation = function () {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(function (pos) {
+            var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+            marker.setLatLng(latlng);
+            previewMap.setView(latlng, previewMap.getZoom());
+            if (currentMode === 'custom') {
+                syncHiddenFields(pos.coords.latitude, pos.coords.longitude);
+            }
+        });
+    };
+
+    // Apply the initial mode (show/hide correct fields, etc.).
+    applyMode(currentMode);
+})();
+
+// -- Cluster radius -------------------------------------------------------------
+window.setClusterMode = function (mode) {
+    var wrap = document.getElementById('cluster-radius-wrap');
+    var hidden = document.getElementById('{{ map_display_form.cluster_radius.id_for_label }}');
+    var autoLabel = document.getElementById('cluster-auto-label');
+    var customLabel = document.getElementById('cluster-custom-label');
+    if (mode === 'auto') {
+        hidden.value = '';
+        wrap.style.display = 'none';
+        autoLabel.classList.add('active');
+        customLabel.classList.remove('active');
+        document.querySelector('input[name="_cluster_mode"][value="auto"]').checked = true;
+    } else {
+        var slider = document.getElementById('cluster-radius-slider');
+        hidden.value = slider.value;
+        wrap.style.display = '';
+        autoLabel.classList.remove('active');
+        customLabel.classList.add('active');
+        document.querySelector('input[name="_cluster_mode"][value="custom"]').checked = true;
+    }
+};
+
+window.updateClusterRadius = function (value) {
+    document.getElementById('{{ map_display_form.cluster_radius.id_for_label }}').value = value;
+    document.getElementById('cluster-radius-display').textContent = value;
+};
+
+// -- Color+Opacity Picker (cop) ------------------------------------------------
+(function () {
+    var _palette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc'];
+
+    // Initialize both pickers
+    var fillColor   = document.getElementById('id_markup_fill_color').value   || '#e53e3e';
+    var borderColor = document.getElementById('id_markup_border_color').value || '';
+
+    function hexToRgb(hex) {
+        var r = parseInt(hex.slice(1,3),16);
+        var g = parseInt(hex.slice(3,5),16);
+        var b = parseInt(hex.slice(5,7),16);
+        return r + ',' + g + ',' + b;
+    }
+
+    function buildSwatches(containerId, currentColor, withNone, onChange) {
+        var cont = document.getElementById(containerId);
+        cont.innerHTML = '';
+        if (withNone) {
+            var nb = document.createElement('button');
+            nb.type = 'button'; nb.title = 'None (no border)';
+            nb.className = 'markup-color-swatch markup-color-swatch--none' + (!currentColor ? ' markup-color-swatch--active' : '');
+            nb.style.cssText = 'background:transparent;border:1px solid #cbd5e1;position:relative;';
+            nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+            nb.addEventListener('click', function () {
+                cont.querySelectorAll('.markup-color-swatch').forEach(function(b){ b.classList.remove('markup-color-swatch--active'); });
+                nb.classList.add('markup-color-swatch--active');
+                onChange('');
+            });
+            cont.appendChild(nb);
+        }
+        _palette.forEach(function (color) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'markup-color-swatch' + (color === currentColor ? ' markup-color-swatch--active' : '');
+            btn.style.cssText = 'background:' + color + ';' + (color === '#f8fafc' ? 'border:1px solid #cbd5e1;' : '');
+            btn.addEventListener('click', function () {
+                cont.querySelectorAll('.markup-color-swatch').forEach(function(b){ b.classList.remove('markup-color-swatch--active'); });
+                btn.classList.add('markup-color-swatch--active');
+                onChange(color);
+            });
+            cont.appendChild(btn);
+        });
+    }
+
+    function updateSliderGradient(sliderId, color) {
+        var slider = document.getElementById(sliderId);
+        if (!slider) return;
+        if (color) {
+            var rgb = hexToRgb(color);
+            slider.style.setProperty('--cop-color', 'rgba(' + rgb + ',1)');
+        } else {
+            slider.style.setProperty('--cop-color', 'rgba(0,0,0,0)');
+        }
+    }
+
+    function updatePreview(previewId, color, opacity) {
+        var el = document.getElementById(previewId);
+        if (!el) return;
+        if (color) {
+            var rgb = hexToRgb(color);
+            el.style.background = 'rgba(' + rgb + ',' + (opacity / 100) + ')';
+        } else {
+            el.style.background = 'transparent';
+        }
+    }
+
+    window.copUpdate = function (which) {
+        if (which === 'fill') {
+            var opacity = parseInt(document.getElementById('cop-fill-opacity').value, 10);
+            document.getElementById('cop-fill-opacity-val').textContent = opacity;
+            document.getElementById('id_markup_fill_opacity').value = opacity;
+            updateSliderGradient('cop-fill-opacity', fillColor);
+            updatePreview('cop-fill-preview', fillColor, opacity);
+        } else {
+            var opacityB = parseInt(document.getElementById('cop-border-opacity').value, 10);
+            document.getElementById('cop-border-opacity-val').textContent = opacityB;
+            document.getElementById('id_markup_border_opacity').value = opacityB;
+            updateSliderGradient('cop-border-opacity', borderColor);
+            updatePreview('cop-border-preview', borderColor, opacityB);
+        }
+    };
+
+    // Build fill swatches
+    buildSwatches('cop-fill-swatches', fillColor, false, function (color) {
+        fillColor = color;
+        document.getElementById('id_markup_fill_color').value = color;
+        copUpdate('fill');
+    });
+
+    // Build border swatches (with None option)
+    buildSwatches('cop-border-swatches', borderColor, true, function (color) {
+        borderColor = color;
+        document.getElementById('id_markup_border_color').value = color;
+        copUpdate('border');
+    });
+
+    // Initial render
+    var initFillOpacity   = parseInt(document.getElementById('cop-fill-opacity').value, 10);
+    var initBorderOpacity = parseInt(document.getElementById('cop-border-opacity').value, 10);
+    updateSliderGradient('cop-fill-opacity', fillColor);
+    updatePreview('cop-fill-preview', fillColor, initFillOpacity);
+    updateSliderGradient('cop-border-opacity', borderColor);
+    updatePreview('cop-border-preview', borderColor, initBorderOpacity);
+})();
+
+// -- Auto-save settings forms --------------------------------------------------
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    var _timers = {};
+    var _indicators = {};
+
+    function showSaved(formId) {
+        var el = _indicators[formId];
+        if (!el) return;
+        el.textContent = '✓ Saved';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 2500);
+    }
+
+    function doSave(form) {
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
+        fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf() },
+        }).then(function (r) {
+            if (r.ok && guard) guard.markClean();
+            if (r.ok) showSaved(form.id);
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
+    }
+
+    function schedule(form, delay) {
+        if (window.autosaveGuard) window.autosaveGuard.markDirty();
+        clearTimeout(_timers[form.id]);
+        _timers[form.id] = setTimeout(function () { doSave(form); }, delay !== undefined ? delay : 0);
+    }
+
+    document.querySelectorAll('.settings-form').forEach(function (form) {
+        // Build per-form saved indicator
+        var actions = form.querySelector('.settings-actions');
+        if (actions) {
+            var ind = document.createElement('span');
+            ind.className = 'settings-autosave-indicator';
+            actions.appendChild(ind);
+            _indicators[form.id] = ind;
+            // Hide the save button - auto-save replaces it
+            actions.querySelectorAll('.settings-save-btn').forEach(function (b) { b.style.display = 'none'; });
+        }
+
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            // Ignore hidden fields (updated programmatically - handled via copUpdate hook)
+            if (t.type === 'hidden') return;
+            var delay = (t.type === 'text' || t.type === 'email' || t.type === 'number') ? 1200 : 0;
+            schedule(form, delay);
+        });
+
+        form.addEventListener('input', function (e) {
+            var t = e.target;
+            if (t.type === 'range' || t.type === 'text' || t.type === 'email') {
+                schedule(form, 600);
+            }
+        });
+    });
+
+    // Hook into the color/opacity picker - it updates hidden fields with no DOM event
+    var _orig = window.copUpdate;
+    window.copUpdate = function (which) {
+        if (_orig) _orig(which);
+        var form = document.getElementById('markup-defaults-form');
+        if (form) schedule(form, 600);
+    };
+}());
+
+// -- AI settings: toggle sub-options when master switch is flipped -------------
+(function () {
+    var masterToggle = document.getElementById('{{ ai_form.ai_enabled.id_for_label }}');
+    var subOptions   = document.getElementById('ai-sub-options');
+    if (!masterToggle || !subOptions) return;
+
+    function syncSubOptions() {
+        subOptions.style.opacity = masterToggle.checked ? '' : '0.4';
+        subOptions.querySelectorAll('input').forEach(function (inp) {
+            inp.disabled = !masterToggle.checked;
+        });
+    }
+
+    masterToggle.addEventListener('change', syncSubOptions);
+    syncSubOptions();
+}());
+</script>
+{% endblock %}

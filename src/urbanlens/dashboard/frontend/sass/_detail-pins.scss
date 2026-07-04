@@ -1,0 +1,463 @@
+@use 'variables' as *;
+
+// -- Detail Pins ----------------------------------------------------------------
+.detail-pins-panel {
+    .detail-pin-empty {
+        padding: 1rem 1.25rem;
+        color: var(--ul-grey-6);
+        font-size: .85rem;
+    }
+}
+
+// Shared destructive icon button - used in detail pins, trip panels, etc.
+.detail-pin-action-btn {
+    @include icon-btn-danger(28px);
+    outline: none;
+
+    &:focus {
+        outline: none;
+    }
+}
+
+.detail-pin-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.detail-pin-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .75rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .15);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    .detail-pin-type-icon {
+        font-size: 1.35rem;
+        flex-shrink: 0;
+        margin-top: .1rem;
+    }
+
+    .detail-pin-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .15rem;
+
+        .detail-pin-name {
+            font-weight: 600;
+            font-size: .9rem;
+        }
+
+        .detail-pin-desc {
+            font-size: .8rem;
+            color: var(--ul-grey-6);
+        }
+
+        .detail-pin-coords {
+            font-size: .75rem;
+            color: var(--ul-grey-6);
+            font-family: monospace;
+        }
+    }
+
+    .detail-pin-actions {
+        display: flex;
+        gap: .25rem;
+        flex-shrink: 0;
+    }
+
+    // see global .detail-pin-action-btn below
+
+    &.detail-pin-type--building .detail-pin-type-icon {
+        color: var(--ul-grey-6);
+    }
+
+    &.detail-pin-type--entrance .detail-pin-type-icon {
+        color: $color-green-600;
+    }
+
+    &.detail-pin-type--poi .detail-pin-type-icon {
+        color: var(--ul-accent-amber);
+    }
+
+    &.detail-pin-type--danger .detail-pin-type-icon {
+        color: $color-red-600;
+    }
+
+    &.detail-pin-type--other .detail-pin-type-icon {
+        color: $color-indigo-600;
+    }
+
+    &.detail-pin-type--location .detail-pin-type-icon {
+        color: $color-blue-600;
+    }
+}
+
+.detail-pin-no-location {
+    margin: 0 1.25rem .5rem;
+    font-size: .8rem;
+    color: var(--ul-grey-4);
+    font-style: italic;
+}
+
+.form-optional {
+    font-weight: 400;
+    color: var(--ul-grey-4);
+    font-size: .8em;
+}
+
+// Scrollable body - everything below the fixed header. Shared by the
+// non-modal .map-dialog--side panel used identically on both the pin detail
+// page and the Location wiki page.
+.detail-pin-add-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0; // required for flex children to shrink below content size
+}
+
+.detail-pin-add-hint {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: .5rem 1.25rem 0;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined,
+    .material-icons {
+        color: $color-blue-600;
+    }
+
+    // Set once a location has been placed - confirms the click/drag registered.
+    &.is-placed {
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-green-600;
+        }
+    }
+}
+
+.detail-pin-add-form {
+    padding: 0 1.25rem 1.25rem;
+
+    .form-row {
+        @include form-row;
+        margin-bottom: .8rem;
+
+        &--coords {
+            flex-direction: row;
+            gap: .75rem;
+
+            > div {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: .3rem;
+            }
+        }
+    }
+}
+
+.detail-map-icon {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    display: block;
+}
+
+// -- Detail-pin icon + color pickers (shared by both dialogs) ----------------
+.dp-icon-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    padding: .25rem 0;
+}
+
+.dp-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 18px;
+        color: var(--ul-grey-7);
+    }
+
+    &:hover {
+        background: var(--ul-grey-0a);
+        border-color: $color-blue-300;
+    }
+
+    &.dp-icon-btn--active {
+        background: $color-blue-100;
+        border-color: $color-blue-600;
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-blue-600;
+        }
+    }
+}
+
+.dp-color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    padding: .25rem 0;
+}
+
+.dp-color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color .12s, transform .1s;
+
+    &:hover {
+        transform: scale(1.15);
+    }
+
+    &.dp-color-swatch--active {
+        border-color: var(--ul-grey-8);
+        box-shadow: 0 0 0 2px #fff inset;
+    }
+}
+
+// -- Detail-pin delete animation ----------------------------------------------
+.detail-pin-item.is-deleting,
+.detail-pin-wiki-item.is-deleting {
+    opacity: 0.25;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.detail-pin-wiki-list {
+    padding: .5rem 0;
+}
+
+.detail-pin-wiki-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .6rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .12);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    .detail-pin-wiki-attr {
+        margin-left: auto;
+        font-size: .75rem;
+        color: var(--ul-grey-4);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+}
+
+.detail-pin-wiki-empty {
+    padding: 1rem 1.25rem;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+}
+
+// -- Aliases panel ------------------------------------------------------------
+.aliases-panel {
+    .aliases-description {
+        padding: .5rem 1rem 0;
+        font-size: .83rem;
+        color: var(--ul-grey-6);
+        margin: 0;
+    }
+}
+
+.alias-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .75rem 1rem;
+    min-height: 2.5rem;
+    align-items: center;
+}
+
+.alias-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .25rem .35rem .25rem .65rem;
+    border-radius: 20px;
+    background: color-mix(in srgb, $color-indigo-500 12%, transparent);
+    border: 1px solid color-mix(in srgb, $color-indigo-500 25%, transparent);
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    line-height: 1.3;
+
+    .alias-chip-name {
+        flex: 1;
+    }
+
+    .alias-chip-author {
+        font-size: .72rem;
+        color: var(--ul-grey-6);
+        font-style: italic;
+        padding: 0 .2rem;
+
+        &::before {
+            content: '- ';
+        }
+    }
+
+    .alias-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: .15rem;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, .1);
+        cursor: pointer;
+        padding: 0;
+        color: var(--ul-grey-7);
+        outline: none;
+        transition: background .12s, color .12s;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        &:hover,
+        &:focus {
+            background: rgba(200, 0, 0, .18);
+            color: var(--ul-color-danger-accent);
+            outline: none;
+        }
+    }
+}
+
+.aliases-empty {
+    padding: .5rem 1rem .75rem;
+    font-size: .83rem;
+    color: var(--ul-grey-6);
+    font-style: italic;
+    margin: 0;
+}
+
+.alias-add-form {
+    display: flex;
+    gap: .5rem;
+    padding: 0 1rem 1rem;
+    align-items: center;
+
+    .alias-add-input {
+        flex: 1;
+        padding: .35rem .6rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 6px;
+        font-size: .85rem;
+        outline: none;
+
+        &:focus {
+            border-color: $color-indigo-500;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .15);
+        }
+    }
+
+    .alias-add-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: .35rem .6rem;
+        background: $color-indigo-500;
+        color: var(--ul-grey-5);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background .15s;
+        
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 18px;
+        }
+
+        &:hover {
+            background: $color-indigo-600;
+        }
+    }
+}
+
+// -- Circle-style bg/border opacity row --------------------------------------
+.dp-opacity-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: .35rem;
+
+    .dp-opacity-label {
+        font-size: .78rem;
+        color: var(--ul-grey-5);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    input[type=range] {
+        flex: 1;
+        accent-color: $color-indigo-500;
+    }
+}
+
+.dp-opacity-val {
+    font-size: .78rem;
+    color: var(--ul-grey-7);
+    min-width: 2.2ch;
+    text-align: right;
+}
+
+.dp-circle-swatches {
+    gap: .3rem;
+    padding: .2rem 0;
+}
+
+// -- Marker tooltip (detail pins + markup items) ------------------------------
+.detail-pin-tooltip.leaflet-tooltip {
+    background: rgba(15, 23, 42, .88);
+    border: none;
+    border-radius: 6px;
+    color: var(--ul-grey-0);
+    font-size: .78rem;
+    font-weight: 500;
+    padding: .25rem .5rem;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+
+    &::before {
+        border-top-color: rgba(15, 23, 42, .88);
+    }
+}
+
+// Shared wiki dialog uses the same base as tag/visit dialogs.
+.wiki-edit-dialog {
+    @include dialog-base(480px);
+
+    .wiki-edit-form {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+    }
+}

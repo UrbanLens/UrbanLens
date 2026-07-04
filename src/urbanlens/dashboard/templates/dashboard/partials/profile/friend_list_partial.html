@@ -1,0 +1,137 @@
+{% load dashboard_tags %}
+<div id="friend_list" class="profile-section">
+
+    {# -- Section header -------------------------------------------------------- #}
+    <div class="profile-section-header">
+        <h3 class="profile-section-title">
+            {% if is_own_profile %}Friends{% else %}Mutual Friends{% endif %}
+            {% if is_own_profile and friends %}<span class="profile-section-count">{{ friends|length }}</span>{% endif %}
+            {% if not is_own_profile and mutual_friends %}<span class="profile-section-count">{{ mutual_friends|length }}</span>{% endif %}
+        </h3>
+        <div class="profile-section-actions">
+            {% if is_own_profile %}
+            {% include "dashboard/partials/profile/_invite_friend_button.html" with button_class="btn btn--primary btn-friend--invite btn-friend--compact" dialog_id="invite-friend-dialog-profile" %}
+            {% endif %}
+            {% if is_own_profile and friends|length > 8 %}
+            <a href="{% url 'friend.page' viewer.id %}" class="profile-section-link">
+                View all {{ friends|length }} <i class="material-symbols-outlined">arrow_forward</i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# -- Incoming friend requests (own profile only) ------------------------ #}
+    {% if is_own_profile and incoming_requests %}
+    <div class="friend-requests-section">
+        <p class="friend-requests-label">
+            <i class="material-symbols-outlined">person_add</i>
+            {{ incoming_requests|length }} pending request{{ incoming_requests|length|pluralize }}
+        </p>
+        <ul class="friend-request-list">
+            {% for req in incoming_requests %}
+            <li class="friend-request-item">
+                {% if req.from_profile.avatar %}
+                <img class="friend-avatar-sm" src="{{ req.from_profile.avatar.url }}" alt="">
+                {% else %}
+                <div class="friend-avatar-sm friend-avatar-placeholder">{{ req.from_profile.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-request-info">
+                    <a href="{% url 'profile.view_user' req.from_profile.slug %}" class="friend-request-name">
+                        {{ req.from_profile.full_name|default:req.from_profile.username }}
+                    </a>
+                    <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
+                </div>
+                <div class="friend-request-actions">
+                    <button type="button" class="btn-friend-accept"
+                            hx-post="{% url 'friend.accept' req.from_profile.id %}"
+                            hx-target="#friend_list"
+                            hx-swap="outerHTML"
+                            title="Accept">
+                        <i class="material-symbols-outlined">check</i>
+                    </button>
+                    <button type="button" class="btn-friend-reject"
+                            hx-post="{% url 'friend.reject' req.from_profile.id %}"
+                            hx-target="#friend_list"
+                            hx-swap="outerHTML"
+                            title="Decline">
+                        <i class="material-symbols-outlined">close</i>
+                    </button>
+                    <button type="button" class="btn-friend-ignore"
+                            hx-post="{% url 'friend.ignore' req.from_profile.id %}"
+                            hx-target="#friend_list"
+                            hx-swap="outerHTML"
+                            title="Ignore">
+                        <i class="material-symbols-outlined">block</i>
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# -- Friend grid ----------------------------------------------------------- #}
+    {% if is_own_profile %}
+    {% if friends %}
+    <ul class="friend-grid">
+        {% for friend in friends|slice:":8" %}
+        <li class="friend-card">
+            <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
+                {% if friend.avatar %}
+                <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
+                {% else %}
+                <div class="friend-avatar friend-avatar-placeholder">{{ friend.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-card-info">
+                    <span class="friend-card-name">{{ friend.full_name|default:friend.username }}</span>
+                    <span class="friend-card-username">@{{ friend.username }}</span>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="profile-section-empty">No friends yet.</p>
+    {% endif %}
+    {% else %}
+    {# Viewing another user's profile - show mutual friends only #}
+    {% if mutual_friends %}
+    <ul class="friend-grid">
+        {% for friend in mutual_friends %}
+        <li class="friend-card">
+            <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
+                {% if friend.avatar %}
+                <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
+                {% else %}
+                <div class="friend-avatar friend-avatar-placeholder">{{ friend.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-card-info">
+                    <span class="friend-card-name">{{ friend.full_name|default:friend.username }}</span>
+                    <span class="friend-card-username">@{{ friend.username }}</span>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="profile-section-empty">No mutual friends.</p>
+    {% endif %}
+    {% endif %}
+
+    {# -- Add friend button (only when not already friends) -------------------- #}
+    {% if not is_own_profile and viewer and viewer_can_request %}
+    <div class="friend-action-row">
+        <button type="button" class="btn-add-friend"
+                hx-post="{% url 'friend.request' friend_list_profile.id %}"
+                hx-target="#friend_list"
+                hx-swap="outerHTML">
+            <i class="material-symbols-outlined">person_add</i> Add Friend
+        </button>
+    </div>
+    {% endif %}
+
+    {% if is_own_profile %}
+    {% include "dashboard/partials/profile/_invite_friend_dialog.html" with dialog_id="invite-friend-dialog-profile" result_id="invite-result-profile" %}
+    {% endif %}
+
+</div>

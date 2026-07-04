@@ -1,0 +1,292 @@
+@use 'variables' as *;
+
+// -- Auth pages (login, signup, password reset, verify email) --------------
+
+body.page-auth {
+    margin: 0;
+    padding: 0;
+}
+
+.auth-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 40%, $color-indigo-700 70%, $color-indigo-500 100%);
+    padding: 2rem 1rem;
+}
+
+.auth-card {
+    background: var(--ul-grey-0);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
+    width: 100%;
+    max-width: 440px;
+    overflow: hidden;
+}
+
+// -- Card header (logo + title) --------------------------------------------
+.auth-card-header {
+    text-align: center;
+    padding: 2.25rem 2rem 1rem;
+    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-grey-0), 100%);
+    border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+.auth-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    margin-bottom: 1.25rem;
+    text-decoration: none;
+    color: $color-indigo-900;
+
+    img {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+    }
+
+    .auth-brand-name {
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: -.03em;
+        color: $color-indigo-900;
+    }
+}
+
+.auth-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    margin: 0 0 .3rem;
+    line-height: 1.25;
+}
+
+.auth-subtitle {
+    font-size: .875rem;
+    color: var(--ul-grey-6);
+    margin: 0;
+}
+
+// -- Card body -------------------------------------------------------------
+.auth-card-body {
+    padding: 1.5rem 2rem 2rem;
+}
+
+// -- Form ------------------------------------------------------------------
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+}
+
+.auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    label {
+        font-size: .75rem;
+        font-weight: 700;
+        color: var(--ul-grey-7);
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+        width: 100%;
+        padding: .7rem .9rem;
+        border: 1.5px solid var(--ul-grey-1a);
+        border-radius: 9px;
+        font-size: .95rem;
+        color: var(--ul-grey-8);
+        background: var(--ul-grey-0);
+        transition: border-color .15s, box-shadow .15s, background .15s;
+        box-sizing: border-box;
+        font-family: inherit;
+
+        &:focus {
+            outline: none;
+            border-color: $color-indigo-500;
+            background: var(--ul-grey-0);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
+        }
+
+        &::placeholder {
+            color: var(--ul-grey-4);
+        }
+    }
+
+    .field-help {
+        font-size: .76rem;
+        color: var(--ul-grey-4);
+        line-height: 1.4;
+    }
+
+    .field-error {
+        font-size: .8rem;
+        color: $color-red-600;
+    }
+
+    ul.errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+            font-size: .8rem;
+            color: $color-red-600;
+        }
+    }
+}
+
+// -- Non-field errors ------------------------------------------------------
+.auth-errors {
+    background: var(--ul-grey-0);
+    border: 1px solid $color-red-200;
+    border-radius: 9px;
+    padding: .75rem 1rem;
+    margin-bottom: .25rem;
+
+    ul.errorlist {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+            font-size: .875rem;
+            color: $color-red-600;
+        }
+    }
+
+    p {
+        font-size: .875rem;
+        color: $color-red-600;
+        margin: 0;
+    }
+}
+
+// -- Submit button ---------------------------------------------------------
+.auth-submit-btn {
+    background-color: $color-indigo-600;
+    font-size: 1rem;
+
+    &:hover {
+        background: $color-indigo-700;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, .4);
+    }
+
+    &:active {
+        transform: translateY(1px);
+    }
+}
+
+// -- Divider ---------------------------------------------------------------
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin: .5rem 0;
+
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--ul-grey-0);
+    }
+
+    span {
+        font-size: .75rem;
+        color: var(--ul-grey-4);
+        white-space: nowrap;
+        font-weight: 500;
+    }
+}
+
+
+// -- Footer links (sign up / log in) --------------------------------------
+.auth-footer {
+    text-align: center;
+    margin-top: 1.25rem;
+    font-size: .875rem;
+    color: var(--ul-grey-6);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+
+    a {
+        color: $color-indigo-600;
+        font-weight: 600;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+.auth-inline-link {
+    color: $color-indigo-600;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+// -- Info page (check email, verify complete, etc.) ------------------------
+.auth-info-icon {
+    text-align: center;
+    margin-bottom: 1.25rem;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 3.5rem;
+        color: $color-indigo-600;
+    }
+}
+
+.auth-info-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    margin: 0 0 .5rem;
+    text-align: center;
+}
+
+.auth-info-text {
+    font-size: .9rem;
+    color: var(--ul-grey-6);
+    text-align: center;
+    line-height: 1.6;
+    margin: 0 0 1.5rem;
+}
+
+.auth-info-email {
+    font-weight: 600;
+    color: $color-indigo-600;
+}
+
+// Debug-only verification link block
+.auth-debug-block {
+    background: var(--ul-grey-0);
+    border: 1px solid $color-green-200;
+    border-radius: 9px;
+    padding: .85rem 1rem;
+    margin: 1rem 0;
+    font-size: .82rem;
+    color: $color-green-800;
+    word-break: break-all;
+
+    strong {
+        display: block;
+        margin-bottom: .3rem;
+    }
+
+    a {
+        color: $color-green-800;
+        font-weight: 700;
+    }
+}

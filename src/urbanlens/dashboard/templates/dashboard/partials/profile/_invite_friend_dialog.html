@@ -1,0 +1,44 @@
+<dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="invite-dialog ul-dialog">
+    <div class="dialog-header">
+        <span><i class="material-symbols-outlined">mail</i> Invite a Friend</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    <div class="invite-dialog-body">
+        <p class="invite-dialog-hint">
+            If they're already on UrbanLens, we'll send them a friend request.
+            If not, they'll receive an email with a link to join - and after they join, they'll be invited to become your friend.
+        </p>
+        <form class="invite-form"
+            hx-post="{% url 'friend.invite_email' %}"
+            hx-target="#{{ result_id|default:'invite-result' }}"
+            hx-swap="innerHTML">
+            {% csrf_token %}
+            <input type="email" name="email" class="invite-email-input"
+                placeholder="friend@example.com" required autocomplete="email">
+            {% if perms.dashboard.view_site_admin %}
+            <div class="invite-subscription-panel">
+                <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>
+                <select name="subscription_role">
+                    <option value="">No subscription</option>
+                    <option value="vip">VIP - SaaS features</option>
+                </select>
+                <select name="subscription_duration">
+                    <option value="1">1 month</option>
+                    <option value="3">3 months</option>
+                    <option value="6">6 months</option>
+                    <option value="12">12 months</option>
+                    <option value="indefinite">Indefinite</option>
+                </select>
+            </div>
+            {% endif %}
+            <div class="invite-form-actions">
+                <button type="submit" class="btn btn--primary">
+                    <i class="material-symbols-outlined">send</i> Send
+                </button>
+            </div>
+        </form>
+        <div id="{{ result_id|default:'invite-result' }}" class="invite-result-wrap"></div>
+    </div>
+</dialog>

@@ -1,0 +1,77 @@
+{% load dashboard_tags %}
+<div class="visit-history card" id="visit-history-panel">
+    <div class="card-header">
+        <i class="material-icons">history</i>
+        <h3>Visit History</h3>
+        {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
+        <button type="button" class="btn--icon-sm" style="margin-left:auto"
+                onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
+                title="Log a visit">
+            <i class="material-icons">add</i>
+        </button>
+    </div>
+
+    {% if visits %}
+    <ul class="visit-list">
+        {% for visit in visits %}
+        <li class="visit-item">
+            <div class="visit-item-main">
+                <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
+                {% if visit.visited_at|time:"H:i" != "00:00" %}
+                <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
+                {% endif %}
+                <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
+                    {% if visit.source == "google_takeout" %}
+                    <i class="material-icons" style="font-size:14px">cloud_download</i>
+                    {% else %}
+                    <i class="material-icons" style="font-size:14px">edit</i>
+                    {% endif %}
+                    {{ visit.get_source_display }}
+                </span>
+            </div>
+            {% if visit.notes %}
+            <div class="visit-notes">{{ visit.notes }}</div>
+            {% endif %}
+            <button type="button"
+                    hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
+                    hx-target="#visit-history-panel"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this visit record?"
+                    class="icon-btn visit-delete-btn"
+                    title="Delete visit">
+                <i class="material-icons">delete_outline</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="visit-empty">No visits recorded yet.</p>
+    {% endif %}
+
+    {# ── Log-a-visit dialog ──────────────────────────────────────────── #}
+    <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
+        {% include "dashboard/partials/_dialog_header.html" with title="Log a Visit" %}
+        <form hx-post="{% url 'pin.visits' pin.slug %}"
+              hx-target="#visit-history-panel"
+              hx-swap="outerHTML"
+              class="visit-add-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="visited_date_{{ pin.slug }}">Date</label>
+                <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required>
+            </div>
+            <div class="form-row">
+                <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>
+                <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}">
+            </div>
+            <div class="form-row">
+                <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
+                <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="submit-button btn btn--primary btn--lg">Save Visit</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+</div>

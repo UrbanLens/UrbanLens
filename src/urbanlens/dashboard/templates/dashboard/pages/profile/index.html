@@ -1,0 +1,380 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="profile-page page-content">
+
+    {# -- Hero card ----------------------------------------------------------- #}
+    <div class="profile-hero ul-section">
+        <div class="profile-avatar-col">
+            <div class="profile-avatar-wrap">
+                {% if profile.avatar %}
+                    <img class="profile-avatar-img" src="{{ profile.avatar.url }}" alt="Avatar">
+                {% else %}
+                    <div class="profile-avatar-placeholder">
+                        {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
+                    </div>
+                {% endif %}
+                {% if profile.user == request.user %}
+                <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
+                    {% csrf_token %}
+                    <label class="avatar-upload-btn" title="Change photo">
+                        <i class="material-symbols-outlined">photo_camera</i>
+                        <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
+                    </label>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="profile-info-col">
+            <div class="profile-name-row">
+                <div>
+                    <h1 class="profile-full-name">
+                        {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
+                    </h1>
+                    <p class="profile-username">@{{ profile.username }}</p>
+                </div>
+
+                {# -- Friendship actions (only when viewing another user) -- #}
+                {% if user.is_authenticated and profile.user != request.user %}
+                <div class="profile-friendship-actions">
+                    {% if friendship_status == 'accepted' %}
+                        <div class="friendship-chip friendship-chip--friend">
+                            <i class="material-symbols-outlined">people</i>
+                            Friends
+                            {% if friends_since %}
+                            <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="friendship-btn-group">
+                            <form method="post" action="{% url 'friend.remove' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Remove friend">
+                                    <i class="material-symbols-outlined">person_remove</i> Remove
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.mute' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Mute this user">
+                                    <i class="material-symbols-outlined">volume_off</i> Mute
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.block' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn--danger" title="Block this user"
+                                        onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
+                                    <i class="material-symbols-outlined">block</i> Block
+                                </button>
+                            </form>
+                        </div>
+                    {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
+                        <div class="friendship-chip friendship-chip--pending">
+                            <i class="material-symbols-outlined">hourglass_top</i> Request sent
+                        </div>
+                        <form method="post" action="{% url 'friend.remove' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                                <i class="material-symbols-outlined">cancel</i> Cancel request
+                            </button>
+                        </form>
+                    {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
+                        <div class="friendship-chip friendship-chip--pending">
+                            <i class="material-symbols-outlined">person_add</i> Wants to connect
+                        </div>
+                        <div class="friendship-btn-group">
+                            <form method="post" action="{% url 'friend.accept' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn btn--primary">
+                                    <i class="material-symbols-outlined">check</i> Accept
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.reject' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                                    <i class="material-symbols-outlined">close</i> Decline
+                                </button>
+                            </form>
+                        </div>
+                    {% elif friendship_status == 'muted' %}
+                        <div class="friendship-chip friendship-chip--muted">
+                            <i class="material-symbols-outlined">volume_off</i> Muted
+                        </div>
+                        <form method="post" action="{% url 'friend.request' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                                <i class="material-symbols-outlined">volume_up</i> Unmute
+                            </button>
+                        </form>
+                    {% elif friendship_status == 'blocked' %}
+                        <div class="friendship-chip friendship-chip--blocked">
+                            <i class="material-symbols-outlined">block</i> Blocked
+                        </div>
+                        <form method="post" action="{% url 'friend.remove' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                                <i class="material-symbols-outlined">lock_open</i> Unblock
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'friend.request' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn btn--primary">
+                                <i class="material-symbols-outlined">person_add</i> Add Friend
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'friend.block' profile.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Block this user">
+                                <i class="material-symbols-outlined">block</i> Block
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if profile.user == request.user %}
+                <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
+                    <i class="material-symbols-outlined">edit</i> Edit Profile
+                </a>
+                {% endif %}
+            </div>
+
+            {% if profile.bio %}
+            <p class="profile-bio">{{ profile.bio }}</p>
+            {% else %}
+            <p class="profile-bio empty" />
+            {% endif %}
+
+            <div class="profile-meta-row">
+                {% if profile.area %}
+                <span class="profile-meta-item">
+                    <i class="material-symbols-outlined">place</i>{{ profile.area }}
+                </span>
+                {% endif %}
+                {% if profile.started_exploring %}
+                <span class="profile-meta-item">
+                    <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
+                </span>
+                {% endif %}
+                {% if profile.email %}
+                <span class="profile-meta-item">
+                    <i class="material-symbols-outlined">email</i>{{ profile.email }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# -- Stats row ----------------------------------------------------------- #}
+    <div class="profile-stats-row">
+        {% if profile.user == request.user %}
+        {# Own profile - show their own pin count and exploring year #}
+        <div class="profile-stat ul-section">
+            <span class="stat-value">{{ profile.pins.count }}</span>
+            <span class="stat-label">Pins</span>
+        </div>
+        {% if profile.started_exploring %}
+        <div class="profile-stat ul-section">
+            <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
+            <span class="stat-label">Exploring Since</span>
+        </div>
+        {% endif %}
+        {% else %}
+        {# Viewing another user - show only mutual/shared stats #}
+        {% if common_pin_count %}
+        <div class="profile-stat profile-stat--highlight ul-section" title="Locations you've both pinned">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">Places in Common</span>
+        </div>
+        {% endif %}
+        {% if trips_in_common %}
+        <div class="profile-stat profile-stat--highlight ul-section" title="Trips you're both on">
+            <span class="stat-value">{{ trips_in_common|length }}</span>
+            <span class="stat-label">Trips Together</span>
+        </div>
+        {% endif %}
+        {% if shared_visited %}
+        <div class="profile-stat profile-stat--highlight ul-section" title="Places you've both visited">
+            <span class="stat-value">{{ shared_visited|length }}</span>
+            <span class="stat-label">Visited Together</span>
+        </div>
+        {% endif %}
+        {% if not common_pin_count and not trips_in_common and not shared_visited %}
+        <div class="profile-stat ul-section">
+            <span class="stat-value">-</span>
+            <span class="stat-label">Nothing in Common Yet</span>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+
+    {# -- Social links -------------------------------------------------------- #}
+    {% if social_links %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Social</h3>
+        <div class="social-links">
+            {% for link in social_links %}
+            {% if link.platform == "website" %}
+            <a href="#" class="social-link" data-external-url="{{ link.url }}" title="{{ link.url }}">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle|truncatechars:40 }}</span>
+            </a>
+            {% elif link.url %}
+            <a href="{{ link.url }}" class="social-link" target="_blank" rel="noopener noreferrer">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle }}</span>
+            </a>
+            {% else %}
+            <span class="social-link">
+                <i class="{{ link.icon }}"></i>
+                <span>{{ link.handle }}</span>
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# -- Contact Info -------------------------------------------------------- #}
+    {% if contact_info %}
+    {% with ci=contact_info %}
+    {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Contact</h3>
+        <div class="contact-info-list">
+            {% if ci.phone_number %}
+            <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
+                <i class="material-symbols-outlined">phone</i>
+                <span>{{ ci.phone_number }}</span>
+            </a>
+            {% endif %}
+            {% if ci.whatsapp_number %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>{{ ci.whatsapp_number }}</span>
+            </span>
+            {% endif %}
+            {% if ci.signal_username %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-signal-messenger" title="Signal"></i>
+                <span>{{ ci.signal_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.telegram_username %}
+            <a href="https://t.me/{{ ci.telegram_username|urlencode }}" class="contact-info-item" target="_blank" rel="noopener noreferrer">
+                <i class="fa-brands fa-telegram"></i>
+                <span>{{ ci.telegram_username }}</span>
+            </a>
+            {% endif %}
+            {% if ci.discord_username %}
+            <span class="contact-info-item">
+                <i class="fa-brands fa-discord"></i>
+                <span>{{ ci.discord_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.matrix_handle %}
+            <span class="contact-info-item">
+                <i class="material-icons" title="Matrix">chat</i>
+                <span>{{ ci.matrix_handle }}</span>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+
+    {# -- Private annotation panel (viewer ≠ profile owner) ------------------- #}
+    {% if user.is_authenticated and profile.user != request.user %}
+    {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
+    {% endif %}
+
+    {# -- Friends ------------------------------------------------------------- #}
+    <div id="friend_list"
+         hx-get="{% url 'friend.list' profile.id %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="profile-section profile-friends-loading ul-section">
+        <div class="profile-section-header">
+            <h3 class="profile-section-title">Friends</h3>
+        </div>
+        <p class="loading-text">Loading friends...</p>
+    </div>
+
+
+</div>
+
+{# -- External-link warning dialog -------------------------------------------- #}
+<div id="ext-warn-overlay" class="dialog-overlay" style="display:none;" aria-hidden="true">
+    <div class="dialog ext-warn-dialog" role="alertdialog" aria-labelledby="ext-warn-title" aria-describedby="ext-warn-desc">
+        <h2 id="ext-warn-title">
+            <i class="material-icons ext-warn-icon">warning</i>
+            External Link
+        </h2>
+        <p id="ext-warn-desc" class="ext-warn-desc">
+            This link was added by a user and has <strong>not been verified</strong> by UrbanLens.
+            It may lead to content outside our control.
+        </p>
+        <p class="ext-warn-url-label">Destination:</p>
+        <p class="ext-warn-url" id="ext-warn-url"></p>
+        <div class="ext-warn-actions">
+            <button id="ext-warn-cancel" class="ext-warn-cancel-btn">Cancel</button>
+            <a id="ext-warn-continue" href="#" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--lg btn--submit">
+                Continue to site
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const overlay   = document.getElementById('ext-warn-overlay');
+    const urlEl     = document.getElementById('ext-warn-url');
+    const continueEl = document.getElementById('ext-warn-continue');
+    const cancelBtn  = document.getElementById('ext-warn-cancel');
+
+    function openDialog(url) {
+        urlEl.textContent  = url;
+        continueEl.href    = url;
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        cancelBtn.focus();
+    }
+
+    function closeDialog() {
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+        continueEl.href = '#';
+    }
+
+    document.querySelectorAll('[data-external-url]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            openDialog(el.dataset.externalUrl);
+        });
+    });
+
+    cancelBtn.addEventListener('click', closeDialog);
+
+    overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeDialog();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeDialog();
+    });
+}());
+
+function panToggleEdit(noteId) {
+    var body = document.getElementById('pan-note-body-' + noteId);
+    var edit = document.getElementById('pan-note-edit-' + noteId);
+    if (!body || !edit) return;
+    var isEditing = !edit.hidden;
+    body.hidden = !isEditing;
+    edit.hidden = isEditing;
+    if (!isEditing) edit.querySelector('textarea').focus();
+}
+</script>
+{% endblock %}

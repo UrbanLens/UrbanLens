@@ -1,0 +1,81 @@
+<div class="loopnet-info card" id="loopnet-section"
+     data-collapse-scope="pin" data-collapse-section="loopnet">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">business_center</i>
+        <h3>LoopNet Listings</h3>
+    </div>
+
+    <div class="card__body">
+        <div class="loopnet-address-row">
+            <i class="material-symbols-outlined">location_on</i>
+            <span>{{ address }}</span>
+        </div>
+
+        <ul class="loopnet-listing-list">
+            {% for listing in result.listings %}
+            <li class="loopnet-listing">
+                <div class="loopnet-listing-body">
+                    {% if listing.title %}
+                    <div class="loopnet-listing-title">
+                        {% if listing.url %}
+                        <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">
+                            {{ listing.title }}
+                            <i class="material-icons loopnet-ext-icon">open_in_new</i>
+                        </a>
+                        {% else %}
+                        {{ listing.title }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if listing.price %}
+                    <div class="loopnet-listing-price">
+                        <i class="material-symbols-outlined">attach_money</i>
+                        {{ listing.price }}
+                    </div>
+                    {% endif %}
+
+                    {% if listing.snippet %}
+                    <p class="loopnet-listing-snippet">{{ listing.snippet }}</p>
+                    {% endif %}
+
+                    {% if not listing.title and listing.url %}
+                    <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer"
+                    class="loopnet-listing-url">
+                        View listing
+                        <i class="material-symbols-outlined">open_in_new</i>
+                    </a>
+                    {% endif %}
+
+                    {% if listing.property_details %}
+                    <dl class="loopnet-property-details">
+                        {% for key, value in listing.property_details.items %}
+                        <div class="loopnet-property-detail">
+                            <dt>{{ key }}</dt>
+                            <dd>{{ value }}</dd>
+                        </div>
+                        {% endfor %}
+                    </dl>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if result.duplicate_links %}
+        <div class="loopnet-duplicate-links">
+            {% for link in result.duplicate_links %}
+            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+               class="loopnet-duplicate-link">{{ link.label }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>

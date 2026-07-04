@@ -1,0 +1,246 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+    <div class="site-admin-header">
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-symbols-outlined">arrow_back</i>
+                Admin Home
+            </a>
+        </div>
+        <h1 class="site-admin-title">
+            <i class="material-symbols-outlined">bar_chart</i>
+            Site Statistics
+        </h1>
+        <p class="site-admin-subtitle">Usage metrics and server health at a glance.</p>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.5rem">
+            <span class="stats-timestamp">
+                <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">schedule</i>
+                {{ server_time|date:"N j, Y  g:i A" }} UTC
+            </span>
+            <span class="stats-refresh-badge" id="stats-refresh-badge">
+                <i class="material-icons" style="font-size:.85rem;vertical-align:-.1em">autorenew</i>
+                Auto-refreshes every 60s
+            </span>
+        </div>
+    </div>
+
+    {# -- KPI cards (HTMX, lazy + polling) ----------------------------------- #}
+    <div id="stats-kpi-region"
+         hx-get="{% url 'site_admin_stats_kpi' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-kpi-region">
+        {# Skeleton placeholder #}
+        <div class="stats-kpi-sections">
+            {% for section in "xxx" %}
+            <section class="stats-kpi-section">
+                <div class="stats-skeleton stats-skeleton--title" style="width:120px"></div>
+                <div class="stats-kpi-grid">
+                    {% for card in "xxx" %}
+                    <div class="stats-kpi-card">
+                        <div class="stats-skeleton" style="width:44px;height:44px;border-radius:10px;flex-shrink:0"></div>
+                        <div style="flex:1">
+                            <div class="stats-skeleton stats-skeleton--value" style="width:70px"></div>
+                            <div class="stats-skeleton stats-skeleton--label" style="width:90px;margin-top:.4rem"></div>
+                            <div class="stats-skeleton stats-skeleton--sub" style="width:120px;margin-top:.3rem"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+        <div class="site-admin-card ul-section card" style="padding:1rem">
+            <div class="stats-skeleton stats-skeleton--title" style="width:200px;margin-bottom:1rem"></div>
+            {% for row in "xxxxx" %}
+            <div class="stats-skeleton" style="height:1.8rem;margin-bottom:.5rem;border-radius:4px"></div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# -- Charts (server-rendered, fast DB queries) --------------------------- #}
+    <div class="stats-charts-grid">
+        <div class="site-admin-card ul-section card stats-chart-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">person_add</i>
+                <span>New User Signups - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-users"></canvas>
+            </div>
+        </div>
+        <div class="site-admin-card ul-section card stats-chart-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">add_location_alt</i>
+                <span>New Locations - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-locations"></canvas>
+            </div>
+        </div>
+    </div>
+
+    {# -- System health (HTMX, lazy + polling) ------------------------------- #}
+    <div id="stats-system-region"
+         hx-get="{% url 'site_admin_stats_system' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-system-region">
+        {# Skeleton placeholder #}
+        <div class="site-admin-card ul-section card" style="padding:1.25rem">
+            <div class="stats-skeleton stats-skeleton--title" style="width:140px;margin-bottom:1rem"></div>
+            <div class="stats-health-grid">
+                {% for item in "xxxxxx" %}
+                <div class="stats-health-item">
+                    <div class="stats-skeleton" style="width:2rem;height:2rem;border-radius:50%;flex-shrink:0"></div>
+                    <div>
+                        <div class="stats-skeleton stats-skeleton--value" style="width:100px"></div>
+                        <div class="stats-skeleton stats-skeleton--label" style="width:70px;margin-top:.35rem"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="stats-services-grid">
+            {% for svc in "xxxx" %}
+            <div class="site-admin-card ul-section card" style="padding:1rem 1.25rem">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div class="stats-skeleton" style="width:100px;height:1rem;border-radius:4px"></div>
+                    <div class="stats-skeleton" style="width:60px;height:.85rem;border-radius:4px"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# -- External API usage (HTMX, lazy + polling) -------------------------- #}
+    <div id="stats-api-region"
+         hx-get="{% url 'site_admin_stats_api' %}"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-api-region">
+        {# Skeleton placeholder #}
+        <div class="site-admin-card ul-section card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">cloud</i>
+                <span>External API Usage (last 30 days)</span>
+            </div>
+            <div style="padding:.5rem 1rem 1rem">
+                {% for row in "xxxxxxxxxxxxxxxxx" %}
+                <div class="stats-skeleton" style="height:2rem;margin-bottom:.4rem;border-radius:4px"></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
+    var gridColor  = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    var labelColor = isDark ? '#94a3b8' : '#64748b';
+    var tooltipBg  = isDark ? '#1e293b' : '#fff';
+    var tooltipFg  = isDark ? '#f1f5f9' : '#0f172a';
+
+    var defaults = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: tooltipBg,
+                titleColor: tooltipFg,
+                bodyColor: tooltipFg,
+                borderColor: gridColor,
+                borderWidth: 1,
+            },
+        },
+        scales: {
+            x: {
+                ticks: { color: labelColor, maxRotation: 45 },
+                grid: { color: gridColor },
+            },
+            y: {
+                beginAtZero: true,
+                ticks: { color: labelColor, precision: 0 },
+                grid: { color: gridColor },
+            },
+        },
+    };
+
+    function makeBar(canvasId, labels, data, color) {
+        var ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: color + '99',
+                    borderColor: color,
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                }],
+            },
+            options: defaults,
+        });
+    }
+
+    makeBar('chart-users',     {{ chart_user_labels|safe }},     {{ chart_user_counts|safe }},     '#0891b2');
+    makeBar('chart-locations', {{ chart_location_labels|safe }}, {{ chart_location_counts|safe }}, '#7c3aed');
+
+    // Wire up git pull button whenever it appears after HTMX swap
+    document.addEventListener('htmx:afterSettle', function (e) {
+        var pullBtn = document.getElementById('git-pull-refresh-btn');
+        if (!pullBtn || pullBtn._wired) return;
+        pullBtn._wired = true;
+        pullBtn.addEventListener('click', function () {
+            var originalHtml = pullBtn.innerHTML;
+            pullBtn.disabled = true;
+            pullBtn.innerHTML = '<span class="ul-spinner" aria-hidden="true"></span> Pulling...';
+            if (window.toastr) toastr.info('Pulling latest code...');
+
+            fetch(pullBtn.getAttribute('data-url'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRFToken': window.csrftoken || '{{ csrf_token }}'
+                },
+                credentials: 'same-origin'
+            })
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return { ok: false, message: response.statusText || 'Unexpected server response.' };
+                }).then(function (payload) {
+                    if (!response.ok || !payload.ok) throw new Error(payload.message || 'Could not pull latest code.');
+                    return payload;
+                });
+            })
+            .then(function (payload) {
+                if (window.toastr) toastr.success(payload.message || 'Code updated. Refreshing...');
+                window.setTimeout(function () { window.location.reload(); }, payload.changed ? 1200 : 500);
+            })
+            .catch(function (err) {
+                pullBtn.disabled = false;
+                pullBtn.innerHTML = originalHtml;
+                if (window.toastr) toastr.error(err.message || 'Could not pull latest code.');
+            });
+        });
+    });
+
+    // Flash the refresh badge on each HTMX swap
+    document.addEventListener('htmx:afterSwap', function () {
+        var badge = document.getElementById('stats-refresh-badge');
+        if (!badge) return;
+        badge.classList.add('stats-refresh-badge--active');
+        setTimeout(function () { badge.classList.remove('stats-refresh-badge--active'); }, 800);
+    });
+}());
+</script>
+{% endblock %}

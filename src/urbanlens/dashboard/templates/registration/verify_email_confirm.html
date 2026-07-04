@@ -1,0 +1,56 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}{% if valid %}Email verified{% else %}Verification failed{% endif %} - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+{% if valid %}
+<div class="auth-info-icon">
+    <i class="material-icons" style="color:#22c55e">check_circle</i>
+</div>
+<h2 class="auth-info-title">Email verified!</h2>
+<p class="auth-info-text">Your account is now active. You can sign in and start exploring.</p>
+<a href="{% url 'login' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+    Sign in
+</a>
+
+{% elif expired %}
+<div class="auth-info-icon">
+    <i class="material-icons" style="color:#f59e0b">schedule</i>
+</div>
+<h2 class="auth-info-title">Link expired</h2>
+<p class="auth-info-text">
+    This verification link has expired (links are valid for 48 hours).
+    Request a new one below.
+</p>
+{% if email %}
+<form method="post" action="{% url 'resend_verification' %}" class="auth-form">
+    {% csrf_token %}
+    <input type="hidden" name="email" value="{{ email }}">
+    <button type="submit" class="btn btn--primary auth-submit-btn">Resend verification email</button>
+</form>
+{% else %}
+<a href="{% url 'resend_verification' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+    Resend verification email
+</a>
+{% endif %}
+
+{% else %}
+<div class="auth-info-icon">
+    <i class="material-icons" style="color:#dc2626">error_outline</i>
+</div>
+<h2 class="auth-info-title">Invalid link</h2>
+<p class="auth-info-text">
+    This verification link is invalid or has already been used.
+    If you haven't verified yet, request a new link.
+</p>
+<a href="{% url 'resend_verification' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+    Request a new link
+</a>
+{% endif %}
+
+<div class="auth-footer">
+    <a href="{% url 'login' %}" style="font-size:.82rem;color:#9ca3af;font-weight:400">Back to sign in</a>
+</div>
+{% endblock %}

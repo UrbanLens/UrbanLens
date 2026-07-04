@@ -1,0 +1,49 @@
+<div id="detail-pins-panel" class="detail-pins-panel card">
+    <div class="card-header">
+        <i class="material-icons">push_pin</i>
+        <span>Detail Pins</span>
+        <button type="button" class="btn btn--sm btn--primary"
+                onclick="document.getElementById('detail-pin-add-dialog').showModal()">
+            <i class="material-icons">add</i>
+        </button>
+    </div>
+
+    {% if detail_pins %}
+    <ul class="detail-pin-list">
+        {% for dp in detail_pins %}
+        <li class="detail-pin-item detail-pin-type--{{ dp.pin_type }}"
+            id="detail-pin-{{ dp.uuid }}">
+            <span class="detail-pin-type-icon material-icons">
+                {% if dp.pin_type == "building" %}business
+                {% elif dp.pin_type == "entrance" %}door_front
+                {% elif dp.pin_type == "poi" %}star
+                {% elif dp.pin_type == "danger" %}warning
+                {% else %}place{% endif %}
+            </span>
+            <div class="detail-pin-info">
+                <span class="detail-pin-name">{{ dp.effective_name }}</span>
+                {% if dp.description %}
+                <span class="detail-pin-desc">{{ dp.description }}</span>
+                {% endif %}
+                <span class="detail-pin-coords">
+                    {{ dp.effective_latitude|floatformat:5 }}, {{ dp.effective_longitude|floatformat:5 }}
+                </span>
+            </div>
+            <div class="detail-pin-actions">
+                <button type="button" class="detail-pin-action-btn"
+                        title="Delete"
+                        hx-delete="{% url 'pin.detail_pin.edit' pin.slug dp.uuid %}"
+                        hx-target="#detail-pin-{{ dp.uuid }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete this detail pin?"
+                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                    <i class="material-icons">delete</i>
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="detail-pin-empty">No detail pins yet. Add sub-markers for buildings, entrances, points of interest, or hazards.</p>
+    {% endif %}
+</div>

@@ -1,0 +1,412 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<div class="wiki-page page-content">
+    <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
+
+    {# -- Wiki identity banner ---------------------------------------------- #}
+    <div class="wiki-banner">
+        <div class="wiki-banner-left">
+            <span class="wiki-badge">
+                <i class="material-symbols-outlined">public</i> Community Wiki
+            </span>
+            <h1 class="wiki-title">{{ location.name }}</h1>
+            {% if location.address %}
+            <p class="wiki-address">
+                <i class="material-symbols-outlined">place</i>
+                {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
+            </p>
+            {% endif %}
+        </div>
+        <div class="wiki-banner-right">
+            <div class="wiki-notice">
+                <i class="material-symbols-outlined">public</i>
+                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
+            </div>
+            <div class="wiki-banner-actions">
+                <button type="button" class="wiki-edit-btn btn btn--primary"
+                        onclick="document.getElementById('wiki-edit-dialog').showModal()">
+                    <i class="material-symbols-outlined">edit_note</i>
+                    Suggest edits
+                </button>
+                {% if user_pin %}
+                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
+                    <i class="material-symbols-outlined">arrow_back</i> Back to my pin
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# -- Other-location conflict notice ----------------------------------- #}
+    {% if other_locations %}
+    <div class="wiki-location-conflict" id="wiki-location-conflict">
+        <i class="material-icons wiki-lcn-icon">info</i>
+        <div class="wiki-lcn-body">
+            <strong>
+                {{ other_locations|length }} other location{{ other_locations|length|pluralize }}
+                {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
+                the same area as your pin.
+            </strong>
+            Your pin is currently linked here. You may want to browse the alternatives or switch:
+            <div class="wiki-lcn-list">
+                {% for other in other_locations %}
+                <span class="wiki-lcn-item">
+                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.name }}</a>
+                    {% if user_pin %}
+                    <button type="button" class="wiki-lcn-switch-btn"
+                            hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
+                            hx-target="#pin-overview-stub"
+                            hx-swap="none"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
+                            title="Switch your pin to {{ other.name }}">
+                        Switch
+                    </button>
+                    {% endif %}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        <button type="button" class="wiki-lcn-dismiss"
+                onclick="document.getElementById('wiki-location-conflict').remove()"
+                title="Dismiss">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    {% endif %}
+
+    {# -- Body grid --------------------------------------------------------- #}
+    <div class="wiki-body">
+
+        {# -- Description / dates (if any) --------------------------------- #}
+        {% if location.description or location.date_abandoned or location.effective_date_last_active %}
+        <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
+            <div class="card-header">
+                <i class="material-symbols-outlined">info</i>
+                <h2>About</h2>
+            </div>
+            <div class="card__body wiki-meta-body">
+                {% if location.description %}
+                <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
+                {% endif %}
+                {% if location.date_abandoned or location.effective_date_last_active %}
+                <div class="wiki-meta-dates">
+                    {% if location.date_abandoned %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
+                    {% endif %}
+                    {% if location.effective_date_last_active %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {# Security indicators - only shown when at least one is non-unknown #}
+                {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
+                <div class="security-indicators">
+                    <span class="security-indicators-label">Security</span>
+                    <div class="security-chips">
+                        {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
+                        {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
+                        {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
+                        {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
+                        {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
+                        {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
+                        {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
+                        {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# -- Community stats card ------------------------------------------ #}
+        <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
+            <div class="card-header">
+                <i class="material-symbols-outlined">people</i>
+                <h2>Community</h2>
+            </div>
+            <div class="card__body wiki-stats-grid">
+                <div class="wiki-stat">
+                    <span class="wiki-stat-value">{{ pin_count }}</span>
+                    <span class="wiki-stat-label">{{ pin_count|pluralize:"user has,users have" }} this pinned</span>
+                </div>
+                {% if first_pinned %}
+                <div class="wiki-stat">
+                    <span class="wiki-stat-value">{{ first_pinned.created|date:"M Y" }}</span>
+                    <span class="wiki-stat-label">First pinned</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# -- Location map (boundary editor + community detail pins + markup) -- #}
+        <div class="location-map pin-map card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">place</i>
+                <h3>Location</h3>
+            </div>
+            <div class="map-wrapper">
+                {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
+            </div>
+        </div>
+
+        {# Badges/categories hidden: global categories no longer exist #}
+
+        {# -- Aliases ------------------------------------------------------- #}
+        <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             id="location-aliases-panel"
+             class="card wiki-card aliases-panel">
+            <div class="card-header">
+                <i class="material-symbols-outlined">label_important</i>
+                <span>Aliases</span>
+            </div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        {# -- Photo gallery -------------------------------------------------- #}
+        <div id="wiki-gallery-panel"
+             hx-get="{% url 'location.wiki.gallery' location.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+            <div class="card">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">photo_library</i>
+                    <span>Photos</span>
+                </div>
+                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+        </div>
+
+        {# -- Comments ------------------------------------------------------- #}
+        <div id="comment-panel"
+             hx-get="{% url 'location.wiki.comments' location.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="card wiki-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">chat</i>
+                <h2>Discussion</h2>
+            </div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        {# -- Tabs: Details / Edit history ---------------------------------- #}
+        <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+            <div class="wiki-tabs">
+                <button class="wiki-tab wiki-tab--active" data-tab="history"
+                        hx-get="{% url 'location.wiki.history' location.slug %}"
+                        hx-target="#wiki-tab-content"
+                        hx-swap="innerHTML"
+                        hx-trigger="click, load">
+                    <i class="material-symbols-outlined">history</i> Edit History
+                </button>
+            </div>
+            <div id="wiki-tab-content" class="card__body wiki-tab-content">
+                <div class="wiki-loading">
+                    <i class="material-icons spin">autorenew</i> Loading...
+                </div>
+            </div>
+        </div>
+
+    </div>{# end wiki-body #}
+
+    {# -- Suggest-edits dialog ----------------------------------------------- #}
+    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggest Edits" %}
+        <p class="wiki-edit-notice">
+            <i class="material-symbols-outlined">public</i>
+            Changes apply immediately and are visible to everyone.
+        </p>
+        <form id="wiki-edit-form" class="wiki-edit-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="wiki-name">Name</label>
+                <input type="text" id="wiki-name" name="name" value="{{ location.name }}" required>
+            </div>
+            <div class="form-row">
+                <label for="wiki-description">Description</label>
+                <textarea id="wiki-description" name="description" rows="4">{{ location.description|default:"" }}</textarea>
+            </div>
+            <div class="form-row">
+                <label for="wiki-latitude">Latitude</label>
+                <input type="number" id="wiki-latitude" name="latitude" step="0.000001"
+                       value="{{ location.latitude }}" required>
+            </div>
+            <div class="form-row">
+                <label for="wiki-longitude">Longitude</label>
+                <input type="number" id="wiki-longitude" name="longitude" step="0.000001"
+                       value="{{ location.longitude }}" required>
+            </div>
+            <div class="form-row form-row--two-col">
+                <div>
+                    <label for="wiki-date-abandoned">Date Abandoned</label>
+                    <input type="date" id="wiki-date-abandoned" name="date_abandoned"
+                           value="{{ location.date_abandoned|date:'Y-m-d'|default:'' }}">
+                </div>
+                <div>
+                    <label for="wiki-date-last-active">Date Last Active</label>
+                    <input type="date" id="wiki-date-last-active" name="date_last_active"
+                           value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
+                </div>
+            </div>
+            <details class="form-section-details" open>
+                <summary class="form-section-summary">Security Indicators</summary>
+                <div class="security-edit-grid">
+                    {% for sf_key, sf_label, sf_val in location_security_values %}
+                    <div class="security-edit-row">
+                        <label for="wiki-{{ sf_key }}">{{ sf_label }}</label>
+                        <select name="{{ sf_key }}" id="wiki-{{ sf_key }}">
+                            {% for val, lbl in security_level_choices %}
+                            <option value="{{ val }}"{% if sf_val == val %} selected{% endif %}>{{ lbl }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            <div class="form-actions">
+                <button type="submit" class="wiki-action-btn wiki-action-btn btn--primary">Save changes</button>
+                <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% url 'location.wiki.markup.json' location.slug as markup_json_url %}
+{% url 'location.wiki.markup' location.slug as markup_create_url %}
+{% url 'location.wiki.markup.edit' location.slug '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
+{% url 'location.wiki.detail_pins.json' location.slug as detail_pins_json_url %}
+{% url 'location.wiki.detail_pins.panel' location.slug as detail_pin_create_url %}
+{% url 'location.wiki.detail_pin.edit' location.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
+{% url 'location.wiki.bbox' location.slug as boundary_url %}
+{% url 'location.wiki.gallery.json' location.slug as photo_gallery_json_url %}
+{% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=location.latitude map_center_lng=location.longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
+<script>
+    // -- Suggest-edits form --------------------------------------------------
+    document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const data = {};
+        new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
+        fetch("{% url 'location.wiki.edit' location.slug %}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.ok) {
+                toastr.success('Changes saved.');
+                document.getElementById('wiki-edit-dialog').close();
+                // Update visible fields without reload.
+                if (data.name) document.getElementById('wiki-field-name').textContent = data.name;
+                if (data.description !== undefined) {
+                    const dd = document.getElementById('wiki-field-description');
+                    if (dd) dd.textContent = data.description;
+                }
+                // Refresh the history tab.
+                htmx.trigger('[data-tab="history"]', 'click');
+            } else {
+                toastr.error(resp.error || 'Failed to save changes.');
+            }
+        })
+        .catch(() => toastr.error('Network error saving changes.'));
+    });
+
+    document.addEventListener('htmx:configRequest', (event) => {
+        event.detail.headers['X-CSRFToken'] = csrftoken;
+    });
+
+
+    // -- Community wiki onboarding -------------------------------------------
+    (function initWikiOnboarding() {
+        {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
+        const prefix = 'ul_onboarding_v1_wiki_{{ location.uuid|default:location.id }}';
+        const sessionKey = prefix + '_later';
+        const cards = [
+            {
+                id: 'shared-edits', icon: 'edit_note', target: '.wiki-edit-btn',
+                eyebrow: 'Community page', title: 'Suggest improvements that everyone can use',
+                body: 'Names, descriptions, dates, coordinates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
+                button: 'Suggest an edit', watchSelector: '.wiki-edit-btn',
+                action: function () { document.querySelector('.wiki-edit-btn')?.click(); },
+                ready: function () { return !!document.querySelector('.wiki-edit-btn'); },
+            },
+            {
+                id: 'community-detail-pins', icon: 'add_location_alt', target: '#add-detail-btn',
+                eyebrow: 'Shared map details', title: 'Add community detail pins for entrances and hazards',
+                body: 'Community detail pins appear on this wiki map for everyone. They are separate from your private detail pins on your personal pin page.',
+                button: 'Add detail pin', watchSelector: '#add-detail-btn',
+                action: function () { document.getElementById('add-detail-btn')?.click(); },
+                ready: function () { return !!document.getElementById('add-detail-btn'); },
+            },
+            {
+                id: 'wiki-photos', icon: 'photo_library', target: '#wiki-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
+                eyebrow: 'Shared photos', title: 'Photos here are visible to the whole community',
+                body: 'Upload exterior, access, and historical photos that help other users. GPS-tagged images can be positioned directly on the wiki map.',
+                button: 'Upload a photo', watchSelector: '#wiki-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn',
+                action: function () {
+                    var btn = document.querySelector('#wiki-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn');
+                    if (btn) btn.click(); else document.getElementById('wiki-gallery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                },
+                ready: function () { return !!document.getElementById('wiki-gallery-panel'); },
+            },
+        ];
+        function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+        function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+        function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+        function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
+        function clear() {
+            document.getElementById('wiki-onboarding')?.replaceChildren();
+            document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus'));
+        }
+        function registerAutoDismiss(card) {
+            if (dismissed(card.id) || !card.watchSelector) return;
+            document.querySelectorAll(card.watchSelector).forEach(function (el) {
+                el.addEventListener(card.watchEvent || 'click', function () { dismiss(card.id); }, { once: true });
+            });
+        }
+        function show(card) {
+            const host = document.getElementById('wiki-onboarding');
+            if (!host) return;
+            clear();
+            document.querySelector(card.target)?.classList.add('onboarding-focus');
+            const el = document.createElement('section');
+            el.className = 'page-onboarding-card';
+            el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+                '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+                '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+                '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+                '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+                '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+                '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-symbols-outlined">close</i></button>';
+            host.appendChild(el);
+            el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+            el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+            el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
+        }
+        function tryShow() {
+            if (laterSet()) return;
+            const card = cards.find(c => c.ready() && !dismissed(c.id));
+            if (card) show(card);
+        }
+        cards.forEach(registerAutoDismiss);
+        setTimeout(tryShow, 900);
+        document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
+    }());
+</script>
+{% endblock %}

@@ -1,0 +1,1 @@
+from urbanlens.dashboard.exceptions import DashboardError

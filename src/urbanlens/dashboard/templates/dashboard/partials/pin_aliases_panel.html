@@ -1,0 +1,43 @@
+<div id="pin-aliases-panel" class="aliases-panel card">
+    <div class="card-header">
+        <i class="material-icons">label_important</i>
+        <span>Aliases</span>
+        <button type="button" class="btn--icon-sm" style="margin-left:auto" title="Add alias"
+                onclick="this.closest('.aliases-panel').querySelector('.alias-add-input').focus()">
+            <i class="material-icons">add</i>
+        </button>
+    </div>
+    <p class="aliases-description">Alternate names for this pin, visible only to you.</p>
+
+    {% if aliases %}
+    <div class="alias-chips-row">
+        {% for alias in aliases %}
+        <span class="alias-chip" id="alias-chip-{{ alias.id }}">
+            <span class="alias-chip-name">{{ alias.name }}</span>
+            <button type="button"
+                    class="alias-chip-remove"
+                    title="Remove alias"
+                    hx-delete="{% url 'pin.alias.delete' pin.slug alias.id %}"
+                    hx-target="#pin-aliases-panel"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove alias &ldquo;{{ alias.name }}&rdquo;?">
+                <i class="material-icons">close</i>
+            </button>
+        </span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="aliases-empty">No aliases yet.</p>
+    {% endif %}
+
+    <form class="alias-add-form"
+          hx-post="{% url 'pin.aliases' pin.slug %}"
+          hx-target="#pin-aliases-panel"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="text" name="name" class="alias-add-input" placeholder="Add an alias…" maxlength="255" required>
+        <button type="submit" class="alias-add-btn">
+            <i class="material-icons">add</i>
+        </button>
+    </form>
+</div>

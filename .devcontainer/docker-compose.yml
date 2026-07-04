@@ -1,0 +1,46 @@
+# Devcontainer override for the root docker-compose.yml.
+# Keep shared service topology, environment, volumes, and dependency versions in
+# ../docker-compose.yml. This file only changes what is unique to an interactive
+# VS Code development container.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE_VERSION: ${PYTHON_BASE_IMAGE_VERSION:-3.12-bookworm}
+        POSTGRES_MAJOR: ${POSTGRES_MAJOR:-17}
+        GIT_EMAIL: ${GIT_EMAIL:-}
+        GIT_NAME: ${GIT_NAME:-}
+    image: urbanlens-devcontainer:latest
+    init: true
+    stdin_open: true
+    tty: true
+    user: vscode
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while sleep 1000; do :; done"]
+    environment:
+      UL_ENVIRONMENT: development
+      NODE_ENV: development
+      UL_DB_HOST: urbanlens_db
+      UL_DB_PORT: 5432
+      UL_DB_NAME: ${UL_DB_NAME:-postgres}
+      UL_DB_USER: ${UL_DB_USER:-postgres}
+      UL_DB_PASS: ${UL_DB_PASS:-postgres}
+      UL_VALKEY_URL: redis://urbanlens_valkey:6379/0
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-devcontainer-insecure-key}
+      UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
+    volumes:
+      - .:/app:cached
+      - urbanlens-dev-bun-cache:/home/vscode/.bun
+      - urbanlens-dev-cache:/home/vscode/.cache
+      - urbanlens-dev-vscode:/home/vscode/.vscode-server
+      - urbanlens-dev-node-modules:/app/node_modules
+    ports:
+      - "${URBANLENS_PORT:-21800}:8000"
+
+volumes:
+  urbanlens-dev-bun-cache:
+  urbanlens-dev-cache:
+  urbanlens-dev-vscode:
+  urbanlens-dev-node-modules:

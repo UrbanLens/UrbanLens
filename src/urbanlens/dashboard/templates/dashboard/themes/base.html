@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
+
+<head>
+    <meta charset="utf-8">
+    {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
+    <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
+    <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
+    <!-- Compiled and minified CSS -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+
+    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+    {% load static %}
+    {# -- Shared markup engine - must load before {% block content %} scripts -- #}
+    {% include 'dashboard/partials/layout/_markup_engine.html' %}
+    {% block header %}{% endblock %}
+    <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
+    <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
+
+    <!-- Compiled and minified JavaScript -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+
+    <!--Let browser know website is optimized for mobile-->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body class="{% if page_name %}page-{{ page_name }}{% endif %}">
+    {% include 'dashboard/partials/layout/_env_indicator.html' %}
+    {% include 'dashboard/partials/layout/header.html' %}
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% block footer %}
+    {% include 'dashboard/partials/layout/footer.html' %}
+    {% endblock %}
+
+    {% if show_dev_toolbar %}
+    {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
+    {% endif %}
+
+    <!--  Scripts-->
+    <script>
+        var csrftoken = '{{ csrf_token }}';
+        // Include CSRF token in all HTMX requests (needed for DELETE/PUT/PATCH)
+        document.body.addEventListener('htmx:configRequest', function (evt) {
+            evt.detail.headers['X-CSRFToken'] = csrftoken;
+        });
+        toastr.options = {
+            positionClass: 'toast-bottom-right',
+            progressBar: true,
+            timeOut: 4500,
+            extendedTimeOut: 2000,
+            closeButton: false,
+            tapToDismiss: true,
+            onHoverTimeOut: true,
+            newestOnTop: true,
+            showDuration: 280,
+            hideDuration: 220,
+        };
+
+        {% if messages %}
+        (function () {
+            var _valid = { success: 1, info: 1, warning: 1, error: 1 };
+            {% for message in messages %}
+            (function () {
+                var tag = '{{ message.tags|escapejs }}';
+                var fn = _valid[tag] ? tag : 'info';
+                toastr[fn]('{{ message.message|escapejs }}');
+            }());
+            {% endfor %}
+        }());
+        {% endif %}
+
+        // Global: handle HX-Trigger showToast events fired by HTMX responses
+        document.body.addEventListener('showToast', function (evt) {
+            var d = evt.detail;
+            if (!d) return;
+            var level = d.level;
+            var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
+            toastr[fn](d.message || '');
+        });
+
+        // Global request error notifications for HTMX and fetch/AJAX calls.
+        (function () {
+            function _toastError(message) {
+                if (window.toastr) toastr.error(message || 'Request failed. Please try again.');
+            }
+            document.body.addEventListener('htmx:responseError', function (evt) {
+                var xhr = evt.detail && evt.detail.xhr;
+                var fallback = 'Request failed' + (xhr && xhr.status ? ' (HTTP ' + xhr.status + ')' : '') + '.';
+                var text = xhr && xhr.responseText ? xhr.responseText.trim() : '';
+                // Short, plain-text error bodies (e.g. validation messages) are shown verbatim;
+                // anything that looks like an HTML error page falls back to the generic message.
+                var isPlainText = text && text.length <= 300 && text.indexOf('<') === -1;
+                _toastError(isPlainText ? text : fallback);
+            });
+            document.body.addEventListener('htmx:sendError', function () { _toastError('Network error sending request.'); });
+            document.body.addEventListener('htmx:timeout', function () { _toastError('Request timed out.'); });
+            document.body.addEventListener('htmx:abort', function () { _toastError('Request was cancelled.'); });
+
+            var nativeFetch = window.fetch;
+            if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
+                var wrappedFetch = function () {
+                    return nativeFetch.apply(this, arguments).then(function (response) {
+                        if (!response.ok) _toastError('Request failed (HTTP ' + response.status + ').');
+                        return response;
+                    }).catch(function (err) {
+                        if (err && err.name === 'AbortError') _toastError('Request timed out.');
+                        else _toastError('Network request failed.');
+                        throw err;
+                    });
+                };
+                wrappedFetch.__urbanLensWrapped = true;
+                window.fetch = wrappedFetch;
+            }
+            if (window.jQuery) {
+                jQuery(document).ajaxError(function (_event, jqxhr, settings, errorThrown) {
+                    _toastError('Request failed' + (jqxhr && jqxhr.status ? ' (HTTP ' + jqxhr.status + ')' : '') + '.');
+                });
+            }
+        }());
+
+        // Global: disable submit buttons during HTMX form requests to prevent double-submit
+        (function () {
+            function _submitBtns(el) {
+                if (!el) return [];
+                var form = el.tagName === 'FORM' ? el : (el.closest ? el.closest('form') : null);
+                return form ? Array.from(form.querySelectorAll('.btn--submit, input[type="submit"]')) : [];
+            }
+            document.body.addEventListener('htmx:beforeRequest', function (e) {
+                _submitBtns(e.target).forEach(function (btn) {
+                    btn.classList.add('is-loading');
+                    btn.disabled = true;
+                });
+            });
+            document.body.addEventListener('htmx:afterRequest', function (e) {
+                _submitBtns(e.target).forEach(function (btn) {
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                });
+            });
+        }());
+    </script>
+    <script>
+    // -- Comment utilities -----------------------------------------------------
+
+    function toggleReplyForm(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.hidden = !el.hidden;
+        if (!el.hidden) {
+            var ta = el.querySelector('textarea');
+            if (ta) setTimeout(function () { ta.focus(); }, 30);
+        }
+    }
+
+    var RECENT_REACTION_EMOJIS_KEY = 'urbanlens.recentReactionEmojis';
+    var RECENT_REACTION_EMOJIS_LIMIT = 5;
+
+    function getRecentReactionEmojis() {
+        try {
+            var parsed = JSON.parse(window.localStorage.getItem(RECENT_REACTION_EMOJIS_KEY) || '[]');
+            return Array.isArray(parsed) ? parsed.filter(function (emoji) {
+                return typeof emoji === 'string' && emoji.length > 0;
+            }).slice(0, RECENT_REACTION_EMOJIS_LIMIT) : [];
+        } catch (err) {
+            return [];
+        }
+    }
+
+    function saveRecentReactionEmoji(emoji) {
+        if (!emoji) return;
+        var recent = getRecentReactionEmojis().filter(function (item) { return item !== emoji; });
+        recent.unshift(emoji);
+        try {
+            window.localStorage.setItem(RECENT_REACTION_EMOJIS_KEY, JSON.stringify(recent.slice(0, RECENT_REACTION_EMOJIS_LIMIT)));
+        } catch (err) {
+            // Browsers can disable localStorage; reactions should still work normally.
+        }
+    }
+
+    function refreshRecentReactionEmojis(popup) {
+        var recent = getRecentReactionEmojis();
+        var section = popup.querySelector('.reaction-picker-recent');
+        if (!section) {
+            section = document.createElement('div');
+            section.className = 'reaction-picker-recent';
+            section.innerHTML = '<div class="reaction-picker-label">Recent</div><div class="reaction-picker-recent-list"></div>' +
+                '<div class="reaction-picker-divider" aria-hidden="true"></div>';
+            popup.insertBefore(section, popup.firstChild);
+        }
+
+        var list = section.querySelector('.reaction-picker-recent-list');
+        list.innerHTML = '';
+        recent.forEach(function (emoji) {
+            var source = Array.prototype.find.call(popup.querySelectorAll('.reaction-picker-emoji:not(.reaction-picker-emoji--recent)'), function (btn) {
+                return (btn.dataset.emoji || btn.textContent.trim()) === emoji;
+            });
+            if (!source) return;
+            var clone = source.cloneNode(true);
+            clone.classList.add('reaction-picker-emoji--recent');
+            clone.setAttribute('title', 'Use recent reaction ' + emoji);
+            list.appendChild(clone);
+            if (window.htmx) window.htmx.process(clone);
+        });
+        section.hidden = !list.children.length;
+    }
+
+    function toggleReactionPicker(btn) {
+        var popup = btn.parentElement && btn.parentElement.querySelector('.reaction-picker-popup');
+        if (!popup) return;
+        document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
+            if (p !== popup) p.hidden = true;
+        });
+        if (popup.hidden) refreshRecentReactionEmojis(popup);
+        popup.hidden = !popup.hidden;
+    }
+
+    document.addEventListener('click', function (e) {
+        var reactionEmojiButton = e.target.closest('.reaction-picker-emoji');
+        if (reactionEmojiButton) {
+            saveRecentReactionEmoji(reactionEmojiButton.dataset.emoji || reactionEmojiButton.textContent.trim());
+        }
+        if (!e.target.closest('.reaction-picker')) {
+            document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
+                p.hidden = true;
+            });
+        }
+        if (!e.target.closest('.trip-member-rsvp-wrap')) {
+            document.querySelectorAll('.rsvp-popup:not([hidden])').forEach(function (p) {
+                p.hidden = true;
+            });
+        }
+    });
+
+    // -- @mention autocomplete -------------------------------------------------
+    (function () {
+        var _timer = null;
+
+        function _query(ta) {
+            var pos = ta.selectionStart;
+            var before = ta.value.substring(0, pos);
+            var atIdx = before.lastIndexOf('@');
+            if (atIdx === -1) return null;
+            var frag = before.substring(atIdx + 1);
+            if (/\s/.test(frag)) return null;
+            return { start: atIdx, query: frag };
+        }
+
+        function _showDropdown(ta, items, onSelect) {
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (!dd) return;
+            dd.innerHTML = '';
+            if (!items.length) { dd.hidden = true; return; }
+            items.forEach(function (item) {
+                var div = document.createElement('div');
+                div.className = 'mention-option';
+                div.innerHTML = '<span class="mention-option__name">' +
+                    item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>';
+                div.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    onSelect(item);
+                    dd.hidden = true;
+                    dd.innerHTML = '';
+                });
+                dd.appendChild(div);
+            });
+            dd.hidden = false;
+        }
+
+        function _hide(ta) {
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
+        }
+
+        function _insert(ta, start, text) {
+            var pos = ta.selectionStart;
+            ta.value = ta.value.substring(0, start) + text + ' ' + ta.value.substring(pos);
+            var cur = start + text.length + 1;
+            ta.setSelectionRange(cur, cur);
+            ta.focus();
+        }
+
+        function _fetch(ta) {
+            var q = _query(ta);
+            if (!q || q.query.length < 1) { _hide(ta); return; }
+            var ctx = ta.dataset.contextType || '';
+            var tripUuid = ta.dataset.tripUuid || '';
+            var isNum = /^\d+$/.test(q.query);
+
+            if (isNum && ctx === 'trip' && tripUuid) {
+                fetch('/dashboard/trips/' + encodeURIComponent(tripUuid) + '/map-data/', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var pts = (data.points || []).filter(function (p) {
+                        return String(p.index).startsWith(q.query);
+                    });
+                    _showDropdown(ta, pts.map(function (p) {
+                        return { name: '#' + p.index + ' - ' + p.label, actIndex: p.index };
+                    }), function (item) {
+                        _insert(ta, q.start, '@act:' + item.actIndex);
+                    });
+                })
+                .catch(function () {});
+            } else {
+                fetch('/dashboard/comments/locations/?q=' + encodeURIComponent(q.query), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (results) {
+                    _showDropdown(ta, results, function (item) {
+                        _insert(ta, q.start, '@[' + item.name + '](loc:' + item.uuid + ')');
+                    });
+                })
+                .catch(function () {});
+            }
+        }
+
+        document.addEventListener('input', function (e) {
+            if (!e.target.classList.contains('mention-input')) return;
+            clearTimeout(_timer);
+            var ta = e.target;
+            _timer = setTimeout(function () { _fetch(ta); }, 200);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (!e.target.classList.contains('mention-input')) return;
+            var ta = e.target;
+            var wrap = ta.closest('.comment-input-wrap');
+            var dd = wrap && wrap.querySelector('.mention-dropdown');
+            if (!dd || dd.hidden) return;
+            var opts = Array.from(dd.querySelectorAll('.mention-option'));
+            var cur = dd.querySelector('.mention-option.is-selected');
+            var idx = cur ? opts.indexOf(cur) : -1;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (cur) cur.classList.remove('is-selected');
+                var nxt = opts[Math.min(idx + 1, opts.length - 1)];
+                if (nxt) nxt.classList.add('is-selected');
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (cur) cur.classList.remove('is-selected');
+                var prv = opts[Math.max(idx - 1, 0)];
+                if (prv) prv.classList.add('is-selected');
+            } else if ((e.key === 'Enter' || e.key === 'Tab') && cur) {
+                e.preventDefault();
+                cur.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            } else if (e.key === 'Escape') {
+                dd.hidden = true;
+                dd.innerHTML = '';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.classList.contains('mention-input')) {
+                document.querySelectorAll('.mention-dropdown:not([hidden])').forEach(function (dd) {
+                    dd.hidden = true;
+                    dd.innerHTML = '';
+                });
+            }
+        });
+    }());
+
+    // -- Comment image upload preview -----------------------------------------
+    document.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('comment-image-input')) return;
+        var file = e.target.files && e.target.files[0];
+        var actions = e.target.closest('.comment-compose-actions');
+        var preview = actions && actions.querySelector('.comment-image-preview');
+        if (preview) preview.textContent = file ? '📎 ' + file.name : '';
+    });
+
+    // -- Activity mention hover → highlight trip map marker --------------------
+    document.addEventListener('mouseover', function (e) {
+        var link = e.target.closest && e.target.closest('.mention--activity');
+        if (!link || !window.tripHighlightMarker) return;
+        var id = link.dataset.activityId;
+        if (id) window.tripHighlightMarker(id, true);
+    });
+    document.addEventListener('mouseout', function (e) {
+        var link = e.target.closest && e.target.closest('.mention--activity');
+        if (!link || !window.tripHighlightMarker) return;
+        var id = link.dataset.activityId;
+        if (id) window.tripHighlightMarker(id, false);
+    });
+    </script>
+
+    <script>
+    // -- Scroll to hash anchor after HTMX swap (for dynamically loaded comments) -
+    (function () {
+        function _scrollToHash() {
+            var hash = window.location.hash;
+            if (!hash) return;
+            var el = document.querySelector(hash);
+            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        }
+        document.addEventListener('htmx:afterSettle', _scrollToHash);
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(_scrollToHash, 400); });
+    }());
+    </script>
+
+    <script>
+    // -- Unsaved / in-flight auto-save guard -----------------------------------
+    (function () {
+        var _dirty = false;
+        var _inFlight = 0;
+        var _message = 'Changes are still saving. Leave this page anyway?';
+
+        window.autosaveGuard = {
+            markDirty: function () { _dirty = true; },
+            markClean: function () { _dirty = false; },
+            saveStarted: function () { _inFlight++; },
+            saveFinished: function () { _inFlight = Math.max(0, _inFlight - 1); },
+            allowNavigation: function () { _dirty = false; _inFlight = 0; },
+            isBlocked: function () { return _dirty || _inFlight > 0; },
+            setMessage: function (msg) { _message = msg; },
+        };
+
+        window.addEventListener('beforeunload', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        document.body.addEventListener('htmx:confirm', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    e.detail.issueRequest(true);
+                }
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!window.autosaveGuard.isBlocked()) return;
+            var a = e.target.closest ? e.target.closest('a[href]') : null;
+            if (!a) return;
+            var href = a.getAttribute('href');
+            if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+            e.preventDefault();
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Leave page?',
+                message: _message,
+                confirmLabel: 'Leave anyway',
+                danger: true,
+            }) : Promise.resolve(window.confirm(_message));
+            proceed.then(function (ok) {
+                if (ok) {
+                    window.autosaveGuard.allowNavigation();
+                    window.location.href = a.href;
+                }
+            });
+        }, true);
+    }());
+    </script>
+
+    <script>
+    // -- Close any <dialog> on backdrop click (not drag-outside) ---------------
+    (function () {
+        var _dialogPress = null;
+
+        function _isBackdrop(dialog, x, y) {
+            var rect = dialog.getBoundingClientRect();
+            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+        }
+
+        document.addEventListener('mousedown', function (e) {
+            var dlg = e.target.closest ? e.target.closest('dialog') : null;
+            if (!dlg || !dlg.open) { _dialogPress = null; return; }
+            _dialogPress = _isBackdrop(dlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
+        });
+
+        document.addEventListener('click', function (e) {
+            if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
+            if (_dialogPress !== 'backdrop') return;
+            if (!_isBackdrop(e.target, e.clientX, e.clientY)) return;
+            var closeFn = e.target.dataset.closefn;
+            if (closeFn && window[closeFn]) { window[closeFn](); }
+            else { e.target.close(); }
+            _dialogPress = null;
+        });
+    }());
+    </script>
+
+    {# -- Comment map composer dialog -------------------------------------------- #}
+    <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog">
+      <div class="dialog-header">
+        <span>Attach a Map</span>
+        <button type="button" class="dialog-close" id="comment-map-composer-close">
+          <i class="material-symbols-outlined">close</i>
+        </button>
+      </div>
+      <div class="comment-map-composer-body">
+        <div class="comment-map-composer-controls">
+          <label class="cmcc-label">Go to</label>
+          <div class="cmcc-pin-search-wrap">
+            <input type="text" class="cmcc-pin-search" id="cmcc-search-input"
+                   placeholder="Pin name, address, or lat,lng (Enter to search)" autocomplete="off">
+            <button type="button" class="cmcc-go-btn" id="cmcc-go-btn" title="Go to location">
+              <i class="material-symbols-outlined">search</i>
+            </button>
+            <div class="cmcc-pin-dropdown" hidden></div>
+          </div>
+        </div>
+        <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
+        <div class="comment-map-composer-toolbar">
+          <span class="cmc-toolbar-label">Layer:</span>
+          <button type="button" class="cmc-layer-btn is-active" data-layer="standard" title="Street map">
+            <i class="material-symbols-outlined">map</i>
+          </button>
+          <button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite">
+            <i class="material-symbols-outlined">globe</i>
+          </button>
+          <button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic">
+            <i class="material-symbols-outlined">terrain</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
+          <span class="cmc-toolbar-label">Draw:</span>
+          <button type="button" class="cmc-tool-btn" data-tool="arrow" title="Arrow">
+            <i class="material-symbols-outlined">arrow_forward</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="line" title="Line">
+            <i class="material-symbols-outlined">timeline</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="text" title="Text label">
+            <i class="material-symbols-outlined">text_fields</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="circle" title="Circle">
+            <i class="material-symbols-outlined">radio_button_unchecked</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="rect" title="Rectangle">
+            <i class="material-symbols-outlined">crop_square</i>
+          </button>
+          <button type="button" class="cmc-tool-btn" data-tool="polygon" title="Polygon">
+            <i class="material-symbols-outlined">pentagon</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
+          <button type="button" class="cmc-undo-btn" id="cmc-undo" title="Undo last shape">
+            <i class="material-symbols-outlined">undo</i>
+          </button>
+          <button type="button" class="cmc-clear-btn" id="cmc-clear" title="Clear all markup">
+            <i class="material-symbols-outlined">delete_sweep</i>
+          </button>
+          <span class="cmc-toolbar-sep"></span>
+          <label class="cmc-color-wrap" title="Markup color">
+            <span>Color</span>
+            <input type="color" id="cmc-color" value="#e74c3c">
+          </label>
+          {# text label input - shown only when text tool is active #}
+          <input type="text" id="cmc-text-label" class="cmc-text-label-input"
+                 placeholder="Label text..." autocomplete="off" maxlength="100" hidden>
+          <span class="cmc-hint-text" id="cmc-hint"></span>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="comment-map-composer-save">Attach map</button>
+      </div>
+    </dialog>
+
+    {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
+    <dialog id="confirm-dialog" class="confirm-dialog ul-dialog">
+        <div class="dialog-header">
+            <span id="confirm-dialog-title">Are you sure?</span>
+            <button type="button" id="confirm-dialog-x" class="dialog-close" aria-label="Close">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+        <div class="confirm-dialog-body">
+            <p id="confirm-dialog-message"></p>
+        </div>
+        <div class="confirm-dialog-footer">
+            <button type="button" id="confirm-dialog-cancel" class="btn btn--ghost">Cancel</button>
+            <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
+        </div>
+    </dialog>
+    <script>
+    (function () {
+        var _resolve = null;
+        var dlg = document.getElementById('confirm-dialog');
+        var okBtn = document.getElementById('confirm-dialog-ok');
+
+        function _done(result) {
+            if (_resolve) { var r = _resolve; _resolve = null; r(result); }
+            if (dlg.open) dlg.close();
+        }
+
+        document.getElementById('confirm-dialog-cancel').addEventListener('click', function () { _done(false); });
+        document.getElementById('confirm-dialog-x').addEventListener('click', function () { _done(false); });
+        okBtn.addEventListener('click', function () { _done(true); });
+        // Catches all close paths: backdrop click, Escape key, and direct .close() calls
+        dlg.addEventListener('close', function () { _done(false); });
+
+        window.confirmDialog = function (opts) {
+            if (typeof opts === 'string') opts = { message: opts };
+            opts = opts || {};
+            document.getElementById('confirm-dialog-title').textContent = opts.title || 'Are you sure?';
+            document.getElementById('confirm-dialog-message').innerHTML =
+                (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+            okBtn.textContent = opts.confirmLabel || 'Confirm';
+            okBtn.className = (opts.danger === false) ? 'btn btn--primary' : 'btn--danger-filled';
+            return new Promise(function (resolve) {
+                _resolve = resolve;
+                dlg.showModal();
+            });
+        };
+    }());
+    </script>
+
+    {# -- Comment map composer + viewer JS -------------------------------------- #}
+    {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load  #}
+    {# it in {% block header %} along with their plugins (MarkerCluster, Leaflet.draw).         #}
+    {# Re-loading would clobber those plugins by replacing window.L.  Comment-map code          #}
+    {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
+    <script>
+    (function () {
+        // -- Shared tile layer factory -----------------------------------------
+        var _TILE_LAYERS = {
+            standard: {
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                options: { attribution: '© OpenStreetMap contributors', maxZoom: 19 }
+            },
+            satellite: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                options: { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
+            },
+            topo: {
+                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                options: { attribution: '© OpenTopoMap contributors', maxZoom: 17 }
+            }
+        };
+
+        function _makeTileLayer(mode) {
+            var cfg = _TILE_LAYERS[mode] || _TILE_LAYERS.standard;
+            return L.tileLayer(cfg.url, cfg.options);
+        }
+
+        // -- Composer state ----------------------------------------------------
+        var _composerMap = null;
+        var _composerTileLayer = null;    // active tile layer
+        var _composerLayerMode = 'standard';
+        var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
+        var _composerSession = null;      // MarkupEngine draw session
+        var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
+        var _originForm = null;           // the .comment-compose element that opened the dialog
+        var _pinSearchTimer = null;
+        var _pinCache = [];
+
+        var _dialog = document.getElementById('comment-map-composer');
+        var _colorPicker = document.getElementById('cmc-color');
+
+        // -- Open composer -----------------------------------------------------
+        window._openCommentMapComposer = function (form) {
+            if (typeof L === 'undefined') {
+                toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
+                return;
+            }
+            _originForm = form;
+
+            // Restore existing map_data if the form already has one
+            var existing = null;
+            var hiddenField = form.querySelector('.comment-map-data-field');
+            if (hiddenField && hiddenField.value) {
+                try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+            }
+
+            _dialog.showModal();
+            _loadPinsForSearch();
+
+            // showModal() sets [open] synchronously, but the browser hasn't run
+            // style recalculation yet. Reading offsetHeight forces an immediate
+            // synchronous reflow so Leaflet reads the correct container dimensions
+            // on the very next line - no setTimeout/rAF timing tricks needed.
+            void _dialog.offsetHeight;
+
+            var mapEl = document.getElementById('comment-map-composer-map');
+            if (!_composerMap) {
+                _composerMap = L.map(mapEl, { zoomControl: true });
+                _composerTileLayer = _makeTileLayer(_composerLayerMode);
+                _composerTileLayer.addTo(_composerMap);
+                _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
+                _composerSession = MarkupEngine.createDrawSession(_composerMap, {
+                    getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
+                    getTextLabel: function () {
+                        var inp = document.getElementById('cmc-text-label');
+                        return inp ? inp.value.trim() : '';
+                    },
+                    onCommit: function (type, latlngs, extras) {
+                        var color = _colorPicker ? _colorPicker.value : '#e74c3c';
+                        var s = { type: type, latlngs: latlngs, color: color };
+                        if (type === 'text') {
+                            var label = extras.label || '';
+                            if (!label) {
+                                var hintEl = document.getElementById('cmc-hint');
+                                if (hintEl) hintEl.textContent = 'Enter a label first, then click the map';
+                                return;
+                            }
+                            s.label = label;
+                            s.stroke_width = extras.dragFontSize || 16;
+                        }
+                        _composerShapes.push(s);
+                        _redrawMarkup();
+                    },
+                    onHintChange: function (hint) {
+                        var el = document.getElementById('cmc-hint');
+                        if (el) el.textContent = hint;
+                    },
+                    onToolChange: function (tool) {
+                        document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
+                            b.classList.toggle('is-active', b.dataset.tool === tool);
+                        });
+                        var textInp = document.getElementById('cmc-text-label');
+                        var hintEl  = document.getElementById('cmc-hint');
+                        if (textInp) {
+                            textInp.hidden = (tool !== 'text');
+                            if (tool === 'text') { setTimeout(function () { textInp.focus(); }, 0); }
+                        }
+                        if (hintEl) hintEl.hidden = (tool === 'text');
+                        if (_composerMap) {
+                            if (tool) { _composerMap.dragging.disable(); }
+                            else      { _composerMap.dragging.enable(); }
+                        }
+                    },
+                });
+                // Intercept dialog ESC: let engine cancel the shape instead of closing dialog
+                _dialog.addEventListener('cancel', function (e) {
+                    if (_composerSession && _composerSession.getCurrentTool()) {
+                        e.preventDefault();
+                    }
+                });
+            }
+
+            if (existing) {
+                _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
+                _composerShapes = existing.markup || [];
+                var savedMode = existing.layer_mode || 'standard';
+                if (savedMode !== _composerLayerMode) {
+                    _setComposerLayer(savedMode);
+                }
+            } else {
+                var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
+                var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
+                _composerMap.setView([defLat, defLng], 14);
+                _composerShapes = [];
+            }
+
+            // invalidateSize() tells Leaflet to re-read the container pixel size
+            // and re-request any tiles needed for the current view.
+            _composerMap.invalidateSize();
+
+            _redrawMarkup();
+            if (_composerSession) _composerSession.deactivate();
+        };
+
+        // -- Layer switching ---------------------------------------------------
+        function _setComposerLayer(mode) {
+            if (!_composerMap || !_TILE_LAYERS[mode]) return;
+            if (_composerTileLayer) _composerMap.removeLayer(_composerTileLayer);
+            _composerLayerMode = mode;
+            _composerTileLayer = _makeTileLayer(mode);
+            _composerTileLayer.addTo(_composerMap);
+            document.querySelectorAll('.cmc-layer-btn').forEach(function (b) {
+                b.classList.toggle('is-active', b.dataset.layer === mode);
+            });
+        }
+
+        document.querySelectorAll('.cmc-layer-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
+        });
+
+        // -- Close / cancel ----------------------------------------------------
+        document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
+        document.getElementById('comment-map-composer-cancel').addEventListener('click', _closeComposer);
+
+        function _closeComposer() {
+            if (_composerSession) _composerSession.deactivate();
+            if (_dialog.open) _dialog.close();
+        }
+
+        // -- Save --------------------------------------------------------------
+        document.getElementById('comment-map-composer-save').addEventListener('click', function () {
+            if (!_composerMap || !_originForm) return;
+            var center = _composerMap.getCenter();
+            var snapshot = {
+                center_lat: center.lat,
+                center_lng: center.lng,
+                zoom: _composerMap.getZoom(),
+                layer_mode: _composerLayerMode,
+                detail_pins: [],
+                markup: _composerShapes.slice()
+            };
+            var hiddenField = _originForm.querySelector('.comment-map-data-field');
+            if (hiddenField) hiddenField.value = JSON.stringify(snapshot);
+
+            // Show chip in form
+            var chip = _originForm.querySelector('.comment-map-chip');
+            if (chip) chip.hidden = false;
+
+            _closeComposer();
+        });
+
+        // -- Clear attached map from a form ------------------------------------
+        window._clearCommentMap = function (form) {
+            var hf = form && form.querySelector('.comment-map-data-field');
+            if (hf) hf.value = '';
+            var chip = form && form.querySelector('.comment-map-chip');
+            if (chip) chip.hidden = true;
+        };
+
+        // Wire chip buttons (event delegation - forms are dynamic via HTMX)
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('.comment-map-chip-remove')) {
+                var form = e.target.closest('.comment-compose');
+                if (form) _clearCommentMap(form);
+            }
+            if (e.target.closest('.comment-map-chip-edit')) {
+                var form2 = e.target.closest('.comment-compose');
+                if (form2) _openCommentMapComposer(form2);
+            }
+        });
+
+        // -- Tool selection ----------------------------------------------------
+        document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (!_composerSession) return;
+                var tool = btn.dataset.tool;
+                if (_composerSession.getCurrentTool() === tool) { _composerSession.deactivate(); }
+                else { _composerSession.startTool(tool); }
+            });
+        });
+
+        document.getElementById('cmc-undo').addEventListener('click', function () {
+            _composerShapes.pop();
+            _redrawMarkup();
+        });
+
+        document.getElementById('cmc-clear').addEventListener('click', function () {
+            _composerShapes = [];
+            _redrawMarkup();
+        });
+
+        // -- Redraw all confirmed shapes ---------------------------------------
+        function _redrawMarkup() {
+            if (!_composerMarkupLayer) return;
+            _composerMarkupLayer.clearLayers();
+            _composerShapes.forEach(function (s) {
+                MarkupEngine.renderShape(s, _composerMarkupLayer);
+            });
+        }
+
+        // -- Pin search / address / coordinate autocomplete --------------------
+        function _loadPinsForSearch() {
+            if (_pinCache.length) return;
+            fetch('/dashboard/comments/map-pins/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { _pinCache = d.pins || []; });
+        }
+
+        // Try to interpret the input as a lat,lng string. Returns true and pans
+        // the map if successful; returns false otherwise.
+        function _tryCoordInput(raw) {
+            var parts = raw.split(',');
+            if (parts.length !== 2) return false;
+            var lat = parseFloat(parts[0]);
+            var lng = parseFloat(parts[1]);
+            if (isNaN(lat) || isNaN(lng)) return false;
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+            if (_composerMap) _composerMap.setView([lat, lng], 15);
+            return true;
+        }
+
+        // Geocode a free-text address via the settings endpoint; pan map on success.
+        function _geocodeAndCenter(q) {
+            var input = document.getElementById('cmcc-search-input');
+            if (input) input.disabled = true;
+            fetch('/dashboard/settings/geocode/?address=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (input) input.disabled = false;
+                    if (d.lat != null && d.lng != null) {
+                        if (_composerMap) _composerMap.setView([d.lat, d.lng], 15);
+                        _closePinDropdown();
+                        if (input) input.value = '';
+                    } else {
+                        toastr.warning('Location not found.');
+                    }
+                })
+                .catch(function () {
+                    if (input) input.disabled = false;
+                    toastr.error('Geocoding failed.');
+                });
+        }
+
+        function _closePinDropdown() {
+            var dd = document.querySelector('.cmcc-pin-dropdown');
+            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
+        }
+
+        // Called when the user commits a search (Enter key or Go button).
+        function _commitSearch() {
+            var input = document.getElementById('cmcc-search-input');
+            var q = input ? input.value.trim() : '';
+            if (!q) return;
+            _closePinDropdown();
+            if (_tryCoordInput(q)) { input.value = ''; return; }
+            _geocodeAndCenter(q);
+        }
+
+        var _searchInput = document.getElementById('cmcc-search-input');
+
+        _searchInput.addEventListener('input', function () {
+            clearTimeout(_pinSearchTimer);
+            var q = this.value.toLowerCase().trim();
+            var dd = document.querySelector('.cmcc-pin-dropdown');
+            if (!q) { _closePinDropdown(); return; }
+            _pinSearchTimer = setTimeout(function () {
+                var results = _pinCache.filter(function (p) {
+                    return p.name.toLowerCase().includes(q);
+                }).slice(0, 8);
+                dd.innerHTML = '';
+                if (!results.length) { dd.hidden = true; return; }
+                results.forEach(function (p) {
+                    var item = document.createElement('div');
+                    item.className = 'cmcc-pin-option';
+                    item.textContent = p.name;
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault();  // keeps focus on input, preventing premature blur
+                        if (_composerMap) _composerMap.setView([p.lat, p.lng], 15);
+                        _closePinDropdown();
+                        _searchInput.value = p.name;
+                    });
+                    dd.appendChild(item);
+                });
+                dd.hidden = false;
+            }, 150);
+        });
+
+        _searchInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); _commitSearch(); }
+        });
+
+        _searchInput.addEventListener('blur', function () {
+            setTimeout(_closePinDropdown, 200);
+        });
+
+        document.getElementById('cmcc-go-btn').addEventListener('click', _commitSearch);
+
+        // Belt-and-suspenders: re-invalidate after dialog CSS transitions finish.
+        _dialog.addEventListener('transitionend', function () {
+            if (_dialog.open && _composerMap) _composerMap.invalidateSize();
+        });
+
+        // -- Markup bounds helpers ---------------------------------------------
+        // Returns an L.LatLngBounds covering all points in the shapes array,
+        // or null when there are no shapes with computable bounds.
+        function _computeMarkupBounds(shapes) {
+            var pts = [];
+            (shapes || []).forEach(function (s) {
+                if (!s.latlngs || !s.latlngs.length) return;
+                if (s.type === 'circle' && s.latlngs.length >= 2) {
+                    // Approximate circle extent using radius in metres → degrees
+                    var ctr = L.latLng(s.latlngs[0][0] != null ? s.latlngs[0][0] : s.latlngs[0],
+                                       s.latlngs[0][1] != null ? s.latlngs[0][1] : 0);
+                    var edge = L.latLng(s.latlngs[1][0] != null ? s.latlngs[1][0] : s.latlngs[1],
+                                        s.latlngs[1][1] != null ? s.latlngs[1][1] : 0);
+                    var r = ctr.distanceTo(edge);
+                    var dLat = r / 111320;
+                    var dLng = r / (111320 * Math.cos(ctr.lat * Math.PI / 180));
+                    pts.push([ctr.lat + dLat, ctr.lng + dLng]);
+                    pts.push([ctr.lat - dLat, ctr.lng - dLng]);
+                } else {
+                    s.latlngs.forEach(function (ll) {
+                        if (Array.isArray(ll)) { pts.push([ll[0], ll[1]]); }
+                        else if (ll && ll.lat != null) { pts.push([ll.lat, ll.lng]); }
+                    });
+                }
+            });
+            if (!pts.length) return null;
+            try { var b = L.latLngBounds(pts); return b.isValid() ? b : null; }
+            catch (_) { return null; }
+        }
+
+        // Sets the map view: respects the user's saved center/zoom but zooms out
+        // if any markup would be hidden at that zoom level.
+        function _fitMapToMarkup(lmap, data) {
+            var lat  = data.center_lat;
+            var lng  = data.center_lng;
+            var zoom = data.zoom || 13;
+            var markup = data.markup || [];
+            if (!markup.length) { lmap.setView([lat, lng], zoom); return; }
+            var bounds = _computeMarkupBounds(markup);
+            if (!bounds) { lmap.setView([lat, lng], zoom); return; }
+            lmap.setView([lat, lng], zoom);
+            // If the saved view already contains all markup, keep it exactly.
+            if (lmap.getBounds().contains(bounds)) return;
+            // Otherwise zoom out enough to show all markup, with a little padding.
+            lmap.fitBounds(bounds.pad(0.15));
+        }
+
+        // -- Comment map viewer ------------------------------------------------
+        var _viewerMaps = {};   // commentId → L.Map
+
+        window._expandCommentMap = function (commentId) {
+            if (typeof L === 'undefined') return;
+            var dlg = document.getElementById('comment-map-dialog-' + commentId);
+            if (!dlg) return;
+            dlg.showModal();
+            void dlg.offsetHeight;
+
+            // Reuse cached map only when its container is still in the live document.
+            // After an HTMX swap the old element is detached, so we must reinitialise.
+            var cached = _viewerMaps[commentId];
+            if (cached && document.body.contains(cached.getContainer())) {
+                cached.invalidateSize();
+                return;
+            }
+            delete _viewerMaps[commentId];
+
+            var script = document.getElementById('comment-map-data-' + commentId);
+            if (!script) return;
+            var data;
+            try { data = JSON.parse(script.textContent); } catch (_) { return; }
+
+            var el = document.getElementById('comment-map-view-' + commentId);
+            if (!el) return;
+            // Set height inline so Leaflet reads a non-zero size even if the compiled
+            // CSS hasn't picked up the .comment-map-view-body rule yet.
+            el.style.height = Math.round(window.innerHeight * 0.6) + 'px';
+            el.style.minHeight = '300px';
+
+            var viewMap = L.map(el);
+            _makeTileLayer(data.layer_mode || 'standard').addTo(viewMap);
+            _fitMapToMarkup(viewMap, data);
+
+            var markupGroup = L.layerGroup().addTo(viewMap);
+            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, markupGroup); });
+
+            viewMap.invalidateSize();
+            _viewerMaps[commentId] = viewMap;
+
+            // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
+            dlg.addEventListener('transitionend', function () {
+                viewMap.invalidateSize();
+            }, { once: true });
+        };
+
+        // -- Render thumbnail map inside .comment-map-thumb --------------------
+        // Runs on DOMContentLoaded and after HTMX swaps
+        function _initThumbs() {
+            if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
+            document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
+                var id = preview.dataset.commentId;
+                var thumb = preview.querySelector('.comment-map-thumb');
+                if (!thumb || thumb.dataset.initialized) return;
+                var script = document.getElementById('comment-map-data-' + id);
+                if (!script) return;
+                var data;
+                try { data = JSON.parse(script.textContent); } catch (_) { return; }
+
+                thumb.dataset.initialized = '1';
+                // Set height inline - guarantees Leaflet reads a non-zero size
+                // regardless of whether the compiled CSS has loaded yet.
+                thumb.style.height = '180px';
+                thumb.style.width = '100%';
+                var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
+                                          scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+                _makeTileLayer(data.layer_mode || 'standard').addTo(tmap);
+                _fitMapToMarkup(tmap, data);
+                tmap.invalidateSize();
+                var mg = L.layerGroup().addTo(tmap);
+                (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', _initThumbs);
+        document.addEventListener('htmx:afterSettle', _initThumbs);
+
+        // -- Comment form validation (text optional if photo or map attached) -
+        window._validateCommentForm = function (form) {
+            var text = ((form.querySelector('[name=text]') || {}).value || '').trim();
+            var imgInput = form.querySelector('[name=image]');
+            var hasImage = !!(imgInput && imgInput.files && imgInput.files.length > 0);
+            var mapField = form.querySelector('.comment-map-data-field');
+            var hasMap = !!(mapField && mapField.value);
+            return !!(text || hasImage || hasMap);
+        };
+
+    }());
+    </script>
+
+    <script>
+    // -- Collapsible sections ---------------------------------------------------
+    // Any element with [data-collapse-scope][data-collapse-section] gets a
+    // chevron button injected into its header that toggles an .is-collapsed
+    // class. State is persisted in localStorage keyed by scope ("pin", "wiki",
+    // "trip") + section name only - deliberately NOT by entity id, so
+    // collapsing "Comments" on one pin collapses it on every pin, independent
+    // of the wiki and trip pages.
+    (function () {
+        function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
+
+        function _isCollapsed(scope, section) {
+            try { return localStorage.getItem(_key(scope, section)) === '1'; }
+            catch (_) { return false; }
+        }
+
+        function _setCollapsed(scope, section, collapsed) {
+            try {
+                if (collapsed) localStorage.setItem(_key(scope, section), '1');
+                else localStorage.removeItem(_key(scope, section));
+            } catch (_) {}
+        }
+
+        function _applyState(container) {
+            var scope = container.dataset.collapseScope;
+            var section = container.dataset.collapseSection;
+            if (!scope || !section) return;
+            var collapsed = _isCollapsed(scope, section);
+            container.classList.toggle('is-collapsed', collapsed);
+            var btn = container.querySelector('.section-collapse-btn');
+            if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
+        }
+
+        function _header(container) {
+            return container.querySelector(':scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs');
+        }
+
+        function _actionsGroup(header) {
+            var group = header.querySelector(':scope > .card-header-actions');
+            if (group) return group;
+            group = document.createElement('div');
+            group.className = 'card-header-actions';
+            var toMove = [];
+            Array.prototype.forEach.call(header.children, function (el) {
+                if (el.matches('.btn--icon-sm, .gallery-upload-compact-btn, .card-header-link, .btn, .section-collapse-btn')
+                    && !el.classList.contains('view-toggle-btn')) {
+                    toMove.push(el);
+                }
+            });
+            toMove.forEach(function (el) { group.appendChild(el); });
+            header.appendChild(group);
+            return group;
+        }
+
+        // Headers can arrive after this container is first seen (HTMX content
+        // still loading), so this is safe to call repeatedly and idempotent.
+        function _ensureToggle(container) {
+            if (container.dataset.collapseInit === '1') { _applyState(container); return; }
+            var header = _header(container);
+            if (!header) return;
+            var actions = _actionsGroup(header);
+            if (!actions.querySelector('.section-collapse-btn')) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn--icon-sm section-collapse-btn';
+                btn.setAttribute('aria-label', 'Collapse section');
+                btn.innerHTML = '<i class="material-symbols-outlined">expand_less</i>';
+                actions.appendChild(btn);
+            }
+            container.dataset.collapseInit = '1';
+            _applyState(container);
+        }
+
+        function _scanAll() {
+            document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
+        }
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.section-collapse-btn');
+            if (!btn) return;
+            var container = btn.closest('[data-collapse-scope][data-collapse-section]');
+            if (!container) return;
+            var collapsed = !container.classList.contains('is-collapsed');
+            container.classList.toggle('is-collapsed', collapsed);
+            btn.setAttribute('aria-expanded', String(!collapsed));
+            _setCollapsed(container.dataset.collapseScope, container.dataset.collapseSection, collapsed);
+        });
+
+        document.addEventListener('DOMContentLoaded', _scanAll);
+        document.addEventListener('htmx:afterSettle', _scanAll);
+    }());
+    </script>
+
+    {% include 'dashboard/partials/ui/_tooltips_script.html' %}
+    {% include 'dashboard/partials/ui/_page_explainer_script.html' %}
+    {% block scripts %}{% endblock %}
+
+</body>
+
+</html>

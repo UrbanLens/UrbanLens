@@ -1,0 +1,319 @@
+// Admin dev toolbar - fixed, collapsible panel for development-mode tooling.
+@use 'variables' as *;
+
+.dev-toolbar {
+    // Hidden on phones/tablets; dev tooling is desktop-only.
+    display: none;
+
+}
+
+@include up($breakpoint-sm) {
+    .dev-toolbar {
+        position: fixed;
+        bottom: 3rem;
+        left: 1rem;
+        z-index: 10050;
+        min-width: 10rem;
+        max-width: 16rem;
+        border-radius: 10px;
+        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-grey-9);
+        box-shadow: var(--ul-shadow-lg);
+        font-size: 0.8125rem;
+        color: var(--ul-grey-8);
+        overflow: hidden;
+        opacity: 0.95;
+        transition:
+            left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+            top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+            opacity 0.25s ease;
+    
+        &.dev-toolbar--no-transition,
+        &.dev-toolbar--dragging {
+            transition: none;
+        }
+    
+        &.dev-toolbar--position-animating {
+            pointer-events: none;
+        }
+    
+        &[data-collapsed='true'] {
+            .dev-toolbar__body {
+                max-height: 0;
+                opacity: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+                pointer-events: none;
+            }
+        }
+
+        &.dev-toolbar--hidden {
+            display: none;
+        }
+    
+        &.dev-toolbar--dragging {
+            user-select: none;
+            cursor: grabbing;
+        }
+    
+        @include up($breakpoint-sm) {
+            display: block;
+        }
+
+        &:hover {
+            opacity: 1;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dev-toolbar {
+        transition: opacity 0.15s ease;
+    }
+}
+
+.dev-toolbar__header {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+%dev-toolbar-header-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: var(--ul-grey-1a);
+    color: inherit;
+    font: inherit;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+}
+
+.dev-toolbar__drag-handle {
+    @extend %dev-toolbar-header-control;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.35rem;
+    cursor: grab;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.15rem !important;
+    }
+
+    &:active,
+    .dev-toolbar--dragging & {
+        cursor: grabbing;
+    }
+}
+
+.dev-toolbar__toggle {
+    @extend %dev-toolbar-header-control;
+    flex: 1 1 auto;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+    text-align: left;
+}
+
+.dev-toolbar__reset-position {
+    @extend %dev-toolbar-header-control;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.5rem;
+    cursor: pointer;
+    color: var(--ul-grey-6);
+    border-left: 1px solid var(--ul-grey-1a);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.05rem !important;
+    }
+}
+
+.dev-toolbar__chevron {
+    font-size: 1.1rem !important;
+    transition: transform 0.15s ease;
+}
+
+.dev-toolbar__title {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    color: var(--ul-grey-6);
+}
+
+.dev-toolbar__body {
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem;
+    gap: 0.25rem;
+    overflow: hidden;
+    max-height: 20rem;
+    opacity: 1;
+    transition:
+        max-height 0.2s ease,
+        opacity 0.15s ease,
+        padding 0.2s ease;
+}
+
+.dev-toolbar__tool {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &--danger:hover {
+        background: var(--ul-color-danger-bg);
+    }
+}
+
+.dev-toolbar__theme-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.1rem 0.25rem;
+    border-radius: 6px;
+    background: var(--ul-grey-1a);
+}
+
+.dev-toolbar__theme-icon {
+    font-size: 1.1rem !important;
+    opacity: 0.35;
+    color: var(--ul-grey-6);
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+
+    &.is-active {
+        opacity: 1;
+        color: var(--ul-grey-8);
+        transform: scale(1.05);
+    }
+}
+
+.dev-toolbar__theme-label {
+    color: var(--ul-grey-6);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.dev-toolbar__tool-icon {
+    font-size: 1.1rem !important;
+    color: var(--ul-grey-6);
+}
+
+.dev-toolbar__tool-label {
+    color: var(--ul-grey-6);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.dev-toolbar__tool.is-busy {
+    opacity: 0.65;
+    pointer-events: none;
+
+    .dev-toolbar__tool-icon {
+        animation: dev-toolbar-spin 0.9s linear infinite;
+    }
+}
+
+.dev-toolbar__tool--danger {
+    .dev-toolbar__tool-icon,
+    .dev-toolbar__tool-label {
+        color: var(--ul-color-danger-text);
+    }
+}
+
+@keyframes dev-toolbar-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dev-toolbar--dark-active {
+    .dev-toolbar__theme-icon--dark.is-active {
+        color: $color-indigo-300;
+    }
+}
+
+.dev-toolbar:not(.dev-toolbar--dark-active) {
+    .dev-toolbar__theme-icon--light.is-active {
+        color: $color-amber-500;
+    }
+}
+
+html[data-theme='dark'] {
+    .dev-toolbar {
+        background: var(--ul-grey-1a);
+        border-color: var(--ul-grey-1a);
+        color: var(--ul-grey-8);
+        box-shadow: var(--ul-shadow-lg);
+
+    }
+
+    .dev-toolbar__header {
+        border-bottom-color: var(--ul-grey-1a);
+    }
+
+    .dev-toolbar__drag-handle,
+    .dev-toolbar__toggle,
+    .dev-toolbar__reset-position {
+        background: var(--ul-grey-1b);
+    }
+
+    .dev-toolbar__reset-position {
+        border-left-color: var(--ul-grey-1a);
+    }
+
+    .dev-toolbar__title,
+    .dev-toolbar__theme-label,
+    .dev-toolbar__tool-label,
+    .dev-toolbar__tool-icon,
+    .dev-toolbar__drag-handle,
+    .dev-toolbar__reset-position {
+        color: var(--ul-grey-6);
+    }
+
+    .dev-toolbar__theme-icons {
+        background: var(--ul-grey-2a);
+    }
+
+    .dev-toolbar__theme-icon.is-active {
+        color: var(--ul-grey-9);
+    }
+
+    .dev-toolbar--dark-active {
+        .dev-toolbar__theme-icon--dark.is-active {
+            color: $color-indigo-300;
+        }
+    }
+
+    .dev-toolbar:not(.dev-toolbar--dark-active) {
+        .dev-toolbar__theme-icon--light.is-active {
+            color: $color-amber-400;
+        }
+    }
+
+    .dev-toolbar__tool--danger {
+        .dev-toolbar__tool-icon,
+        .dev-toolbar__tool-label {
+            color: var(--ul-color-danger-text);
+        }
+    }
+}

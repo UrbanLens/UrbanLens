@@ -1,0 +1,70 @@
+<div class="web-search card" id="web-search-section"
+     data-collapse-scope="pin" data-collapse-section="web-search">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">travel_explore</i>
+        <h3>Web Results</h3>
+        {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+    </div>
+    {% if search_results %}
+    <ul class="search-results-list" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="5">
+        {% for result in search_results %}
+        {% if result.title or result.link %}
+        <li class="search-result" data-adaptive-pagination-item>
+            <div class="search-result-inner">
+                <div class="search-result-thumb-wrap">
+                    {% if result.thumbnail %}
+                    <img class="search-result-thumb" src="{{ result.thumbnail }}" alt="" loading="lazy"
+                         onerror="urbanlensMediaThumbFallback(this, 'public', 'search-result-thumb search-result-thumb-fallback')">
+                    {% else %}
+                    <span class="search-result-thumb search-result-thumb-fallback" aria-hidden="true">
+                        <i class="material-symbols-outlined">public</i>
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="search-result-body">
+                    <div class="search-result-source-row">
+                        {% if result.domain %}
+                        <span class="search-result-domain">
+                            <img class="search-result-favicon"
+                                 src="https://www.google.com/s2/favicons?domain={{ result.domain }}&sz=16"
+                                 alt="" loading="lazy" onerror="this.style.display='none'">
+                            {{ result.domain }}
+                        </span>
+                        {% endif %}
+                        {% if result.date_display %}
+                        <span class="search-result-date">{{ result.date_display }}</span>
+                        {% endif %}
+                    </div>
+                    <a href="{{ result.link }}" target="_blank" rel="noopener noreferrer" class="search-result-title">
+                        {{ result.title }}
+                        <i class="material-icons search-result-ext-icon">open_in_new</i>
+                    </a>
+                    {% if result.snippet %}
+                    <p class="search-result-snippet">{{ result.snippet }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% endif %}
+        {% endfor %}
+    </ul>
+    {% include "dashboard/partials/ui/_pagination_controls.html" %}
+    {% elif error %}
+    <div class="view-unavailable">
+        <i class="material-symbols-outlined">wifi_off</i>
+        <span>{{ error }}</span>
+    </div>
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-symbols-outlined">search_off</i>
+        <span>No results found.</span>
+    </div>
+    {% endif %}
+</div>

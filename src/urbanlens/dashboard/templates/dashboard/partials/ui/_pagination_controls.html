@@ -1,0 +1,46 @@
+{% comment %}
+Reusable pagination bar for any card rendered by a single HTMX-loaded view.
+
+Context:
+  page_obj - a django.core.paginator.Page
+
+Conventions relied on:
+  - The card this is included into has the .card class.
+  - The view that rendered this card is reachable at request.path and reads
+    a `page` GET/POST parameter (see urbanlens.dashboard.services.pagination).
+{% endcomment %}
+{% if adaptive_pagination %}
+<div class="pagination-bar" data-adaptive-pagination-controls
+     data-server-page="{{ page_obj.number }}"
+     data-server-pages="{{ page_obj.paginator.num_pages }}"
+     data-next-url="{% if page_obj.has_next %}{{ request.path }}?page={{ page_obj.next_page_number }}{% endif %}"
+     data-prev-url="{% if page_obj.has_previous %}{{ request.path }}?page={{ page_obj.previous_page_number }}{% endif %}"></div>
+{% elif page_obj.paginator.num_pages > 1 %}
+<div class="pagination-bar">
+    {% if page_obj.has_previous %}
+    <button type="button" class="pagination-btn"
+            hx-get="{{ request.path }}?page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}"
+            hx-target="closest .card" hx-swap="outerHTML"
+            aria-label="Previous page">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    {% else %}
+    <button type="button" class="pagination-btn" disabled aria-label="Previous page">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    {% endif %}
+    <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <button type="button" class="pagination-btn"
+            hx-get="{{ request.path }}?page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}"
+            hx-target="closest .card" hx-swap="outerHTML"
+            aria-label="Next page">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    {% else %}
+    <button type="button" class="pagination-btn" disabled aria-label="Next page">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    {% endif %}
+</div>
+{% endif %}

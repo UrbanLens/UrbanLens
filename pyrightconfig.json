@@ -1,0 +1,13 @@
+{
+	"include": ["src"],
+	"extraPaths": ["src"],
+	"venvPath": ".",
+	"venv": ".venv_windows",
+	"pythonVersion": "3.12",
+	// basedpyright cannot resolve Django ORM reverse accessors (e.g. user.profile)
+	// because it has no plugin API - the mypy_django_plugin that generates those
+	// types cannot run under pyright. Downgrading from "error" to "information"
+	// avoids hundreds of false-positive squiggles while mypy (CI / manual runs)
+	// remains the authoritative type checker for Django-specific patterns.
+	"reportAttributeAccessIssue": "information"
+}

@@ -1,0 +1,2444 @@
+@use 'variables' as *;
+
+
+// -- Compact weather forecast strip -----------------------------------------
+.weather-widget {
+    .weather-strip-scroll {
+        overflow-x: auto;
+        padding: .5rem .75rem .85rem;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, .12) transparent;
+
+        &::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, .15);
+            border-radius: 4px;
+        }
+    }
+
+    .weather-strip {
+        display: flex;
+        gap: .35rem;
+        width: max-content;
+    }
+
+    .wx-entry {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .1rem;
+        padding: .55rem .5rem .45rem;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, .035);
+        min-width: 68px;
+        text-align: center;
+        transition: background .15s;
+        cursor: default;
+
+        &:hover {
+            background: rgba(0, 0, 0, .065);
+        }
+    }
+
+    .wx-time {
+        font-size: .65rem;
+        color: var(--ul-grey-6);
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+    }
+
+    .wx-icon {
+        width: 44px;
+        height: 44px;
+        margin: -.45rem 0 -.3rem; // compensate for OWM icon's built-in padding
+    }
+
+    .wx-temp {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--ul-grey-9);
+        line-height: 1.1;
+
+        .wx-unit {
+            font-size: .6rem;
+            font-weight: 400;
+            color: var(--ul-grey-6);
+            vertical-align: super;
+        }
+    }
+
+    .wx-condition {
+        font-size: .63rem;
+        color: var(--ul-grey-7);
+        @include truncate;
+        max-width: 66px;
+    }
+
+    .wx-meta {
+        display: flex;
+        gap: .3rem;
+        font-size: .6rem;
+        color: var(--ul-grey-6);
+        margin-top: .1rem;
+
+        span {
+            display: flex;
+            align-items: center;
+            gap: 1px;
+        }
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .65rem;
+        }
+    }
+}
+
+// -- Small icon button (used in card headers) --------------------------------
+.btn-icon-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ul-grey-7);
+    outline: none;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover,
+    &:focus {
+        background: rgba(0, 0, 0, .07);
+        color: var(--ul-grey-8);
+        outline: none;
+    }
+}
+
+// -- Tag chips (pin detail page) ---------------------------------------------
+.tag-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    padding: .6rem .75rem .75rem;
+    min-height: 2.5rem;
+    align-items: center;
+}
+
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .25rem .45rem .25rem .55rem;
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--tag-color, #6366f1) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tag-color, #6366f1) 30%, transparent);
+    font-size: .78rem;
+    font-weight: 500;
+    color: var(--ul-grey-9);
+    line-height: 1.3;
+
+    .tag-chip-icon {
+        line-height: 1;
+    }
+
+    .tag-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: .1rem;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, .12);
+        cursor: pointer;
+        font-size: .75rem;
+        line-height: 1;
+        color: var(--ul-grey-7);
+        transition: background .12s, color .12s;
+        padding: 0;
+
+        &:hover {
+            background: rgba(200, 0, 0, .2);
+            color: var(--ul-color-danger-accent);
+        }
+    }
+}
+
+.tag-chips-empty {
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    font-style: italic;
+}
+
+// -- Tag-add dialog specifics ------------------------------------------------
+.tag-add-dialog {
+    width: min(460px, 95vw); // slightly wider to accommodate tabs
+
+    // -- Tab bar --------------------------------------------------------------
+    .tad-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--ul-grey-1a);
+        padding: 0 .5rem;
+        flex-shrink: 0;
+        background: var(--ul-grey-0);
+    }
+
+    .tad-tab {
+        flex: 1;
+        padding: .5rem .4rem;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        background: transparent;
+        font-size: .8rem;
+        font-weight: 500;
+        color: var(--ul-grey-5);
+        cursor: pointer;
+        transition: color .12s, border-color .12s;
+        white-space: nowrap;
+
+        &:hover {
+            color: $color-indigo-500;
+        }
+
+        &--active {
+            color: $color-indigo-500;
+            border-bottom-color: $color-indigo-500;
+        }
+    }
+
+    // -- Search ---------------------------------------------------------------
+    .dialog-search {
+        display: block;
+        width: calc(100% - 1.5rem);
+        margin: .6rem .75rem;
+        padding: .45rem .7rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 8px;
+        font-size: .85rem;
+        box-sizing: border-box;
+        outline: none;
+        flex-shrink: 0;
+        background: var(--ul-grey-0);
+        color: inherit;
+
+        &:focus {
+            border-color: $color-indigo-500;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+        }
+    }
+
+    .tag-dialog-list {
+        list-style: none;
+        padding: 0 .5rem .5rem;
+        margin: 0;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .tag-dialog-item {
+        margin-bottom: 2px;
+    }
+
+    .tag-dialog-btn {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        width: 100%;
+        padding: .5rem .6rem;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        font-size: .88rem;
+        text-align: left;
+        transition: background .12s;
+        color: inherit;
+
+        &:hover {
+            background: rgba(99, 102, 241, .08);
+        }
+    }
+
+    .tag-dialog-icon {
+        width: 20px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .tag-dialog-name {
+        font-weight: 500;
+        flex: 1;
+    }
+
+    // -- Kind pill (shown in "All" tab next to badge name) --------------------
+    .tad-kind-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5em 1em;
+        border-radius: 999px;
+        font-size: .7rem;
+        font-weight: 600;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        flex-shrink: 0;
+        color: var(--ul-grey-0);
+
+        &--tag {
+            background-color: #{$color-purple-900};
+            color: #{$color-purple-100};
+        }
+
+        &--category {
+            background-color: #{$color-blue-900};
+            color: #{$color-blue-100};
+        }
+
+        &--status {
+            background-color: #{$color-green-900};
+            color: #{$color-green-100};
+        }
+    }
+}
+
+// -- Dark mode: tag-add-dialog feature colors ---------------------------------
+// Structural colors (background, text, border) are now fully token-driven via
+// @include dialog-base and var(--ul-*) custom properties. Only the feature-
+// specific indigo accent colours need explicit dark overrides here.
+[data-theme="dark"] {
+    .tag-add-dialog {
+        .tad-tabs {
+            border-bottom-color: var(--ul-grey-1a);
+        }
+
+        .tad-tab {
+            color: var(--ul-grey-6);
+
+            &:hover {
+                color: $color-indigo-400;
+            }
+
+            &--active {
+                color: $color-indigo-400;
+                border-bottom-color: $color-indigo-400;
+            }
+        }
+
+        .dialog-search {
+            background: var(--ul-grey-1);
+            border-color: var(--ul-grey-1a);
+
+            &:focus {
+                border-color: $color-indigo-400;
+                box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
+            }
+        }
+
+        .tag-dialog-btn {
+            &:hover {
+                background: rgba(129, 140, 248, .12);
+            }
+        }
+    }
+}
+
+// -- Visit history panel -----------------------------------------------------
+.visit-empty {
+    padding: .6rem 1rem;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    font-style: italic;
+}
+
+.visit-list {
+    list-style: none;
+    margin: 0;
+    padding: .25rem 0;
+    min-height: 15rem;
+
+    .visit-item {
+        display: flex;
+        align-items: flex-start;
+        gap: .5rem;
+        padding: .5rem 1rem;
+        border-bottom: 1px solid var(--ul-grey-1a);
+
+        &:last-child {
+            border-bottom: none;
+        }
+    }
+
+    .visit-item-main {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex: 1;
+        flex-wrap: wrap;
+    }
+
+    .visit-date {
+        font-weight: 500;
+        font-size: .88rem;
+    }
+
+    .visit-time {
+        font-size: .82rem;
+        color: var(--ul-grey-6);
+    }
+
+    .visit-source {
+        font-size: .75rem;
+        color: var(--ul-grey-6);
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .visit-notes {
+        font-size: .82rem;
+        color: var(--ul-grey-7);
+        margin-top: .2rem;
+        padding: 0 1rem .35rem;
+    }
+
+    .visit-delete-btn {
+        @include icon-btn-danger(24px);
+        margin-left: auto;
+        outline: none;
+
+        &:focus {
+            outline: none;
+        }
+    }
+}
+
+// -- Visit-add dialog specifics ----------------------------------------------
+.visit-add-dialog {
+    .visit-add-form {
+        padding: .75rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+    }
+
+    .form-row {
+        @include form-row;
+
+        textarea {
+            resize: vertical;
+        }
+    }
+
+    .form-actions {
+        display: flex;
+        gap: .5rem;
+        padding-top: .25rem;
+    }
+}
+
+#loading-pins-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.28);
+    z-index: 1001;
+    pointer-events: none;
+}
+
+// Satellite and Street View
+.page-location-details {
+    .satellite-view {
+        height: 100%;
+    }
+}
+
+// -- Satellite imagery carousel -------------------------------------------------
+.sat-carousel {
+    display: flex;
+    flex-direction: column;
+
+    .sat-slides-wrapper {
+        position: relative;
+        background: var(--ul-grey-0);
+        overflow: hidden;
+    }
+
+    .sat-slide {
+        display: none;
+
+        &.is-active {
+            display: block;
+        }
+    }
+
+    .sat-img {
+        width: 100%;
+        height: 300px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .sat-controls {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .45rem .6rem;
+        border-top: 1px solid var(--ul-border);
+    }
+
+    .sat-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-surface-1);
+        cursor: pointer;
+        color: var(--ul-grey-7);
+        transition: background .12s;
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.15rem;
+        }
+
+        &:hover {
+            background: var(--ul-grey-1a);
+        }
+    }
+
+    .sat-meta {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        overflow: hidden;
+    }
+
+    .sat-source {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sat-date {
+        font-size: .73rem;
+        color: var(--ul-grey-6);
+    }
+
+    .sat-detail {
+        font-size: .67rem;
+        color: var(--ul-grey-5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sat-dots {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: .3rem;
+        padding: .35rem .5rem;
+    }
+
+    .sat-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        border: none;
+        padding: 0;
+        background: var(--ul-grey-3);
+        cursor: pointer;
+        transition: background .12s, transform .12s;
+
+        &.is-active {
+            background: var(--ul-grey-7);
+            transform: scale(1.25);
+        }
+
+        &:hover {
+            background: var(--ul-grey-5);
+        }
+    }
+}
+
+// -- Street-view imagery carousel ----------------------------------------------
+.sv-carousel {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 4rem);
+    
+    .sv-slides-wrapper, .sv-slide, .sv-embed {
+        height: 100%;
+    }
+
+    .sv-slides-wrapper {
+        position: relative;
+        background: var(--ul-grey-0);
+        overflow: hidden;
+    }
+
+    .sv-slide {
+        display: none;
+
+        &.is-active {
+            display: block;
+        }
+    }
+
+    .sv-img {
+        width: 100%;
+        height: 300px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .sv-controls {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .5rem .6rem;
+        border-top: 1px solid var(--ul-border);
+    }
+
+    .sv-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-surface-1);
+        cursor: pointer;
+        color: var(--ul-grey-7);
+        transition: background .12s;
+        .material-symbols-outlined,
+        .material-icons { font-size: 1.15rem; }
+
+        &:hover { background: var(--ul-grey-1a); }
+    }
+
+    .sv-meta {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        overflow: hidden;
+    }
+
+    .sv-source {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sv-date {
+        font-size: .73rem;
+        color: var(--ul-grey-6);
+    }
+
+    .sv-heading {
+        font-size: .67rem;
+        color: var(--ul-grey-5);
+    }
+
+    .sv-dots {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: .3rem;
+        padding: .35rem .5rem;
+    }
+
+    .sv-embed {
+        width: 100%;
+    }
+}
+
+// -- Wikipedia summary panel ------------------------------------------------
+.wikipedia-info {
+    .wikipedia-body {
+        display: flex;
+        flex-direction: column;
+        // Without a cap here, this card's natural height grows with however long the
+        // article extract is, which is also what `.pin-aux-grid` uses to size the whole
+        // row - so a long article stretches every sibling card in the row to match. The
+        // JS clamp (see index.html) measures its "available" budget from this element's
+        // own bottom edge, which only works if that edge is fixed independently of the
+        // extract's length instead of growing to contain it.
+        max-height: 20rem;
+        overflow: hidden;
+    }
+
+    // The extract now contains real block markup (headings/paragraphs/lists)
+    // rather than one flat run of text, so it's clamped in JS by hiding
+    // overflowing block children (see index.html) instead of relying on
+    // -webkit-line-clamp across mixed block content, which isn't reliable.
+    .wikipedia-extract {
+        overflow: hidden;
+
+        > :first-child { margin-top: 0; }
+        > :last-child { margin-bottom: 0; }
+
+        p, ul, ol, dl, blockquote {
+            margin: 0 0 .5rem;
+        }
+
+        h2, h3, h4, h5, h6 {
+            margin: .75rem 0 .35rem;
+            font-size: .88rem;
+            font-weight: 600;
+            color: var(--ul-grey-9);
+        }
+
+        ul, ol {
+            padding-left: 1.1rem;
+        }
+
+        dd {
+            margin: 0 0 .4rem;
+        }
+
+        blockquote {
+            margin-left: 0;
+            padding-left: .6rem;
+            border-left: 2px solid var(--ul-grey-2);
+            color: var(--ul-grey-6);
+        }
+    }
+}
+
+// -- USGS Historical Topographic Maps panel ------------------------------------
+.usgs-topo {
+    .usgs-topo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+        gap: .5rem;
+        padding: .75rem;
+    }
+
+    .usgs-topo-card {
+        display: flex;
+        flex-direction: column;
+        text-decoration: none;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        overflow: hidden;
+        transition: border-color .15s, box-shadow .15s;
+
+        &:hover {
+            border-color: var(--ul-grey-5);
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+        }
+    }
+
+    .usgs-topo-thumb {
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+        display: block;
+        background: var(--ul-grey-1);
+    }
+
+    .usgs-topo-thumb-empty {
+        width: 100%;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-4);
+        .material-symbols-outlined,
+        .material-icons { font-size: 2rem; }
+    }
+
+    .usgs-topo-meta {
+        padding: .25rem .35rem;
+        display: flex;
+        flex-direction: column;
+        gap: .1rem;
+    }
+
+    .usgs-topo-year {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+    }
+
+    .usgs-topo-extent {
+        font-size: .65rem;
+        color: var(--ul-grey-5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .usgs-topo-footer {
+        padding: .5rem .75rem;
+        border-top: 1px solid var(--ul-border);
+        font-size: .78rem;
+
+        a {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            color: var(--ul-grey-6);
+            text-decoration: none;
+            transition: color .12s;
+
+            .material-symbols-outlined,
+            .material-icons { font-size: .85rem; }
+
+            &:hover { color: var(--ul-grey-8); }
+        }
+    }
+}
+
+// -- LoopNet commercial real-estate panel (pin details page) --------------------
+.loopnet-info {
+    .loopnet-property-details {
+        margin: .5rem 0 0;
+        padding: .5rem .6rem;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-grey-1);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: .3rem .75rem;
+    }
+
+    .loopnet-property-detail {
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        min-width: 0;
+
+        dt {
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            color: var(--ul-grey-5);
+        }
+
+        dd {
+            margin: 0;
+            font-size: .8rem;
+            color: var(--ul-grey-8);
+            overflow-wrap: break-word;
+        }
+    }
+
+    .loopnet-duplicate-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem .75rem;
+        padding: .5rem .75rem;
+        border-top: 1px solid var(--ul-border);
+        font-size: .75rem;
+    }
+
+    .loopnet-duplicate-link {
+        color: var(--ul-grey-5);
+        text-decoration: none;
+
+        &:hover {
+            color: var(--ul-grey-8);
+            text-decoration: underline;
+        }
+    }
+}
+
+// -- Pin detail supplements ------------------
+// -- Wiki link banner (pin details page) ---------------------------------------
+.wiki-link-banner {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .65rem 1rem;
+    background: linear-gradient(90deg, var(--ul-grey-0) 0%, $color-light-blue-50 100%);
+    border-bottom: 1px solid $color-light-blue-200;
+    font-size: .83rem;
+    color: $color-light-blue-700;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    span {
+        flex: 1;
+    }
+}
+
+.wiki-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+    padding: .3rem .7rem;
+    background: $color-cyan-600;
+    color: var(--ul-grey-5);
+    border-radius: 7px;
+    font-size: .8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .15s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .85rem;
+    }
+
+    &:hover {
+        background: $color-cyan-700;
+    }
+}
+
+
+// -- Pin detail extra -------------------------
+// -- Pin overview (title + details card) ----------------------------------
+
+.pin-overview-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .5rem;
+    flex-wrap: wrap;
+
+    .pin-title {
+        margin: 0;
+    }
+}
+
+// -- Pin edit dialog -------------------------------------------------------
+
+.pin-edit-dialog {
+    width: min(560px, 96vw);
+
+    // The form fills the dialog's flex column and relays the scroll to its body.
+    .pin-edit-form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    // Scrollable field area; uses .ul-dialog-body for consistent padding/scroll.
+    .pin-edit-form-body {
+        // gap between form rows
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+    }
+
+    // Footer stays pinned below the scrollable area.
+    .pin-edit-form-actions {
+        border-top: 1px solid var(--ul-grey-1a);
+        padding: .75rem 1.25rem .75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        flex-shrink: 0;
+        align-items: center;
+    }
+}
+
+// Two-column form row used in multiple dialogs
+.form-row--two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+}
+
+// -- Security indicators ---------------------------------------------------
+
+.security-indicators {
+    padding: .5rem 1rem .75rem;
+    border-top: 1px solid var(--ul-grey-1);
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.security-indicators-label {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-5);
+}
+
+.security-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.security-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: .75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+
+    &--no {
+        background: $color-green-100;
+        color: $color-green-1700;
+        border-color: $color-green-500;
+    }
+
+    &--some {
+        background: var(--ul-accent-amber-bg);
+        color: $color-amber-1700;
+        border-color: $color-amber-500;
+    }
+
+    &--everywhere {
+        background: $color-red-100;
+        color: $color-red-1700;
+        border-color: $color-red-500;
+    }
+}
+
+// Security field edit section
+.form-section-details {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: 0;
+
+    &[open] .form-section-summary {
+        border-bottom: 1px solid var(--ul-grey-2);
+        border-radius: 8px 8px 0 0;
+    }
+
+    .form-section-summary {
+        display: list-item;
+        padding: .55rem .9rem;
+        font-size: .85rem;
+        font-weight: 600;
+        color: var(--ul-grey-6);
+        background: var(--ul-grey-0);
+        border-radius: 8px;
+        cursor: pointer;
+        user-select: none;
+
+        &:hover {
+            background: var(--ul-grey-0);
+        }
+
+        &::marker {
+            color: var(--ul-grey-4);
+        }
+    }
+}
+
+.security-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: .5rem .75rem;
+    padding: .75rem .9rem .9rem;
+}
+
+.security-edit-row {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+
+    label {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-6);
+    }
+
+    select {
+        font-size: .82rem;
+        padding: .3rem .5rem;
+        border: 1px solid var(--ul-grey-1a);
+        ;
+        border-radius: 6px;
+        background: var(--ul-grey-0);
+
+        &:focus {
+            outline: none;
+            border-color: $color-blue-300;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+        }
+    }
+}
+
+// -- Interactive star rating (rating + priority) ---------------------------
+.star-rating-interactive {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+
+    // Fill all stars up to the hovered one (preview the new rating).
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: $color-amber-500;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: var(--ul-grey-3);
+            }
+        }
+    }
+}
+
+.sr-star-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 2rem;
+    line-height: 1;
+    color: var(--ul-grey-3);
+    padding: 1px 2px;
+    border-radius: 3px;
+    transition: color .1s, transform .1s;
+    outline: none;
+
+    &--on {
+        color: $color-amber-500;
+    }
+
+    &:hover {
+        transform: scale(1.2);
+        outline: none;
+    }
+
+    &:focus {
+        outline: none;
+    }
+}
+
+.star-rating-interactive--priority .sr-star-btn {
+    &--on {
+        color: $color-indigo-500;
+    }
+}
+
+.star-rating-interactive--priority {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: $color-indigo-500;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: var(--ul-grey-3);
+            }
+        }
+    }
+}
+
+// Vulnerability - red scale (higher = more exposed/risky)
+.star-rating-interactive--vulnerability .sr-star-btn {
+    &--on {
+        color: $color-red-500;
+    }
+}
+
+.star-rating-interactive--vulnerability {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: $color-red-500;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: var(--ul-grey-3);
+            }
+        }
+    }
+}
+
+// Danger - orange scale (higher = more hazardous)
+.star-rating-interactive--danger .sr-star-btn {
+    &--on {
+        color: $color-orange-500;
+    }
+}
+
+.star-rating-interactive--danger {
+    @for $i from 1 through 5 {
+        &:has(.sr-star-btn:nth-child(#{$i}):hover) {
+            .sr-star-btn:nth-child(-n+#{$i}) {
+                color: $color-orange-500;
+            }
+
+            .sr-star-btn:not(:nth-child(-n+#{$i})) {
+                color: var(--ul-grey-3);
+            }
+        }
+    }
+}
+
+.sr-star-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--ul-grey-4);
+    padding: 0 4px;
+    line-height: 1;
+    margin-left: 2px;
+    border-radius: 3px;
+    outline: none;
+
+    &:hover {
+        color: $color-red-600;
+        outline: none;
+    }
+
+    &:focus {
+        outline: none;
+    }
+}
+
+// -- Pin details card theming (pin overview / location details page) --------
+body.page-location-details {
+    .location-details.card {
+        border: 1px solid var(--ul-grey-1a);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
+    }
+
+    .details-grid {
+        .detail-row {
+            padding: .45rem .9rem;
+            border-radius: 0;
+
+            &:last-child {
+                border-bottom: none;
+            }
+        }
+
+        .field-label {
+            color: $text-secondary;
+        }
+    }
+
+    // -- Rating / Priority / Place Name row ---------------------------------
+    .pin-stats {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        gap: .5rem 1rem;
+        padding: .6rem .9rem;
+        border-bottom: 1px solid var(--ul-grey-1a);
+    }
+
+    .pin-stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .2rem;
+        min-width: 0;
+        flex: 1;
+        min-width: max-content;
+
+        &--place {
+            flex: 2;
+            align-items: flex-start;
+        }
+
+        .field-label {
+            width: auto;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-size: .68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: $text-muted;
+        }
+
+        .field-value {
+            font-size: .88rem;
+            min-width: 0;
+        }
+    }
+
+    .security-indicators {
+        border-top-color: var(--ul-grey-1a);
+    }
+}
+
+// -- Community wiki CTA link (pin overview) --------------------------------
+.wiki-cta-link {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin-top: .6rem;
+    padding: .55rem .9rem;
+    border-radius: 8px;
+    background: var(--ul-grey-0a);
+    border: 1px solid $color-blue-200;
+    color: $color-blue-700;
+    text-decoration: none;
+    font-size: .83rem;
+    font-weight: 600;
+    transition: background .15s, border-color .15s, color .15s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    .wiki-cta-arrow {
+        margin-left: auto;
+        opacity: .5;
+        font-size: .95rem;
+    }
+
+    &:hover {
+        background: $color-blue-100;
+        border-color: $color-blue-300;
+        color: $color-blue-800;
+    }
+}
+
+// -- Community wiki box --------------------------------------------------------
+// A floating info box that sits in the title row, to the right of the pin's
+// name - it's metadata about the pin (link + detach action), not a first-class
+// page section, so it stays out of the Details card entirely.
+
+.pin-wiki-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .85rem;
+    @include surface($radius-md);
+    box-shadow: var(--ul-shadow-md);
+    font-size: .85rem;
+    max-width: 100%;
+
+    > .material-symbols-outlined,
+    > .material-icons {
+        font-size: 1.15rem;
+        color: $color-indigo-500;
+        flex-shrink: 0;
+    }
+
+    &--private,
+    &--unlinked {
+        background: $color-blue-500;
+        color: $color-grey-0;
+        font-size: .82rem;
+
+        > .material-symbols-outlined,
+        > .material-icons {
+            font-size: 1.05rem;
+            color: $color-grey-0;
+        }
+
+        > span {
+            min-width: 0;
+        }
+    }
+}
+
+.pin-wiki-box-info {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.pin-wiki-box-label {
+    font-size: .64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-4);
+}
+
+.pin-wiki-box-link {
+    font-size: .88rem;
+    font-weight: 600;
+    color: $color-blue-800;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    min-width: 0;
+    max-width: 240px;
+    @include truncate;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .8rem;
+        opacity: .6;
+        flex-shrink: 0;
+    }
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.pin-wiki-box-actions {
+    display: flex;
+    align-items: center;
+    gap: .2rem;
+    flex-shrink: 0;
+    padding-left: .5rem;
+    border-left: 1px solid var(--ul-grey-1a);
+}
+
+.pin-loc-change-btn,
+.pin-loc-detach-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover,
+    &:focus {
+        box-shadow: none;
+        background: var(--ul-grey-0a);
+        color: var(--ul-grey-8);
+    }
+}
+
+.pin-loc-detach-btn {
+    color: $color-red-600;
+
+    &:hover,
+    &:focus {
+        background: rgba($color-red-600, .1);
+        color: $color-red-600;
+    }
+}
+
+// -- Location picker panel ------------------------------------------------------
+// Drops down from the wiki box like a menu (anchored via .pin-wiki-box's
+// position:relative) rather than living inline in the Details card.
+
+.pin-loc-picker {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, 90vw);
+    background: var(--ul-grey-1b);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    box-shadow: var(--ul-shadow-lg);
+    z-index: 30;
+    overflow: hidden;
+}
+
+.pin-loc-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem .85rem .35rem;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-4);
+}
+
+.pin-loc-picker-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ul-grey-4);
+    padding: 0;
+    display: inline-flex;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        color: var(--ul-grey-7);
+    }
+}
+
+.pin-loc-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .45rem .85rem;
+    border-top: 1px solid var(--ul-grey-1);
+    gap: .5rem;
+
+    &--current {
+        background: var(--ul-grey-0);
+    }
+}
+
+.pin-loc-option-info {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.pin-loc-option-name {
+    font-size: .84rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    @include truncate;
+}
+
+.pin-loc-option-badge {
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: $color-blue-100;
+    color: $color-blue-700;
+    border-radius: 8px;
+    padding: .1rem .4rem;
+    white-space: nowrap;
+}
+
+.pin-loc-option-actions {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    flex-shrink: 0;
+}
+
+.pin-loc-picker-empty {
+    padding: .65rem .85rem;
+    font-size: .82rem;
+    color: var(--ul-grey-4);
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+}
+
+// -- Location conflict dialog (map page) ---------------------------------------
+
+.loc-conflict-dialog {
+    @include dialog-base(520px);
+
+    // dialog-close inside header sits at the right edge
+    .dialog-header .dialog-close {
+        margin-left: auto;
+    }
+}
+
+.loc-conflict-body {
+    padding: .85rem 1rem 1rem;
+}
+
+.loc-conflict-intro {
+    font-size: .83rem;
+    color: var(--ul-grey-6);
+    margin: 0 0 .75rem;
+}
+
+.loc-conflict-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.loc-conflict-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    gap: .5rem;
+
+    &--current {
+        background: var(--ul-grey-0);
+        border-color: $color-light-blue-200;
+    }
+}
+
+.loc-conflict-option-name {
+    font-size: .86rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    flex: 1;
+    min-width: 0;
+    @include truncate;
+}
+
+.loc-conflict-badge {
+    font-size: .65rem;
+    font-weight: 700;
+    background: $color-blue-100;
+    color: $color-blue-700;
+    border-radius: 8px;
+    padding: .1rem .4rem;
+    margin-left: .4rem;
+    white-space: nowrap;
+}
+
+.loc-conflict-option-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-shrink: 0;
+}
+
+// -- Wiki "other locations" conflict notice ------------------------------------
+
+.wiki-location-conflict {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    background: var(--ul-grey-0);
+    border: 1px solid $color-amber-300;
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    margin-bottom: 1.25rem;
+    position: relative;
+}
+
+.wiki-lcn-icon {
+    font-size: 1.2rem;
+    color: $color-amber-500;
+    flex-shrink: 0;
+    margin-top: .05rem;
+}
+
+.wiki-lcn-body {
+    flex: 1;
+    font-size: .84rem;
+    color: var(--ul-grey-7);
+
+    strong {
+        color: $color-amber-800;
+    }
+}
+
+.wiki-lcn-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .5rem;
+}
+
+.wiki-lcn-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    background: var(--ul-grey-0);
+    border: 1px solid $color-amber-300;
+    border-radius: 8px;
+    padding: .2rem .55rem;
+}
+
+.wiki-lcn-link {
+    font-size: .82rem;
+    font-weight: 500;
+    color: $color-blue-700;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.wiki-lcn-switch-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .75rem;
+    font-weight: 600;
+    color: $color-indigo-700;
+    padding: 0;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.wiki-lcn-dismiss {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ul-grey-4);
+    padding: 0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        color: var(--ul-grey-7);
+    }
+}
+
+// -- Dark mode -----------------------------------------------------------------
+
+[data-theme="dark"] {
+    .pin-status-chip {
+        background: rgba(255, 255, 255, .08);
+    }
+
+    .pin-wiki-box-link {
+        color: $color-blue-300;
+    }
+
+    .pin-loc-change-btn {
+        &:hover,
+        &:focus {
+            color: var(--ul-grey-8);
+        }
+    }
+
+    .pin-loc-detach-btn {
+        color: $color-red-400;
+
+        &:hover,
+        &:focus {
+            background: rgba(220, 38, 38, .15);
+            color: $color-red-400;
+        }
+    }
+
+    .pin-loc-picker {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-1a);
+    }
+
+    .pin-loc-picker-header {
+        color: var(--ul-grey-6);
+    }
+
+    .pin-loc-option {
+        border-color: var(--ul-grey-1a);
+
+        &--current {
+            background: rgba(59, 130, 246, .08);
+        }
+    }
+
+    .pin-loc-option-name {
+        color: var(--ul-grey-8);
+    }
+
+    .loc-conflict-intro {
+        color: var(--ul-grey-6);
+    }
+
+    .loc-conflict-option {
+        border-color: var(--ul-grey-1a);
+
+        &--current {
+            background: rgba(59, 130, 246, .08);
+            border-color: $color-blue-500;
+        }
+    }
+
+    .loc-conflict-option-name {
+        color: var(--ul-grey-8);
+    }
+
+    .wiki-location-conflict {
+        background: rgba(245, 158, 11, .08);
+        border-color: rgba(245, 158, 11, .35);
+    }
+
+    .wiki-lcn-body {
+        color: var(--ul-grey-8);
+
+        strong {
+            color: $color-amber-400;
+        }
+    }
+
+    .wiki-lcn-item {
+        background: var(--ul-grey-0);
+        border-color: rgba(245, 158, 11, .3);
+    }
+
+    .wiki-lcn-link {
+        color: $color-blue-300;
+    }
+
+    .wiki-lcn-switch-btn {
+        color: $color-indigo-300;
+    }
+
+    .wiki-lcn-dismiss {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            color: var(--ul-grey-8);
+        }
+    }
+
+    .form-actions {
+        margin-top: .5rem;
+    }
+}
+
+// -- Pin detail page: section card accents --------------------------------
+
+body.page-location-details {
+
+    // Elevate all cards on this page
+    .card {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .09);
+
+        &--primary {
+
+        }
+
+        &--secondary {
+        }
+    }
+
+    .pin-detail-grid {
+        margin: 1rem 0;
+
+        > .card {
+            margin-bottom: 0;
+            justify-self: stretch;
+            align-self: stretch;
+        }
+    }
+}
+
+// -- Pin note delete button ------------------------------------------------
+
+.pin-note-delete-btn {
+    @include icon-btn-danger(28px);
+    flex-shrink: 0;
+    outline: none;
+
+    &:focus {
+        outline: none;
+    }
+}
+
+// -- Pin detail page layout -------------------------------------------------
+body.page-location-details {
+    background: var(--ul-grey-0);
+}
+
+body.page-location-details .pin-detail-grid {
+    .location-title {
+        text-align: center;
+        margin: .5rem 0;
+    }
+
+    .location-details {
+        .details-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: .35rem .75rem;
+            padding: .75rem 1rem;
+
+            @include up($breakpoint-sm) {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            @include up($breakpoint-md) {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .detail-row {
+                display: flex;
+                flex-direction: column;
+                gap: .1rem;
+
+                &.full-width {
+                    grid-column: 1 / -1;
+                }
+            }
+
+            .pin-stats {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: .75rem 1.25rem;
+                padding: .25rem 0;
+            }
+
+            .pin-stat-item {
+                display: flex;
+                flex-direction: column;
+                gap: .1rem;
+            }
+
+            .field-label {
+                font-size: .7rem;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                color: var(--ul-grey-6, #9ca3af);
+                font-weight: 600;
+            }
+
+            .field-value {
+                font-size: .92rem;
+                color: var(--ul-grey-8, #1e293b);
+            }
+        }
+    }
+
+    .location-map {
+        .map-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        #map {
+            height: min(52vh, 540px);
+            min-height: 320px;
+            width: 100%;
+        }
+    }
+
+    .media-gallery {
+        .media-gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
+            gap: clamp(.65rem, 2vw, 1rem);
+            padding: .75rem;
+            min-height: 12rem;
+
+            @include up($breakpoint-sm) {
+                grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+            }
+
+            @include up($breakpoint-md) {
+                grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+            }
+        }
+
+        .media-item {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+
+            &[hidden] {
+                display: none;
+            }
+            text-decoration: none;
+            color: inherit;
+            background: var(--ul-grey-0, #fff);
+            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow:
+                0 1px 2px rgba(15, 23, 42, .05),
+                0 1px 3px rgba(15, 23, 42, .04);
+            transition:
+                transform .2s cubic-bezier(.22, 1, .36, 1),
+                box-shadow .2s ease;
+
+            &:hover,
+            &:focus-visible {
+                transform: translateY(-2px);
+                box-shadow:
+                    0 4px 10px rgba(15, 23, 42, .08),
+                    0 2px 4px rgba(15, 23, 42, .06);
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--ul-link, #2563eb);
+                outline-offset: 2px;
+            }
+        }
+
+        .media-item-source {
+            position: absolute;
+            top: .4rem;
+            left: .4rem;
+            z-index: 1;
+            padding: .15rem .5rem;
+            font-size: .65rem;
+            font-weight: 600;
+            letter-spacing: .02em;
+            color: #fff;
+            background: rgba(15, 23, 42, .72);
+            border-radius: 999px;
+            backdrop-filter: blur(2px);
+        }
+
+        .media-item-thumb {
+            display: block;
+            width: 100%;
+            aspect-ratio: 3 / 4;
+            object-fit: cover;
+            object-position: top center;
+            background: linear-gradient(145deg, var(--ul-grey-1, #f1f5f9) 0%, var(--ul-grey-0, #fff) 100%);
+        }
+
+        .media-item-thumb-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ul-grey-4, #94a3b8);
+
+            .material-symbols-outlined,
+            .material-icons {
+                font-size: 2rem;
+            }
+        }
+
+        .media-item-caption {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            padding: .5rem .6rem .6rem;
+            font-size: .72rem;
+            font-weight: 500;
+            line-height: 1.45;
+            letter-spacing: .01em;
+            color: var(--ul-grey-7, #475569);
+            background: var(--ul-grey-1, #f8fafc);
+            border-top: 1px solid var(--ul-grey-1a, #e2e8f0);
+        }
+    }
+
+    .web-search {
+        .search-results-list {
+            padding: .25rem 0;
+            list-style: none;
+            margin: 0;
+            min-height: 26rem;
+        }
+
+        .search-result {
+            padding: .75rem 1rem;
+            border-bottom: 1px solid var(--ul-grey-1a);
+            transition: background .12s;
+
+            &:last-child {
+                border-bottom: none;
+            }
+
+            &:hover {
+                background: var(--ul-grey-1, #f8fafc);
+            }
+        }
+
+        .search-result-inner {
+            display: flex;
+            gap: .75rem;
+            align-items: flex-start;
+        }
+
+        .search-result-thumb-wrap {
+            flex-shrink: 0;
+            width: 72px;
+            height: 54px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .search-result-thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            border: 1px solid var(--ul-grey-1a);
+        }
+
+        .search-result-thumb-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            opacity: 0;
+        }
+
+        .search-result-body {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: .2rem;
+        }
+
+        .search-result-source-row {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .search-result-domain {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            font-size: .72rem;
+            font-weight: 500;
+            color: var(--ul-grey-6, #6b7280);
+            letter-spacing: .01em;
+        }
+
+        .search-result-favicon {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .search-result-date {
+            font-size: .7rem;
+            color: var(--ul-grey-6, #9ca3af);
+            font-weight: 500;
+
+            &::before {
+                content: "·";
+                margin-right: .35rem;
+                color: var(--ul-grey-1a);
+            }
+        }
+
+        .search-result-title {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            font-weight: 600;
+            font-size: .88rem;
+            color: var(--ul-link, #1a73e8);
+            line-height: 1.35;
+            text-decoration: none;
+
+            &:hover {
+                text-decoration: underline;
+            }
+
+            .search-result-ext-icon {
+                font-size: .75rem;
+                opacity: .5;
+                flex-shrink: 0;
+            }
+        }
+
+        .search-result-snippet {
+            font-size: .8rem;
+            color: var(--ul-grey-7, #555);
+            margin: 0;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    }
+
+}
+
+// -- Pin detail layout ---------------------------------------------------------
+//
+// Mobile-first, content-aware layout for the pin details page. The grid avoids
+// brittle fixed spans: every card starts as a full-width section, then available
+// space is divided with auto-fit tracks so visible cards naturally expand,
+// collapse, and wrap without leaving holes when optional sections are hidden.
+// Named grid areas for the primary pin-detail cards. Optional / external-data
+// cards live inside .pin-aux-grid (area: aux) and reflow with auto-fit when
+// sections are removed at runtime (HTMX 204).
+.pin-detail-grid {
+    --pin-detail-gap: clamp(.85rem, 2vw, 1.35rem);
+    --pin-detail-pad: clamp(.75rem, 2.4vw, 1.5rem);
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+        'onboarding'
+        'overview'
+        'map'
+        'satellite'
+        'street'
+        'gallery'
+        'visits'
+        'categories'
+        'aliases'
+        'aux'
+        'comments';
+    gap: var(--pin-detail-gap);
+    padding: 0 var(--pin-detail-pad) clamp(1.5rem, 4vw, 3rem);
+    align-items: start;
+
+    > * {
+        min-width: 0;
+    }
+
+    > .page-onboarding,
+    > #pin-detail-onboarding { grid-area: onboarding; }
+
+    > #pin-overview { grid-area: overview; }
+
+    > .location-map,
+    > .pin-map { grid-area: map; }
+
+    > .satellite-view,
+    > #satellite-view-section { grid-area: satellite; min-width: 0; }
+
+    > .street-view,
+    > #street-view-section { grid-area: street; min-width: 0; }
+
+    > .visit-history,
+    > #visit-history-panel { grid-area: visits; }
+
+    > .tag-panel { grid-area: categories; }
+
+    > .aliases-panel,
+    > #pin-aliases-panel { grid-area: aliases; }
+
+    > .pin-aux-grid { grid-area: aux; }
+
+    > .photo-gallery,
+    > #pin-gallery-panel,
+    > #photo-gallery { grid-area: gallery; min-width: 0; }
+
+    > .comment-panel,
+    > #comment-panel { grid-area: comments; }
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            'onboarding onboarding'
+            'overview   overview'
+            'map        map'
+            'satellite  street'
+            'gallery    gallery'
+            'visits     categories'
+            'aliases    aliases'
+            'aux        aux'
+            'comments   comments';
+    }
+
+    @include up($breakpoint-lg) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-areas:
+            'overview   overview   overview'
+            'map        map        map'
+            'satellite  street     gallery'
+            'visits     categories aliases'
+            'aux        aux        aux'
+            'comments   comments   comments';
+    }
+
+    @include up($breakpoint-xl) {
+        grid-template-areas:
+            'overview   overview   overview'
+            'map        map        map'
+            'satellite  street     gallery'
+            'visits     categories aliases'
+            'aux        aux        aux'
+            'comments   comments   .';
+    }
+}
+
+// Optional cards that may not render for every pin. `auto-fit` collapses empty
+// tracks when HTMX removes a section (204), so survivors expand to fill aux.
+.pin-aux-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--pin-detail-gap, 1rem);
+    align-items: start;
+
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 40em), 1fr));
+    }
+
+    > .card {
+        align-self: stretch;
+    }
+}
+
+// Admin-only floating panel (toggled via the Dev Tools toolbar) listing the
+// search term/coordinates and cache status behind every external-API result
+// currently loaded on the pin detail page.
+.pin-debug-overlay {
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    z-index: 10040;
+    min-width: min(24rem, calc(100vw - 2rem));
+    max-height: min(28rem, calc(100vh - 6rem));
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    box-shadow: var(--ul-shadow-lg);
+    font-family: 'Roboto Mono', 'Consolas', monospace;
+    font-size: 0.75rem;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.pin-debug-overlay__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    font-family: var(--ul-font-family, sans-serif);
+    font-weight: 600;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    .pin-debug-overlay__close {
+        margin-left: auto;
+        display: inline-flex;
+        border: none;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+        padding: 0.125rem;
+        line-height: 0;
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
+}
+
+.pin-debug-overlay__meta {
+    padding: 0.375rem 0.75rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pin-debug-overlay__list {
+    overflow-y: auto;
+    padding: 0.375rem 0;
+}
+
+.pin-debug-overlay__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+
+    &:hover {
+        background: var(--ul-grey-1a);
+    }
+}
+
+.pin-debug-overlay__source {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pin-debug-overlay__query {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+.pin-debug-overlay__count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    white-space: nowrap;
+
+    &::before {
+        content: '×';
+        margin-right: 0.125rem;
+        opacity: 0.6;
+    }
+}
+
+.pin-debug-overlay__badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 999px;
+    white-space: nowrap;
+
+    &--hit {
+        color: #43a047;
+        background: rgba(67, 160, 71, 0.15);
+    }
+
+    &--miss {
+        color: #fb8c00;
+        background: rgba(251, 140, 0, 0.15);
+    }
+}
+
+.pin-debug-overlay__empty {
+    padding: 0.5rem 0.75rem;
+    opacity: 0.7;
+    font-family: var(--ul-font-family, sans-serif);
+}

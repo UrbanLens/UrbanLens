@@ -1,0 +1,36 @@
+<div class="comment-reactions" id="comment-reactions-{{ comment.id }}">
+  {# Existing reaction pills #}
+  {% for emoji, data in reactions.items %}
+  <button type="button"
+          class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
+          hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_uuid comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
+          hx-target="#comment-reactions-{{ comment.id }}"
+          hx-swap="outerHTML"
+          hx-vals='{"emoji": "{{ emoji }}"}'
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    {{ emoji }} <span class="reaction-count">{{ data.count }}</span>
+  </button>
+  {% endfor %}
+
+  {# Add reaction picker #}
+  <div class="reaction-picker" data-comment-id="{{ comment.id }}">
+    <button type="button" class="reaction-add-btn" onclick="toggleReactionPicker(this)">
+      <i class="material-symbols-outlined">add_reaction</i>
+    </button>
+    <div class="reaction-picker-popup" hidden>
+      {% for emoji in allowed_emojis %}
+      <button type="button"
+              class="reaction-picker-emoji"
+              data-emoji="{{ emoji }}"
+              hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_uuid comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
+              hx-target="#comment-reactions-{{ comment.id }}"
+              hx-swap="outerHTML"
+              hx-vals='{"emoji": "{{ emoji }}"}'
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              onclick="this.closest('.reaction-picker-popup').hidden=true">
+        {{ emoji }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>

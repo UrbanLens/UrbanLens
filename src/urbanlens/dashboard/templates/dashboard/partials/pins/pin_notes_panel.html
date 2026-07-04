@@ -1,0 +1,48 @@
+<div id="pin-notes-panel" class="pin-notes-panel card">
+    <div class="card-header">
+        <i class="material-icons">sticky_note_2</i>
+        <span>My Notes</span>
+        {% if notes %}<span class="badge">{{ notes|length }}</span>{% endif %}
+        <button type="button" class="btn btn--icon-sm" title="Add note"
+                onclick="this.closest('.pin-notes-panel').querySelector('.pin-note-input').focus()">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </div>
+
+    {% if notes %}
+    <ul class="pin-note-list">
+        {% for note in notes %}
+        <li class="pin-note-item" id="pin-note-{{ note.id }}">
+            <div class="pin-note-body">
+                <p class="pin-note-text">{{ note.text }}</p>
+                <span class="pin-note-date">{{ note.created|date:"M j, Y g:i A" }}</span>
+            </div>
+            <button type="button"
+                    class="pin-note-delete-btn"
+                    title="Delete note"
+                    hx-delete="{% url 'pin.note.delete' pin.slug note.id %}"
+                    hx-target="#pin-note-{{ note.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this note?"
+                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                <i class="material-symbols-outlined">delete_outline</i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {# -- Add note form ------------------------------------------------- #}
+    <form hx-post="{% url 'pin.notes' pin.slug %}"
+          hx-target="#pin-notes-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.reset()}"
+          class="pin-note-form">
+        {% csrf_token %}
+        <textarea name="text" rows="2" placeholder="Add a note..." required
+                  class="pin-note-input"></textarea>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Note</button>
+        </div>
+    </form>
+</div>

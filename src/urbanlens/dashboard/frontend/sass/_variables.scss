@@ -1,0 +1,3 @@
+// Barrel module - existing partials can keep `@use 'variables' as *`.
+@forward 'tokens';
+@forward 'mixins';

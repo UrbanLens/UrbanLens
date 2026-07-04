@@ -1,0 +1,1513 @@
+@use 'sass:color';
+@use 'variables' as *;
+@use "mixins" as *;
+
+@mixin standard-section {
+    background-color: var(--ul-grey-0a);
+    border-color: var(--ul-black);
+    box-shadow: 3px 3px 10px rgba(0,0,0,.2);
+}
+
+[data-theme="dark"] {
+
+    @include input-selectors { 
+        color: var(--ul-grey-6); 
+    }
+    @include input-selectors(":disabled", "[readonly=readonly]") { 
+        color: var(--ul-grey-5); 
+    }
+    
+    .page-content > .ul-section {
+        background-color: var(--ul-grey-0a);
+    }
+
+    .tag-stat {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-0b);
+        color: var(--ul-grey-3);
+
+        &.tag-stat--children {
+            background: $dk-panel-bg-alt;
+            border-color: $dk-tag-stat-border;
+            color: color.adjust($primary-color, $lightness: 20%);
+        }
+
+        &.tag-stat--total {
+            background: var(--ul-grey-0);
+            border-color: var(--ul-grey-8b);
+            color: var(--ul-grey-5);
+        }
+    }
+
+    .tag-tree-children {
+        border-left-color: var(--ul-grey-7b);
+    }
+
+    .badge-title {
+        color: var(--ul-grey-1);
+    }
+
+    .settings-section-desc,
+    .settings-subtitle,
+    .settings-help,
+    .tag-card-desc,
+    .tag-subtitle {
+        color: var(--ul-grey-4a);
+    }
+
+    .settings-select,
+    .settings-input,
+    .form-input,
+    textarea.form-input {
+        color: var(--ul-grey-9);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .ul-radio-button {
+        border-color: var(--ul-grey-0b);
+        background: var(--ul-grey-0);
+    }
+
+    .settings-theme-option {
+        border-color: var(--ul-grey-7b);
+
+        span {
+            color: var(--ul-grey-3a);
+        }
+
+        i {
+            color: var(--ul-grey-5a);
+        }
+
+        &:hover:not(.active) {
+            background: var(--ul-grey-8a);
+            border-color: var(--ul-grey-6b);
+        }
+
+        &.active {
+            background: rgba($primary-color, 0.12);
+            border-color: var(--primary-color);
+        }
+    }
+
+    .tag-global-badge {
+        background: var(--ul-grey-8a);
+        color: var(--ul-grey-3b);
+    }
+
+    .tag-parent-select,
+    .tag-parent-option {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .tag-parent-option:hover {
+        background: var(--ul-grey-8a);
+    }
+
+    .icon-option {
+        color: var(--ul-grey-2);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .icon-option:hover {
+        background: var(--ul-grey-8);
+    }
+
+    .icon-option.selected {
+        background: rgba($primary-color, 0.18);
+        border-color: var(--primary-color);
+    }
+
+    .tag-order-badge {
+        color: var(--ul-grey-3b);
+    }
+
+    .icon-picker-trigger {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-1);
+    }
+
+    .icon-picker-search-input {
+        color: var(--ul-grey-1);
+    }
+
+    .icon-tab {
+        color: var(--ul-grey-5a);
+
+        &:hover {
+            color: var(--ul-grey-2);
+        }
+
+        &.active {
+            color: var(--primary-color);
+        }
+    }
+
+    .icon-picker-item.selected {
+        background: rgba($primary-color, 0.18);
+    }
+
+    .icon-picker-item-label {
+        color: var(--ul-grey-5b);
+    }
+
+    .icon-picker-mi {
+        color: var(--ul-grey-3b);
+    }
+
+    .icon-custom-upload-btn {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-5a);
+    }
+
+    .dialog-overlay {
+        background: rgba(0, 0, 0, .7);
+    }
+
+    .edit-input,
+    input.edit-input,
+    textarea.edit-textarea {
+        color: var(--ul-grey-1);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .edit-avatar-placeholder {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .edit-avatar-preview {
+        border-color: var(--ul-grey-7b);
+    }
+
+    .edit-avatar-upload-btn {
+        background: $dk-panel-bg-alt;
+        border-color: color.adjust($primary-color, $lightness: 10%);
+    }
+
+    .edit-link-row {
+        background: var(--ul-grey-0);
+    }
+
+    .edit-add-link-input {
+        color: var(--ul-grey-1);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .edit-discord-details {
+        border-color: var(--ul-grey-8b);
+    }
+
+    .edit-discord-summary {
+        background: var(--ul-grey-0);
+    }
+
+    .field-status--saved {
+        color: $color-green-400;
+    }
+
+    .edit-card {
+        box-shadow: var(--ul-shadow-md);
+    }
+
+    .edit-card-title {
+        border-bottom-color: var(--ul-grey-1a);
+    }
+
+    .edit-username-hint--ok  { color: $color-green-400; }
+    .edit-username-hint--bad { color: $color-red-400; }
+
+    .settings-cluster-value {
+        color: var(--ul-grey-7);
+    }
+
+    .settings-cluster-slider-wrap input[type="range"] {
+        accent-color: var(--primary-color);
+    }
+
+    .settings-reset-btn {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-3b);
+
+        &:hover {
+            border-color: var(--ul-grey-6b);
+        }
+    }
+
+    .trip-map-ctx-menu {
+        background: $dk-panel-bg;
+        border-color: $dk-panel-border;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .trip-map-ctx-item {
+        color: var(--ul-grey-2);
+
+        &:hover {
+            background: rgba(255, 255, 255, .06);
+        }
+    }
+
+    .btn-danger {
+        border-color: $dk-danger-text;
+        color: $dk-danger-text;
+
+        &:hover {
+            background: $color-red-800;
+            border-color: $color-red-800;
+            color: var(--ul-grey-5);
+        }
+    }
+
+    .card {
+        @include standard-section;
+        border-radius: 10px;
+
+        .card-header {
+            background-color: var(--ul-grey-0b);
+        }
+    }
+
+    .trip-weather-day {
+        background-color: var(--ul-grey-1);
+
+        .trip-weather-day-header {
+            background-color: var(--ul-grey-0b);
+            border-bottom-color: $dk-panel-border;
+        }
+    }
+
+    .trip-weather-activity {
+        border-top-color: $dk-panel-border;
+
+        .trip-weather-activity-name {
+            color: var(--ul-grey-2);
+        }
+    }
+
+    .trip-weather-slot-temp {
+        color: var(--ul-grey-2);
+    }
+
+    .trip-weather-slot-desc,
+    .trip-weather-slot-feels {
+        color: var(--ul-grey-4);
+    }
+
+    body.page-location-details .card {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+    }
+
+    .notif-prefs__header {
+        background: var(--ul-grey-0);
+        border-bottom-color: var(--ul-grey-7b);
+    }
+
+    .notif-prefs__hdr {
+        color: var(--ul-grey-5a);
+    }
+
+    .notif-prefs__row {
+        border-bottom-color: var(--ul-grey-9a);
+
+        &:hover {
+            background: var(--ul-grey-0);
+        }
+    }
+
+    .notif-prefs__label {
+        color: var(--ul-grey-2);
+    }
+
+    .notif-prefs__saved {
+        background: $dk-success-bg;
+        color: $color-green-300;
+    }
+
+    .profile-stat,
+    .profile-section,
+    .profile-hero {
+        @include standard-section;
+    }
+
+    .social-link {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-3b);
+
+        &:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+    }
+
+    .shared-visited-item {
+        border-color: var(--ul-grey-8b);
+        color: var(--ul-grey-2);
+    }
+
+    .friend-card {
+        border-color: var(--ul-grey-8b);
+
+        &:hover {
+            border-color: var(--ul-grey-6b);
+        }
+    }
+
+    .friend-card-name {
+        color: var(--ul-grey-1);
+    }
+
+    .friend-card-username,
+    .friend-card-area {
+        color: var(--ul-grey-6);
+    }
+
+    .friend-requests-section {
+        background: $dk-warning-amber-bg;
+        border-color: $dk-warning-amber-bd;
+    }
+
+    .friend-requests-label {
+        color: $dk-warning-amber-txt;
+    }
+
+    .friend-request-name {
+        color: var(--ul-grey-2);
+    }
+
+    .friend-request-sub {
+        color: var(--ul-grey-6);
+    }
+
+    .friend-request-item {
+        border-bottom-color: rgba(255, 255, 255, .06);
+    }
+
+    .btn-friend-accept {
+        background: $dk-success-bg;
+        border-color: $dk-accept-border;
+        color: $color-green-300;
+
+        &:hover {
+            background: $dk-accept-hover;
+        }
+    }
+
+    .btn-friend-reject {
+        background: $dk-reject-bg;
+        border-color: $dk-reject-border;
+        color: $color-red-300;
+
+        &:hover {
+            background: $dk-reject-hover;
+        }
+    }
+
+    .btn-friend-ignore {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-5a);
+    }
+
+    .btn-friend-remove:hover {
+        color: $color-red-300;
+        background: $dk-friend-remove-hover;
+    }
+
+    .friend-status-badge--friends {
+        background: $dk-success-bg;
+        color: $color-green-300;
+        border-color: $dk-accept-border;
+    }
+
+    .friend-status-badge--pending {
+        background: $dk-pending-bg;
+        color: $color-amber-400;
+        border-color: $dk-pending-border;
+    }
+
+    .profile-section-title {
+        color: var(--ul-grey-5a);
+    }
+
+    .profile-section-empty {
+        color: var(--ul-grey-6b);
+    }
+
+    .friends-back-link {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            color: var(--ul-grey-2);
+        }
+    }
+
+    .friends-page-title {
+        color: var(--ul-grey-1);
+    }
+
+    .friends-section--requests {
+        border-color: $dk-warning-amber-bd;
+    }
+
+    .friends-empty {
+        .material-symbols-outlined,
+        .material-icons {
+            color: var(--ul-grey-7b);
+        }
+
+        p {
+            color: var(--ul-grey-6);
+        }
+    }
+
+    .btn-friend--accept {
+        background: $dk-success-bg;
+        border-color: $dk-accept-border;
+        color: $color-green-300;
+
+        &:hover {
+            background: $dk-accept-hover;
+        }
+    }
+
+    .btn-friend--reject {
+        background: $dk-reject-bg;
+        border-color: $dk-reject-border;
+        color: $color-red-300;
+
+        &:hover {
+            background: $dk-reject-hover;
+        }
+    }
+
+    .btn-friend--ignore {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-5a);
+    }
+
+    .btn-friend--remove {
+        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-5a);
+
+        &:hover {
+            background: $dk-friend-remove-hover;
+            border-color: $dk-reject-border;
+            color: $color-red-300;
+        }
+    }
+
+    .date-error-list {
+        margin: 0 0 0.75rem;
+        padding-left: 1.25rem;
+        color: $color-red-700;
+        font-size: 0.9rem;
+
+        li {
+            margin-bottom: 0.25rem;
+        }
+    }
+
+    .date-error-hint {
+        font-size: 0.85rem;
+        color: $text-secondary;
+        margin: 0;
+    }
+
+    .nav-dropdown-item--signout {
+        color: $dk-danger-text;
+
+        .material-icons,
+        .material-symbols-outlined {
+            color: $dk-danger-text;
+        }
+
+        &:hover {
+            background: rgba($dk-danger-text, .08);
+
+            .material-icons,
+            .material-symbols-outlined {
+                color: $dk-danger-text;
+            }
+        }
+    }
+
+    .notif-item {
+        border-bottom-color: var(--ul-grey-2);
+
+        &--link:not(.notif-item--unread):hover {
+            background: var(--ul-grey-1);
+        }
+
+        &__icon-wrap {
+            background: rgba(255, 255, 255, .04);
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: var(--ul-grey-6);
+            }
+        }
+
+        &__title {
+            color: var(--ul-grey-6);
+        }
+
+        &__msg {
+            color: var(--ul-grey-6);
+        }
+
+        &__time {
+            color: var(--ul-grey-5);
+        }
+
+        &__dot {
+            background: $color-deep-purple-300;
+            box-shadow: 0 0 0 3px rgba($color-deep-purple-300, .2);
+        }
+    }
+
+    .notif-item--unread {
+        background: linear-gradient(90deg, rgba($color-indigo-600, .14) 0%, transparent 100%);
+        border-left-color: $color-indigo-600;
+
+        &:hover {
+            background: linear-gradient(90deg, rgba($color-indigo-600, .2) 0%, transparent 100%);
+        }
+
+        .notif-item__icon-wrap {
+            background: rgba($color-indigo-600, .15);
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: $color-deep-purple-300;
+            }
+        }
+
+        .notif-item__title {
+            color: var(--ul-grey-8);
+        }
+
+        .notif-item__msg {
+            color: var(--ul-grey-7);
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--friend_request,
+    .notif-item--unread .notif-item__icon-wrap--friend_accepted {
+        background: rgba($color-green-600, .15);
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-green-400;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--added_to_trip,
+    .notif-item--unread .notif-item__icon-wrap--trip_updated {
+        background: rgba($color-blue-600, .15);
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-blue-500;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--comment_reply,
+    .notif-item--unread .notif-item__icon-wrap--comment_liked {
+        background: rgba($color-pink-600, .15);
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-pink-400;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--error {
+        background: rgba($color-red-600, .15);
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-red-400;
+        }
+    }
+
+    .notif-item--unread .notif-item__icon-wrap--warning {
+        background: rgba($color-amber-600, .15);
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-amber-400;
+        }
+    }
+
+    .notif-mark-all-btn {
+        color: $dk-info-link;
+    }
+
+    .notif-empty__text {
+        color: var(--ul-grey-7);
+    }
+
+    .notif-dropdown__header {
+        background: var(--ul-grey-0);
+        border-bottom-color: var(--ul-grey-2);
+    }
+
+    .btn--danger {
+        color: $color-red-300;
+        background: rgba($dk-danger-text, .07);
+        border-color: rgba($dk-danger-text, .25);
+
+        &:hover {
+            background: rgba($dk-danger-text, .13);
+        }
+    }
+
+    .trips-title {
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-blue-500;
+        }
+    }
+
+    .trips-empty .trips-empty-icon-wrap {
+        background: linear-gradient(135deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+        border-color: var(--ul-grey-2);
+    }
+
+    .trips-empty .trips-empty-icon {
+        color: $color-blue-500;
+    }
+
+    .trips-empty .trips-empty-title {
+        color: var(--ul-grey-7);
+    }
+
+    .trip-card:hover {
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+    }
+
+    .trip-card-status {
+        &--upcoming {
+            background: rgba($color-blue-500, .15);
+            color: $color-blue-300;
+            border-color: rgba($color-blue-500, .25);
+        }
+
+        &--active {
+            background: rgba($color-green-500, .15);
+            color: $color-green-300;
+            border-color: rgba($color-green-500, .25);
+        }
+
+        &--planning {
+            background: rgba($color-amber-500, .15);
+            color: $color-amber-300;
+            border-color: rgba($color-amber-500, .25);
+        }
+    }
+
+    .trip-card-stat {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-2);
+    }
+
+    .trip-card-member-avatar {
+        border-color: var(--ul-grey-0);
+        background: $dk-navy;
+    }
+
+    .trip-card-role {
+        color: $color-amber-300 !important;
+    }
+
+    .trip-back-link:hover {
+        color: $color-blue-500;
+    }
+
+    .trip-panel .card-header {
+        border-bottom-color: var(--ul-grey-2);
+
+        .badge {
+            background: var(--ul-grey-4);
+            color: var(--ul-grey-7);
+        }
+    }
+
+    .view-toggle-group {
+        background-color: var(--ul-grey-4);
+    }
+
+    .card-header {
+        .view-toggle-group {
+            background-color: var(--ul-grey-1);
+        }
+    }
+
+    .view-toggle-btn {
+
+        &:hover {
+            background: var(--ul-grey-1);
+            color: var(--ul-grey-7);
+        }
+
+        &.view-toggle-btn--active {
+            color: $color-blue-500;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        }
+    }
+
+    .cal-nav-btn {
+
+        &:hover {
+            background: var(--ul-grey-1);
+        }
+    }
+
+    .cal-cell {
+        &--empty {
+            background: rgba(255, 255, 255, .025);
+            opacity: .6;
+        }
+
+        &--has-events {
+            background: $dk-cal-event-bg;
+        }
+
+        &--today {
+            background: $dk-navy;
+        }
+    }
+
+    .cal-day-num {
+        color: var(--ul-grey-7);
+    }
+
+    .trip-activity-item {
+        border-bottom-color: var(--ul-grey-1a);
+
+        &.trip-activity--highlighted {
+            background: $dk-cal-event-bg;
+        }
+    }
+
+    .trip-activity-icon {
+        background: $dk-navy;
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-blue-500;
+        }
+    }
+
+    .trip-activity-num {
+        border-color: var(--ul-grey-1);
+    }
+
+    .trip-attr-link:hover {
+        color: $color-deep-purple-300;
+    }
+
+    .trip-member-item {
+        border-bottom-color: var(--ul-grey-1a);
+    }
+
+    .trip-member-avatar {
+        background: $dk-navy;
+    }
+
+    .trip-member-avatar-initial {
+        color: $color-blue-500;
+    }
+
+    .trip-member-badge {
+        &--creator {
+            background: rgba($color-amber-400, .12);
+            color: $color-amber-400;
+            border-color: rgba($color-amber-400, .25);
+        }
+
+        &--organizer {
+            background: rgba($color-indigo-400, .12);
+            color: $color-deep-purple-300;
+            border-color: rgba($color-indigo-400, .25);
+        }
+    }
+
+    .trip-organizer-btn {
+        &--active {
+            color: $color-deep-purple-300 !important;
+
+            &:hover {
+                background: rgba($color-indigo-400, .1) !important;
+            }
+        }
+    }
+
+    .rsvp-popup {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .rsvp-popup-opt {
+        color: var(--ul-grey-8);
+
+        &:hover {
+            background: var(--ul-grey-1);
+        }
+
+        &--yes {
+            color: $color-green-400;
+
+            &:hover {
+                background: rgba($color-green-500, .1);
+            }
+        }
+
+        &--no {
+            color: $color-red-400;
+
+            &:hover {
+                background: rgba(220, 38, 38, .1);
+            }
+        }
+
+        &--maybe {
+            color: $color-amber-400;
+
+            &:hover {
+                background: rgba($color-amber-500, .1);
+            }
+        }
+
+        &--clear {
+            color: var(--ul-grey-6);
+        }
+    }
+
+    .rsvp-pill-btn {
+
+        &:hover {
+            border-color: var(--ul-grey-3b);
+        }
+    }
+
+    .trip-comment-item {
+        border-bottom-color: var(--ul-grey-1a);
+
+        &:hover {
+            background: rgba(255, 255, 255, .03);
+        }
+    }
+
+    .trip-comment-text {
+        color: var(--ul-grey-7);
+    }
+
+    .trip-comment-input:focus {
+        border-color: $color-blue-500;
+        box-shadow: 0 0 0 3px rgba($color-blue-400, .12);
+    }
+
+    .comment-item {
+        border-bottom-color: var(--ul-grey-1a);
+
+        &--reply {
+            background: var(--ul-grey-1);
+        }
+    }
+
+    .comment-date {
+        color: var(--ul-grey-6);
+    }
+
+    .comment-text {
+        color: var(--ul-grey-7);
+    }
+
+    .comment-avatar-initial {
+        background: $dk-comment-avatar-bg;
+        color: $dk-comment-avatar-txt;
+    }
+
+    .comment-delete-btn {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            color: $color-red-400;
+        }
+    }
+
+    .comment-reply-btn {
+        color: var(--ul-grey-6);
+
+        .reply-count {
+            color: var(--ul-grey-6);
+        }
+
+        &:hover {
+            color: $color-deep-purple-300;
+            background: rgba(124, 58, 237, .08);
+        }
+    }
+
+    .comment-compose {
+        border-top-color: var(--ul-grey-1a);
+    }
+
+    .comment-input {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-8);
+
+        &::placeholder {
+            color: var(--ul-grey-6);
+        }
+
+        &:focus {
+            border-color: $color-indigo-500;
+            box-shadow: 0 0 0 3px rgba($color-indigo-500, .1);
+        }
+    }
+
+    .card {
+        .comment-input {
+            background-color: var(--ul-grey-1);
+        }
+    }
+
+    .reaction-pill {
+        background-color: var(--ul-grey-4);
+
+        &:hover {
+            background: var(--ul-grey-1);
+        }
+
+        &--mine {
+            background: rgba($color-indigo-600, .15);
+            border-color: rgba(124, 58, 237, .4);
+            color: $color-deep-purple-300;
+        }
+
+        .reaction-count {
+            color: var(--ul-grey-7);
+        }
+    }
+
+    .reaction-add-btn {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            background: var(--ul-grey-1);
+            color: var(--ul-grey-7);
+        }
+    }
+
+    .reaction-picker-popup {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+    }
+
+    .reaction-picker-label {
+        color: var(--ul-grey-6);
+    }
+
+    .reaction-picker-divider {
+        border-left-color: var(--ul-grey-2);
+    }
+
+    .reaction-picker-emoji:hover {
+        background: var(--ul-grey-1);
+    }
+
+    .mention-dropdown {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .mention-option {
+        color: var(--ul-grey-7);
+        border-bottom-color: var(--ul-grey-1a);
+
+        &:hover,
+        &.is-selected {
+            background: rgba(124, 58, 237, .08);
+            color: $color-deep-purple-300;
+        }
+    }
+
+    .comment-image-label {
+        color: var(--ul-grey-6);
+    }
+
+    .comment-map-btn {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            background: rgba(167, 139, 250, .15);
+            border-color: $color-deep-purple-300;
+            color: $color-indigo-300;
+        }
+    }
+
+    .comment-map-chip {
+        background: rgba($color-indigo-700, .2);
+        border-color: $color-indigo-600;
+        color: $color-indigo-300;
+    }
+
+    .comment-map-expand-btn {
+        background: rgba(30, 30, 40, .9);
+        color: var(--ul-grey-8);
+
+        &:hover {
+            background: rgba(40, 40, 55, 1);
+        }
+    }
+
+    .comment-map-composer-controls {
+        border-color: var(--ul-grey-1a);
+    }
+
+    .comment-map-composer-toolbar {
+        border-color: var(--ul-grey-1a);
+    }
+
+    .cmcc-label {
+        color: var(--ul-grey-6);
+    }
+
+    .cmcc-pin-search {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-8);
+    }
+
+    .cmcc-pin-option {
+        color: var(--ul-grey-8);
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    .cmc-layer-btn,
+    .cmc-tool-btn,
+    .cmc-undo-btn,
+    .cmc-clear-btn {
+        color: var(--ul-grey-8);
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        &.is-active {
+            background: rgba($color-indigo-700, .25);
+            border-color: $color-indigo-600;
+            color: $color-indigo-300;
+        }
+    }
+
+    .cmc-toolbar-sep {
+        background: var(--ul-grey-1a);
+    }
+
+    .cmc-toolbar-label {
+        color: var(--ul-grey-6);
+    }
+
+    .cmc-color-wrap {
+        color: var(--ul-grey-6);
+
+        input[type="color"] {
+            background: var(--ul-grey-0);
+        }
+    }
+
+    .trip-setting-pill {
+
+        &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+            background: var(--ul-grey-1);
+            border-color: var(--ul-grey-3b);
+        }
+
+        &--active {
+            background: $dk-navy;
+            border-color: $color-blue-500;
+            color: $color-blue-500;
+        }
+    }
+
+    .trip-create-dialog {
+
+        .location-suggestion-item:hover {
+            background: var(--ul-grey-4);
+        }
+    }
+
+    .organize-subtitle {
+        color: var(--ul-grey-7);
+    }
+
+    .organize-tab.active {
+        color: color.adjust($primary-color, $lightness: 15%);
+        border-bottom-color: color.adjust($primary-color, $lightness: 15%);
+    }
+
+    .cat-sel-bar.cat-sel-bar--active {
+        background: rgba($color-blue-500, .1);
+        border-color: rgba($color-blue-500, .35);
+    }
+
+    .cat-sel-count {
+        background: rgba($color-blue-500, .15);
+        color: $color-blue-300;
+    }
+
+    .cat-sel-btn {
+        border-color: var(--ul-grey-3b);
+
+        &:hover:not(:disabled) {
+            background: var(--ul-grey-1);
+        }
+    }
+
+    .cat-sel-delete-btn {
+        border-color: rgba($color-red-600, .45);
+        color: $color-red-400;
+
+        &:hover:not(:disabled) {
+            background: rgba($color-red-600, .08);
+            border-color: $color-red-400;
+        }
+    }
+
+    .ul-checkbox-wrap {
+        &:hover {
+            background: var(--ul-grey-1);
+        }
+
+        .ul-checkbox {
+            border-color: var(--ul-grey-3b);
+        }
+    }
+
+    .tag-card--selected {
+        border-color: color.adjust($primary-color, $lightness: 10%) !important;
+        background: rgba($color-blue-500, .1) !important;
+    }
+
+    .priority-item {
+        background-color: var(--ul-grey-0a);
+
+        &:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+        }
+
+        &.priority-item--ghost {
+            background: rgba($color-blue-500, .1);
+            border-color: var(--primary-color);
+        }
+    }
+
+    .priority-item-icon {
+        background: var(--ul-grey-1);
+
+        i {
+            color: var(--ul-grey-7);
+        }
+    }
+
+    .priority-item-name {
+        color: var(--ul-grey-8);
+    }
+
+    .priority-order-badge {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-7);
+
+        &:hover {
+            background: var(--ul-grey-2);
+            color: var(--ul-color-accent);
+        }
+    }
+
+    .priority-order-input {
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+
+    .priority-order-save {
+        background: var(--ul-grey-1);
+        color: var(--ul-color-accent);
+    }
+
+    .priority-item--editing-order {
+        border-color: rgba($primary-color, .45);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
+    }
+
+    .priority-kind-badge {
+        color: var(--ul-grey-9);
+
+        &--tag {
+            background-color: #{$color-purple-1100};
+        }
+
+        &--category {
+            background-color: #{$color-blue-1100};
+        }
+
+        &--status {
+            background-color: #{$color-green-1100};
+        }
+    }
+
+    .site-admin-notice--success {
+        background: rgba($color-green-600, .15);
+        border-color: rgba($color-green-600, .3);
+        color: $color-green-300;
+    }
+
+    .site-admin-form input[type="number"] {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-3b);
+
+        &:focus {
+            border-color: color.adjust($primary-color, $lightness: 10%);
+        }
+    }
+
+    .wiki-page {
+        .wiki-card-header {
+            background: var(--ul-grey-1);
+            border-bottom-color: var(--ul-grey-1a);
+
+            h2 {
+                color: var(--ul-grey-8);
+            }
+        }
+
+        .wiki-card-desc {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-dl-row {
+
+            dt {
+                color: var(--ul-grey-6);
+            }
+
+            dd {
+                color: var(--ul-grey-8);
+            }
+        }
+
+        .wiki-stat-label {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-bbox-controls {
+            background: var(--ul-grey-1);
+            border-top-color: var(--ul-grey-1a);
+        }
+
+        .wiki-action-btn {
+            border-color: var(--ul-grey-3b);
+            color: var(--ul-grey-8);
+
+            &:hover {
+                background: var(--ul-grey-1);
+                border-color: var(--ul-grey-3b);
+            }
+        }
+
+        .wiki-tabs {
+            background: var(--ul-grey-1);
+            border-bottom-color: var(--ul-grey-1a);
+        }
+
+        .wiki-tab {
+            color: var(--ul-grey-7);
+
+            &--active,
+            &:hover {
+                color: $color-cyan-400;
+                border-bottom-color: $color-cyan-400;
+            }
+        }
+
+        .wiki-loading {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-history-item {
+
+            &--reverted {
+                background: var(--ul-grey-1);
+            }
+        }
+
+        .wiki-history-editor {
+            color: var(--ul-grey-8);
+        }
+
+        .wiki-history-date {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-history-badge--reverted {
+            background: rgba($color-amber-800, .3);
+            color: $color-amber-300;
+        }
+
+        .wiki-change-field {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-change-arrow {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-change-from {
+            background: rgba($color-red-700, .18);
+            color: $color-red-300;
+        }
+
+        .wiki-change-to {
+            background: rgba($color-green-700, .18);
+            color: $color-green-300;
+        }
+
+        .wiki-revert-btn {
+            border-color: rgba($color-red-600, .4);
+            color: $color-red-400;
+
+            &:hover {
+                background: rgba($color-red-600, .08);
+                border-color: $color-red-400;
+            }
+        }
+
+        .wiki-history-empty {
+            color: var(--ul-grey-6);
+        }
+    }
+
+    .ul-radio-button {
+        &.active,
+        &:has(input:checked) {
+            border-color: #{$color-indigo-500};
+            color: #{$color-indigo-100};
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: #{$color-indigo-100};
+            }
+        }
+    
+        &:hover:not(.active) {
+            border-color: #{$color-indigo-300};
+            background: #{$color-indigo-1100};
+        }
+    }
+
+    .kind-toggle .kind-toggle-option {
+        input[type="radio"]:checked + span,
+        &.is-active span {
+            background: color-mix(in srgb, $primary-color 16%, var(--ul-grey-2));
+        }
+
+        &:hover span {
+            background: var(--ul-grey-3);
+        }
+    }
+
+    .organize-badge-rows.tag-view--gallery .ul-checkbox-wrap {
+        background: color-mix(in srgb, var(--ul-grey-2) 92%, transparent);
+    }
+
+    .org-bulk-bar {
+        background: color-mix(in srgb, var(--ul-grey-2) 88%, transparent);
+        border-color: var(--ul-grey-3b);
+        box-shadow:
+            0 12px 40px rgba(0, 0, 0, .45),
+            0 2px 8px rgba(0, 0, 0, .3),
+            inset 0 1px 0 rgba(255, 255, 255, .06);
+
+        &.visible {
+            box-shadow:
+                0 16px 48px rgba(0, 0, 0, .55),
+                0 4px 12px rgba(0, 0, 0, .35),
+                inset 0 1px 0 rgba(255, 255, 255, .06);
+        }
+    }
+
+    .org-bulk-count {
+        background: color-mix(in srgb, $primary-color 18%, transparent);
+        border-color: color-mix(in srgb, $primary-color 34%, transparent);
+        color: color-mix(in srgb, $primary-color 80%, white);
+    }
+
+    .org-bulk-btn {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-3b);
+        color: var(--ul-grey-8);
+    }
+
+    .org-bulk-btn--edit:hover:not(:disabled) {
+        background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
+    }
+
+    .org-bulk-btn--merge {
+        color: var(--ul-grey-0);
+
+        &:disabled {
+            color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
+        }
+    }
+
+    .org-bulk-btn--delete:hover:not(:disabled) {
+        background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
+    }
+}
+// Theme-level refinements for shared surfaces and controls. These catch legacy
+// pages that still use raw element selectors while newer components consume the
+// semantic tokens directly.
+[data-theme="dark"] {
+    @include input-selectors {
+        background-color: var(--ul-grey-1);
+        border-color: var(--ul-grey-1a);
+        color: var(--ul-grey-8);
+    }
+
+    // TODO: Temporary fix for right now.
+    .form-input-wrap {
+        @include input-selectors {
+            background-color: transparent;
+        }
+    }
+
+    .ul-section,
+    .ul-card,
+    .ul-panel,
+    .ul-surface,
+    .dialog,
+    .ul-dialog,
+    .confirm-dialog {
+        background-color: var(--ul-grey-1b);
+        border-color: var(--ul-grey-1a);
+    }
+
+    .dialog-header,
+    .ul-card-header,
+    .ul-card-footer,
+    .ul-panel-footer,
+    .ul-dialog-footer,
+    .dialog-footer {
+        background-color: var(--ul-grey-1a);
+        border-color: var(--ul-grey-1a);
+        color: var(--ul-grey-9);
+    }
+
+    .btn--ghost,
+    .btn--link,
+    .ul-radio-button {
+        border-color: var(--ul-grey-1a);
+    }
+}

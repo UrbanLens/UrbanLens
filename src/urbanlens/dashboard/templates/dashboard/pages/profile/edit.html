@@ -1,0 +1,509 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+{% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
+{% if date_errors %}
+<div class="dialog-overlay" id="date-error-overlay"></div>
+<div class="dialog" id="date-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="date-error-title">
+    <button class="btn-close" id="date-error-close" aria-label="Close">x</button>
+    <h2 id="date-error-title"><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>
+    <ul class="date-error-list">
+        {% for error in form.birth_date.errors %}<li>{{ error }}</li>{% endfor %}
+        {% for error in form.started_exploring.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    <p class="date-error-hint">Please choose a different date.</p>
+    <div style="margin-top:16px;text-align:right;">
+        <button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button>
+    </div>
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="edit-profile-page page-content">
+
+    {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}
+    {% if not form.instance.profile_setup_complete %}
+    <div class="edit-setup-banner" id="setup-banner">
+        <i class="material-icons setup-banner-icon">waving_hand</i>
+        <div class="setup-banner-text">
+            <strong>Welcome! Set up your profile.</strong>
+            <span>Choose a username and avatar before you start exploring.</span>
+        </div>
+        <button class="setup-banner-skip" id="setup-skip-btn" type="button">
+            Skip for now
+        </button>
+    </div>
+    {% endif %}
+
+    <div class="edit-profile-header">
+        <a href="{% url 'profile.view' %}" class="edit-back-link">
+            <i class="material-symbols-outlined">arrow_back</i> Back to Profile
+        </a>
+        <h1 class="edit-profile-title">Edit Profile</h1>
+    </div>
+
+    {# -- Profile info -------------------------------------------------------- #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Profile Info</h2>
+
+        {# Username #}
+        <div class="edit-field">
+            <label class="edit-label">
+                Username
+                <span class="field-status" data-field-status="username"></span>
+            </label>
+            <div class="edit-username-wrap">
+                <span class="edit-username-at">@</span>
+                <input type="text" class="edit-input edit-username-input" id="username-input"
+                       maxlength="30" value="{{ request.user.username }}"
+                       autocomplete="username" spellcheck="false">
+                <span class="edit-username-hint" id="username-hint"></span>
+            </div>
+            <p class="edit-field-hint">3-30 characters: letters, numbers, and underscores only.</p>
+        </div>
+
+        {# Avatar #}
+        <div class="edit-field edit-avatar-field">
+            <label class="edit-label">Profile Photo</label>
+            <div class="edit-avatar-layout">
+                {# Current avatar display #}
+                <div class="edit-avatar-current-wrap">
+                    {% if form.instance.avatar %}
+                    <img src="{{ form.instance.avatar.url }}" class="edit-avatar-preview" id="avatar-preview" alt="Avatar">
+                    {% else %}
+                    <div class="edit-avatar-placeholder" id="avatar-preview">
+                        <i class="material-symbols-outlined">person</i>
+                    </div>
+                    {% endif %}
+                    <span class="field-status" data-field-status="avatar" style="display:block;text-align:center;margin-top:4px"></span>
+                </div>
+
+                {# Avatar source options #}
+                <div class="edit-avatar-sources">
+
+                    {# Upload #}
+                    <label class="edit-avatar-option" title="Upload your own photo">
+                        <i class="material-symbols-outlined">upload</i>
+                        <span>Upload</span>
+                        <input type="file" accept="image/*" data-autosave="avatar" style="display:none">
+                    </label>
+
+                    {# Gravatar #}
+                    {% if gravatar_preview_url %}
+                    <button type="button" class="edit-avatar-option" id="avatar-gravatar-btn"
+                            data-gravatar-url="{{ gravatar_preview_url }}" title="Use your Gravatar">
+                        <img src="{{ gravatar_preview_url }}" class="edit-avatar-option-img" alt="Gravatar">
+                        <span>Gravatar</span>
+                    </button>
+                    {% endif %}
+
+                    {# Emoji circles #}
+                    {% for opt in emoji_options %}
+                    <button type="button" class="edit-avatar-option edit-avatar-emoji-opt"
+                            data-animal="{{ opt.animal }}" data-color="{{ opt.color }}"
+                            title="{{ opt.animal|title }} emoji avatar"
+                            style="background:none;border:none;cursor:pointer;padding:0;">
+                        <div class="edit-avatar-emoji-circle" style="background:{{ opt.color }}">
+                            {{ opt.emoji }}
+                        </div>
+                        <span>{{ opt.animal|title }}</span>
+                    </button>
+                    {% endfor %}
+
+                </div>
+            </div>
+        </div>
+
+        {# Name #}
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    First Name
+                    <span class="field-status" data-field-status="first_name"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="150"
+                       value="{{ request.user.first_name }}"
+                       data-autosave="first_name">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Last Name
+                    <span class="field-status" data-field-status="last_name"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="150"
+                       value="{{ request.user.last_name }}"
+                       data-autosave="last_name">
+            </div>
+        </div>
+
+        {# Bio #}
+        <div class="edit-field">
+            <label class="edit-label" for="{{ form.bio.id_for_label }}">
+                Bio
+                <span class="field-status" data-field-status="bio"></span>
+            </label>
+            {{ form.bio }}
+        </div>
+
+        {# Area / dates #}
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.area.id_for_label }}">
+                    Location / Area
+                    <span class="field-status" data-field-status="area"></span>
+                </label>
+                {{ form.area }}
+            </div>
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.started_exploring.id_for_label }}">
+                    Exploring Since
+                    <span class="field-status" data-field-status="started_exploring"></span>
+                </label>
+                {{ form.started_exploring }}
+            </div>
+            <div class="edit-field">
+                <label class="edit-label" for="{{ form.birth_date.id_for_label }}">
+                    Birth Date
+                    <span class="field-status" data-field-status="birth_date"></span>
+                </label>
+                {{ form.birth_date }}
+            </div>
+        </div>
+
+    </section>
+
+    {# -- Social links -------------------------------------------------------- #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Social Links</h2>
+        <p class="edit-card-desc">Paste a profile URL - the platform is detected automatically.</p>
+        {% include "dashboard/partials/profile/profile_social_links.html" %}
+    </section>
+
+    {# -- Contact Information -------------------------------------------------- #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Contact Information</h2>
+
+        <div class="edit-field">
+            <label class="edit-label">
+                Email Address
+                <span class="field-status" data-field-status="email"></span>
+            </label>
+            <input type="email" class="edit-input" maxlength="254"
+                   value="{{ request.user.email }}"
+                   placeholder="your@email.com"
+                   autocomplete="email"
+                   data-autosave="email">
+            <p class="edit-field-hint">Used for account recovery and notifications.</p>
+        </div>
+
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Phone Number
+                    <span class="field-status" data-field-status="phone_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.phone_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="phone_number">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    WhatsApp Number
+                    <span class="field-status" data-field-status="whatsapp_number"></span>
+                </label>
+                <input type="tel" class="edit-input" maxlength="30"
+                       value="{{ form.instance.whatsapp_number }}"
+                       placeholder="+1 555 000 0000"
+                       data-autosave="whatsapp_number">
+            </div>
+        </div>
+
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Signal Username
+                    <span class="field-status" data-field-status="signal_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.signal_username }}"
+                       placeholder="signal.01"
+                       data-autosave="signal_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Discord Username
+                    <span class="field-status" data-field-status="discord_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.discord_username }}"
+                       placeholder="username"
+                       data-autosave="discord_username">
+            </div>
+        </div>
+
+        <div class="edit-field-row">
+            <div class="edit-field">
+                <label class="edit-label">
+                    Telegram Username
+                    <span class="field-status" data-field-status="telegram_username"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="100"
+                       value="{{ form.instance.telegram_username }}"
+                       placeholder="@username"
+                       data-autosave="telegram_username">
+            </div>
+            <div class="edit-field">
+                <label class="edit-label">
+                    Matrix Handle
+                    <span class="field-status" data-field-status="matrix_handle"></span>
+                </label>
+                <input type="text" class="edit-input" maxlength="200"
+                       value="{{ form.instance.matrix_handle }}"
+                       placeholder="@user:server.org"
+                       data-autosave="matrix_handle">
+            </div>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function closeDateErrorDialog() {
+    var overlay = document.getElementById('date-error-overlay');
+    var dialog  = document.getElementById('date-error-dialog');
+    if (overlay) overlay.remove();
+    if (dialog)  dialog.remove();
+}
+
+(function () {
+    var SAVE_URL = '{% url "profile.field.update" %}';
+
+    // -- date error dialog (created dynamically for auto-save errors) ----------
+    function showDateDialog(message) {
+        closeDateErrorDialog();
+        var overlay = document.createElement('div');
+        overlay.className = 'dialog-overlay';
+        overlay.id = 'date-error-overlay';
+        overlay.addEventListener('click', closeDateErrorDialog);
+
+        var dialog = document.createElement('div');
+        dialog.className = 'dialog';
+        dialog.id = 'date-error-dialog';
+        dialog.setAttribute('role', 'alertdialog');
+        dialog.innerHTML =
+            '<button class="btn-close" aria-label="Close" onclick="closeDateErrorDialog()">x</button>' +
+            '<h2><i class="material-icons" style="vertical-align:middle;color:#d32f2f;margin-right:6px;">event_busy</i>Invalid Date</h2>' +
+            '<ul class="date-error-list"><li>' + message + '</li></ul>' +
+            '<p class="date-error-hint">Please choose a different date.</p>' +
+            '<div style="margin-top:16px;text-align:right;"><button type="button" class="settings-save-btn" onclick="closeDateErrorDialog()">OK</button></div>';
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(dialog);
+    }
+
+    // -- per-field status indicator --------------------------------------------
+    function setStatus(field, state, text) {
+        var el = document.querySelector('[data-field-status="' + field + '"]');
+        if (!el) return;
+        el.className = 'field-status' + (state ? ' field-status--' + state : '');
+        el.textContent = text;
+        if (state === 'saved') {
+            setTimeout(function () { setStatus(field, '', ''); }, 2500);
+        }
+    }
+
+    // -- core save -------------------------------------------------------------
+    function saveField(field, value, isFile) {
+        if (window.autosaveGuard) window.autosaveGuard.markDirty();
+        setStatus(field, 'saving', 'Saving...');
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
+        var fd = new FormData();
+        fd.append('csrfmiddlewaretoken', csrftoken);
+        fd.append('field', field);
+        if (isFile) {
+            fd.append('file_value', value);
+        } else {
+            fd.append('value', value);
+        }
+        fetch(SAVE_URL, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    if (guard) guard.markClean();
+                    setStatus(field, 'saved', '✓ Saved');
+                    if (data.avatar_url) {
+                        var el = document.getElementById('avatar-preview');
+                        if (el.tagName === 'IMG') {
+                            el.src = data.avatar_url;
+                        } else {
+                            var img = document.createElement('img');
+                            img.src = data.avatar_url;
+                            img.className = 'edit-avatar-preview';
+                            img.id = 'avatar-preview';
+                            img.alt = 'Avatar';
+                            el.parentNode.replaceChild(img, el);
+                        }
+                    }
+                } else {
+                    var msg = data.error || 'Save failed.';
+                    // Clear the field value and show a red X indicator
+                    var input = document.querySelector('[data-autosave="' + field + '"]');
+                    if (input && input.type !== 'file') { input.value = ''; }
+                    setStatus(field, 'error', '✗');
+                    // Full message via toastr
+                    toastr.error(msg);
+                    if (field === 'birth_date' || field === 'started_exploring') {
+                        showDateDialog(msg);
+                    }
+                }
+            })
+            .catch(function () { setStatus(field, 'error', 'Save failed.'); })
+            .finally(function () { if (guard) guard.saveFinished(); });
+    }
+
+    // -- wire up all autosave inputs -------------------------------------------
+    document.querySelectorAll('[data-autosave]').forEach(function (el) {
+        var field = el.getAttribute('data-autosave');
+        if (el.type === 'file') {
+            el.addEventListener('change', function () {
+                if (el.files.length > 0) saveField(field, el.files[0], true);
+            });
+        } else {
+            el.addEventListener('change', function () { saveField(field, el.value, false); });
+        }
+    });
+
+    // -- username field: debounced availability check + save on blur -----------
+    var usernameInput = document.getElementById('username-input');
+    var usernameHint  = document.getElementById('username-hint');
+    var _unameCheckTimer;
+    var _lastChecked = '';
+
+    function checkUsername(username) {
+        if (!username || username === _lastChecked) return;
+        _lastChecked = username;
+        usernameHint.textContent = '';
+        if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+            usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+            usernameHint.textContent = '3-30 chars: letters, numbers, underscores';
+            return;
+        }
+        fetch(SAVE_URL + '?field=username&value=' + encodeURIComponent(username))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.available) {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--ok';
+                    usernameHint.textContent = '✓ Available';
+                } else {
+                    usernameHint.className = 'edit-username-hint edit-username-hint--bad';
+                    usernameHint.textContent = d.reason || 'Unavailable';
+                }
+            })
+            .catch(function () {});
+    }
+
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function () {
+            clearTimeout(_unameCheckTimer);
+            var v = usernameInput.value.trim();
+            _unameCheckTimer = setTimeout(function () { checkUsername(v); }, 400);
+        });
+
+        usernameInput.addEventListener('blur', function () {
+            var v = usernameInput.value.trim();
+            if (!v || !/^[a-zA-Z0-9_]{3,30}$/.test(v)) return;
+            saveField('username', v, false);
+        });
+    }
+
+    // -- gravatar button -------------------------------------------------------
+    var gravatarBtn = document.getElementById('avatar-gravatar-btn');
+    if (gravatarBtn) {
+        gravatarBtn.addEventListener('click', function () {
+            setStatus('avatar', 'saving', 'Saving...');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_gravatar');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not load Gravatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    }
+
+    // -- emoji circle buttons --------------------------------------------------
+    document.querySelectorAll('.edit-avatar-emoji-opt').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var animal = btn.dataset.animal;
+            var color  = btn.dataset.color;
+            setStatus('avatar', 'saving', 'Saving...');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'avatar_emoji');
+            fd.append('animal', animal);
+            fd.append('color', color);
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) {
+                        setStatus('avatar', 'saved', '✓ Saved');
+                        updateAvatarPreview(d.avatar_url);
+                    } else {
+                        setStatus('avatar', 'error', '✗');
+                        toastr.error(d.error || 'Could not save avatar.');
+                    }
+                })
+                .catch(function () { setStatus('avatar', 'error', 'Failed'); });
+        });
+    });
+
+    function updateAvatarPreview(url) {
+        if (!url) return;
+        var el = document.getElementById('avatar-preview');
+        if (!el) return;
+        if (el.tagName === 'IMG') {
+            el.src = url + '?' + Date.now();
+        } else {
+            var img = document.createElement('img');
+            img.src = url + '?' + Date.now();
+            img.className = 'edit-avatar-preview';
+            img.id = 'avatar-preview';
+            img.alt = 'Avatar';
+            el.parentNode.replaceChild(img, el);
+        }
+    }
+
+    // -- setup banner skip -----------------------------------------------------
+    var skipBtn = document.getElementById('setup-skip-btn');
+    var banner  = document.getElementById('setup-banner');
+    if (skipBtn && banner) {
+        skipBtn.addEventListener('click', function () {
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', csrftoken);
+            fd.append('field', 'setup_complete');
+            fetch(SAVE_URL, { method: 'POST', body: fd })
+                .then(function () { banner.remove(); })
+                .catch(function () { banner.remove(); });
+        });
+    }
+
+    // -- server-rendered date dialog close wiring ------------------------------
+    var overlay = document.getElementById('date-error-overlay');
+    var closeBtn = document.getElementById('date-error-close');
+    if (overlay) overlay.addEventListener('click', closeDateErrorDialog);
+    if (closeBtn) closeBtn.addEventListener('click', closeDateErrorDialog);
+}());
+</script>
+{% endblock %}

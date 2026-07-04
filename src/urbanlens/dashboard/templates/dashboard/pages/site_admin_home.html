@@ -1,0 +1,172 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+
+    {# -- Hero header ------------------------------------------------------------ #}
+    <div class="admin-home-hero">
+        <div class="admin-home-hero__left">
+            <div class="admin-home-hero__icon">
+                <i class="material-symbols-outlined">admin_panel_settings</i>
+            </div>
+            <div>
+                <h1 class="admin-home-hero__title">Admin Dashboard</h1>
+                <p class="admin-home-hero__sub">
+                    Welcome back, {{ request.user.first_name|default:request.user.username }}.
+                    {% if unhealthy_services %}
+                    <span class="admin-home-status admin-home-status--warn">
+                        <i class="material-symbols-outlined">warning</i>
+                        {{ unhealthy_services }} service{{ unhealthy_services|pluralize }} unhealthy
+                    </span>
+                    {% elif total_services %}
+                    <span class="admin-home-status admin-home-status--ok">
+                        <i class="material-symbols-outlined">check_circle</i>
+                        All services healthy
+                    </span>
+                    {% endif %}
+                    {% if git_has_newer_commits %}
+                    <span class="admin-home-status admin-home-status--warn">
+                        <i class="material-symbols-outlined">new_releases</i>
+                        Update available
+                    </span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="admin-home-hero__meta">
+            <span class="admin-home-meta-pill">
+                <i class="material-symbols-outlined">sell</i>
+                v{{ app_version }}
+            </span>
+            {% if git_branch %}
+            <span class="admin-home-meta-pill">
+                <i class="material-symbols-outlined">call_split</i>
+                {{ git_branch }}
+            </span>
+            {% endif %}
+            <span class="admin-home-meta-pill">
+                <i class="material-symbols-outlined">schedule</i>
+                {{ server_time|date:"N j, Y" }}
+            </span>
+        </div>
+    </div>
+
+    {# -- Quick stats bar -------------------------------------------------------- #}
+    <div class="admin-home-quickstats">
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#0891b2">people</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ total_users }}</div>
+                <div class="admin-home-quickstat__label">Total Users</div>
+            </div>
+            {% if new_users_30d %}
+            <span class="admin-home-quickstat__badge admin-home-quickstat__badge--green">+{{ new_users_30d }} this month</span>
+            {% endif %}
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#7c3aed">place</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ total_locations }}</div>
+                <div class="admin-home-quickstat__label">Locations</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#d97706">push_pin</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ total_pins }}</div>
+                <div class="admin-home-quickstat__label">Pins</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#16a34a">person</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ active_users_30d }}</div>
+                <div class="admin-home-quickstat__label">Active (30d)</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#ec4899">photo_library</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ total_photos }}</div>
+                <div class="admin-home-quickstat__label">Photos</div>
+            </div>
+        </div>
+        {% if total_subscriptions %}
+        <div class="admin-home-quickstat">
+            <i class="material-icons" style="color:#6366f1">workspace_premium</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ total_subscriptions }}</div>
+                <div class="admin-home-quickstat__label">Subscriptions</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# -- Navigation cards ------------------------------------------------------- #}
+    <h2 class="admin-home-section-title">
+        <i class="material-symbols-outlined">grid_view</i>
+        Administration
+    </h2>
+    <div class="admin-home-nav-grid">
+
+        <a href="{% url 'site_admin_stats' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(8,145,178,.12)">
+                <i class="material-icons" style="color:#0891b2">bar_chart</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Statistics</div>
+                <div class="admin-nav-card__desc">Usage metrics, growth charts, API call logs, and system health at a glance.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+
+        <a href="{% url 'site_admin' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(99,102,241,.12)">
+                <i class="material-icons" style="color:#6366f1">tune</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Settings</div>
+                <div class="admin-nav-card__desc">Branding, registration mode, login security, backups, and environment overrides.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+
+        <a href="{% url 'site_admin_subscriptions' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(234,179,8,.12)">
+                <i class="material-icons" style="color:#ca8a04">workspace_premium</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Subscriptions</div>
+                <div class="admin-nav-card__desc">Grant, review, and revoke premium access for individual users.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+
+        <a href="{% url 'site_admin_api_limits' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(16,185,129,.12)">
+                <i class="material-icons" style="color:#059669">cloud</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">API Limits</div>
+                <div class="admin-nav-card__desc">Configure per-service rate limits, daily caps, and geo-restrictions for external APIs.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+
+        {% if show_dev_toolbar %}
+        <a href="{% url 'site_admin_ui_components' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(236,72,153,.12)">
+                <i class="material-icons" style="color:#db2777">palette</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">UI Components</div>
+                <div class="admin-nav-card__desc">Visual reference for reusable UI classes and design tokens (dev only).</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+        {% endif %}
+
+    </div>
+
+</div>
+{% endblock %}

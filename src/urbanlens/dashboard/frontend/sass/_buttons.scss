@@ -1,0 +1,286 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+// -- Standard button system ----------------------------------------------------
+// Prefer `.btn` + BEM modifiers for new markup. The button appearance is driven
+// by mixins in _mixins.scss so feature files can @include btn-primary/ghost/danger
+// without duplicating rules here.
+
+@keyframes ul-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.btn {
+	@include btn-base;
+
+	&:focus,
+	&:hover {
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+		background: var(--primary-color);
+	}
+
+	&:disabled {
+		background: var(--ul-grey-4);
+		border-color: var(--ul-grey-5b);
+		color: var(--ul-grey-9a);
+	}
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.05em;
+		flex-shrink: 0;
+	}
+
+	&--primary {
+		background: var(--ul-button-bg);
+		border-color: var(--ul-button-border);
+		color: var(--ul-button-text);
+
+		&:focus,
+		&:hover {
+			background-color: var(--ul-button-hover-bg);
+			border-color: var(--ul-grey-3b);
+			color: var(--ul-button-hover-text);
+		}
+
+		&:active {
+			background-color: var(--ul-button-hover-bg);
+		}
+	}
+
+	&--ghost {
+		border-color: var(--ul-grey-2b);
+		color: var(--ul-grey-7);
+
+		&:focus,
+		&:hover {
+			background: var(--ul-grey-0a);
+			color: var(--ul-grey-8);
+		}
+	}
+
+	&--link {
+		color: var(--ul-primary-color);
+		padding-inline: .5rem;
+		border-color: var(--ul-grey-2b);
+
+		&:focus,
+		&:hover {
+			background: var(--ul-grey-0a);
+		}
+	}
+
+	&--danger {
+		color: $color-red-1300;
+		border-color: $danger-border;
+		background: $danger-bg;
+		text-transform: uppercase;
+
+		&:focus,
+		&:hover {
+			background: color.scale($danger-bg, $lightness: -4%);
+
+			i.material-symbols-outlined,
+			i.material-icons {
+				color: $color-red-1300;
+			}		
+		}
+	}
+
+	&--danger-filled {
+		background: $danger-color;
+		border-color: color.scale($danger-color, $lightness: -10%);
+		color: var(--ul-grey-9);
+		text-transform: uppercase;
+
+		&:focus,
+		&:hover {
+			background: color.adjust($danger-color, $lightness: -8%);
+			border-color: color.adjust($danger-color, $lightness: -8%);
+		}
+	}
+
+	&--sm {
+		padding: .3rem .65rem;
+		font-size: .8rem;
+	}
+
+	&--lg {
+		padding: 0.6rem 1.25rem;
+	}
+
+	&--icon {
+		padding: .45rem;
+		width: 2.2rem;
+		height: 2.2rem;
+		flex-shrink: 0;
+
+		.material-symbols-outlined,
+		.material-icons {
+			font-size: 1.1rem;
+		}
+	}
+	
+    &--social {
+        @extend .btn--primary;
+        gap: .7rem;
+        // Hide border for social buttons, since they're all styled specially. Transparent to maintain spacing for hover border color changes.
+        border-color: transparent;
+    }
+
+    &--google {
+        background: var(--ul-grey-0);
+    }
+
+    &--discord {
+        background: $discord-brand;
+        color: var(--ul-grey-9);
+    }
+
+	&--active {
+		background: var(--secondary-color);
+		color: var(--ul-grey-9);
+	}
+
+	&.is-loading {
+		opacity: .78;
+		pointer-events: none;
+		cursor: not-allowed;
+		@include btn-loading-spinner;
+	}
+}
+
+.social-btn-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+input[type="submit"] {
+	@extend .btn;
+	@extend .btn--lg;
+	@extend .btn--primary;
+	@extend .btn--submit;
+}
+
+// -- Icon-only buttons ---------------------------------------------------------
+// .btn-icon is canonical. .btn-icon is a legacy alias that shares the same
+// base styles so existing templates keep working without changes.
+.btn-icon,
+.btn-icon {
+	@include icon-btn(30px);
+	color: var(--ul-grey-7);
+
+	&:focus-visible {
+		@include focus-ring($alpha: .12);
+	}
+
+	i {
+		font-size: 1.15rem;
+	}
+}
+
+.btn-icon {
+	&--danger {
+
+		&:hover {
+			color: $color-red-1300;
+			border-color: $color-red-1500;
+			background-color: $color-red-500;
+		}
+	}
+
+	&--active {
+		color: $accent-1;
+
+		&:hover,
+		&:focus {
+			background-color: $accent-1-light;
+			color: $accent-1-dark;
+		}
+	}
+
+	&--global-edit {
+		color: $color-amber-500;
+
+		&:hover,
+		&:focus {
+			background-color: $color-amber-500;
+			border-color: $color-amber-500;
+			color: $color-amber-1700;
+		}
+	}
+}
+
+// Absolutely-positioned corner close button used in legacy card/panel contexts.
+// Extends .btn-icon for the base appearance; position overrides make it stick to its container.
+.btn-close {
+	@extend .btn-icon;
+	position: absolute;
+	top: 0.5em;
+	right: 0.5em;
+
+	&:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+}
+
+// - Button Containers
+// A container that toggles between several buttons.
+.btn-togl {
+    display: flex;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    overflow: hidden;
+
+	button,
+    .btn {
+        background: var(--ul-grey-0);
+        border: none;
+        padding: 5px 9px;
+        cursor: pointer;
+        color: $text-muted;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s, color .12s;
+		border-radius: 0;
+        border-right: 1px solid var(--ul-grey-1a);
+
+        &:last-child {
+            border-right: none;
+        }
+
+        i {
+            font-size: 1.1rem;
+        }
+
+        &:hover {
+            background: var(--ul-grey-4);
+            color: var(--ul-grey-8);
+        }
+
+        &.active {
+            background: var(--primary-color);
+            color: var(--ul-grey-9);
+        }
+	}
+}
+
+.btn-group {	
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-shrink: 0;
+}
+
+.dialog {
+	.btn--submit,
+	input[type="submit"] {
+		float: right;
+		margin-top: 6px;
+	}
+}

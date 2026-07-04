@@ -1,0 +1,838 @@
+@use 'variables' as *;
+
+// -- Comment panel ------------------------------------------------------------
+
+.comment-panel {
+    padding: 0;
+
+    .card-header,
+    .wiki-card-header {
+        padding: .75rem 1rem;
+    }
+}
+
+.comment-list,
+.comment-replies {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.comment-list {
+    min-height: 12rem;
+}
+
+.comment-item {
+    display: flex;
+    gap: .65rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-1);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &--reply {
+        background: var(--ul-grey-0);
+        padding-left: 1.2rem;
+    }
+}
+
+.comment-replies {
+    margin-top: .5rem;
+    border-left: 2px solid var(--ul-grey-1a);
+    margin-left: .4rem;
+
+    .comment-item {
+        padding-left: .75rem;
+        border-bottom: none;
+        background: var(--ul-grey-0);
+        border-radius: 6px;
+        margin-bottom: .3rem;
+    }
+}
+
+// -- Avatars ------------------------------------------------------------------
+
+.comment-avatar {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+
+    &--sm {
+        width: 26px;
+        height: 26px;
+    }
+
+    &--compose {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+.comment-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.comment-avatar-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: $color-indigo-100;
+    color: $color-indigo-700;
+    font-weight: 700;
+    font-size: .8rem;
+}
+
+// -- Comment body -------------------------------------------------------------
+
+.comment-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.comment-meta {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .25rem;
+}
+
+.comment-author {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+
+    &--link {
+        text-decoration: none;
+        color: inherit;
+
+        &:hover {
+            text-decoration: underline;
+            color: $color-indigo-600;
+        }
+    }
+}
+
+.comment-date {
+    font-size: .75rem;
+    color: var(--ul-grey-4);
+}
+
+.comment-delete-btn {
+    @include icon-btn-danger(20px);
+    margin-left: auto;
+
+    i {
+        font-size: .85rem;
+    }
+}
+
+.comment-text {
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    line-height: 1.5;
+    word-break: break-word;
+
+    .mention {
+        font-weight: 600;
+        text-decoration: none;
+
+        &--location {
+            color: $color-indigo-600;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+
+        &--activity {
+            color: $color-light-blue-700;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+    }
+}
+
+.comment-image {
+    max-width: 200px;
+    max-height: 160px;
+    border-radius: 6px;
+    margin-top: .4rem;
+    display: block;
+    object-fit: cover;
+}
+
+.comment-image-link {
+    display: inline-block;
+    margin-top: .35rem;
+}
+
+// -- Reply button --------------------------------------------------------------
+
+.comment-reply-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .2rem .3rem;
+    border-radius: 4px;
+    margin-top: .2rem;
+    transition: color .1s, background .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    .reply-count {
+        color: var(--ul-grey-4);
+        font-size: .73rem;
+    }
+
+    &:hover {
+        color: $color-indigo-600;
+        background: var(--ul-grey-0);
+    }
+}
+
+.comment-reply-form {
+    margin-top: .5rem;
+}
+
+// -- Reactions -----------------------------------------------------------------
+
+.comment-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem;
+    margin-top: .35rem;
+}
+
+.reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .15rem .5rem;
+    border-radius: 20px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    font-size: .8rem;
+    cursor: pointer;
+    transition: background .1s, border-color .1s;
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+
+    &--mine {
+        background: var(--ul-accent-purple-bg);
+        border-color: $color-indigo-400;
+        color: var(--ul-accent-purple-fg);
+    }
+}
+
+.reaction-count {
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+
+    .reaction-pill--mine & {
+        color: var(--ul-accent-purple-fg);
+    }
+}
+
+.reaction-picker {
+    position: relative;
+    display: inline-flex;
+}
+
+.reaction-add-btn {
+    background: none;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 20px;
+    padding: .15rem .4rem;
+    cursor: pointer;
+    color: var(--ul-grey-4);
+    font-size: .8rem;
+    display: inline-flex;
+    align-items: center;
+    transition: background .1s, color .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-7);
+    }
+}
+
+.reaction-picker-popup {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .35rem .5rem;
+    z-index: 500;
+    white-space: nowrap;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.reaction-picker-recent {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.reaction-picker-recent-list {
+    display: inline-flex;
+    align-items: center;
+    gap: .15rem;
+}
+
+.reaction-picker-label {
+    color: var(--ul-grey-5);
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+.reaction-picker-divider {
+    align-self: stretch;
+    border-left: 1px solid var(--ul-grey-1a);
+    margin: 0 .2rem;
+}
+
+.reaction-picker-emoji {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.25rem;
+    padding: .15rem .2rem;
+    border-radius: 4px;
+    transition: background .1s, transform .1s;
+
+    &:hover {
+        background: var(--ul-grey-0);
+        transform: scale(1.2);
+    }
+}
+
+// -- Compose form --------------------------------------------------------------
+
+.comment-compose {
+    padding: .75rem 1rem;
+    border-top: 1px solid var(--ul-grey-1);
+    display: flex;
+    gap: .6rem;
+    align-items: flex-start;
+
+    &--reply {
+        padding: 0;
+        border-top: none;
+    }
+}
+
+.comment-compose-inner {
+    display: flex;
+    gap: .6rem;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.comment-compose-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.card {
+    .comment-compose-field {
+        textarea {
+            background-color: var(--ul-grey-0a);
+        }
+    }
+}
+
+.comment-input-wrap {
+    position: relative;
+}
+
+.comment-input {
+    width: 100%;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    font-size: .85rem;
+    resize: vertical;
+    font-family: inherit;
+    transition: border-color .12s;
+
+    &:focus {
+        outline: none;
+        border-color: $color-indigo-500;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, .1);
+    }
+}
+
+.comment-compose-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .4rem;
+    margin-top: .4rem;
+}
+
+// -- Comment map button & chip -------------------------------------------------
+
+.comment-map-btn {
+    background: none;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: .25rem .45rem;
+    color: var(--ul-grey-6);
+    display: inline-flex;
+    align-items: center;
+    font-size: .8rem;
+    gap: .2rem;
+    transition: background .1s, color .1s, border-color .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        background: var(--ul-accent-purple-bg);
+        border-color: $color-indigo-400;
+        color: $color-indigo-700;
+    }
+}
+
+.comment-map-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    background: var(--ul-accent-purple-bg);
+    border: 1px solid $color-indigo-400;
+    border-radius: 6px;
+    padding: .2rem .5rem;
+    font-size: .78rem;
+    color: var(--ul-accent-purple-fg);
+    margin-top: .35rem;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .95rem;
+    }
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.comment-map-chip-edit,
+.comment-map-chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: $color-indigo-600;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .85rem;
+    }
+
+    &:hover {
+        color: $color-indigo-900;
+    }
+}
+
+// -- Comment map preview (thumbnail in comment body) ---------------------------
+
+.comment-map-preview {
+    margin: .5rem 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.comment-map-thumb {
+    height: 180px;
+    width: 100%;
+    pointer-events: none; // thumbnail is non-interactive
+}
+
+.comment-map-expand-btn {
+    position: absolute;
+    bottom: .5rem;
+    right: .5rem;
+    background: rgba(255, 255, 255, .9);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    padding: .2rem .55rem;
+    font-size: .75rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    color: var(--ul-grey-7);
+    backdrop-filter: blur(4px);
+    transition: background .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        background: rgba(255, 255, 255, 1);
+    }
+}
+
+// -- Comment map viewer dialog -------------------------------------------------
+
+.comment-map-view-dialog {
+    @include dialog-base(820px);
+}
+
+.comment-map-view-body {
+    height: 60vh;
+    min-height: 300px;
+}
+
+// -- Comment map composer dialog -----------------------------------------------
+
+.comment-map-composer-dialog {
+    @include dialog-base(900px);
+    max-height: 95vh;
+
+    &[open] {
+        // Explicit height so flex children (body, map) have a real reference to
+        // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
+        // and Leaflet reads a 0px container height.
+        height: min(95vh, 680px);
+    }
+}
+
+.comment-map-composer-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+.comment-map-composer-controls {
+    padding: .5rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-1);
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-shrink: 0;
+}
+
+.cmcc-label {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+}
+
+.cmcc-pin-search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+    display: flex;
+    gap: .35rem;
+}
+
+.cmcc-pin-search {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    padding: .3rem .65rem;
+    font-size: .82rem;
+    font-family: inherit;
+
+    &:focus {
+        outline: none;
+        border-color: $color-indigo-500;
+    }
+
+    &:disabled {
+        opacity: .6;
+        cursor: wait;
+    }
+}
+
+.cmcc-go-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: .3rem .5rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        background: $color-indigo-500;
+        border-color: $color-indigo-500;
+        color: var(--ul-grey-5);
+    }
+}
+
+.cmcc-pin-dropdown {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
+    z-index: 600;
+    max-height: 200px;
+    overflow-y: auto;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.cmcc-pin-option {
+    padding: .45rem .75rem;
+    font-size: .83rem;
+    cursor: pointer;
+    color: var(--ul-grey-7);
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+}
+
+.comment-map-composer-map {
+    flex: 1;
+    // min-height: 400px ensures this item contributes 400px to the flex container's
+    // intrinsic size, so the dialog auto-sizes correctly even without explicit height.
+    min-height: 400px;
+}
+
+.comment-map-composer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .45rem .75rem;
+    border-top: 1px solid var(--ul-grey-1);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.cmc-toolbar-label {
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--ul-grey-4);
+    margin-right: .15rem;
+}
+
+.cmc-toolbar-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--ul-grey-0);
+    margin: 0 .1rem;
+}
+
+.cmc-hint-text {
+    margin-left: auto;
+    font-size: .72rem;
+    color: var(--ul-grey-4);
+    font-style: italic;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.cmc-layer-btn,
+.cmc-tool-btn,
+.cmc-undo-btn,
+.cmc-clear-btn {
+    background: none;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    padding: .2rem .45rem;
+    cursor: pointer;
+    color: var(--ul-grey-7);
+    display: inline-flex;
+    align-items: center;
+    transition: background .1s, border-color .1s, color .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+
+    &.is-active {
+        background: var(--ul-accent-purple-bg);
+        border-color: $color-indigo-400;
+        color: var(--ul-accent-purple-fg);
+    }
+}
+
+.cmc-color-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    input[type="color"] {
+        width: 28px;
+        height: 22px;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 4px;
+        padding: 1px;
+        cursor: pointer;
+    }
+}
+
+// Text label div-icon
+.cmc-text-label {
+    background: none;
+    border: none;
+    font-size: .85rem;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, .8);
+}
+
+
+// [data-theme="dark"] comment overrides → _dark.scss
+
+.comment-image-label {
+    cursor: pointer;
+    color: var(--ul-grey-4);
+    display: flex;
+    align-items: center;
+    padding: .2rem;
+    border-radius: 4px;
+    transition: color .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        color: $color-indigo-500;
+    }
+
+    input[type="file"] {
+        display: none;
+    }
+}
+
+.comment-image-input {
+    display: none;
+}
+
+.comment-image-preview {
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comment-empty {
+    display: none;
+}
+
+// -- @mention autocomplete ------------------------------------------------------
+
+.mention-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 600;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.mention-option {
+    padding: .45rem .75rem;
+    font-size: .84rem;
+    cursor: pointer;
+    color: var(--ul-grey-7);
+    border-bottom: 1px solid var(--ul-grey-0);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover,
+    &.is-selected {
+        background: var(--ul-grey-0);
+        color: $color-indigo-700;
+    }
+
+    &__name {
+        font-weight: 500;
+    }
+}

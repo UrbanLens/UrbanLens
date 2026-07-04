@@ -1,0 +1,38 @@
+{% comment %}
+Single 1-5 star-rating stat item (priority / danger / vulnerability / rating) with quick-edit
+buttons. Rendered both inline as part of pin_overview_partial.html and standalone as the
+minimal response to a single star click (see PinEditView.post).
+
+Usage:
+  {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="..." modifier="priority" wide=False client_version=client_version %}
+{% endcomment %}
+{% load dashboard_tags %}
+<div class="pin-stat-item" id="pin-stat-{{ field }}">
+    <span class="field-label">
+        {% include "dashboard/partials/ui/_tooltip_label.html" with label=label help=help wide=wide %}
+    </span>
+    <span class="field-value">
+        {% with value=pin|get_attr:field %}
+        <span class="star-rating-interactive{% if modifier %} star-rating-interactive--{{ modifier }}{% endif %}">
+            {% for i in "12345"|make_list %}
+            <button type="button"
+                    class="sr-star-btn{% if value and forloop.counter <= value %} sr-star-btn--on{% endif %}"
+                    hx-post="{% url 'pin.edit' pin.slug %}"
+                    hx-target="#pin-stat-{{ field }}"
+                    hx-swap="outerHTML"
+                    hx-vals='{"{{ field }}": {{ forloop.counter }}, "client_version": "{{ client_version }}"}'
+                    title="{{ label }} {{ forloop.counter }}">★</button>
+            {% endfor %}
+            {% if value %}
+            <button type="button"
+                    class="sr-star-clear"
+                    hx-post="{% url 'pin.edit' pin.slug %}"
+                    hx-target="#pin-stat-{{ field }}"
+                    hx-swap="outerHTML"
+                    hx-vals='{"{{ field }}": 0, "client_version": "{{ client_version }}"}'
+                    title="Clear {{ label|lower }}">x</button>
+            {% endif %}
+        </span>
+        {% endwith %}
+    </span>
+</div>

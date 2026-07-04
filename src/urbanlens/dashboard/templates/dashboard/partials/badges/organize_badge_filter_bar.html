@@ -1,0 +1,17 @@
+<div id="{{ ns }}-filter-bar" class="org-filter-bar" data-filter-ns="{{ filter_ns }}">
+    <input type="search" id="{{ ns }}-filter-search" class="org-filter-search"
+           placeholder="Search {{ plural_lower }}..." autocomplete="off">
+    <div class="org-filter-chips">
+        <button type="button" class="org-filter-chip" data-filter="has-icon" data-mutex="no-icon"><i class="material-symbols-outlined">image</i> Has icon</button>
+        <button type="button" class="org-filter-chip" data-filter="no-icon" data-mutex="has-icon"><i class="material-symbols-outlined">hide_image</i> No icon</button>
+        <button type="button" class="org-filter-chip" data-filter="has-children"><i class="material-symbols-outlined">account_tree</i> Has children</button>
+        <button type="button" class="org-filter-chip" data-filter="has-parents"><i class="material-symbols-outlined">call_merge</i> Has parents</button>
+        <div class="org-filter-color-row">
+            <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color" title="Show only items with a color"><i class="material-symbols-outlined">palette</i></button>
+            {% for hex, label in color_choices %}<button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}" style="background:{{ hex }};"></button>{% endfor %}
+            <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color" title="Show only items without a color"><i class="material-symbols-outlined">block</i></button>
+        </div>
+        <button type="button" class="org-filter-clear">✕ Clear</button>
+    </div>
+    <button type="button" class="org-filter-close" title="Close filter"><i class="material-symbols-outlined">close</i></button>
+</div>

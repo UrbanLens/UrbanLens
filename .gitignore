@@ -1,0 +1,46 @@
+# Server state - Could contain sensitive details
+*.log
+
+# Compiled code
+__pycache__/
+*.pyc
+**/frontend/static/admin/
+**/frontend/static/**/*.css
+
+# Libraries (npm, etc)
+node_modules
+package-lock.json
+.venv/
+.venv_windows/
+
+# Temporary files
+*.out
+*.tmp
+*.swp
+.*cache
+docs/prompts.txt
+
+# VSCode stuff per user (keep shared workspace config)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.favorites.json
+notes/
+.coverage
+
+# Secrets, authentication, etc
+.env
+bin/conf/
+bin/settings.py
+.pgpass
+
+# Database files
+*.sqlite3-journal
+*db.sqlite3
+pgsql
+src/urbanlens/frontend/static/dashboard/images/
+.claude/settings.local.json
+.vscode/settings.json
+.cursor/

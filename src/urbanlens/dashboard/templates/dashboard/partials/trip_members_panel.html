@@ -1,0 +1,107 @@
+<div id="trip-members-panel" class="trip-panel card">
+    <div class="card-header">
+        <i class="material-icons">group</i>
+        <span>Members</span>
+        {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
+        {% if profile == trip.creator %}
+        <button type="button" class="btn btn--sm btn--primary"
+                onclick="document.getElementById('add-member-dialog').showModal()">
+            <i class="material-icons">add</i>
+        </button>
+        {% endif %}
+    </div>
+
+    {% if members %}
+    <ul class="trip-member-list">
+        {% for membership in members %}
+        {% with member=membership.profile %}
+        <li class="trip-member-item" id="trip-member-{{ member.id }}">
+            <div class="trip-member-avatar">
+                {% if member.avatar %}
+                <img src="{{ member.avatar.url }}" alt="" class="trip-member-avatar-img">
+                {% else %}
+                <span class="trip-member-avatar-initial">{{ member.user.username|first|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="trip-member-info">
+                <a href="{% url 'profile.view_user' member.slug %}" class="trip-member-name trip-member-name--link">{{ member.user.get_full_name|default:member.user.username }}</a>
+                <span class="trip-member-username">@{{ member.user.username }}</span>
+            </div>
+
+            {# Role badge #}
+            {% if member == trip.creator %}
+            <span class="trip-member-badge trip-member-badge--creator">creator</span>
+            {% elif membership.is_organizer %}
+            <span class="trip-member-badge trip-member-badge--organizer">organizer</span>
+            {% endif %}
+
+            {# RSVP: clickable dropdown for current user, static badge for others #}
+            {% if membership.profile == profile %}
+            <div class="trip-member-rsvp-wrap">
+                <button type="button"
+                        class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"
+                        title="Change your RSVP"
+                        onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
+                    {% if membership.rsvp == 'yes' %}Yes
+                    {% elif membership.rsvp == 'no' %}No
+                    {% elif membership.rsvp == 'maybe' %}Maybe
+                    {% else %}RSVP{% endif %}
+                    <i class="material-icons" style="font-size:.75rem;vertical-align:middle;margin-left:1px">expand_more</i>
+                </button>
+                <div class="rsvp-popup" id="rsvp-popup-{{ member.id }}" hidden>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--yes"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Yes</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--no"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>No</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--maybe"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "maybe"}'>Maybe</button>
+                    <button type="button" class="rsvp-popup-opt rsvp-popup-opt--clear"
+                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": ""}'>Clear</button>
+                </div>
+            </div>
+            {% else %}
+            <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}">
+                {% if membership.rsvp == 'yes' %}Yes
+                {% elif membership.rsvp == 'no' %}No
+                {% elif membership.rsvp == 'maybe' %}Maybe
+                {% else %}-{% endif %}
+            </span>
+            {% endif %}
+
+            {# Actions: creator manages others; current user can leave #}
+            <div class="trip-member-actions">
+                {% if profile == trip.creator and member != trip.creator %}
+                <button type="button"
+                        class="detail-pin-action-btn trip-organizer-btn{% if membership.is_organizer %} trip-organizer-btn--active{% endif %}"
+                        title="{% if membership.is_organizer %}Remove organizer role{% else %}Make organizer{% endif %}"
+                        hx-post="{% url 'trips.member.organizer' trip.uuid member.id %}"
+                        hx-target="#trip-members-panel"
+                        hx-swap="outerHTML">
+                    <i class="material-icons">{% if membership.is_organizer %}manage_accounts{% else %}workspace_premium{% endif %}</i>
+                </button>
+                <button type="button" class="detail-pin-action-btn"
+                        title="Remove member"
+                        hx-delete="{% url 'trips.member.remove' trip.uuid member.id %}"
+                        hx-target="#trip-members-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Remove {{ member.user.username }} from this trip?"
+                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                    <i class="material-icons">person_remove</i>
+                </button>
+                {% elif membership.profile == profile and profile != trip.creator %}
+                <button type="button" class="detail-pin-action-btn"
+                        title="Leave trip"
+                        hx-delete="{% url 'trips.leave' trip.uuid %}"
+                        hx-confirm="Leave this trip? You can be re-added by the creator.">
+                    <i class="material-icons">exit_to_app</i>
+                </button>
+                {% endif %}
+            </div>
+        </li>
+        {% endwith %}
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="trip-panel-empty">No members yet.</p>
+    {% endif %}
+</div>

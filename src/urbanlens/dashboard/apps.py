@@ -1,0 +1,20 @@
+# Generic imports
+from __future__ import annotations
+
+from django.apps import AppConfig
+
+
+class DashboardConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "urbanlens.dashboard"
+
+    def ready(self):
+        from django.db.models.signals import post_save
+
+        from urbanlens.dashboard.models.badges.signals import create_default_tags
+        import urbanlens.dashboard.models.location.signals
+        import urbanlens.dashboard.models.pin.signals
+        from urbanlens.dashboard.models.profile.model import Profile
+        import urbanlens.dashboard.models.profile.signals
+
+        post_save.connect(create_default_tags, sender=Profile, dispatch_uid="badge_create_default_tags")

@@ -1,0 +1,1551 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="trip-detail-page page-content">
+    <div id="trip-onboarding" class="page-onboarding" aria-live="polite"></div>
+
+    {# -- Trip header ----------------------------------------------------- #}
+    <div id="trip-header">
+        {% include "dashboard/partials/trips/trip_header_partial.html" %}
+    </div>
+
+    {# -- Activity map ---------------------------------------------------- #}
+    <div class="trip-map-wrap" id="trip-map-wrap">
+        <div id="trip-map"></div>
+        <div class="trip-map-overlay">
+            <button type="button" class="btn btn--icon trip-map-past-btn" id="trip-map-completed-toggle"
+                    onclick="window.tripToggleShowCompleted()"
+                    data-tooltip="Toggle past activities on the trip map."
+                    aria-label="Show completed activities">
+                <i class="material-symbols-outlined">history</i>
+            </button>
+        </div>
+        <p class="trip-map-empty" id="trip-map-empty" hidden>No locations to display.</p>
+    </div>
+
+    {# -- Sortable sections - draggable per user, order stored in localStorage -- #}
+    <div id="trip-sections" class="trip-sections">
+
+        {# Activities #}
+        <div class="trip-section" data-section="activities">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-symbols-outlined">drag_indicator</i>
+            </div>
+            <section class="trip-detail-section trip-detail-activities">
+                <div id="trip-activities-panel"
+                     hx-get="{% url 'trips.activities' trip.uuid %}"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="trip-panel-loading">
+                        <i class="material-icons rotating">refresh</i>
+                        Loading activities...
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        {# Members #}
+        <div class="trip-section" data-section="members">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-symbols-outlined">drag_indicator</i>
+            </div>
+            <div id="trip-members-panel"
+                 hx-get="{% url 'trips.members' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading members...
+                </div>
+            </div>
+        </div>
+
+        {# Comments #}
+        <div class="trip-section" data-section="comments">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-symbols-outlined">drag_indicator</i>
+            </div>
+            <div id="trip-comments-panel"
+                 hx-get="{% url 'trips.comments' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading comments...
+                </div>
+            </div>
+        </div>
+
+        {# Weather - default last per requirements #}
+        <div class="trip-section" data-section="weather">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-symbols-outlined">drag_indicator</i>
+            </div>
+            <div id="trip-weather-panel"
+                 hx-get="{% url 'trips.weather' trip.uuid %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading weather...
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+{# -- Edit trip dialog ----------------------------------------------------- #}
+<dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Trip" %}
+    <form hx-post="{% url 'trips.edit' trip.uuid %}"
+          hx-target="#trip-header"
+          hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="edit-trip-name">Trip name <span class="required">*</span></label>
+            <input type="text" name="name" id="edit-trip-name" required
+                   value="{{ trip.name }}" maxlength="255">
+        </div>
+        <div class="form-row">
+            <label for="edit-trip-description">Description</label>
+            <textarea name="description" id="edit-trip-description" rows="3">{{ trip.description|default:"" }}</textarea>
+        </div>
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="edit-trip-start">Start date</label>
+                <input type="date" name="start_date" id="edit-trip-start"
+                       value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div>
+                <label for="edit-trip-end">End date</label>
+                <input type="date" name="end_date" id="edit-trip-end"
+                       value="{{ trip.end_date|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# -- Add activity dialog -------------------------------------------------- #}
+<dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Activity" %}
+    <form id="add-activity-form"
+          hx-post="{% url 'trips.activities' trip.uuid %}"
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
+          class="trip-create-form">
+        {% csrf_token %}
+
+        {# Name hidden by default - reveal with toggle #}
+        <div id="add-activity-name-wrap" hidden>
+            <div class="form-row">
+                <label for="activity-title">Custom Name <small>(optional)</small></label>
+                <input type="text" name="title" id="activity-title"
+                       placeholder="e.g. Rooftop access point" maxlength="255">
+            </div>
+        </div>
+        <div class="form-row" style="margin-bottom:.1rem">
+            <button type="button" class="btn btn--ghost" id="add-activity-name-toggle"
+                    style="font-size:.8rem;padding:.25rem .5rem"
+                    onclick="_toggleAddActivityName()">
+                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
+            </button>
+        </div>
+
+        <div class="form-row">
+            <label>Location <small>(optional - search existing or enter an address)</small></label>
+            <div class="activity-location-search-wrap">
+                <input type="text" id="activity-location-search"
+                       placeholder="Search by name or address..." autocomplete="off">
+                <input type="hidden" name="location_uuid" id="activity-location-uuid">
+                <input type="hidden" name="pin_uuid" id="activity-pin-uuid">
+                <input type="hidden" name="geocoded_lat" id="activity-geocoded-lat">
+                <input type="hidden" name="geocoded_lng" id="activity-geocoded-lng">
+                <input type="hidden" name="geocoded_name" id="activity-geocoded-name">
+                <div id="activity-location-suggestions" class="location-suggestions" hidden></div>
+                <span id="activity-location-display" class="activity-location-display"></span>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Start <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_date" id="activity-date"
+                       value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
+                <input type="time" name="scheduled_time" id="activity-time">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>End <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_end_date" id="activity-end-date">
+                <input type="time" name="scheduled_end_time" id="activity-end-time">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Child Trip <small>(optional - link another trip as an activity)</small></label>
+            <div class="activity-child-trip-wrap">
+                <input type="text" id="activity-child-trip-search"
+                       placeholder="Search your trips..." autocomplete="off">
+                <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
+                <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
+                <span id="activity-child-trip-display" class="activity-location-display"></span>
+                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="activity-child-trip-clear"
+                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
+                        onclick="_clearChildTrip('add')">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+                </button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="activity-notes">Notes</label>
+            <textarea name="notes" id="activity-notes" rows="3"
+                      placeholder="Any notes about this stop..."></textarea>
+        </div>
+        <div class="form-row">
+            <label>Status</label>
+            <input type="hidden" name="status" id="add-activity-status-input" value="proposed">
+            <div class="status-pill-toggle" role="group" aria-label="Activity status">
+                <button type="button" class="status-pill-btn is-active" data-value="proposed"
+                        onclick="_setStatusPill('add', 'proposed')">
+                    <i class="material-symbols-outlined">schedule</i> Proposed
+                </button>
+                <button type="button" class="status-pill-btn" data-value="confirmed"
+                        onclick="_setStatusPill('add', 'confirmed')">
+                    <i class="material-symbols-outlined">check_circle</i> Confirmed
+                </button>
+            </div>
+        </div>
+        <div class="form-row form-row--toggle">
+            <label class="activity-hide-label">
+                <input type="checkbox" name="location_hidden" id="add-activity-location-hidden" value="true">
+                <i class="material-symbols-outlined">visibility_off</i>
+                Hide location
+            </label>
+            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Activity</button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# -- Edit activity dialog ------------------------------------------------- #}
+<dialog id="edit-activity-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Activity" %}
+    <form id="edit-activity-form"
+          hx-post=""
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();if(window.refreshTripMap)window.refreshTripMap();}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row" style="margin-bottom:.1rem">
+            <button type="button" class="btn btn--ghost" id="edit-activity-name-toggle"
+                    style="font-size:.8rem;padding:.25rem .5rem"
+                    onclick="_toggleEditActivityName()">
+                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
+            </button>
+        </div>
+        <div id="edit-activity-name-wrap" hidden>
+            <div class="form-row">
+                <label for="edit-activity-title">Custom Name <small>(optional)</small></label>
+                <input type="text" name="title" id="edit-activity-title"
+                       placeholder="e.g. Rooftop access point" maxlength="255">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Location <small>(optional)</small></label>
+            <div class="activity-location-search-wrap">
+                <input type="text" id="edit-activity-location-search"
+                       placeholder="Search by name or address..." autocomplete="off">
+                <input type="hidden" name="location_uuid" id="edit-activity-location-uuid">
+                <input type="hidden" name="pin_uuid" id="edit-activity-pin-uuid">
+                <input type="hidden" name="geocoded_lat" id="edit-activity-geocoded-lat">
+                <input type="hidden" name="geocoded_lng" id="edit-activity-geocoded-lng">
+                <input type="hidden" name="geocoded_name" id="edit-activity-geocoded-name">
+                <div id="edit-activity-location-suggestions" class="location-suggestions" hidden></div>
+                <span id="edit-activity-location-display" class="activity-location-display"></span>
+            </div>
+            <button type="button" class="btn btn--ghost"
+                    onclick="_clearEditLocation()" style="margin-top:.35rem;font-size:.8rem;padding:.25rem .6rem">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">clear</i> Clear location
+            </button>
+        </div>
+
+        <div class="form-row">
+            <label>Start <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_date" id="edit-activity-date">
+                <input type="time" name="scheduled_time" id="edit-activity-time">
+                <button type="button" class="btn btn--ghost"
+                        style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
+                        onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>End <small>(optional)</small></label>
+            <div class="activity-datetime-row">
+                <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
+                <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
+                <button type="button" class="btn btn--ghost"
+                        style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
+                        onclick="document.getElementById('edit-activity-end-date').value='';document.getElementById('edit-activity-end-time').value=''">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
+                </button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Child Trip <small>(optional)</small></label>
+            <div class="activity-child-trip-wrap">
+                <input type="text" id="edit-activity-child-trip-search"
+                       placeholder="Search your trips..." autocomplete="off">
+                <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
+                <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
+                <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
+                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
+                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
+                        onclick="_clearChildTrip('edit')">
+                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+                </button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label for="edit-activity-notes">Notes</label>
+            <textarea name="notes" id="edit-activity-notes" rows="3"
+                      placeholder="Any notes about this stop..."></textarea>
+        </div>
+        <div class="form-row">
+            <label>Status</label>
+            <input type="hidden" name="status" id="edit-activity-status-input" value="proposed">
+            <div class="status-pill-toggle" role="group" aria-label="Activity status">
+                <button type="button" class="status-pill-btn is-active" data-value="proposed"
+                        onclick="_setStatusPill('edit', 'proposed')">
+                    <i class="material-symbols-outlined">schedule</i> Proposed
+                </button>
+                <button type="button" class="status-pill-btn" data-value="confirmed"
+                        onclick="_setStatusPill('edit', 'confirmed')">
+                    <i class="material-symbols-outlined">check_circle</i> Confirmed
+                </button>
+            </div>
+        </div>
+        <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
+            <label class="activity-hide-label">
+                <input type="checkbox" name="location_hidden" id="edit-activity-location-hidden" value="true">
+                <i class="material-symbols-outlined">visibility_off</i>
+                Hide location
+            </label>
+            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
+        </div>
+        <div class="form-actions form-actions--split">
+            <button type="button" class="btn btn--danger" id="edit-activity-delete-btn"
+                    onclick="_deleteEditActivity()">
+                <i class="material-symbols-outlined">delete</i> Delete
+            </button>
+            <div class="form-actions-right">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>
+                <button type="button" class="btn btn--ghost"
+                        onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </div>
+    </form>
+</dialog>
+
+{# -- Mark as completed dialog ---------------------------------------------- #}
+<dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Mark as Completed" %}
+    <form id="trip-complete-form"
+          hx-post=""
+          hx-target="#trip-activities-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful)document.getElementById('trip-complete-dialog').close()"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <p style="margin:0 0 .75rem;color:var(--ul-text-muted,#6b7280)">When was this activity completed?</p>
+            <label for="trip-complete-date">Date completed</label>
+            <input type="date" name="completed_date" id="trip-complete-date"
+                   style="width:100%;max-width:240px;margin-top:.25rem">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">
+                <i class="material-icons" style="font-size:1rem;vertical-align:middle">check_circle</i>
+                Mark Complete
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# -- Trip settings dialog --------------------------------------------------- #}
+{% if viewer_is_organizer %}
+<dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Trip Settings" %}
+    <div id="trip-settings-content">
+        {% include "dashboard/partials/trips/trip_settings_partial.html" %}
+    </div>
+</dialog>
+{% endif %}
+
+{# -- Add member dialog ---------------------------------------------------- #}
+<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
+    <form hx-post="{% url 'trips.members' trip.uuid %}"
+          hx-target="#trip-members-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          hx-on::response-error="toastr.error(event.detail.xhr.responseText || 'Could not add member.')"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="member-username">Username <span class="required">*</span></label>
+            <input type="text" name="username" id="member-username" required
+                   placeholder="Enter exact username">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Member</button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+(function initTripOnboarding() {
+    {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
+    const prefix = 'ul_onboarding_v1_trip_{{ trip.uuid }}';
+    const sessionKey = prefix + '_later';
+    const cards = [
+        {
+            id: 'activities', icon: 'playlist_add', target: '#trip-activities-panel, .trip-detail-activities',
+            eyebrow: 'Itinerary', title: 'Activities are proposed or confirmed stops',
+            body: 'Add locations, times, notes, secret stops, or even a child trip. Votes let the group weigh in on what makes the final plan.',
+            button: 'Add an activity', watchSelector: '#trip-activities-panel [type="button"]',
+            action: function () {
+                var addBtn = document.querySelector('#trip-activities-panel .add-activity-btn, #trip-activities-panel [data-action="add"]');
+                if (addBtn) addBtn.click(); else document.getElementById('trip-activities-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            },
+            ready: function () { return !!document.getElementById('trip-activities-panel'); },
+        },
+        {
+            id: 'members-rsvp', icon: 'groups', target: '#trip-members-panel',
+            eyebrow: 'Coordination', title: 'Members can RSVP and organizers can manage planning permissions',
+            body: 'Use the Members panel to see who is coming, promote organizers, or invite the right collaborators.',
+            button: 'View members', watchSelector: '#trip-members-panel [type="button"]',
+            action: function () { document.getElementById('trip-members-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
+            ready: function () { return !!document.getElementById('trip-members-panel'); },
+        },
+        {
+            id: 'section-layout', icon: 'drag_indicator', target: '#trip-sections .trip-section-grip, #trip-sections',
+            eyebrow: 'Personal layout', title: 'Reorder trip sections for the way you plan',
+            body: 'Drag the grip handles to put activities, members, comments, or weather where you need them. The order saves automatically.',
+            button: 'Show sections', watchSelector: '.trip-section-grip', watchEvent: 'pointerdown',
+            action: function () { document.getElementById('trip-sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+            ready: function () { return !!document.getElementById('trip-sections'); },
+        },
+    ];
+    function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }
+    function dismiss(id) { try { localStorage.setItem(prefix + '_' + id + '_dismissed', '1'); } catch (_) {} }
+    function later() { try { sessionStorage.setItem(sessionKey, '1'); } catch (_) {} }
+    function laterSet() { try { return sessionStorage.getItem(sessionKey) === '1'; } catch (_) { return false; } }
+    function clear() { document.getElementById('trip-onboarding')?.replaceChildren(); document.querySelectorAll('.onboarding-focus').forEach(el => el.classList.remove('onboarding-focus')); }
+    function registerAutoDismiss(card) {
+        if (dismissed(card.id) || !card.watchSelector) return;
+        document.querySelectorAll(card.watchSelector).forEach(function (el) {
+            el.addEventListener(card.watchEvent || 'click', function () { dismiss(card.id); }, { once: true });
+        });
+    }
+    function show(card) {
+        const host = document.getElementById('trip-onboarding'); if (!host) return;
+        clear(); document.querySelector(card.target)?.classList.add('onboarding-focus');
+        const el = document.createElement('section'); el.className = 'page-onboarding-card';
+        el.innerHTML = '<div class="page-onboarding-card__icon"><i class="material-icons">' + card.icon + '</i></div>' +
+            '<div class="page-onboarding-card__body"><div class="page-onboarding-card__eyebrow">' + card.eyebrow + '</div>' +
+            '<h2>' + card.title + '</h2><p>' + card.body + '</p><div class="page-onboarding-card__actions">' +
+            '<button type="button" class="btn btn--primary js-onboarding-action">' + card.button + '</button>' +
+            '<button type="button" class="btn btn--ghost js-onboarding-later">Later</button>' +
+            '<button type="button" class="page-onboarding-dismiss js-onboarding-dismiss">Don\'t show again</button></div></div>' +
+            '<button type="button" class="page-onboarding-x js-onboarding-later" aria-label="Close"><i class="material-symbols-outlined">close</i></button>';
+        host.appendChild(el);
+        el.querySelector('.js-onboarding-action').addEventListener('click', function () { dismiss(card.id); clear(); card.action(); });
+        el.querySelectorAll('.js-onboarding-later').forEach(btn => btn.addEventListener('click', function () { later(); clear(); }));
+        el.querySelector('.js-onboarding-dismiss').addEventListener('click', function () { dismiss(card.id); clear(); });
+    }
+    function tryShow() { if (laterSet()) return; const card = cards.find(c => c.ready() && !dismissed(c.id)); if (card) show(card); }
+    cards.forEach(registerAutoDismiss);
+    setTimeout(tryShow, 900);
+    document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
+}());
+
+
+(function () {
+    // -- Trip activity map ------------------------------------------------
+    var mapEl  = document.getElementById('trip-map');
+    var emptyEl = document.getElementById('trip-map-empty');
+    var wrapEl = document.getElementById('trip-map-wrap');
+
+    if (!mapEl) return;
+
+    var _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
+    var _SERVER_CENTER_LAT = {{ map_center_lat|default:"null" }};
+    var _SERVER_CENTER_LNG = {{ map_center_lng|default:"null" }};
+    var _GPS_FALLBACK_LAT  = {{ gps_fallback_lat|default:"null" }};
+    var _GPS_FALLBACK_LNG  = {{ gps_fallback_lng|default:"null" }};
+    var _CONTINENT_ZOOM    = 3;
+
+    var _map = null;
+    var _markersGroup = null;
+    var _markers = {};   // activity_id → L.Marker
+
+    // Context menu for right-click to add activity
+    var _ctxMenu = null;
+    function _removeCtxMenu() {
+        if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
+    }
+
+    function _showCtxMenu(latlng, containerPt) {
+        _removeCtxMenu();
+        var menu = document.createElement('div');
+        menu.className = 'trip-map-ctx-menu';
+        menu.style.left = containerPt.x + 'px';
+        menu.style.top  = containerPt.y + 'px';
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'trip-map-ctx-item';
+        btn.innerHTML = '<i class="material-symbols-outlined">add_location</i> Add activity here';
+        btn.addEventListener('click', function () {
+            _removeCtxMenu();
+            _openAddActivityAtCoords(latlng.lat, latlng.lng);
+        });
+        menu.appendChild(btn);
+
+        var mapWrap = document.getElementById('trip-map-wrap');
+        mapWrap.appendChild(menu);
+        _ctxMenu = menu;
+    }
+
+    function _openAddActivityAtCoords(lat, lng) {
+        document.getElementById('activity-geocoded-lat').value  = lat;
+        document.getElementById('activity-geocoded-lng').value  = lng;
+        document.getElementById('activity-geocoded-name').value = '';
+        document.getElementById('activity-location-uuid').value = '';
+        document.getElementById('activity-location-display').textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+        document.getElementById('add-activity-dialog').showModal();
+    }
+
+    function _defaultCenter() {
+        if (_SERVER_CENTER_LAT !== null && _SERVER_CENTER_LNG !== null) {
+            return [_SERVER_CENTER_LAT, _SERVER_CENTER_LNG];
+        }
+        if (_GPS_FALLBACK_LAT !== null && _GPS_FALLBACK_LNG !== null) {
+            return [_GPS_FALLBACK_LAT, _GPS_FALLBACK_LNG];
+        }
+        return [40.7128, -74.0060];
+    }
+
+    function _applyMapCenter(callback) {
+        if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) { callback(pos.coords.latitude, pos.coords.longitude); },
+                function () {
+                    var center = _defaultCenter();
+                    callback(center[0], center[1]);
+                },
+                { timeout: 8000, maximumAge: 300000 }
+            );
+            return;
+        }
+        var center = _defaultCenter();
+        callback(center[0], center[1]);
+    }
+
+    function _setContinentView() {
+        _applyMapCenter(function (lat, lng) {
+            if (_map) _map.setView([lat, lng], _CONTINENT_ZOOM);
+        });
+    }
+
+    function _showEmptyMap() {
+        wrapEl.hidden = false;
+        mapEl.hidden = false;
+        if (emptyEl) emptyEl.hidden = false;
+
+        if (!_map) _initMap();
+        else {
+            _markersGroup.clearLayers();
+            _markers = {};
+        }
+        _setContinentView();
+    }
+
+    function _initMap() {
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19,
+        });
+        var satellite = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            maxZoom: 18,
+        });
+        var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+            maxZoom: 17,
+        });
+
+        _map = L.map('trip-map', {contextmenu: false});
+        osm.addTo(_map);
+        L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(_map);
+        _markersGroup = L.layerGroup().addTo(_map);
+
+        // Right-click on map → context menu to add activity at those coords
+        _map.on('contextmenu', function (e) {
+            L.DomEvent.preventDefault(e.originalEvent);
+            var pt = _map.latLngToContainerPoint(e.latlng);
+            _showCtxMenu(e.latlng, pt);
+        });
+        _map.on('click', _removeCtxMenu);
+        _map.on('movestart', _removeCtxMenu);
+
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') _removeCtxMenu();
+        });
+
+        window.tripHighlightActivity = function (actId, on) {
+            var el = document.getElementById('trip-activity-' + actId);
+            if (el) el.classList.toggle('trip-activity--highlighted', on);
+        };
+        window.tripHighlightMarker = function (actId, on) {
+            var m = _markers[actId];
+            if (m) {
+                var el = m.getElement();
+                if (el) el.classList.toggle('trip-map-marker--highlighted', on);
+            }
+        };
+        // Correct any sizing discrepancy from layout settling after init
+        setTimeout(function () { _map.invalidateSize(); }, 100);
+    }
+
+    function _loadPoints() {
+        var url = '{% url "trips.map_data" trip.uuid %}';
+        if (window._tripShowCompleted) url += '?include_past=1';
+        fetch(url, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            var points = data.points || [];
+
+            if (!points.length) {
+                _showEmptyMap();
+                return;
+            }
+
+            wrapEl.hidden = false;
+            mapEl.hidden = false;
+            if (emptyEl) emptyEl.hidden = true;
+
+            if (!_map) _initMap();
+
+            _markersGroup.clearLayers();
+            _markers = {};
+
+            var bounds = [];
+            points.forEach(function (pt) {
+                var isChildTrip = !!pt.child_trip;
+                var markerClass = 'trip-map-marker' +
+                    (pt.status === 'proposed' ? ' trip-map-marker--proposed' : '') +
+                    (isChildTrip ? ' trip-map-marker--child-trip' : '');
+                var numHtml = pt.index != null
+                    ? '<span class="trip-map-marker-num">' + pt.index + '</span>'
+                    : '<span class="trip-map-marker-num trip-map-marker-num--ghost"><i class="material-icons" style="font-size:13px;line-height:1">link</i></span>';
+                var icon = L.divIcon({
+                    className: markerClass,
+                    html: numHtml,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14],
+                    popupAnchor: [0, -16],
+                });
+                var popup = '<strong>' + pt.label + '</strong>';
+                if (pt.scheduled_at) {
+                    popup += '<br><small>' + new Date(pt.scheduled_at).toLocaleString() + '</small>';
+                }
+                var markerOpts = {icon: icon, draggable: !isChildTrip && !!pt.draggable};
+                var marker = L.marker([pt.lat, pt.lng], markerOpts).bindPopup(popup);
+
+                if (pt.activity_id) {
+                    var actId = pt.activity_id;
+                    marker.on('mouseover', function () { window.tripHighlightActivity(actId, true); });
+                    marker.on('mouseout',  function () { window.tripHighlightActivity(actId, false); });
+                    _markers[actId] = marker;
+
+                    if (!isChildTrip && pt.draggable) {
+                        (function (aId, m, savedLat, savedLng) {
+                            var dragUnlocked = false;
+                            var PIN_DRAG_CONFIRM_ZOOM = 14;
+                            var posUrl = '{% url "trips.activity.position" trip.uuid 0 %}'.replace('/0/', '/' + aId + '/');
+
+                            m.on('dragstart', function () {
+                                if (_map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !dragUnlocked) {
+                                    m.dragging.disable();
+                                    m.setLatLng([savedLat, savedLng]);
+                                    window.confirmDialog({
+                                        title: 'Move activity?',
+                                        message: 'At this zoom level it is easy to move a marker by accident.\n\nDrag again after confirming to reposition it.',
+                                        confirmLabel: 'Enable move',
+                                        danger: false,
+                                    }).then(function (ok) {
+                                        if (ok) {
+                                            dragUnlocked = true;
+                                            m.dragging.enable();
+                                            toastr && toastr.info('Drag the marker to its new location.');
+                                        }
+                                    });
+                                    return;
+                                }
+                            });
+
+                            m.on('dragend', function (ev) {
+                                dragUnlocked = false;
+                                var ll = ev.target.getLatLng();
+                                fetch(posUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                    },
+                                    body: JSON.stringify({lat: ll.lat, lng: ll.lng}),
+                                }).catch(function () {
+                                    toastr && toastr.error('Could not save new position.');
+                                });
+                            });
+                        }(actId, marker, pt.lat, pt.lng));
+                    }
+                }
+                marker.addTo(_markersGroup);
+                bounds.push([pt.lat, pt.lng]);
+            });
+
+            if (bounds.length === 1) {
+                _map.setView(bounds[0], 14);
+            } else {
+                _map.fitBounds(bounds, {padding: [32, 32]});
+            }
+        })
+        .catch(function () {
+            if (wrapEl) wrapEl.hidden = true;
+        });
+    }
+
+    _loadPoints();
+    window.refreshTripMap = _loadPoints;
+}());
+
+// -- Hide trip sections whose HTMX panel comes back hidden (e.g. weather with no data) -
+document.body.addEventListener('htmx:afterSettle', function () {
+    var weatherPanel = document.getElementById('trip-weather-panel');
+    if (weatherPanel) {
+        var sec = weatherPanel.closest('.trip-section');
+        if (sec) sec.hidden = weatherPanel.hidden;
+    }
+});
+
+// -- Show completed toggle (shared between map overlay and activities panel) -
+var _tripShowCompletedKey = 'trip-show-completed-{{ trip.uuid }}';
+var _tripAllCompletedCollapsedKey = 'trip-all-completed-collapsed-{{ trip.uuid }}';
+window._tripShowCompleted = false;
+
+function _tripPanelAllCompleted() {
+    var panel = document.getElementById('trip-activities-panel');
+    return !!(panel && panel.dataset.allCompleted === 'true');
+}
+
+function _resolveShowCompletedPreference() {
+    try {
+        if (_tripPanelAllCompleted()) {
+            if (localStorage.getItem(_tripAllCompletedCollapsedKey) === 'true') {
+                return false;
+            }
+            return true;
+        }
+        var stored = localStorage.getItem(_tripShowCompletedKey);
+        if (stored !== null) {
+            return JSON.parse(stored);
+        }
+    } catch (e) {}
+    return false;
+}
+
+function _updateActivitiesEmptyState(panel, tab, showCompleted) {
+    var list = panel.querySelector('.trip-activity-list');
+    if (!list) return;
+
+    var anyVisible = Array.from(list.querySelectorAll('.trip-activity-item')).some(function (li) {
+        return li.style.display !== 'none';
+    });
+    var emptyAllDone = panel.querySelector('.trip-panel-empty--all-completed');
+    if (emptyAllDone) {
+        var allCompleted = panel.dataset.allCompleted === 'true';
+        emptyAllDone.hidden = anyVisible || !allCompleted || showCompleted || tab !== 'all';
+    }
+}
+
+function _applyShowCompletedState() {
+    var on = window._tripShowCompleted;
+
+    var panelBtn = document.getElementById('trip-show-completed-btn');
+    if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', on);
+
+    var mapBtn = document.getElementById('trip-map-completed-toggle');
+    if (mapBtn) mapBtn.classList.toggle('trip-map-past-btn--active', on);
+
+    tripSetTab(window._tripCurrentTab || 'all');
+
+    if (window.refreshTripMap) window.refreshTripMap();
+}
+
+function _initShowCompletedState() {
+    window._tripShowCompleted = _resolveShowCompletedPreference();
+    _applyShowCompletedState();
+}
+
+window.tripToggleShowCompleted = function () {
+    window._tripShowCompleted = !window._tripShowCompleted;
+    try {
+        localStorage.setItem(_tripShowCompletedKey, JSON.stringify(window._tripShowCompleted));
+        if (_tripPanelAllCompleted()) {
+            if (window._tripShowCompleted) {
+                localStorage.removeItem(_tripAllCompletedCollapsedKey);
+            } else {
+                localStorage.setItem(_tripAllCompletedCollapsedKey, 'true');
+            }
+        } else {
+            localStorage.removeItem(_tripAllCompletedCollapsedKey);
+        }
+    } catch (e) {}
+    _applyShowCompletedState();
+};
+
+// -- Sortable sections ----------------------------------------------------
+(function () {
+    var container = document.getElementById('trip-sections');
+    if (!container || typeof Sortable === 'undefined') return;
+
+    var orderKey = 'trip-section-order-{{ trip.uuid }}';
+    var savedOrder = null;
+    try { savedOrder = JSON.parse(localStorage.getItem(orderKey)); } catch (e) {}
+    if (Array.isArray(savedOrder)) {
+        savedOrder.forEach(function (section) {
+            var el = container.querySelector('.trip-section[data-section="' + section + '"]');
+            if (el) container.appendChild(el);
+        });
+    }
+
+    Sortable.create(container, {
+        animation: 150,
+        handle: '.trip-section-grip',
+        ghostClass: 'trip-section--ghost',
+        chosenClass: 'trip-section--chosen',
+        onEnd: function () {
+            var order = Array.from(container.querySelectorAll('.trip-section')).map(function (el) {
+                return el.dataset.section;
+            });
+            try { localStorage.setItem(orderKey, JSON.stringify(order)); } catch (e) {}
+        },
+    });
+}());
+
+// -- Location search (shared between add + edit dialogs) ------------------
+(function () {
+    function _initLocationSearch(cfg) {
+        var searchInput = document.getElementById(cfg.searchId);
+        var uuidInput   = document.getElementById(cfg.uuidId);
+        var suggestions = document.getElementById(cfg.suggestionsId);
+        var display     = document.getElementById(cfg.displayId);
+        var latInput    = document.getElementById(cfg.latId);
+        var lngInput    = document.getElementById(cfg.lngId);
+        var nameInput   = document.getElementById(cfg.nameId);
+        var pinInput    = cfg.pinId ? document.getElementById(cfg.pinId) : null;
+
+        if (!searchInput) return;
+
+        var debounce;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(debounce);
+            var q = this.value.trim();
+            if (q.length < 2) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+                return;
+            }
+            debounce = setTimeout(function () {
+                fetch('{% url "trips.location_search" %}?q=' + encodeURIComponent(q), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    suggestions.innerHTML = '';
+                    var results = data.results || [];
+
+                    if (!results.length) {
+                        var empty = document.createElement('li');
+                        empty.className = 'location-suggestion-item location-suggestion-empty';
+                        empty.textContent = 'No locations found';
+                        suggestions.appendChild(empty);
+                        suggestions.hidden = false;
+                        return;
+                    }
+
+                    var labels = {coordinates: 'Coordinates', pin: 'Your pins', db: 'Shared locations', geocoded: 'Addresses and cities'};
+                    var shownHeaders = {};
+
+                    results.forEach(function (loc) {
+                        if (!shownHeaders[loc.type]) {
+                            var header = document.createElement('li');
+                            header.className = 'location-suggestion-header';
+                            header.textContent = labels[loc.type] || 'Results';
+                            suggestions.appendChild(header);
+                            shownHeaders[loc.type] = true;
+                        }
+
+                        var li = document.createElement('li');
+                        li.className = 'location-suggestion-item' +
+                            ((loc.type === 'geocoded' || loc.type === 'coordinates') ? ' location-suggestion-geocoded' : '');
+
+                        if (loc.type === 'geocoded' || loc.type === 'coordinates') {
+                            li.textContent = loc.name;
+                        } else {
+                            li.textContent = loc.name +
+                                (loc.locality ? ', ' + loc.locality : '') +
+                                (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
+                        }
+
+                        li.addEventListener('click', function () {
+                            if (pinInput) pinInput.value = '';
+                            if (loc.type === 'geocoded' || loc.type === 'coordinates') {
+                                uuidInput.value = '';
+                                if (latInput)  latInput.value  = loc.lat;
+                                if (lngInput)  lngInput.value  = loc.lng;
+                                if (nameInput) nameInput.value = loc.name;
+                            } else if (loc.type === 'pin') {
+                                uuidInput.value = '';
+                                if (pinInput) pinInput.value = loc.uuid;
+                                if (latInput)  latInput.value  = '';
+                                if (lngInput)  lngInput.value  = '';
+                                if (nameInput) nameInput.value = '';
+                            } else {
+                                uuidInput.value = loc.uuid;
+                                if (latInput)  latInput.value  = '';
+                                if (lngInput)  lngInput.value  = '';
+                                if (nameInput) nameInput.value = '';
+                            }
+                            display.textContent = loc.name;
+                            searchInput.value = '';
+                            suggestions.innerHTML = '';
+                            suggestions.hidden = true;
+                        });
+                        suggestions.appendChild(li);
+                    });
+                    suggestions.hidden = false;
+                });
+            }, 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+            }
+        });
+    }
+
+    _initLocationSearch({
+        searchId: 'activity-location-search',
+        uuidId:   'activity-location-uuid',
+        suggestionsId: 'activity-location-suggestions',
+        displayId: 'activity-location-display',
+        latId:    'activity-geocoded-lat',
+        lngId:    'activity-geocoded-lng',
+        nameId:   'activity-geocoded-name',
+        pinId:    'activity-pin-uuid',
+    });
+
+    _initLocationSearch({
+        searchId: 'edit-activity-location-search',
+        uuidId:   'edit-activity-location-uuid',
+        suggestionsId: 'edit-activity-location-suggestions',
+        displayId: 'edit-activity-location-display',
+        latId:    'edit-activity-geocoded-lat',
+        lngId:    'edit-activity-geocoded-lng',
+        nameId:   'edit-activity-geocoded-name',
+        pinId:    'edit-activity-pin-uuid',
+    });
+}());
+
+// -- Add activity success callback ----------------------------------------
+function _onAddActivitySuccess() {
+    document.getElementById('add-activity-dialog').close();
+    document.getElementById('add-activity-form').reset();
+    document.getElementById('activity-location-display').textContent = '';
+    document.getElementById('activity-location-uuid').value = '';
+    document.getElementById('activity-pin-uuid').value = '';
+    document.getElementById('activity-geocoded-lat').value  = '';
+    document.getElementById('activity-geocoded-lng').value  = '';
+    document.getElementById('activity-geocoded-name').value = '';
+    document.getElementById('activity-child-trip-uuid').value = '';
+    document.getElementById('activity-child-trip-display').textContent = '';
+    document.getElementById('activity-child-trip-clear').style.display = 'none';
+    document.getElementById('activity-end-date').value = '';
+    document.getElementById('activity-end-time').value = '';
+    // Reset status pill, hide toggle, and custom name field
+    _setStatusPill('add', 'proposed');
+    var hideCheck = document.getElementById('add-activity-location-hidden');
+    if (hideCheck) hideCheck.checked = false;
+    var nameWrap = document.getElementById('add-activity-name-wrap');
+    if (nameWrap) nameWrap.setAttribute('hidden', '');
+    var nameToggle = document.getElementById('add-activity-name-toggle');
+    if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+    // map + view restore are handled by the activities section listener below
+}
+
+// -- Activities section: auto-refresh map + restore view on any panel swap -
+(function () {
+    var sec = document.querySelector('.trip-detail-activities');
+    if (!sec) return;
+    sec.addEventListener('htmx:afterSwap', function () {
+        if (window.refreshTripMap) window.refreshTripMap();
+        if (window._tripCurrentView && window._tripCurrentView !== 'list') {
+            tripSetView(window._tripCurrentView);
+        }
+        // Resolve show-completed default once the panel has loaded
+        _initShowCompletedState();
+    });
+}());
+
+// -- Calendar / view toggle -----------------------------------------------
+window._tripCurrentView = 'list';
+var _tripCalOffset = 0;  // months offset from trip's natural date range
+
+window.tripSetView = function (view) {
+    window._tripCurrentView = view;
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.activity-view').forEach(function (el) {
+        el.hidden = (el.dataset.view !== view);
+    });
+    panel.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+        btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
+    });
+
+    if (view === 'calendar') _renderTripCalendar();
+};
+
+window.tripCalNav = function (delta) {
+    _tripCalOffset += delta;
+    _renderTripCalendar();
+};
+
+function _getActivityDataFromPanel() {
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return [];
+    var acts = [];
+    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+        if (li.dataset.actDate) {
+            var numEl = li.querySelector('.trip-activity-num');
+            acts.push({
+                id:     li.dataset.actId,
+                date:   li.dataset.actDate,
+                title:  li.dataset.actTitle || (li.querySelector('.trip-activity-name') ? li.querySelector('.trip-activity-name').textContent.trim() : 'Activity'),
+                index:  numEl ? numEl.textContent.trim() : null,
+                status: li.dataset.actStatus || 'proposed',
+                moveUrl: '{% url "trips.activity.move" trip.uuid 0 %}'.replace('/0/', '/' + li.dataset.actId + '/'),
+            });
+        }
+    });
+    return acts;
+}
+
+function _getTripMonths() {
+    var panel = document.getElementById('trip-activities-panel');
+    var tripStart = panel ? (panel.dataset.tripStart || '') : '';
+    var tripEnd   = panel ? (panel.dataset.tripEnd   || '') : '';
+    var today = new Date();
+    var startY, startM, endY, endM;
+
+    if (tripStart) {
+        var sp = tripStart.split('-');
+        startY = parseInt(sp[0], 10);
+        startM = parseInt(sp[1], 10) - 1;
+    } else {
+        startY = today.getFullYear();
+        startM = today.getMonth();
+    }
+    if (tripEnd) {
+        var ep = tripEnd.split('-');
+        endY = parseInt(ep[0], 10);
+        endM = parseInt(ep[1], 10) - 1;
+    } else {
+        endY = startY;
+        endM = startM;
+    }
+
+    // Apply navigation offset (shift both ends by same amount)
+    startM += _tripCalOffset;
+    endM   += _tripCalOffset;
+    // Normalize months into valid range
+    function normYM(y, m) {
+        var extra = Math.floor(m / 12);
+        m = ((m % 12) + 12) % 12;
+        return {y: y + extra, m: m};
+    }
+    var ns = normYM(startY, startM);
+    var ne = normYM(endY,   endM);
+
+    var months = [];
+    var cy = ns.y, cm = ns.m, limit = 18;
+    while ((cy < ne.y || (cy === ne.y && cm <= ne.m)) && limit-- > 0) {
+        months.push({y: cy, m: cm});
+        cm++;
+        if (cm > 11) { cm = 0; cy++; }
+    }
+    if (!months.length) months.push({y: ns.y, m: ns.m});
+    return months;
+}
+
+function _renderTripCalendar() {
+    var panel = document.getElementById('trip-activities-panel');
+    var calEl = panel ? panel.querySelector('.activity-calendar-grid') : null;
+    if (!calEl) return;
+
+    var activities = _getActivityDataFromPanel();
+    // Apply tab filter
+    var activeTab = window._tripCurrentTab || 'all';
+    if (activeTab !== 'all') {
+        activities = activities.filter(function (a) { return a.status === activeTab; });
+    }
+    var byDate = {};
+    activities.forEach(function (a) {
+        if (a.date) (byDate[a.date] = byDate[a.date] || []).push(a);
+    });
+
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
+        String(today.getDate()).padStart(2, '0');
+
+    var months = _getTripMonths();
+    var firstLabel = new Date(months[0].y, months[0].m, 1).toLocaleString('default', {month: 'long', year: 'numeric'});
+    var lastLabel  = months.length > 1
+        ? new Date(months[months.length-1].y, months[months.length-1].m, 1).toLocaleString('default', {month: 'long', year: 'numeric'})
+        : null;
+    var navTitle = lastLabel ? firstLabel + ' - ' + lastLabel : firstLabel;
+
+    var html = '<div class="cal-header">' +
+        '<button type="button" class="cal-nav-btn" onclick="tripCalNav(-1)" aria-label="Previous">' +
+            '<i class="material-symbols-outlined">chevron_left</i></button>' +
+        '<span class="cal-month-label">' + navTitle + '</span>' +
+        '<button type="button" class="cal-nav-btn" onclick="tripCalNav(1)" aria-label="Next">' +
+            '<i class="material-symbols-outlined">chevron_right</i></button>' +
+    '</div>';
+
+    months.forEach(function (mo, idx) {
+        var firstDay    = new Date(mo.y, mo.m, 1);
+        var daysInMonth = new Date(mo.y, mo.m + 1, 0).getDate();
+
+        if (months.length > 1) {
+            if (idx > 0) html += '<div class="cal-month-section-sep"></div>';
+            html += '<div class="cal-month-section-label">' +
+                firstDay.toLocaleString('default', {month: 'long', year: 'numeric'}) +
+            '</div>';
+        }
+
+        html += '<div class="cal-grid">';
+        ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) {
+            html += '<div class="cal-cell cal-cell--header">' + d + '</div>';
+        });
+
+        var startDow = firstDay.getDay();
+        for (var i = 0; i < startDow; i++) {
+            html += '<div class="cal-cell cal-cell--empty"></div>';
+        }
+        for (var d = 1; d <= daysInMonth; d++) {
+            var ds = mo.y + '-' + String(mo.m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+            var dayActs = byDate[ds] || [];
+            var cls = 'cal-cell' +
+                (ds === todayStr ? ' cal-cell--today' : '') +
+                (dayActs.length  ? ' cal-cell--has-events' : '');
+            html += '<div class="' + cls + '" data-date="' + ds + '">';
+            html += '<span class="cal-day-num">' + d + '</span>';
+            if (dayActs.length) {
+                html += '<div class="cal-events">';
+                dayActs.forEach(function (a) {
+                    var safeTitle = (a.title || 'Activity').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                    var eventCls = 'cal-event' + (a.status === 'proposed' ? ' cal-event--proposed' : '');
+                    html += '<div class="' + eventCls + '" title="' + safeTitle + '" ' +
+                        'draggable="true" data-act-id="' + a.id + '" data-move-url="' + (a.moveUrl || '') + '">';
+                    if (a.index) html += '<span class="cal-event-num">' + a.index + '</span>';
+                    html += '<span class="cal-event-title">' + safeTitle + '</span></div>';
+                });
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    });
+
+    calEl.innerHTML = html;
+    _initCalDragDrop(calEl);
+}
+
+function _initCalDragDrop(calEl) {
+    var dragActId = null;
+    var dragMoveUrl = null;
+    var _wasDragging = false;
+
+    calEl.querySelectorAll('.cal-event[draggable]').forEach(function (el) {
+        el.addEventListener('dragstart', function (e) {
+            dragActId     = el.dataset.actId;
+            dragMoveUrl   = el.dataset.moveUrl;
+            _wasDragging  = true;
+            e.dataTransfer.effectAllowed = 'move';
+            el.classList.add('cal-event--dragging');
+        });
+        el.addEventListener('dragend', function () {
+            el.classList.remove('cal-event--dragging');
+            // Keep _wasDragging true briefly to suppress the subsequent click event
+            setTimeout(function () { _wasDragging = false; }, 150);
+        });
+        el.addEventListener('click', function () {
+            if (_wasDragging) return;
+            var li = document.getElementById('trip-activity-' + el.dataset.actId);
+            if (li) tripOpenEditDialog(li);
+        });
+        el.addEventListener('mouseenter', function () {
+            if (window.tripHighlightMarker)   window.tripHighlightMarker(el.dataset.actId, true);
+            if (window.tripHighlightActivity) window.tripHighlightActivity(el.dataset.actId, true);
+        });
+        el.addEventListener('mouseleave', function () {
+            if (window.tripHighlightMarker)   window.tripHighlightMarker(el.dataset.actId, false);
+            if (window.tripHighlightActivity) window.tripHighlightActivity(el.dataset.actId, false);
+        });
+    });
+
+    calEl.querySelectorAll('.cal-cell[data-date]').forEach(function (cell) {
+        cell.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            cell.classList.add('cal-cell--drag-over');
+        });
+        cell.addEventListener('dragleave', function () {
+            cell.classList.remove('cal-cell--drag-over');
+        });
+        cell.addEventListener('drop', function (e) {
+            e.preventDefault();
+            cell.classList.remove('cal-cell--drag-over');
+            var newDate = cell.dataset.date;
+            if (!dragActId || !dragMoveUrl) return;
+            htmx.ajax('POST', dragMoveUrl, {
+                target: '#trip-activities-panel',
+                swap: 'outerHTML',
+                values: {date: newDate},
+            });
+            dragActId = null;
+            dragMoveUrl = null;
+        });
+    });
+}
+
+// -- Status pill toggle helper --------------------------------------------
+function _setStatusPill(prefix, value) {
+    var inputId  = (prefix === 'add') ? 'add-activity-status-input' : 'edit-activity-status-input';
+    var groupSel = (prefix === 'add') ? '#add-activity-dialog .status-pill-toggle' : '#edit-activity-dialog .status-pill-toggle';
+    document.getElementById(inputId).value = value;
+    document.querySelectorAll(groupSel + ' .status-pill-btn').forEach(function (btn) {
+        btn.classList.toggle('is-active', btn.dataset.value === value);
+    });
+}
+
+// -- Add activity name toggle ---------------------------------------------
+function _toggleAddActivityName() {
+    var wrap = document.getElementById('add-activity-name-wrap');
+    var btn  = document.getElementById('add-activity-name-toggle');
+    var hidden = wrap.hasAttribute('hidden');
+    if (hidden) {
+        wrap.removeAttribute('hidden');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
+    } else {
+        wrap.setAttribute('hidden', '');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+        document.getElementById('activity-title').value = '';
+    }
+}
+
+// -- Edit activity name toggle --------------------------------------------
+function _toggleEditActivityName() {
+    var wrap = document.getElementById('edit-activity-name-wrap');
+    var btn  = document.getElementById('edit-activity-name-toggle');
+    var hidden = wrap.hasAttribute('hidden');
+    if (hidden) {
+        wrap.removeAttribute('hidden');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
+    } else {
+        wrap.setAttribute('hidden', '');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+        document.getElementById('edit-activity-title').value = '';
+    }
+}
+
+// -- Edit activity dialog -------------------------------------------------
+function tripOpenEditDialog(li) {
+    var form = document.getElementById('edit-activity-form');
+    form.setAttribute('hx-post', li.dataset.editUrl);
+    htmx.process(form);
+
+    var hasTitle = !!(li.dataset.actTitle);
+    var nameWrap   = document.getElementById('edit-activity-name-wrap');
+    var nameToggle = document.getElementById('edit-activity-name-toggle');
+    if (nameWrap) {
+        if (hasTitle) {
+            nameWrap.removeAttribute('hidden');
+            if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
+        } else {
+            nameWrap.setAttribute('hidden', '');
+            if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+        }
+    }
+    document.getElementById('edit-activity-title').value        = li.dataset.actTitle  || '';
+    document.getElementById('edit-activity-notes').value        = li.dataset.actNotes  || '';
+    document.getElementById('edit-activity-date').value         = li.dataset.actDate   || '';
+    document.getElementById('edit-activity-time').value         = li.dataset.actTime   || '';
+    document.getElementById('edit-activity-end-date').value     = li.dataset.actEndDate || '';
+    document.getElementById('edit-activity-end-time').value     = li.dataset.actEndTime || '';
+    document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
+    document.getElementById('edit-activity-geocoded-lat').value  = '';
+    document.getElementById('edit-activity-geocoded-lng').value  = '';
+    document.getElementById('edit-activity-geocoded-name').value = '';
+    document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
+    document.getElementById('edit-activity-location-search').value = '';
+
+    var childTripUuid = li.dataset.actChildTripUuid || '';
+    var childTripName = li.dataset.actChildTripName || '';
+    document.getElementById('edit-activity-child-trip-uuid').value = childTripUuid;
+    document.getElementById('edit-activity-child-trip-display').textContent = childTripName;
+    document.getElementById('edit-activity-child-trip-search').value = '';
+    document.getElementById('edit-activity-child-trip-clear').style.display = childTripUuid ? 'inline-flex' : 'none';
+
+    // Store delete URL for the delete button
+    document.getElementById('edit-activity-delete-btn').dataset.deleteUrl = li.dataset.deleteUrl || '';
+
+    _setStatusPill('edit', li.dataset.actStatus || 'proposed');
+
+    // Hide-location toggle: only shown for activity creator or trip organiser
+    var hideWrap = document.getElementById('edit-activity-hide-wrap');
+    var hideInput = document.getElementById('edit-activity-location-hidden');
+    if (hideWrap && hideInput) {
+        var canManage = li.dataset.actCanManage === 'true';
+        hideWrap.hidden = !canManage;
+        if (canManage) {
+            hideInput.checked = li.dataset.actLocationHidden === 'true';
+        }
+    }
+
+    document.getElementById('edit-activity-dialog').showModal();
+}
+
+function _clearEditLocation() {
+    document.getElementById('edit-activity-location-uuid').value  = '';
+    document.getElementById('edit-activity-geocoded-lat').value   = '';
+    document.getElementById('edit-activity-geocoded-lng').value   = '';
+    document.getElementById('edit-activity-geocoded-name').value  = '';
+    document.getElementById('edit-activity-location-display').textContent = '';
+}
+
+// -- Child trip search ----------------------------------------------------
+(function () {
+    function _initChildTripSearch(prefix) {
+        var searchInput  = document.getElementById(prefix + '-child-trip-search');
+        var uuidInput    = document.getElementById(prefix + '-child-trip-uuid');
+        var suggestions  = document.getElementById(prefix + '-child-trip-suggestions');
+        var display      = document.getElementById(prefix + '-child-trip-display');
+        var clearBtn     = document.getElementById(prefix + '-child-trip-clear');
+
+        if (!searchInput) return;
+
+        var debounce;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(debounce);
+            var q = this.value.trim();
+            if (q.length < 2) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+                return;
+            }
+            debounce = setTimeout(function () {
+                fetch('{% url "trips.child_trip_search" trip.uuid %}?q=' + encodeURIComponent(q), {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    suggestions.innerHTML = '';
+                    var results = data.results || [];
+                    if (!results.length) {
+                        var empty = document.createElement('li');
+                        empty.className = 'location-suggestion-item location-suggestion-empty';
+                        empty.textContent = 'No trips found';
+                        suggestions.appendChild(empty);
+                    } else {
+                        results.forEach(function (t) {
+                            var li = document.createElement('li');
+                            li.className = 'location-suggestion-item';
+                            var dates = '';
+                            if (t.start_date) dates = ' (' + t.start_date + (t.end_date ? ' - ' + t.end_date : '') + ')';
+                            li.textContent = t.name + dates;
+                            li.addEventListener('click', function () {
+                                uuidInput.value = t.uuid;
+                                display.textContent = t.name;
+                                if (clearBtn) clearBtn.style.display = 'inline-flex';
+                                searchInput.value = '';
+                                suggestions.innerHTML = '';
+                                suggestions.hidden = true;
+                            });
+                            suggestions.appendChild(li);
+                        });
+                    }
+                    suggestions.hidden = false;
+                });
+            }, 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+            }
+        });
+    }
+
+    _initChildTripSearch('activity');
+    _initChildTripSearch('edit-activity');
+}());
+
+function _clearChildTrip(prefix) {
+    var p = (prefix === 'add') ? 'activity' : 'edit-activity';
+    document.getElementById(p + '-child-trip-uuid').value = '';
+    document.getElementById(p + '-child-trip-display').textContent = '';
+    document.getElementById(p + '-child-trip-clear').style.display = 'none';
+}
+
+// -- Delete activity from edit dialog ------------------------------------
+async function _deleteEditActivity() {
+    var btn = document.getElementById('edit-activity-delete-btn');
+    var deleteUrl = btn && btn.dataset.deleteUrl;
+    if (!deleteUrl) return;
+    if (!await confirmDialog({title:'Delete Activity', message:'Delete this activity? This cannot be undone.', confirmLabel:'Delete'})) return;
+    document.getElementById('edit-activity-dialog').close();
+    htmx.ajax('DELETE', deleteUrl, {
+        target: '#trip-activities-panel',
+        swap: 'outerHTML',
+    });
+}
+
+// -- Activity tabs (All / Proposed / Confirmed) ---------------------------
+window._tripCurrentTab = 'all';
+
+window.tripSetTab = function (tab) {
+    window._tripCurrentTab = tab;
+    var panel = document.getElementById('trip-activities-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.activity-tab').forEach(function (btn) {
+        btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
+    });
+
+    var showCompleted = !!window._tripShowCompleted;
+    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+        var status = li.dataset.actStatus || 'proposed';
+        var isCompleted = status === 'completed';
+        var visible;
+        if (isCompleted) {
+            // Completed only appear when the show-completed toggle is on AND the tab is 'all'
+            visible = showCompleted && (tab === 'all');
+        } else {
+            visible = (tab === 'all') || (tab === status);
+        }
+        li.style.display = visible ? '' : 'none';
+    });
+
+    _updateActivitiesEmptyState(panel, tab, showCompleted);
+
+    // Re-render calendar so the filtered set is reflected there too
+    if (window._tripCurrentView === 'calendar') _renderTripCalendar();
+};
+
+// -- Mark-as-completed dialog ---------------------------------------------
+window.tripOpenCompleteDialog = function (url) {
+    var form = document.getElementById('trip-complete-form');
+    if (form) {
+        form.setAttribute('hx-post', url);
+        htmx.process(form);
+    }
+    var today = new Date().toISOString().slice(0, 10);
+    var dateInput = document.getElementById('trip-complete-date');
+    if (dateInput) {
+        dateInput.value = today;
+        dateInput.max = today;
+    }
+    var dlg = document.getElementById('trip-complete-dialog');
+    if (dlg) dlg.showModal();
+};
+
+// Restore tab + show-completed state after panel swap
+(function () {
+    var sec = document.querySelector('.trip-detail-activities');
+    if (!sec) return;
+    document.body.addEventListener('htmx:afterSettle', function (e) {
+        if (e.target === document.getElementById('trip-activities-panel') ||
+            sec.contains(e.target)) {
+            // Restore tab first (also filters by completed state)
+            tripSetTab(window._tripCurrentTab || 'all');
+            // Sync show-completed button active state in the freshly-rendered panel
+            var panelBtn = document.getElementById('trip-show-completed-btn');
+            if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', !!window._tripShowCompleted);
+        }
+    });
+}());
+</script>
+{% endblock %}

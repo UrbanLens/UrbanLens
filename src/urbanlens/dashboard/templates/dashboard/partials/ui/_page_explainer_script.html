@@ -1,0 +1,239 @@
+<script>
+(function () {
+    'use strict';
+
+    var STORAGE_PREFIX = 'ul_explainer_collapsed_';
+    var DURATION = 380;
+    var EASING = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+    function prefersReducedMotion() {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function isCollapsed(id) {
+        try { return localStorage.getItem(STORAGE_PREFIX + id) === '1'; } catch (_) { return false; }
+    }
+
+    function setCollapsed(id, collapsed) {
+        try { localStorage.setItem(STORAGE_PREFIX + id, collapsed ? '1' : '0'); } catch (_) {}
+    }
+
+    function getAnchor(explainer) {
+        var sel = explainer.getAttribute('data-explainer-anchor');
+        return sel ? document.querySelector(sel) : null;
+    }
+
+    function ensureToggle(anchor, explainer) {
+        var btn = anchor.querySelector('.ul-explainer-toggle');
+        if (btn) return btn;
+
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ul-explainer-toggle';
+        btn.setAttribute('aria-label', 'Show explanation');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('title', 'Show explanation');
+        btn.innerHTML = '<i class="material-icons" aria-hidden="true">help_outline</i>';
+        btn.addEventListener('click', function () { expand(explainer, btn); });
+        anchor.appendChild(btn);
+        return btn;
+    }
+
+    function setToggleVisible(toggle, visible) {
+        if (!toggle) return;
+        toggle.hidden = !visible;
+        toggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
+        toggle.classList.toggle('is-visible', visible);
+    }
+
+    function measureRect(el) {
+        if (!el) return null;
+        var rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return null;
+        return rect;
+    }
+
+    function measureToggle(toggle, keepHidden) {
+        if (!toggle) return null;
+        var wasHidden = toggle.hidden;
+        toggle.hidden = false;
+        toggle.style.visibility = 'hidden';
+        var rect = measureRect(toggle);
+        toggle.style.visibility = '';
+        if (keepHidden || wasHidden) toggle.hidden = true;
+        return rect;
+    }
+
+    function createGhost(sourceEl, fromRect) {
+        var ghost = sourceEl.cloneNode(true);
+        ghost.classList.add('ul-explainer-ghost');
+        ghost.classList.remove('is-collapsed');
+        ghost.removeAttribute('id');
+        ghost.removeAttribute('data-explainer-id');
+        ghost.removeAttribute('data-explainer-anchor');
+        ghost.querySelectorAll('.ul-explainer-collapse').forEach(function (el) { el.remove(); });
+
+        ghost.style.position = 'fixed';
+        ghost.style.top = fromRect.top + 'px';
+        ghost.style.left = fromRect.left + 'px';
+        ghost.style.width = fromRect.width + 'px';
+        ghost.style.height = fromRect.height + 'px';
+        ghost.style.margin = '0';
+        ghost.style.transformOrigin = 'top left';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '10050';
+
+        document.body.appendChild(ghost);
+        return ghost;
+    }
+
+    function animateBetween(ghost, fromRect, toRect, shrinking) {
+        if (prefersReducedMotion()) {
+            ghost.remove();
+            return Promise.resolve();
+        }
+
+        ghost.style.top = fromRect.top + 'px';
+        ghost.style.left = fromRect.left + 'px';
+        ghost.style.width = fromRect.width + 'px';
+        ghost.style.height = fromRect.height + 'px';
+        ghost.style.transition = 'none';
+        ghost.style.transform = 'none';
+        ghost.style.transformOrigin = 'top left';
+        if (shrinking) ghost.style.opacity = '1';
+
+        var tx = toRect.left - fromRect.left;
+        var ty = toRect.top - fromRect.top;
+        var sx = toRect.width / Math.max(fromRect.width, 1);
+        var sy = toRect.height / Math.max(fromRect.height, 1);
+
+        return new Promise(function (resolve) {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    ghost.style.transition =
+                        'transform ' + DURATION + 'ms ' + EASING +
+                        ', opacity ' + Math.round(DURATION * 0.75) + 'ms ' + EASING +
+                        ', border-radius ' + DURATION + 'ms ' + EASING;
+                    ghost.style.transform = 'translate(' + tx + 'px, ' + ty + 'px) scale(' + sx + ', ' + sy + ')';
+                    ghost.style.opacity = shrinking ? '0.35' : '1';
+                    if (shrinking) ghost.classList.add('is-shrinking');
+
+                    var done = false;
+                    function finish() {
+                        if (done) return;
+                        done = true;
+                        ghost.remove();
+                        resolve();
+                    }
+
+                    ghost.addEventListener('transitionend', function (evt) {
+                        if (evt.propertyName === 'transform') finish();
+                    });
+                    setTimeout(finish, DURATION + 80);
+                });
+            });
+        });
+    }
+
+    function collapse(explainer) {
+        if (explainer.classList.contains('is-collapsed') || explainer.dataset.explainerAnimating === '1') return;
+
+        var id = explainer.dataset.explainerId;
+        var anchor = getAnchor(explainer);
+        if (!anchor) return;
+
+        var toggle = ensureToggle(anchor, explainer);
+        var fromRect = measureRect(explainer);
+        var toRect = measureToggle(toggle, true);
+
+        explainer.dataset.explainerAnimating = '1';
+
+        if (!fromRect || !toRect || prefersReducedMotion()) {
+            explainer.classList.add('is-collapsed');
+            explainer.hidden = true;
+            setToggleVisible(toggle, true);
+            setCollapsed(id, true);
+            delete explainer.dataset.explainerAnimating;
+            return;
+        }
+
+        var ghost = createGhost(explainer, fromRect);
+        explainer.classList.add('is-collapsed');
+        explainer.hidden = true;
+        setToggleVisible(toggle, true);
+
+        animateBetween(ghost, fromRect, toRect, true).then(function () {
+            setCollapsed(id, true);
+            delete explainer.dataset.explainerAnimating;
+        });
+    }
+
+    function expand(explainer, toggle) {
+        if (!explainer.classList.contains('is-collapsed') || explainer.dataset.explainerAnimating === '1') return;
+
+        var id = explainer.dataset.explainerId;
+
+        explainer.hidden = false;
+        explainer.classList.remove('is-collapsed');
+        explainer.style.visibility = 'hidden';
+
+        var toRect = measureRect(explainer);
+        var fromRect = measureToggle(toggle, false);
+
+        explainer.style.visibility = '';
+        explainer.hidden = true;
+        explainer.classList.add('is-collapsed');
+
+        explainer.dataset.explainerAnimating = '1';
+        setToggleVisible(toggle, false);
+
+        if (!fromRect || !toRect || prefersReducedMotion()) {
+            explainer.hidden = false;
+            explainer.classList.remove('is-collapsed');
+            setCollapsed(id, false);
+            delete explainer.dataset.explainerAnimating;
+            return;
+        }
+
+        var ghost = createGhost(explainer, fromRect);
+        ghost.classList.add('is-shrinking');
+        ghost.style.opacity = '0.35';
+
+        animateBetween(ghost, fromRect, toRect, false).then(function () {
+            explainer.hidden = false;
+            explainer.classList.remove('is-collapsed');
+            setCollapsed(id, false);
+            delete explainer.dataset.explainerAnimating;
+            explainer.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+        });
+    }
+
+    function initExplainer(explainer) {
+        if (explainer.dataset.explainerInit === '1') return;
+        explainer.dataset.explainerInit = '1';
+
+        var id = explainer.dataset.explainerId;
+        var anchor = getAnchor(explainer);
+        if (!anchor) return;
+
+        var toggle = ensureToggle(anchor, explainer);
+        var collapseBtn = explainer.querySelector('.ul-explainer-collapse');
+        if (collapseBtn) collapseBtn.addEventListener('click', function () { collapse(explainer); });
+
+        if (isCollapsed(id)) {
+            explainer.classList.add('is-collapsed');
+            explainer.hidden = true;
+            setToggleVisible(toggle, true);
+        } else {
+            setToggleVisible(toggle, false);
+        }
+    }
+
+    function scan(root) {
+        (root || document).querySelectorAll('.ul-page-explainer').forEach(initExplainer);
+    }
+
+    scan();
+    document.body.addEventListener('htmx:afterSettle', function () { scan(); });
+}());
+</script>

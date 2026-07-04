@@ -1,0 +1,185 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content api-limits-page">
+    <div class="site-admin-header">
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-symbols-outlined">arrow_back</i>
+                Admin Home
+            </a>
+        </div>
+        <h1 class="site-admin-title">
+            <i class="material-symbols-outlined">tune</i>
+            API Rate Limits
+        </h1>
+        <p class="site-admin-subtitle">Configure per-service rate limits and geo-filtering.</p>
+    </div>
+
+    <div class="api-limits-toolbar">
+        <div class="ul-notice ul-notice--info">
+            <i class="material-symbols-outlined">sync</i>
+        </div>
+        <span class="admin-home-meta-pill">
+            <i class="material-symbols-outlined">cloud</i>
+            {{ services|length }} service{{ services|length|pluralize }}
+        </span>
+    </div>
+
+    <div class="api-limits-grid">
+    {% for svc in services %}
+    {% with cfg=svc.config %}
+    <section class="site-admin-card ul-section card stats-service-card api-limit-card{% if not cfg.enabled %} is-disabled{% endif %}"
+             data-service="{{ cfg.service }}">
+        <form method="post"
+              action="{% url 'site_admin_api_limits' %}"
+              class="api-limit-form site-admin-form"
+              hx-post="{% url 'site_admin_api_limits' %}"
+              hx-trigger="change, input delay:700ms"
+              hx-swap="none">
+            {% csrf_token %}
+            <input type="hidden" name="service" value="{{ cfg.service }}">
+
+            <div class="card-header stats-service-card__header">
+                <div class="stats-service-card__title">
+                    <i class="material-icons api-state-icon">{% if cfg.enabled %}cloud{% else %}cloud_off{% endif %}</i>
+                    <div>
+                        <span class="api-limit-service-name">{{ cfg.display_name }}</span>
+                        <code class="api-limit-service-key">{{ cfg.service }}</code>
+                    </div>
+                </div>
+                <div class="api-limit-header-actions">
+                    <span class="api-limit-status" aria-live="polite" aria-atomic="true"></span>
+                    <label class="ul-switch" title="Enable or disable this API site-wide">
+                        <input type="checkbox" name="enabled" value="on" class="api-enabled-cb" {% if cfg.enabled %}checked{% endif %}>
+                        <span class="ul-switch__track"></span>
+                    </label>
+                </div>
+            </div>
+
+            {% if svc.calls_30d or svc.blocked_30d or svc.geo_skipped_30d or svc.errors_30d or svc.avg_ms %}
+            <div class="api-limit-stats">
+                {% if svc.calls_30d %}
+                <span class="ul-chip">
+                    <i class="material-symbols-outlined">call_made</i>
+                    {{ svc.calls_30d }} calls
+                </span>
+                {% endif %}
+                {% if svc.blocked_30d %}
+                <span class="ul-badge ul-badge--danger">{{ svc.blocked_30d }} blocked</span>
+                {% endif %}
+                {% if svc.geo_skipped_30d %}
+                <span class="ul-badge ul-badge--primary">{{ svc.geo_skipped_30d }} geo-skip</span>
+                {% endif %}
+                {% if svc.errors_30d %}
+                <span class="ul-badge ul-badge--warning">{{ svc.errors_30d }} err</span>
+                {% endif %}
+                {% if svc.avg_ms %}
+                <span class="ul-chip">
+                    <i class="material-symbols-outlined">speed</i>
+                    ~{{ svc.avg_ms }}ms
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="api-limit-body">
+                <div class="api-limit-fields">
+                    <label class="settings-toggle-row" title="Restrict this API to US locations only">
+                        <input type="checkbox" name="usa_only" value="on" class="settings-toggle-input" {% if cfg.usa_only %}checked{% endif %}>
+                        <span class="settings-toggle-label">USA only</span>
+                    </label>
+                    <div class="form-row">
+                        <label for="cpm-{{ cfg.service }}">Per minute</label>
+                        <input type="number" id="cpm-{{ cfg.service }}" name="calls_per_minute"
+                               value="{{ cfg.calls_per_minute|default:'' }}" min="1" max="60000" placeholder="∞">
+                    </div>
+                    <div class="form-row">
+                        <label for="cpd-{{ cfg.service }}">Per day</label>
+                        <input type="number" id="cpd-{{ cfg.service }}" name="calls_per_day"
+                               value="{{ cfg.calls_per_day|default:'' }}" min="1" max="10000000" placeholder="∞">
+                    </div>
+                    <div class="form-row form-row--notes">
+                        <label for="notes-{{ cfg.service }}">Notes</label>
+                        <textarea id="notes-{{ cfg.service }}" name="notes" rows="2"
+                                  placeholder="Free-tier limits, billing info...">{{ cfg.notes }}</textarea>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </section>
+    {% endwith %}
+    {% empty %}
+    <div class="ul-empty">
+        <i class="material-symbols-outlined">cloud_off</i>
+        <p>No service configurations found. They are created automatically on first API call.</p>
+    </div>
+    {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    function getCard(el) { return el && el.closest('.api-limit-card'); }
+
+    function setStatus(card, state, text) {
+        var el = card && card.querySelector('.api-limit-status');
+        if (!el) return;
+        el.className = 'api-limit-status is-' + state;
+        el.textContent = text;
+        clearTimeout(el._t);
+        if (state === 'saved' || state === 'error') {
+            el._t = setTimeout(function () {
+                el.style.transition = 'opacity .5s';
+                el.style.opacity = '0';
+                el._t = setTimeout(function () {
+                    el.className = 'api-limit-status';
+                    el.style.transition = '';
+                    el.style.opacity = '';
+                }, 500);
+            }, 2500);
+        }
+    }
+
+    document.body.addEventListener('change', function (e) {
+        var cb = e.target;
+        if (!cb.classList.contains('api-enabled-cb')) return;
+        var card = getCard(cb);
+        if (!card) return;
+        var enabled = cb.checked;
+        card.classList.toggle('is-disabled', !enabled);
+        var icon = card.querySelector('.api-state-icon');
+        if (icon) {
+            icon.textContent = enabled ? 'cloud' : 'cloud_off';
+        }
+    });
+
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        var form = evt.target.closest('.api-limit-form');
+        if (!form) return;
+        var card = getCard(form);
+        if (card) card.classList.add('is-saving');
+        setStatus(card, 'saving', 'Saving...');
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var form = evt.target.closest('.api-limit-form');
+        if (!form) return;
+        var card = getCard(form);
+        if (card) card.classList.remove('is-saving');
+        var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
+        if (!(status >= 200 && status < 300)) {
+            setStatus(card, 'error', 'Save failed (' + (status || '?') + ')');
+        }
+    });
+
+    document.body.addEventListener('apiLimitSaved', function (evt) {
+        var svc = evt.detail && evt.detail.service;
+        var card = svc && document.querySelector('.api-limit-card[data-service="' + svc + '"]');
+        setStatus(card, 'saved', 'Saved');
+    });
+}());
+</script>
+{% endblock %}

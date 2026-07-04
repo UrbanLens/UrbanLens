@@ -1,0 +1,316 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+    <div class="site-admin-header">
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-symbols-outlined">arrow_back</i>
+                Admin Home
+            </a>
+        </div>
+        <h1 class="site-admin-title">
+            <i class="material-symbols-outlined">tune</i>
+            Site Settings
+        </h1>
+        <p class="site-admin-subtitle">Configure site-wide behaviour, branding, and security.</p>
+    </div>
+
+    {% if saved %}
+    <div class="site-admin-notice site-admin-notice--success">
+        <i class="material-symbols-outlined">check_circle</i>
+        Settings saved.
+    </div>
+    {% endif %}
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">settings_suggest</i>
+            <span>Environment</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-environment">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="environment-override">Environment</label>
+                <p class="form-help">
+                    Controls site-wide behavior such as the admin dev toolbar.
+                    <strong>Default</strong> uses the
+                    <code>UL_ENVIRONMENT</code> variable
+                    {% if env_var_environment %}
+                    (currently <code>{{ env_var_environment }}</code> → {{ effective_environment_label }})
+                    {% else %}
+                    (not set)
+                    {% endif %}.
+                    Choosing another value overrides the variable for this site.
+                </p>
+                <p class="form-help">
+                    Active environment: <strong>{{ effective_environment_label }}</strong>
+                </p>
+                <select name="environment_override" id="environment-override">
+                    {% for value, label in environment_override_choices %}
+                    <option value="{{ value }}"{% if settings.environment_override == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">drive_file_rename_outline</i>
+            <span>Branding</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-branding">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="app-title">App title</label>
+                <p class="form-help">
+                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
+                </p>
+                <input type="text" name="app_title" id="app-title"
+                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+                <span class="admin-autosave-indicator"></span>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">group</i>
+            <span>Trip Settings</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="max-trip-members">Maximum members per trip</label>
+                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
+                <input type="number" name="max_trip_members" id="max-trip-members"
+                       value="{{ settings.max_trip_members }}" min="1" max="500">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">search</i>
+            <span>Web Search</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="search-provider">Search provider</label>
+                <p class="form-help">
+                    Provider used for the "Web Search" panel on pin detail pages.
+                </p>
+                <select name="search_provider" id="search-provider">
+                    {% for value, label in search_provider_choices %}
+                    <option value="{{ value }}"{% if settings.search_provider == value %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="search-cache-hours">Search result cache duration (hours)</label>
+                <p class="form-help">
+                    How long to cache web search results per pin before re-fetching. Set to 0 to disable caching.
+                </p>
+                <input type="number" name="search_cache_hours" id="search-cache-hours"
+                       value="{{ settings.search_cache_hours }}" min="0" max="8760" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">backup</i>
+            <span>Database Backups</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="backup-enabled">Scheduled backups</label>
+                <p class="form-help">Enable or disable automatic database backups. Defaults come from <code>UL_BACKUP_ENABLED</code>.</p>
+                <select name="backup_enabled" id="backup-enabled">
+                    <option value="1"{% if settings.backup_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.backup_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="backup-frequency-hours">Backup frequency (hours)</label>
+                <p class="form-help">Minimum hours between scheduled backups. Defaults to <code>UL_BACKUP_FREQUENCY_HOURS</code>.</p>
+                <input type="number" name="backup_frequency_hours" id="backup-frequency-hours"
+                       value="{{ settings.backup_frequency_hours }}" min="1" max="720" step="1">
+            </div>
+            <div class="form-row">
+                <label for="backup-retention">Backups to retain</label>
+                <p class="form-help">Number of backup files to keep before pruning older files. Defaults to <code>UL_BACKUP_RETENTION</code>.</p>
+                <input type="number" name="backup_retention" id="backup-retention"
+                       value="{{ settings.backup_retention }}" min="1" max="1000" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">person_add_disabled</i>
+            <span>Registration</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="signup-restricted">Sign-up mode</label>
+                <p class="form-help">
+                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
+                    message unless the visitor arrives via an invitation link from an existing member.
+                </p>
+                <select name="signup_restricted" id="signup-restricted">
+                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
+                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">lock_clock</i>
+            <span>Login Security</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="login-max-attempts">Max failed login attempts</label>
+                <p class="form-help">
+                    How many consecutive failed login attempts are allowed before the account is
+                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
+                </p>
+                <input type="number" name="login_max_attempts" id="login-max-attempts"
+                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
+            </div>
+            <div class="form-row">
+                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
+                <p class="form-help">
+                    How many minutes a locked account must wait before login attempts are accepted
+                    again. Minimum 1 minute.
+                </p>
+                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
+                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">crop_free</i>
+            <span>Location Bounding Box</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="max-bbox-area">Maximum bounding box area (km²)</label>
+                <p class="form-help">
+                    Largest area a user may draw as a location boundary, in square kilometers.
+                </p>
+                <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
+                       value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    var _timers = {};
+
+    function showSaved(card) {
+        var ind = card.querySelector('.admin-autosave-indicator');
+        if (!ind) return;
+        ind.textContent = '✓ Saved';
+        ind.style.opacity = '1';
+        clearTimeout(ind._t);
+        ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 2500);
+    }
+
+    function doSave(form, card) {
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf() },
+        }).then(function (r) {
+            if (r.ok && guard) guard.markClean();
+            if (r.ok) showSaved(card);
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
+    }
+
+    document.querySelectorAll('.site-admin-card').forEach(function (card) {
+        var form = card.querySelector('.site-admin-form');
+        if (!form) return;
+
+        // Insert saved indicator and hide save button
+        var actions = form.querySelector('.form-actions');
+        if (actions) {
+            var ind = document.createElement('span');
+            ind.className = 'admin-autosave-indicator';
+            ind.style.cssText = 'font-size:.8rem;color:var(--ul-accent,#0891b2);opacity:0;transition:opacity .3s;margin-left:.75rem;vertical-align:middle;';
+            actions.appendChild(ind);
+            actions.querySelectorAll('.btn--submit').forEach(function (b) { b.style.display = 'none'; });
+        }
+
+        form.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t.type === 'hidden') return;
+            if (window.autosaveGuard) window.autosaveGuard.markDirty();
+            var delay = (t.type === 'text' || t.type === 'number') ? 1200 : 0;
+            var key = form.id || Math.random();
+            clearTimeout(_timers[key]);
+            _timers[key] = setTimeout(function () { doSave(form, card); }, delay);
+        });
+
+        form.addEventListener('input', function (e) {
+            var t = e.target;
+            if (t.type === 'number' || t.type === 'text') {
+                if (window.autosaveGuard) window.autosaveGuard.markDirty();
+                var key = form.id || Math.random();
+                clearTimeout(_timers[key]);
+                _timers[key] = setTimeout(function () { doSave(form, card); }, 1200);
+            }
+        });
+    });
+}());
+</script>
+{% endblock %}

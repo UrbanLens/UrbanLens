@@ -1,0 +1,197 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="home-hero">
+    <p class="home-eyebrow">Urban Exploration Platform</p>
+    <h1 class="home-title">
+        Explore the forgotten.<br>
+        <em>Document the hidden.</em>
+    </h1>
+    <p class="home-subtitle">
+        UrbanLens is a private mapping platform for explorers.
+        Pin locations, track visits, organise expeditions, and share
+        knowledge with people you trust.
+    </p>
+    <div class="home-actions">
+        <a href="{% url 'signup' %}" class="home-btn home-btn btn--primary">
+            <i class="material-icons" style="font-size:1.1rem">person_add</i>
+            Get started
+        </a>
+        <a href="{% url 'login' %}" class="home-btn home-btn--secondary">
+            Sign in
+        </a>
+    </div>
+</section>
+
+{# -- Features --------------------------------------------------------------- #}
+<section class="home-features">
+    <div class="home-features-inner">
+        <h2 class="home-section-title">Everything you need to explore safely</h2>
+        <p class="home-section-subtitle">Built by explorers, for explorers.</p>
+        <div class="home-features-grid">
+
+            <div class="home-feature-card ul-section">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">map</i>
+                </div>
+                <h3 class="home-feature-title">Interactive map</h3>
+                <p class="home-feature-desc">
+                    Drop pins on your locations, add photos, and build your personal database of explored sites.
+                </p>
+            </div>
+
+            <div class="home-feature-card ul-section">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">group</i>
+                </div>
+                <h3 class="home-feature-title">Plan trips together</h3>
+                <p class="home-feature-desc">
+                    Organise group expeditions, invite fellow explorers, track RSVPs, and coordinate activities.
+                </p>
+            </div>
+
+            <div class="home-feature-card ul-section">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">public</i>
+                </div>
+                <h3 class="home-feature-title">Community wiki</h3>
+                <p class="home-feature-desc">
+                    Each location has a community wiki page where explorers can share history, access notes, and hazards.
+                </p>
+            </div>
+
+            <div class="home-feature-card ul-section">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">label</i>
+                </div>
+                <h3 class="home-feature-title">Tags &amp; categories</h3>
+                <p class="home-feature-desc">
+                    Organise pins with custom tags and categories. Filter your map to find exactly what you're looking for.
+                </p>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+{# -- External research APIs ------------------------------------------------- #}
+<section class="home-apis">
+    <div class="home-features-inner">
+        <h2 class="home-section-title">Research every location in depth</h2>
+        <p class="home-section-subtitle">
+            Pin pages automatically pull context from trusted external APIs - history,
+            imagery, archives, weather, and web results - so you spend less time searching
+            and more time exploring.
+        </p>
+        <div class="home-apis-grid">
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">menu_book</i>
+                </div>
+                <h3 class="home-feature-title">Reference &amp; media</h3>
+                <p class="home-feature-desc">
+                    Wikipedia summaries, Wikimedia Commons photos, and related encyclopedia
+                    content matched to each site by name and coordinates.
+                </p>
+                <ul class="home-api-list">
+                    <li>Wikipedia</li>
+                    <li>Wikimedia Commons</li>
+                </ul>
+            </div>
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">place</i>
+                </div>
+                <h3 class="home-feature-title">Places &amp; street view</h3>
+                <p class="home-feature-desc">
+                    Address autocomplete, canonical place names, and street-level imagery
+                    from Google when you add or inspect a location.
+                </p>
+                <ul class="home-api-list">
+                    <li>Google Places</li>
+                    <li>Google Street View</li>
+                </ul>
+            </div>
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">map</i>
+                </div>
+                <h3 class="home-feature-title">Open map data</h3>
+                <p class="home-feature-desc">
+                    Community-maintained OpenStreetMap features and Nominatim reverse
+                    geocoding to fill in addresses and nearby landmarks.
+                </p>
+                <ul class="home-api-list">
+                    <li>OpenStreetMap</li>
+                    <li>Nominatim</li>
+                </ul>
+            </div>
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">museum</i>
+                </div>
+                <h3 class="home-feature-title">Historical archives</h3>
+                <p class="home-feature-desc">
+                    Photographs and collection records from major cultural institutions
+                    to help reconstruct a site's past.
+                </p>
+                <ul class="home-api-list">
+                    <li>Smithsonian Institution</li>
+                </ul>
+            </div>
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">travel_explore</i>
+                </div>
+                <h3 class="home-feature-title">Search &amp; property records</h3>
+                <p class="home-feature-desc">
+                    Web search results for news and mentions, plus commercial property
+                    listings when researching industrial or vacant buildings.
+                </p>
+                <ul class="home-api-list">
+                    <li>Brave / Google Search</li>
+                    <li>LoopNet</li>
+                </ul>
+            </div>
+
+            <div class="home-api-card">
+                <div class="home-feature-icon">
+                    <i class="material-symbols-outlined">wb_sunny</i>
+                </div>
+                <h3 class="home-feature-title">Planning context</h3>
+                <p class="home-feature-desc">
+                    Forecasts and map overlays for trip planning, plus National Park Service
+                    data when a site sits near federal parkland.
+                </p>
+                <ul class="home-api-list">
+                    <li>OpenWeatherMap</li>
+                    <li>U.S. National Park Service</li>
+                </ul>
+            </div>
+
+        </div>
+        <p class="home-apis-footnote">
+            Which integrations are active depends on your instance configuration.
+            <a href="{% url 'thanks' %}">See credits &amp; acknowledgements</a>.
+        </p>
+    </div>
+</section>
+
+{# -- Bottom CTA ------------------------------------------------------------ #}
+<section class="home-cta-section">
+    <h2 class="home-cta-title">Ready to start mapping?</h2>
+    <a href="{% url 'signup' %}" class="home-btn home-btn btn--primary" style="display:inline-flex">
+        <i class="material-icons" style="font-size:1.1rem">rocket_launch</i>
+        Create an account
+    </a>
+</section>
+
+{% endblock %}

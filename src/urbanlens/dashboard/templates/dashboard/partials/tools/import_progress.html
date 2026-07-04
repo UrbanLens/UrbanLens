@@ -1,0 +1,101 @@
+{% comment %}
+Import progress fragment - returned by ImportStartView and polled by ImportStatusView.
+Includes hx-get polling while status is pending/running; removes polling when done/error.
+{% endcomment %}
+
+{% if status == "done" %}
+<div class="export-progress-wrap" id="import-status-poll">
+    <div class="export-progress-label">
+        <span>Complete</span>
+        <span class="export-progress-pct">100%</span>
+    </div>
+    <div class="export-progress-track">
+        <div class="export-progress-bar export-progress-bar--done" style="width:100%;"></div>
+    </div>
+    <div class="export-status-msg">
+        <i class="material-icons" style="color:#388E3C;">check_circle</i>
+        <span>Import complete.</span>
+    </div>
+
+    {% if result %}
+    <div class="import-result-summary">
+        {% if result.created %}
+        {% for key, count in result.created.items %}
+        <div class="import-result-row">
+            <i class="material-symbols-outlined">add_circle</i>
+            <span>{{ count }} {{ key|title }} imported</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% if result.skipped %}
+        {% for key, count in result.skipped.items %}
+        <div class="import-result-row import-result-row--skipped">
+            <i class="material-symbols-outlined">skip_next</i>
+            <span>{{ count }} {{ key|title }} already existed (skipped)</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% if result.warnings %}
+        <div class="import-warnings">
+            <div class="import-warnings-title">Notices</div>
+            {% for warning in result.warnings %}
+            <div class="import-warning-item">{{ warning }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="export-done-actions">
+        <button type="button" class="btn btn--ghost" onclick="location.reload()">
+            <i class="material-symbols-outlined">refresh</i>
+            Import again
+        </button>
+        <a href="{% url 'map.view' %}" class="btn btn--primary">
+            <i class="material-symbols-outlined">map</i>
+            View my map
+        </a>
+    </div>
+</div>
+
+{% elif status == "error" %}
+<div class="export-progress-wrap" id="import-status-poll">
+    <div class="export-progress-track">
+        <div class="export-progress-bar export-progress-bar--error" style="width:100%;"></div>
+    </div>
+    <div class="export-error-msg">
+        <i class="material-symbols-outlined">error</i>
+        <span>{{ message|default:"Import failed. Please try again." }}</span>
+    </div>
+    <div class="export-done-actions" style="margin-top:.75rem;">
+        <button type="button" class="btn btn-secondary" onclick="location.reload()">
+            <i class="material-symbols-outlined">refresh</i>
+            Try again
+        </button>
+    </div>
+</div>
+
+{% else %}
+{# pending or running - keep polling every second #}
+<div
+    class="export-progress-wrap"
+    id="import-status-poll"
+    hx-get="{% url 'tools.import.status' job_id=job_id %}"
+    hx-trigger="load delay:1s"
+    hx-swap="outerHTML"
+    hx-target="#import-status-poll"
+>
+    <div class="export-progress-label">
+        <span>{{ message|default:"Working..." }}</span>
+        <span class="export-progress-pct">{{ progress|default:0 }}%</span>
+    </div>
+    <div class="export-progress-track">
+        <div class="export-progress-bar" style="width:{{ progress|default:0 }}%;"></div>
+    </div>
+    <div class="export-status-msg">
+        <span class="htmx-indicator-spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--ul-grey-4);border-top-color:#1976D2;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></span>
+        <span>This may take a moment...</span>
+    </div>
+</div>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+{% endif %}

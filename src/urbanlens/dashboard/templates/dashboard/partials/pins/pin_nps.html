@@ -1,0 +1,65 @@
+<div class="nps-info card" id="nps-section"
+     data-collapse-scope="pin" data-collapse-section="nps">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">park</i>
+        <h3>National Park Service</h3>
+    </div>
+
+    <div class="card__body">
+        {% if park.images %}
+        {% with img=park.images.0 %}
+        {% if img.url %}
+        <div class="nps-image-wrap">
+            <img class="nps-image" src="{{ img.url }}" alt="{{ img.altText|default:park.fullName }}" loading="lazy"
+                 onerror="this.closest('.nps-image-wrap').style.display='none'">
+            {% if img.caption %}
+            <p class="nps-image-caption">{{ img.caption }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% endif %}
+
+        <div class="nps-text">
+            <h4 class="nps-park-name">
+                {% if park.url %}
+                <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">{{ park.fullName }}</a>
+                {% else %}
+                {{ park.fullName }}
+                {% endif %}
+            </h4>
+
+            {% if park.description %}
+            <p class="nps-description">{{ park.description|truncatechars:500 }}</p>
+            {% endif %}
+
+            {% if park.activities %}
+            <div class="nps-activities">
+                <span class="nps-activities-label">Activities:</span>
+                {% for activity in park.activities|slice:":8" %}
+                <span class="nps-activity-chip">{{ activity.name }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if park.operatingHours %}
+            {% with hours=park.operatingHours.0 %}
+            {% if hours.standardHours %}
+            <div class="nps-hours">
+                <i class="material-symbols-outlined">schedule</i>
+                <span class="nps-hours-label">Standard hours vary - </span>
+                <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">check NPS.gov</a>
+            </div>
+            {% endif %}
+            {% endwith %}
+            {% endif %}
+        </div>
+    </div>
+</div>

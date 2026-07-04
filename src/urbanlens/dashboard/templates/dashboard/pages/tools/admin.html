@@ -1,0 +1,147 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="tools-page page-content">
+
+    <div class="tools-header">
+        <div class="tools-header-top">
+            <a href="{% url 'tools.index' %}" class="tools-back-link">
+                <i class="material-symbols-outlined">arrow_back</i>
+                <span>Tools</span>
+            </a>
+        </div>
+        <h1 class="tools-title">Admin Tools</h1>
+        <p class="tools-subtitle">Site administration utilities.</p>
+    </div>
+
+    <div class="tools-grid">
+
+        {# -- Database Backup card ----------------------------------------------- #}
+        <div class="ul-card tools-card" id="backup-card">
+            <div class="ul-card-header">
+                <i class="material-symbols-outlined">backup</i>
+                <h3>Database Backup</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Queue a manual database backup. The task runs in the Celery worker;
+                    check worker logs or the task status endpoint to confirm completion.
+                </p>
+                <div class="tools-card-actions">
+                    <button type="button" class="btn btn--primary" id="manual-backup-btn"
+                            data-url="{% url 'tools.backup.start' %}">
+                        <i class="material-symbols-outlined">backup</i>
+                        <span>Run Backup</span>
+                    </button>
+                </div>
+                <div id="manual-backup-result" class="tools-backup-result"></div>
+            </div>
+        </div>
+
+    </div>{# /tools-grid #}
+</div>
+
+<style>
+.tools-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+.tools-header {
+    margin-bottom: 2rem;
+}
+
+.tools-header-top {
+    margin-bottom: .5rem;
+}
+
+.tools-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    text-decoration: none;
+    transition: color .15s;
+}
+
+.tools-back-link:hover {
+    color: var(--ul-primary, #1976D2);
+}
+
+.tools-back-link .material-icons {
+    font-size: 1rem;
+}
+
+.tools-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 .35rem;
+    color: var(--ul-grey-9);
+}
+
+.tools-subtitle {
+    margin: 0;
+    color: var(--ul-grey-6);
+    font-size: .95rem;
+}
+
+.tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+    gap: 1.5rem;
+}
+
+.tools-card {
+    border-radius: 10px;
+    width: 100%;
+    justify-self: center;
+}
+
+.tools-card-desc {
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+    margin: 0 0 1.25rem;
+    line-height: 1.5;
+}
+
+.tools-card-actions {
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-grey-1a);
+    margin-top: .5rem;
+}
+
+.tools-backup-result {
+    margin-top: 1rem;
+    font-size: .875rem;
+    color: var(--ul-grey-6);
+    min-height: 1.25rem;
+}
+</style>
+
+<script>
+(function () {
+    var btn = document.getElementById('manual-backup-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var result = document.getElementById('manual-backup-result');
+        btn.disabled = true;
+        result.textContent = 'Queueing backup...';
+        fetch(btn.dataset.url, {
+            method: 'POST',
+            headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''}
+        }).then(function (response) {
+            return response.json().then(function (data) { return {status: response.status, data: data}; });
+        }).then(function (payload) {
+            result.textContent = payload.data.message || (payload.status === 202 ? 'Backup queued.' : 'Backup request failed.');
+            btn.disabled = false;
+        }).catch(function () {
+            result.textContent = 'Backup request failed.';
+            btn.disabled = false;
+        });
+    });
+})();
+</script>
+{% endblock %}

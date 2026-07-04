@@ -1,0 +1,466 @@
+================================================================================
+HOW TO READ THIS REPORT
+================================================================================
+Each result has a Confidence score: High, Medium, or Low. This reflects how
+likely the result is a *genuine* unused/rarely-used function, vs. a false
+positive caused by a known blind spot of static analysis - things like:
+  - Methods on Django/DRF-style view, form, admin, or command classes, which
+    are often dispatched by name/string convention (e.g. routing, list_display)
+    in ways that can't always be fully traced.
+  - Generic framework action/lifecycle names (save, run, dispatch, etc.).
+  - Names defined more than once across the codebase, where the reference
+    count is shared across all definitions sharing that name - a use of any
+    one of them can mask the others.
+Start with High confidence results - they're the most likely to be real dead
+code. Treat Medium and Low results as leads to manually check, not verdicts;
+each one lists the specific reason(s) its confidence was reduced. Counts come
+from real AST analysis (calls, attribute access, parameter names, and string
+literals that exactly match a name) - see the script's --help and source
+comments for the full list of detection methods and their trade-offs.
+================================================================================
+Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low: 2)
+----------------------------------------------------------------------
+    [High  ] ./urbanlens/UrbanLens/celery.py:22  log_task_failure  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/celery.py:36  log_task_retry  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/environments/prod.py:23  Production.debug_override_must_be_off  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:198  AppSettings.BASE_DIR  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:202  AppSettings.ENVIRONMENT  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:208  AppSettings._resolve_version_metadata  (refs: 0)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:232  AppSettings.get_secret  (refs: 0)
+    [High  ] ./urbanlens/core/cache_keys.py:29  is_memcached_safe_key  (refs: 0)
+    [High  ] ./urbanlens/core/tests/runner.py:151  TestRunner.run_suite  (refs: 0)
+    [High  ] ./urbanlens/core/tests/runner.py:172  generate_guid  (refs: 0)
+    [High  ] ./urbanlens/core/tests/runner.py:177  generate_onechar  (refs: 0)
+    [High  ] ./urbanlens/core/tests/runner.py:181  generate_uniquechar  (refs: 0)
+    [High  ] ./urbanlens/core/tests/runner.py:196  generate_pickledobject  (refs: 0)
+    [High  ] ./urbanlens/dashboard/consumers.py:14  RequestStatusConsumer.disconnect  (refs: 0)
+    [High  ] ./urbanlens/dashboard/consumers.py:17  RequestStatusConsumer.receive  (refs: 0)
+    [High  ] ./urbanlens/dashboard/consumers.py:20  RequestStatusConsumer.send_status  (refs: 0)
+    [High  ] ./urbanlens/dashboard/context_processors.py:16  add_site_settings  (refs: 0)
+    [High  ] ./urbanlens/dashboard/context_processors.py:40  add_dev_toolbar  (refs: 0)
+    [High  ] ./urbanlens/dashboard/context_processors.py:75  add_page_name  (refs: 0)
+    [High  ] ./urbanlens/dashboard/context_processors.py:85  add_feature_access  (refs: 0)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:491  social_auth  (refs: 0)
+    [High  ] ./urbanlens/dashboard/controllers/site_admin.py:73  _server_uptime  (refs: 0)
+    [High  ] ./urbanlens/dashboard/dbrouters.py:17  DBRouter.db_for_read  (refs: 0)
+    [High  ] ./urbanlens/dashboard/dbrouters.py:24  DBRouter.db_for_write  (refs: 0)
+    [High  ] ./urbanlens/dashboard/dbrouters.py:31  DBRouter.allow_relation  (refs: 0)
+    [High  ] ./urbanlens/dashboard/forms/upload_datafile.py:9  _MultipleFileInput.value_from_datadict  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/abstract/addressable.py:85  AddressableModel.address_extended  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/abstract/choices.py:22  TextChoices.invalid  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/abstract/choices.py:30  TextChoices.get_name  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/api_call_log/model.py:62  ApiCallLog.prune_older_than_days  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/badges/model.py:114  Badge.is_customized  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/campus/model.py:70  Campus.is_default  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/campus/model.py:75  Campus.effective_polygon  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:42  FriendInvitation.is_expired  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:46  FriendInvitation.is_accepted  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/friendship/meta.py:21  FriendshipStatus.rejected  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/friendship/model.py:96  Friendship.block  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/friendship/model.py:122  Friendship.mute  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/notifications/model.py:48  NotificationLog.is_unread  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:218  Profile.show_onboarding_tips  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:223  Profile.show_hover_tooltips  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:244  Profile.full_name  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:90  UserSubscription.is_indefinite  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/trips/model.py:117  Trip.timeline_status  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/trips/model.py:131  Trip.duration_days  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:122  LLMGateway.cost  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:350  LLMGateway.send_prompt  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/ai/keywords.py:263  categorize_by_keywords  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/ai/scanner.py:139  sanitize  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:55  GoogleMapsGateway.get_directions  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:70  GoogleMapsGateway.find_place  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:180  GoogleMapsGateway.import_pins_from_file  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/google/places.py:94  GooglePlacesGateway.get_place_photos  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/google/places.py:107  GooglePlacesGateway.get_recent_search_results  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:21  import_dir  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:91  MapPinCache.is_enabled  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:212  MapPinCache.upsert_pin  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/mentions.py:133  filter_visible_comments  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/site_admin.py:57  promote_first_user_if_needed  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:36  generate_sso_username  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:73  suppress_last_name_for_new_users  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:105  fetch_and_save_avatar  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:149  mark_new_user_onboarding  (refs: 0)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:178  save_discord_social_link  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:16  create_location_for_pin  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:99  suggest_location_category  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:267  apply_admin_code_update  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:311  refresh_pin_web_search  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:341  refresh_smithsonian_images  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:357  refresh_weather_forecast  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:372  extract_import_archive  (refs: 0)
+    [High  ] ./urbanlens/dashboard/tasks.py:398  import_pins_from_paths  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:23  in_list  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:32  tag_total_pins  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:48  get_attr  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:57  human_timesince  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:74  is_material_icon  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:85  is_icon_url  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:98  icon_keywords  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:112  tooltip_attrs  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:145  tooltip_help  (refs: 0)
+    [High  ] ./urbanlens/dashboard/templatetags/dashboard_tags.py:160  tooltip_label  (refs: 0)
+    [Medium] ./urbanlens/core/tests/runner.py:67  BufferingLogHandler.emit  (refs: 0)
+               - method on 'BufferingLogHandler', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/account.py:346  CustomLoginView.get_success_url  (refs: 0)
+               - method on 'CustomLoginView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/index.py:20  IndexController.page_not_found  (refs: 0)
+               - method on 'IndexController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:428  MapController.post_advanced_search  (refs: 0)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:435  MapController.get_advanced_search  (refs: 0)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/models/location/model.py:80  Location.effective_date_last_active  (refs: 0)
+               - 'effective_date_last_active' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/models/location/model.py:90  Location.add_category  (refs: 0)
+               - 'add_category' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/models/pin/model.py:228  Pin.effective_date_last_active  (refs: 0)
+               - 'effective_date_last_active' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/models/pin/model.py:262  Pin.add_category  (refs: 0)
+               - 'add_category' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
+----------------------------------------------------------------------
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:221  AppSettings._check_env_file  (refs: 1)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:256  AppSettings.ensure_paths  (refs: 1)
+    [High  ] ./urbanlens/UrbanLens/settings/app.py:289  AppSettings.refresh_django  (refs: 1)
+    [High  ] ./urbanlens/core/controllers/backups/db.py:31  DatabaseBackup.create_backup_dir  (refs: 1)
+    [High  ] ./urbanlens/core/controllers/backups/db.py:44  DatabaseBackup.purge_old_backups  (refs: 1)
+    [High  ] ./urbanlens/core/controllers/backups/db.py:116  DatabaseBackup.trigger_backup  (refs: 1)
+    [High  ] ./urbanlens/core/testing_network.py:67  LocalhostOnlyNetwork._guarded_connect  (refs: 1)
+    [High  ] ./urbanlens/core/testing_network.py:73  LocalhostOnlyNetwork._guarded_create_connection  (refs: 1)
+    [High  ] ./urbanlens/core/testing_network.py:91  LocalhostOnlyNetwork.guarded_connect  (refs: 1)
+    [High  ] ./urbanlens/core/testing_network.py:102  verify_external_network_blocked  (refs: 1)
+    [High  ] ./urbanlens/core/tests/result.py:16  MessageResult.getDescription  (refs: 1)
+    [High  ] ./urbanlens/core/tests/runner.py:113  TestRunner.setup_test_environment  (refs: 1)
+    [High  ] ./urbanlens/core/tests/runner.py:142  TestRunner.teardown_test_environment  (refs: 1)
+    [High  ] ./urbanlens/core/tests/runner.py:160  TestRunner.teardown_databases  (refs: 1)
+    [High  ] ./urbanlens/core/tests/runner.py:185  generate_dict  (refs: 1)
+    [High  ] ./urbanlens/core/tests/runner.py:191  generate_list  (refs: 1)
+    [High  ] ./urbanlens/core/version.py:52  get_app_version  (refs: 1)
+    [High  ] ./urbanlens/core/version.py:142  _git_fetch  (refs: 1)
+    [High  ] ./urbanlens/core/version.py:192  get_upstream_git_commit  (refs: 1)
+    [High  ] ./urbanlens/core/version.py:264  _parent_process_command  (refs: 1)
+    [High  ] ./urbanlens/core/version.py:357  _latest_reference_commit  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:55  _record_failed_attempt  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:86  _clear_login_attempts  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:425  _collect_pending_invitations  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:456  _apply_pending_invitation  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/account.py:473  _process_pending_invitations  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:215  _selected_parents_first  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:286  _rows_ctx  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:321  _merge_form_ctx  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:335  _can_modify_badge  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:364  _safe_int  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:410  _apply_custom_icon_from_post  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:419  _apply_kind_conversion  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/badges.py:954  _all_badges  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:256  _render_reaction_row  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:271  _render_trip_reaction_row  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:315  _sanitize_markup_color  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:322  _sanitize_optional_color  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:340  _sanitize_latlngs  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/comments.py:353  _sanitize_markup_shapes  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/maps.py:54  _expand_state_codes  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/maps.py:908  get_pin_by_address  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/pin_edit.py:75  _stat_item_context  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/pin_edit.py:125  _ensure_location_address  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/settings.py:175  geocode_address  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/setup.py:60  normalize_app_title  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/setup.py:121  setup_app_title_value  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/setup.py:149  _build_feature_groups  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/site_admin.py:78  _dir_size_mb  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/tools.py:41  _import_dir  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/trip.py:1401  _build_activity_forecasts  (refs: 1)
+    [High  ] ./urbanlens/dashboard/controllers/visits.py:40  _add_visited_status  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/abstract/slug.py:35  HasSlug._slug_max_length  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/account/model.py:41  EmailVerification.mark_verified  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/badges/model.py:126  Badge.initial_order_for_parents  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/cache/location_cache.py:48  LocationCache.is_stale  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:50  FriendInvitation.mark_accepted  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/pin/model.py:161  Pin.display_label  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:308  Profile.get_map_center  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:359  Profile.can_view_photos_from  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:433  Profile.can_view_contact_info  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/profile/model.py:445  Profile._ck  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/site_settings/meta.py:34  EnvironmentOverrideChoice.to_environment_type  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/site_settings/model.py:212  SiteSettings.get_effective_environment_type  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/site_settings/model.py:227  SiteSettings.get_effective_environment_label  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:99  UserSubscription.revoke  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/subscriptions/model.py:118  PendingSubscriptionGrant.duration_as_int  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/factory.py:19  get_gateway  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/functions.py:40  estimate_combined_tokens  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:83  LLMGateway.sent_tokens  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:95  LLMGateway.received_tokens  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:275  LLMGateway.calculate_combined_tokens  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:291  LLMGateway.prepare_system_prompt  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:426  LLMGateway._parse_answer  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/gateway.py:468  LLMGateway.send_prompt_list  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/openai.py:54  OpenAIGateway.get_client  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/scanner.py:92  scan  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/scanner.py:152  wrap_user_data  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/ai/scanner.py:173  _apply_sanitization  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/archive_extractor.py:161  _extract_zip  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/archive_extractor.py:226  _extract_tgz  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:97  AutoTagService.suggest_for_location  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:122  AutoTagService._kind_enabled_for_profile  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:205  AutoTagService._build_keyword_text  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:235  AutoTagService._badge_matches_text  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:273  AutoTagService._keyword_match  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:299  AutoTagService._ai_match  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:338  AutoTagService._build_instructions  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/auto_tag.py:366  AutoTagService._build_prompt  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/avatar.py:54  AvatarService.generate_emoji_svg  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/avatar.py:98  AvatarService.resolve_provider_url  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/backups.py:30  collect_backup_stats  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/brave/search.py:84  BraveSearchGateway._validate  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/brave/search.py:88  BraveSearchGateway._parse  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/celery.py:31  TaskProgress.as_dict  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/celery.py:61  get_task_progress  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:88  cleanup_export_artifacts  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:110  run_export  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:176  _run_export_steps  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:214  _build_zip  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:228  _write_manifest  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:243  _export_profile  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:259  _export_settings  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:287  _export_pins  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:352  _export_pins_google_takeout  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:379  _export_badges  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:422  _export_connections  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:467  _export_visit_history  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:492  _export_comments  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:518  _export_photos  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/export.py:557  _export_trips  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/geo_filter.py:21  _BBox.contains  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/geo_filter.py:52  is_usa_coordinates  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/github/contributors.py:60  _contributor_from_dict  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/github/contributors.py:70  _fetch_contributors  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/geocoding.py:40  GoogleGeocodingGateway.decode_place_name  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/geocoding.py:180  GoogleGeocodingGateway.get_coordinates  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/geocoding.py:202  GoogleGeocodingGateway.get_coordinates_by_cid  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/geocoding.py:266  GoogleGeocodingGateway._decode_s2_cell  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/location_history.py:41  detect_location_history_format  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/location_history.py:59  _parse_semantic  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/location_history.py:104  _nearest_pin  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/location_history.py:122  import_location_history_streaming  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:166  GoogleMapsGateway.calculate_heading  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:532  GoogleMapsGateway.import_preview_streaming  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/maps.py:753  GoogleMapsGateway.takeout_csv_to_dict  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/place_info.py:44  GooglePlaceService.get_for_coordinates  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/places.py:40  GooglePlacesGateway.search_nearby  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/search.py:88  GoogleCustomSearchGateway.extract_error_detail  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/search.py:158  GoogleCustomSearchGateway.build_query_or  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/search.py:173  GoogleCustomSearchGateway.build_query_and  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/google/search.py:188  GoogleCustomSearchGateway.build_query  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/images.py:15  _get_gps_ifd  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/images.py:34  extract_gps_coords  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:87  cleanup_import_artifacts  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:109  run_import  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:188  _extract_and_validate  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:221  _find_data_dir  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:241  _import_badges  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:326  _import_pins  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:403  _create_location_from_data  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:435  _import_visit_history  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:486  _import_connections  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/import_data.py:535  _import_settings  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:55  _postgres_version_label  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:64  _read_postgres_row  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:102  _build_postgres_metrics  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:120  collect_postgres_stats  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:149  _valkey_metrics  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:181  collect_valkey_stats  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:238  collect_celery_stats  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:260  _collect_celery_stats_live  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:324  _redact_url  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/infrastructure_stats.py:337  collect_nginx_stats  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/locations/creation.py:21  _default_bbox  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/locations/creation.py:32  LocationCreationService.create_for_pin  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/loopnet.py:59  LoopNetGateway._direct_search  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/loopnet.py:85  LoopNetGateway._parse_search_page  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/loopnet.py:126  LoopNetGateway._web_search_fallback  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/loopnet.py:170  LoopNetGateway._absolute_url  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/loopnet.py:176  _clean_snippet  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/autocomplete.py:46  search_local  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/autocomplete.py:155  _pin_match_subtitle  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/autocomplete.py:199  search_google_places  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/autocomplete.py:243  empty_suggestions  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/autocomplete.py:309  resolve_google_place  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:52  _SyncRedis.zrangebyscore  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:53  _SyncRedis.hmget  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:95  MapPinCache._make_client  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:128  MapPinCache.get_or_build_page  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:141  MapPinCache.enqueue_rebuild  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/cache.py:174  MapPinCache.rebuild  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/payload.py:94  MapPinPayloadService._ordered_location_badges  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/payload.py:107  MapPinPayloadService._effective_icon  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/map_pins/payload.py:119  MapPinPayloadService._effective_color  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/mentions.py:35  extract_location_uuids  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/nominatim.py:35  NominatimGateway.reverse_geocode  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/openweather/gateway.py:67  OpenWeatherMapGateway.get_raw_forecast  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/openweather/gateway.py:88  OpenWeatherMapGateway.filter_forecast  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/rate_limiter.py:189  check_rate_limit  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/search.py:45  _format_relative_search_date  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/site_admin.py:18  ensure_site_admin_group_permissions  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/site_admin.py:46  add_user_to_site_admin_group  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/site_admin.py:94  should_redirect_to_site_admin  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:222  _sanitize_sso_username  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/social_auth/pipeline.py:245  _provider_username_preference  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/social_links.py:138  parse_social_link  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/username.py:119  UsernameGenerator.generate  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikimedia.py:36  WikimediaGateway.search_images  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikimedia.py:54  WikimediaGateway._search_files  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikimedia.py:74  WikimediaGateway._fetch_image_info  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikimedia.py:119  _strip_html  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikipedia.py:37  WikipediaGateway.get_nearby_articles  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikipedia.py:125  WikipediaGateway._geo_search  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikipedia.py:143  WikipediaGateway._fetch_summary  (refs: 1)
+    [High  ] ./urbanlens/dashboard/services/wikipedia.py:157  WikipediaGateway._address_matches  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:30  run_user_data_export  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:47  cleanup_export_artifacts_task  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:56  run_user_data_import  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:73  cleanup_import_artifacts_task  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:82  rebuild_map_pin_cache  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:131  prefetch_location_external_data  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:249  run_database_backup  (refs: 1)
+    [High  ] ./urbanlens/dashboard/tasks.py:255  run_scheduled_database_backup  (refs: 1)
+    [High  ] ./urbanlens/manage.py:23  _print_startup_env  (refs: 1)
+    [Medium] ./urbanlens/core/tests/runner.py:70  BufferingLogHandler.flush_logs  (refs: 1)
+               - method on 'BufferingLogHandler', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/core/tests/testcase.py:108  TestCase.module_path  (refs: 1)
+               - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/core/tests/testcase.py:119  TestCase.create_message  (refs: 1)
+               - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/core/tests/testcase.py:148  TestCase.get_message_prefix  (refs: 1)
+               - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/core/tests/testcase.py:166  TestCase.append_to_failure  (refs: 1)
+               - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/badges.py:840  BadgeBulkConvertView._resolved_target_kind  (refs: 1)
+               - method on 'BadgeBulkConvertView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/badges.py:899  BadgeCustomizeView._customize_ctx  (refs: 1)
+               - method on 'BadgeCustomizeView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/campus.py:31  CampusController.get_campus  (refs: 1)
+               - method on 'CampusController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/campus.py:65  CampusController.save_campus  (refs: 1)
+               - method on 'CampusController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/campus.py:117  CampusController.list_campuses  (refs: 1)
+               - method on 'CampusController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:119  FriendController.request_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:200  FriendController.accept_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:233  FriendController.reject_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:251  FriendController.ignore_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:270  FriendController.block_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:292  FriendController.mute_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:306  FriendController.remove_friend  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:324  FriendController.friend_list  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:336  FriendController.friends_page  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:353  FriendController.friend_request_respond  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/friendship.py:416  FriendController.invite_by_email  (refs: 1)
+               - method on 'FriendController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:119  MapController.add_pin  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:123  MapController.post_add_pin  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:245  MapController.autocomplete_local  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:262  MapController.autocomplete_places  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:281  MapController.autocomplete_empty  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:293  MapController.resolve_place  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:316  MapController.streetview_check  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:347  MapController.search_map  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:351  MapController.search_map_post  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:368  MapController.pin_list_panel  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:414  MapController.upload_image  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:439  MapController.map_pins_json  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:483  MapController.map_pins_meta  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:507  MapController.map_pin_json  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:531  MapController.patch_pin  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:588  MapController.nearby_places  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/maps.py:752  MapController.place_details  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:37  PinController.view  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:186  PinController.get_smithsonian_images  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:212  PinController.web_search  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:339  PinController.import_form  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:357  PinController.upload_takeout  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:499  PinController.wikipedia_info  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:549  PinController.wikimedia_assets  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:596  PinController.loopnet_info  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:645  PinController.nps_info  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:699  PinController.nominatim_info  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/pin.py:746  PinController.import_confirmed  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/site_admin.py:502  SiteAdminApiLimitsView._get_all_configs  (refs: 1)
+               - method on 'SiteAdminApiLimitsView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/site_admin.py:538  SiteAdminApiLimitsView._apply_rate_limit_config  (refs: 1)
+               - method on 'SiteAdminApiLimitsView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:83  ViewProfileView._can_view_profile  (refs: 1)
+               - method on 'ViewProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:158  ViewProfileView._add_common_context  (refs: 1)
+               - method on 'ViewProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:348  ProfileFieldUpdateView._save_username  (refs: 1)
+               - method on 'ProfileFieldUpdateView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:366  ProfileFieldUpdateView._save_avatar_gravatar  (refs: 1)
+               - method on 'ProfileFieldUpdateView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:386  ProfileFieldUpdateView._save_avatar_emoji  (refs: 1)
+               - method on 'ProfileFieldUpdateView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:459  EditProfileView._save_profile  (refs: 1)
+               - method on 'EditProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:472  EditProfileView._save_discord  (refs: 1)
+               - method on 'EditProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:489  EditProfileView._add_link  (refs: 1)
+               - method on 'EditProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:517  EditProfileView._remove_link  (refs: 1)
+               - method on 'EditProfileView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/userprofile.py:609  SocialLinkVerifyView._check_url  (refs: 1)
+               - method on 'SocialLinkVerifyView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+               - 'for_pin' is defined 3 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/models/location/model.py:125  Location._slugify_base  (refs: 1)
+               - '_slugify_base' is defined 4 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:31  _SyncPipeline.hdel  (refs: 1)
+               - 'hdel' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:33  _SyncPipeline.zrem  (refs: 1)
+               - 'zrem' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:61  _SyncRedis.hdel  (refs: 1)
+               - 'hdel' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Medium] ./urbanlens/dashboard/services/map_pins/cache.py:62  _SyncRedis.zrem  (refs: 1)
+               - 'zrem' is defined 2 times across the codebase, so this reference count is shared across all of them - a use of any one of them hides this one too
+    [Low   ] ./urbanlens/dashboard/controllers/maps.py:804  MapController.init_map  (refs: 1)
+               - method on 'MapController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Low   ] ./urbanlens/dashboard/controllers/pin.py:134  PinController.init_map  (refs: 1)
+               - method on 'PinController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace

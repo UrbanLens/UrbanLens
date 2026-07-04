@@ -1,0 +1,42 @@
+// UrbanLens - SCSS entry point
+//
+// Module load order:
+//   tokens + mixins  →  _variables.scss (barrel)
+//   buttons          →  unified .btn system + legacy aliases
+//   base             →  resets, grids, legacy dialogs
+//   ...feature partials...
+//   dark             →  CSS custom properties (must precede components)
+//   components       →  .ul-* design system classes
+
+@use 'third_party/_materialize';
+@use 'variables';
+@use 'dark';
+@use 'base';
+@use 'buttons';
+@use 'nav';
+@use 'layout';
+@use 'components';
+@use 'tooltips';
+@use 'explainer';
+@use 'pin-detail';
+@use 'tags';
+@use 'icon-picker';
+@use 'profile';
+@use 'wiki';
+@use 'detail-pins';
+@use 'trips';
+@use 'errors';
+@use 'setup';
+@use 'map';
+@use 'auth';
+@use 'homepage';
+@use 'about';
+@use 'thanks';
+@use 'comments';
+@use 'gallery';
+@use 'markup';
+@use 'toastr';
+@use 'dev_toolbar';
+@use 'env_indicator';
+@use 'admin';
+@use 'collapsible';

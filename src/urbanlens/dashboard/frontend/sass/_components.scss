@@ -1,0 +1,704 @@
+// -- Reusable UI components ----------------------------------------------------
+// Built on var(--ul-*) design tokens from _dark.scss so every component adapts
+// to dark mode automatically. Include AFTER _dark.scss in style.scss.
+
+@use 'sass:color';
+@use 'variables' as *;
+
+// -- Surface primitives --------------------------------------------------------
+
+.ul-surface {
+	@include surface;
+}
+
+// -- Cards ---------------------------------------------------------------------
+
+.ul-card {
+	@include surface;
+	box-shadow: var(--ul-shadow-sm);
+	overflow: hidden;
+}
+
+.ul-card-header {
+	@include panel-header;
+	background-color: var(--ul-grey-1a);
+	color: var(--ul-grey-8);
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.1rem;
+		color: var(--primary-color);
+		opacity: .85;
+	}
+
+	h3 {
+		margin: 0;
+		font-size: .95rem;
+		font-weight: 600;
+	}
+}
+
+.ul-card-body {
+	padding: $space-md;
+}
+
+.ul-card-footer {
+	padding: $bar-padding-y $bar-padding-x;
+	border-top: 1px solid var(--ul-grey-1a);
+	background: var(--ul-grey-1a);
+}
+
+// -- Global dialog utility classes ---------------------------------------------
+// These standalone classes are shared by all native <dialog> elements and do
+// not depend on .ul-dialog being a parent.
+
+.dialog-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: .5rem;
+	padding: .75rem 1rem;
+	font-weight: 600;
+	font-size: .95rem;
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--ul-grey-2b);
+}
+
+.dialog-footer {
+	@include dialog-footer;
+}
+
+// Link shown at the bottom of dialogs pointing to a management page.
+// Was previously defined only in dark-mode overrides - now has a light-mode base.
+.dialog-manage-link {
+	font-size: .8rem;
+	color: var(--ul-grey-6);
+	text-decoration: none;
+	margin-right: auto;
+
+	&:hover {
+		color: var(--ul-grey-8);
+		text-decoration: underline;
+	}
+}
+
+.dialog-close {
+	@include icon-btn(28px);
+	outline: none;
+}
+
+.form-row {
+	@include form-row;
+
+	&--two-col {
+		@include form-row;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: $space-sm $space-md;
+	}
+}
+
+// -- Dialog component ----------------------------------------------------------
+// Base class for all native <dialog> elements. Feature dialogs set their own
+// width via @include dialog-base($width) and add only feature-specific rules.
+
+.ul-dialog {
+	@include dialog-base;
+
+	label {
+		color: var(--ul-grey-8);
+	}
+
+	input {
+		padding: 0.5em 0.75em;
+	}
+
+	.panel-header {
+		@include panel-header($spread: true);
+	}
+
+	// Tinted header background is specific to the .ul-dialog shell.
+	.dialog-header {
+		background-color: var(--ul-grey-1a);
+	}
+
+	.settings-toggle-label
+	{
+		color: var(--ul-grey-9);
+	}
+
+	.form-field {
+		margin-bottom: 1.25rem;
+	}
+}
+
+.ul-dialog-body {
+	padding: 1rem;
+	overflow-y: auto;
+	overflow-x: hidden;
+	flex: 1;
+	min-height: 0;
+	-webkit-overflow-scrolling: touch;
+
+	@include up($breakpoint-sm) {
+		padding: 1.25rem;
+	}
+}
+
+.ul-dialog-footer {
+	@include dialog-footer;
+}
+
+// Alias kept for backwards-compatibility; prefer .dialog-close going forward.
+.ul-dialog-close {
+	@include icon-btn(28px);
+	outline: none;
+}
+
+// -- Panels --------------------------------------------------------------------
+
+.ul-panel {
+	@include panel-base;
+}
+
+.ul-panel-header {
+	@include panel-header;
+	font-size: 0.9rem;
+
+	i,
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.1rem;
+		color: var(--primary-color);
+	}
+}
+
+.ul-panel-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.ul-panel-item {
+	@include panel-item;
+	gap: .6rem;
+	padding: .6rem $space-md;
+	transition: background .1s;
+
+	&:hover {
+		background: var(--ul-hover-bg);
+	}
+}
+
+.ul-panel-footer {
+	display: flex;
+	align-items: center;
+	gap: $space-sm;
+	padding: .6rem $space-md;
+	border-top: 1px solid var(--ul-grey-1a);
+	background: var(--ul-grey-1a);
+	font-size: .82rem;
+	color: var(--ul-grey-7);
+	text-decoration: none;
+	transition: color .12s;
+
+	i {
+		font-size: 1rem;
+	}
+
+	&:hover {
+		color: var(--primary-color);
+	}
+}
+
+.ul-panel-empty {
+	padding: 1.25rem;
+	font-size: .88rem;
+	color: var(--ul-grey-6);
+	text-align: center;
+	font-style: italic;
+
+	a {
+		color: var(--primary-color);
+	}
+}
+
+// -- Spinner -------------------------------------------------------------------
+// Reusable inline spinner for loading states outside of button contexts.
+// For button loading states, use @mixin btn-loading-spinner from _mixins.scss.
+
+.ul-spinner {
+	@include spinner;
+}
+
+// -- Badges --------------------------------------------------------------------
+
+.ul-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: .75rem;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: $radius-full;
+	border: 1px solid transparent;
+	line-height: 1.4;
+	white-space: nowrap;
+
+	&--primary {
+		background: var(--primary-color);
+		color: $color-blue-1700;
+		border-color: color.scale($primary-color, $lightness: -10%);
+	}
+
+	&--success {
+		background: $success-bg;
+		color: $color-green-1700;
+		border-color: color.adjust($success-bg, $lightness: -10%);
+	}
+
+	&--warning {
+		background: $warning-bg;
+		color: $color-amber-1700;
+		border-color: color.adjust($warning-bg, $lightness: -10%);
+	}
+
+	&--danger {
+		background: $danger-bg;
+		color: $color-red-1700;
+		border-color: color.scale($danger-color, $lightness: -10%);
+	}
+
+	&--neutral {
+		background: var(--ul-grey-4);
+		color: var(--ul-black);
+		border-color: var(--ul-grey-1a);
+	}
+
+	&--accent-1 {
+		background: $color-yellow-500;
+		color: $color-yellow-1700;
+		border-color: $color-yellow-700;
+	}
+}
+
+// -- Dropdown ------------------------------------------------------------------
+
+.ul-dropdown {
+	@include surface-elevated;
+	padding: 4px 0;
+	z-index: $z-dropdown;
+	overflow: hidden;
+	@include dropdown-reveal('.is-open > &');
+}
+
+.ul-dropdown-item {
+	@include dropdown-item;
+
+	&--danger {
+		color: $color-red-1300;
+
+		.material-symbols-outlined,
+		.material-icons {
+			color: $color-red-1300;
+		}
+
+		&:hover {
+			background: $danger-bg;
+
+			.material-symbols-outlined,
+			.material-icons {
+				color: $color-red-1500;
+			}
+		}
+	}
+}
+
+.ul-dropdown-sep {
+	height: 1px;
+	background: var(--ul-grey-1a);
+	margin: 4px 0;
+}
+
+// -- Tab bar -------------------------------------------------------------------
+
+.ul-tab-bar {
+	display: flex;
+	border-bottom: 2px solid var(--ul-grey-1a);
+	gap: 0;
+}
+
+.ul-tab {
+	padding: .55rem 1.1rem;
+	font-size: .875rem;
+	font-weight: 500;
+	color: var(--ul-grey-6);
+	border: none;
+	background: none;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	display: inline-flex;
+	align-items: center;
+	gap: .4rem;
+	transition: color .13s, border-color .13s;
+	text-decoration: none;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.05rem;
+	}
+
+	&:hover {
+		color: var(--ul-grey-8);
+	}
+
+	&--active,
+	&.active {
+		color: var(--primary-color);
+		border-bottom-color: var(--primary-color);
+		font-weight: 600;
+	}
+}
+
+// -- Empty state ---------------------------------------------------------------
+
+.ul-empty {
+	@include empty-state;
+	padding: 2.5rem $space-md;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 3rem;
+		opacity: .35;
+	}
+
+	p {
+		margin: 0;
+		font-size: .9rem;
+	}
+}
+
+// -- Notice / inline alert -----------------------------------------------------
+
+.ul-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: $space-sm;
+	padding: .65rem .85rem;
+	border-radius: $radius-sm;
+	font-size: .875rem;
+	border: 1px solid transparent;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.1rem;
+		flex-shrink: 0;
+		margin-top: .05rem;
+	}
+
+	&--info {
+		background: $color-blue-100;
+		color: $color-blue-900;
+		border-color: $color-blue-300;
+	}
+
+	&--success {
+		background: $color-green-100;
+		color: $color-green-900;
+		border-color: $color-green-300;
+	}
+
+	&--warning {
+		background: $color-amber-100;
+		color: $color-amber-900;
+		border-color: $color-amber-300;
+	}
+
+	&--danger {
+		background: $color-red-100;
+		color: $color-red-900;
+		border-color: $color-red-300;
+	}
+}
+
+// -- Chip / pill ---------------------------------------------------------------
+
+.ul-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 10px;
+	border-radius: $radius-full;
+	font-size: .8rem;
+	font-weight: 500;
+	background: var(--ul-grey-4);
+	border: 1px solid var(--ul-grey-2b);
+	color: var(--ul-grey-8);
+	line-height: 1.4;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: .95rem;
+	}
+
+	&--interactive {
+		cursor: pointer;
+		transition: background .12s, border-color .12s;
+
+		&:hover {
+			background: var(--ul-grey-1a);
+			border-color: var(--ul-grey-3b);
+		}
+	}
+}
+
+// -- Toggle switch -------------------------------------------------------------
+
+.ul-switch {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	cursor: pointer;
+	flex-shrink: 0;
+
+	input {
+		position: absolute;
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+
+	&__track {
+		width: 36px;
+		height: 20px;
+		background: var(--ul-grey-3);
+		border-radius: $radius-full;
+		transition: background .2s;
+		position: relative;
+
+		&::after {
+			content: '';
+			position: absolute;
+			top: 2px;
+			left: 2px;
+			width: 16px;
+			height: 16px;
+			background: #fff;
+			border-radius: 50%;
+			transition: transform .2s;
+			box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+		}
+	}
+
+	input:checked + .ul-switch__track {
+		background: var(--primary-color);
+
+		&::after {
+			transform: translateX(16px);
+		}
+	}
+
+	input:focus-visible + .ul-switch__track {
+		outline: 2px solid var(--primary-color);
+		outline-offset: 2px;
+	}
+}
+
+.ul-radio-button {
+	display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    padding: .75em 1.25em;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+	background-color: var(--ul-grey-0);
+    border: 2px solid var(--ul-grey-2b);
+    transition: border-color .15s, background .15s;
+    min-width: 80px;
+	opacity: 0.8;
+
+    input[type="radio"] {
+        display: none;
+    }
+	
+	.material-symbols-outlined,
+    .material-icons {
+        font-size: 1.6rem;
+        color: var(--ul-grey-6);
+        transition: color .15s;
+    }
+
+    &.active,
+    &:has(input:checked) {
+        color: #{$color-indigo-500};
+		background-color: var(--ul-grey-1a);
+		border-color: #{$color-indigo-500};
+		opacity: 1;
+
+        .material-symbols-outlined,
+        .material-icons {
+			color: #{$color-indigo-500};
+        }
+    }
+
+    &:hover:not(.active) {
+		opacity: 1;
+        background-color: var(--ul-grey-0b);
+		border-color: var(--ul-grey-4);
+    }
+}
+
+// - Dual range slider
+// -- Dual-handle range slider -------------------------------------------------
+// One track with overlapped min/max <input type="range"> thumbs.
+
+.ul-dual-range-slider {
+    margin: 4px 0 2px;
+
+	&__track-area {
+		position: relative;
+		height: 22px;
+	}
+
+	&__track {
+		position: absolute;
+		top: 50%;
+		left: 0;
+		right: 0;
+		height: 4px;
+		background: rgba(255, 255, 255, 0.12);
+		border-radius: 2px;
+		transform: translateY(-50%);
+		pointer-events: none;
+	}
+
+	&__fill {
+		position: absolute;
+		height: 100%;
+		border-radius: 2px;
+	}
+
+	&__input {
+		position: absolute !important;  // override materialize input[type=range]{position:relative}
+		width: 100%;
+		height: 100%;
+		top: 0;
+		left: 0;
+		background: transparent;
+		-webkit-appearance: none;
+		appearance: none;
+		pointer-events: none;
+		outline: none;
+		margin: 0 !important;  // override materialize input[type=range]{margin:15px 0}
+		border: none !important;
+
+		&:focus { outline: none; }
+		&:focus-visible { outline: none !important; }
+		&::before, &::after { display: none !important; }
+
+		&::-webkit-slider-runnable-track { background: transparent; }
+		&::-moz-range-track { background: transparent; }
+
+		&::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			appearance: none;
+			width: 18px;
+			height: 18px;
+			border-radius: 50%;
+			background: $ui-fp-active;
+			border: none;
+			cursor: pointer;
+			pointer-events: all;
+			box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5);
+			transition: transform .12s, box-shadow .12s;
+			outline: none !important;
+
+			&:hover,
+			&:active {
+				transform: scale(1.2);
+				box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.55);
+			}
+
+			&:focus { outline: none !important; }
+		}
+
+		&::-moz-range-thumb {
+			width: 18px;
+			height: 18px;
+			border-radius: 50%;
+			background: $ui-fp-active;
+			border: none !important;
+			cursor: pointer;
+			pointer-events: all;
+			box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5);
+			outline: none !important;
+
+			&:hover { transform: scale(1.2); }
+		}
+
+		&::-moz-focus-outer {
+			border: none !important;
+			outline: none !important;
+		}
+	}
+
+	&__value-label {
+		display: block;
+		text-align: center;
+		font-size: 0.78rem;
+		color: rgba(255, 255, 255, 0.45);
+		margin-top: 5px;
+		user-select: none;
+		pointer-events: none;
+		letter-spacing: .04em;
+	}
+}
+
+
+// -- Pagination bar ------------------------------------------------------------
+// Shared Prev/Next control for any paginated card (see _pagination_controls.html).
+
+.pagination-bar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: .6rem;
+	padding: .5rem;
+	border-top: 1px solid var(--ul-grey-1a);
+}
+
+.pagination-btn {
+	@include icon-btn(28px);
+
+	&:disabled {
+		opacity: .35;
+		cursor: default;
+		pointer-events: none;
+	}
+}
+
+.pagination-label {
+	font-size: .78rem;
+	font-weight: 500;
+	color: var(--ul-grey-6);
+	user-select: none;
+}
+
+// - Dark Mode
+[data-theme="dark"] {
+
+	.ul-dropdown-item {
+		&--danger {
+			color: $color-red-100;
+
+			.material-symbols-outlined,
+			.material-icons {
+				color: $color-red-100;
+			}
+		}
+	}
+}

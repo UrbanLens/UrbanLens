@@ -1,0 +1,69 @@
+// -- Generic error / not-found page ----------------------------------------
+// Used by 404.html, 403.html, and any "item not found" pages.
+@use 'variables' as *;
+
+.error-page {
+	text-align: center;
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 4rem 1.5rem 3rem;
+}
+
+.error-page__code {
+	font-size: 7rem;
+	font-weight: 800;
+	line-height: 1;
+	background: linear-gradient(135deg, var(--ul-primary, #2196f3) 0%, #{$color-blue-300} 100%);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+	margin: 0 0 .25rem;
+	letter-spacing: -.04em;
+	user-select: none;
+}
+
+.error-page__icon {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	background: var(--ul-grey-4, #f3f4f6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 auto 1.5rem;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 2.2rem;
+		color: var(--ul-grey-6, #9ca3af);
+	}
+}
+
+.error-page__title {
+	font-size: 1.5rem;
+	font-weight: 700;
+	color: var(--ul-grey-8, #111827);
+	margin: 0 0 .6rem;
+}
+
+.error-page__body {
+	color: var(--ul-grey-7, #6b7280);
+	line-height: 1.6;
+	margin: 0 0 2rem;
+	font-size: .95rem;
+}
+
+.error-page__actions {
+	display: flex;
+	gap: .75rem;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+// Backwards-compat aliases - trip not-found page still uses trip-error-* classes.
+// These just extend the generic classes so no template changes are needed there.
+.trip-error-page    { @extend .error-page; }
+.trip-error-icon    { @extend .error-page__icon; }
+.trip-error-title   { @extend .error-page__title; }
+.trip-error-body    { @extend .error-page__body; }
+.trip-error-actions { @extend .error-page__actions; }

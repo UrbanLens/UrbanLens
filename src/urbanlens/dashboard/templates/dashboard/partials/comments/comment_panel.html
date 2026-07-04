@@ -1,0 +1,27 @@
+{% load dashboard_tags %}
+<div class="comment-panel card" id="comment-panel"
+     data-collapse-scope="{{ context_type }}" data-collapse-section="comments">
+  <div class="card-header">
+    <i class="material-symbols-outlined">chat</i>
+    <span>Comments</span>
+    {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+  </div>
+
+  <div class="card__body comment-panel-body">
+  {% if rendered_comments %}
+  <ul class="comment-list">
+    {% for item in rendered_comments %}
+    {% with c=item.comment %}
+    <li class="comment-item" id="comment-{{ c.id }}">
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=c rendered_text=item.rendered_text reactions=item.reactions replies=item.replies context_type=context_type pin=pin location=location profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=False %}
+    </li>
+    {% endwith %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% include "dashboard/partials/ui/_pagination_controls.html" %}
+
+  {# -- Compose form -- #}
+  {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}
+  </div>
+</div>

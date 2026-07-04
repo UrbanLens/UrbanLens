@@ -1,0 +1,24 @@
+<div id="searchModal">
+    <div class="dialog-overlay" id="searchScreen"></div>
+    <div class="dialog">
+        <button class="btn-close" id="closeDialog" aria-label="Close">x</button>
+        <h2>Search</h2>
+        <form id="searchMapForm" method="POST" action="{% url 'map.search' %}"
+              hx-post="{% url 'map.search' %}" hx-trigger="submit" hx-target="#map-body" hx-swap="outerHTML">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <input type="submit" value="Search">
+        </form>
+    </div>
+</div>
+
+<script>
+    (function () {
+        function closeSearch() {
+            var modal = document.getElementById('searchModal');
+            if (modal) modal.remove();
+        }
+        document.getElementById('closeDialog').addEventListener('click', closeSearch);
+        document.getElementById('searchScreen').addEventListener('click', closeSearch);
+    })();
+</script>

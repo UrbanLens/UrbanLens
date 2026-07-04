@@ -1,0 +1,92 @@
+{% load dashboard_tags %}
+<div class="notif-prefs" id="notif-prefs">
+    {% if saved %}
+    <p class="notif-prefs__saved">
+        <i class="material-icons notif-prefs__saved-icon">check_circle</i>
+        Preferences saved.
+    </p>
+    {% endif %}
+    <form hx-post="{% url 'notifications.preferences' %}"
+          hx-target="#notif-prefs"
+          hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        <p class="settings-label notif-prefs__heading">Event notifications</p>
+        <p class="settings-help notif-prefs__intro">Choose how you want to be notified for each event type.</p>
+
+        <div class="notif-prefs__grid" role="group" aria-label="Notification delivery preferences">
+            <div class="notif-prefs__header">
+                <span class="notif-prefs__hdr notif-prefs__hdr--event">Event</span>
+                <span class="notif-prefs__hdr">None</span>
+                <span class="notif-prefs__hdr">Notification</span>
+                <span class="notif-prefs__hdr">Email</span>
+            </div>
+
+            {% for field, title in pref_fields %}
+            {% with current=prefs|get_attr:field %}
+            <div class="notif-prefs__row">
+                <span class="notif-prefs__label">{{ title }}</span>
+
+                {# None - decorative checkbox; no name, so it is never submitted.       #}
+                {# Checked when neither site nor email is active.                        #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: none</span>
+                    <input type="checkbox"
+                           class="notif-none-box"
+                           data-field="{{ field }}"
+                           {% if current == 'none' %}checked{% endif %}
+                           onchange="notifNone(this)">
+                </label>
+
+                {# In-app notification #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: in-app notification</span>
+                    <input type="checkbox"
+                           name="{{ field }}__site"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if current == 'site' or current == 'both' %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+
+                {# Email #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: email</span>
+                    <input type="checkbox"
+                           name="{{ field }}__email"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if current == 'email' or current == 'both' %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+
+        <div class="notif-prefs__footer">
+            <button type="submit" class="settings-save-btn">Save</button>
+        </div>
+    </form>
+</div>
+<script>
+function notifNone(noneBox) {
+    if (!noneBox.checked) return;
+    var field = noneBox.dataset.field;
+    document.querySelectorAll('.notif-delivery-box[data-field="' + field + '"]').forEach(function (cb) {
+        cb.checked = false;
+    });
+}
+function notifDelivery(deliveryBox) {
+    var field = deliveryBox.dataset.field;
+    var noneBox = document.querySelector('.notif-none-box[data-field="' + field + '"]');
+    if (!noneBox) return;
+    if (deliveryBox.checked) {
+        noneBox.checked = false;
+    } else {
+        var anyChecked = Array.from(
+            document.querySelectorAll('.notif-delivery-box[data-field="' + field + '"]')
+        ).some(function (cb) { return cb.checked; });
+        if (!anyChecked) noneBox.checked = true;
+    }
+}
+</script>

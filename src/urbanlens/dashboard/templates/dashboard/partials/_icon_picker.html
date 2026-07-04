@@ -1,0 +1,63 @@
+{% load dashboard_tags %}
+<div class="icon-picker-dropdown" data-picker="{{ picker_id }}">
+    <input type="hidden" name="{{ field_name }}" id="icon-value-{{ picker_id }}" value="{{ current_icon|default:'' }}">
+
+    <button type="button" class="icon-picker-trigger" id="icon-trigger-{{ picker_id }}"
+            onclick="IconPicker.toggle('{{ picker_id }}')">
+        <span class="icon-picker-current" id="icon-current-{{ picker_id }}">
+            {% if current_icon %}
+                {% if current_icon|is_material_icon %}
+                    <i class="material-icons icon-picker-current-mi">{{ current_icon }}</i>
+                {% else %}
+                    <span class="icon-picker-current-glyph">{{ current_icon }}</span>
+                {% endif %}
+            {% else %}
+                <span class="icon-picker-none-label">No icon</span>
+            {% endif %}
+        </span>
+        <i class="material-icons icon-picker-caret">expand_more</i>
+    </button>
+
+    <div class="icon-picker-panel" id="icon-panel-{{ picker_id }}" hidden>
+        <div class="icon-picker-search-row">
+            <i class="material-icons icon-picker-search-icon">search</i>
+            <input type="text" class="icon-picker-search-input"
+                   placeholder="Search icons…"
+                   oninput="IconPicker.search('{{ picker_id }}', this.value)"
+                   autocomplete="off">
+        </div>
+
+        <div class="icon-picker-tabs">
+            <button type="button" class="icon-tab active" data-cat=""
+                    onclick="IconPicker.setTab('{{ picker_id }}', '', this)">All</button>
+            {% for cat_id, cat_data in icon_categories.items %}
+            <button type="button" class="icon-tab" data-cat="{{ cat_id }}"
+                    onclick="IconPicker.setTab('{{ picker_id }}', '{{ cat_id }}', this)">{{ cat_data.0 }}</button>
+            {% endfor %}
+        </div>
+
+        <div class="icon-picker-grid" id="icon-grid-{{ picker_id }}">
+            <button type="button"
+                    class="icon-picker-item icon-picker-none {% if not current_icon %}selected{% endif %}"
+                    data-icon="" data-cat="" data-label="none no icon clear"
+                    title="No icon"
+                    onclick="IconPicker.pick('{{ picker_id }}', '', this)">
+                <i class="material-icons icon-picker-mi" style="color:#bbb;">block</i>
+                <span class="icon-picker-item-label">None</span>
+            </button>
+            {% for cat_id, cat_data in icon_categories.items %}
+            {% for icon, label in cat_data.1 %}
+            <button type="button"
+                    class="icon-picker-item {% if current_icon == icon %}selected{% endif %}"
+                    data-icon="{{ icon }}" data-cat="{{ cat_id }}" data-label="{{ label|lower }}"
+                    data-keywords="{{ icon|icon_keywords }}"
+                    title="{{ label }}"
+                    onclick="IconPicker.pick('{{ picker_id }}', this.dataset.icon, this)">
+                <span class="icon-picker-glyph">{{ icon }}</span>
+                <span class="icon-picker-item-label">{{ label }}</span>
+            </button>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+</div>

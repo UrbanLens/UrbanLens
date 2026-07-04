@@ -1,0 +1,479 @@
+@use "tokens" as *;
+@use 'sass:color';
+
+$inputs: (
+    "input:not([type])",
+    "input[type=text]:not(.browser-default)",
+    "input[type=password]:not(.browser-default)",
+    "input[type=email]:not(.browser-default)",
+    "input[type=url]:not(.browser-default)",
+    "input[type=time]:not(.browser-default)",
+    "input[type=date]:not(.browser-default)",
+    "input[type=datetime]:not(.browser-default)",
+    "input[type=datetime-local]:not(.browser-default)",
+    "input[type=tel]:not(.browser-default)",
+    "input[type=number]:not(.browser-default)",
+    "input[type=search]:not(.browser-default)",
+    "select",
+    "textarea"
+);
+// Example Usage:
+// @include input-selectors { color: red; }
+// @include input-selectors(".disabled") { color: blue; }
+// @include input-selectors(".disabled", ".readonly") { color: green; }
+@mixin input-selectors($suffixes...) {
+    @if length($suffixes) == 0 {
+        $suffixes: ("");
+    }
+    @each $suffix in $suffixes {
+        @each $selector in $inputs {
+            #{$selector}#{$suffix} {
+                @content;
+            }
+        }
+    }
+}
+
+// -- Responsive ----------------------------------------------------------------
+// up()   - mobile-first: apply styles at $breakpoint and wider (preferred).
+// down() - use only to override desktop-first legacy rules; prefer up() for new code.
+
+@mixin up($breakpoint) {
+	@media (min-width: $breakpoint) {
+		@content;
+	}
+}
+
+@mixin down($breakpoint) {
+	@media (max-width: calc(#{$breakpoint} - 1px)) {
+		@content;
+	}
+}
+
+// -- Layout helpers ------------------------------------------------------------
+
+@mixin flex-center {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+@mixin flex-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+@mixin truncate {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+// -- Focus & inputs ------------------------------------------------------------
+
+@mixin focus-ring($color: $primary-color, $alpha: .15) {
+	outline: none;
+	border-color: $color;
+	box-shadow: 0 0 0 3px rgba($color, $alpha);
+}
+
+@mixin input-focus {
+	@include focus-ring;
+}
+
+@mixin ul-input {
+	display: block;
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid var(--ul-grey-1a);
+	border-radius: $radius-sm;
+	font-size: .9rem;
+	color: var(--ul-grey-8);
+	background: var(--ul-grey-1);
+	box-sizing: border-box;
+	transition: border-color .15s, box-shadow .15s;
+
+	&:focus {
+		@include focus-ring($alpha: .12);
+	}
+
+	&::placeholder {
+		color: var(--ul-grey-6);
+	}
+
+	&:disabled {
+		opacity: .5;
+		cursor: not-allowed;
+	}
+}
+
+// -- Surfaces ------------------------------------------------------------------
+
+@mixin surface($radius: $radius-md) {
+	background: var(--ul-grey-1b);
+	border: 1px solid var(--ul-grey-1a);
+	border-radius: $radius;
+}
+
+@mixin surface-elevated {
+	@include surface;
+	box-shadow: var(--ul-shadow-lg);
+}
+
+// -- Buttons -------------------------------------------------------------------
+// These mixins are the source of truth for button appearance. The .btn class in
+// _buttons.scss uses them, and feature files can @include them directly in
+// feature-specific button classes so they never need to reimplement button styles.
+
+// Base layout, typography, and transitions shared by all .btn variants.
+@mixin btn-base {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: .35em;
+	padding: .5rem 1rem;
+	font-size: .95rem;
+	font-weight: 500;
+	line-height: 1.25;
+	border: 1px solid transparent;
+	border-radius: $radius-sm;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	user-select: none;
+	transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+	background: none;
+	color: var(--ul-grey-8);
+	text-transform: none;
+
+	&:active {
+		transform: translateY(1px);
+	}
+
+	&:disabled,
+	&[disabled] {
+		@include btn-disabled;
+	}
+}
+
+// Filled primary button (uses --ul-button-* CSS custom properties so dark mode works).
+@mixin btn-primary {
+	@include btn-base;
+	background: var(--ul-button-bg);
+	border-color: var(--ul-button-border);
+	color: var(--ul-button-text);
+
+	&:hover {
+		background: var(--ul-button-hover-bg);
+		border-color: var(--ul-grey-3b);
+		color: var(--ul-button-hover-text);
+	}
+}
+
+// Outlined / ghost button.
+@mixin btn-ghost {
+	@include btn-base;
+	border-color: var(--ul-grey-1a);
+	color: var(--ul-grey-7);
+
+	&:hover {
+		background: var(--ul-grey-1);
+		color: var(--ul-grey-8);
+		border-color: var(--ul-grey-3b);
+	}
+}
+
+// Outlined danger button.
+@mixin btn-danger {
+	@include btn-base;
+	color: $danger-color;
+	border-color: $danger-border;
+	background: $danger-bg;
+
+	&:hover {
+		background: color.scale($danger-bg, $lightness: -4%);
+	}
+}
+
+// Icon button that reveals danger colors on hover.
+// Uses surface-0a (translucent neutral) for the hover background so it works in both
+// light and dark themes; only the icon changes to the danger red.
+@mixin icon-btn-danger($size: 28px) {
+	@include icon-btn($size);
+
+	&:hover,
+	&:focus {
+		background: var(--ul-grey-0a);
+		color: $danger-color;
+	}
+}
+
+@mixin icon-btn($size: 28px) {
+	@include flex-center;
+	width: $size;
+	height: $size;
+	border-radius: $radius-icon-btn;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	flex-shrink: 0;
+	color: var(--ul-grey-6);
+	padding: 0;
+	transition: background .12s, color .12s;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 1.1rem;
+	}
+
+	&:hover {
+		background: var(--ul-hover-bg);
+		color: var(--ul-grey-8);
+	}
+}
+
+@mixin btn-disabled {
+	opacity: .45;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+// Inline spinner element styles (used by .ul-spinner and one-off spinner elements).
+@mixin spinner($size: 14px) {
+	display: inline-block;
+	width: $size;
+	height: $size;
+	border: 2px solid rgba(255, 255, 255, .35);
+	border-top-color: var(--ul-grey-5);
+	border-radius: 50%;
+	animation: ul-spin .65s linear infinite;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+
+// Appends a spinning ::after pseudo-element to a button for loading states.
+@mixin btn-loading-spinner($size: 13px) {
+	&::after {
+		content: '';
+		@include spinner($size);
+		margin-left: .4rem;
+	}
+}
+
+// -- Panels & dialogs ------------------------------------------------------------
+
+// Header bar shared by cards, panels, and dialogs.
+// Pass $spread: true when actions should pin to opposite edges.
+@mixin panel-header($spread: false) {
+	display: flex;
+	align-items: center;
+	gap: $space-sm;
+	padding: $bar-padding-y $bar-padding-x;
+	border-bottom: 1px solid var(--ul-grey-1a);
+	font-weight: 600;
+	font-size: 1rem;
+	flex-shrink: 0;
+	background-color: var(--ul-grey-1a);
+	color: var(--ul-grey-8);
+
+	@if $spread {
+		justify-content: space-between;
+	}
+}
+
+// Header bar shared by cards, panels, and dialogs.
+// Pass $spread: true when actions should pin to opposite edges.
+@mixin panel-header-grid($areas: 'header-icon header-title header-meta header-actions') {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto;
+	grid-template-areas: $areas;
+	align-items: center;
+	gap: $space-sm;
+	padding: $bar-padding-y $bar-padding-x;
+	border-bottom: 1px solid var(--ul-grey-1a);
+	background-color: var(--ul-grey-1a);
+	color: var(--ul-grey-8);
+
+	i.material-symbols-outlined,
+	i.material-icons {
+		grid-area: header-icon;
+		font-size: 1.1rem;
+		opacity: .7;
+	}
+	
+	> h3 {
+		grid-area: header-title;
+		margin: 0;
+		font-size: .95rem;
+		font-weight: 600;
+		text-align: left;
+	}
+
+	> .card-header-actions {
+		grid-area: header-actions;
+		display: flex;
+		align-items: center;
+	}
+
+	> .btn--icon-sm,
+	> .card-header-link,
+	> .section-collapse-btn,
+	> .btn:not(.section-collapse-btn):not(.view-toggle-btn) {
+		grid-area: header-actions;
+		justify-self: end;
+	}
+}
+
+@mixin panel-base {
+	@include surface;
+	overflow: hidden;
+}
+
+@mixin panel-item {
+	display: flex;
+	align-items: center;
+	gap: $space-sm;
+	padding: $space-sm $bar-padding-x;
+	border-bottom: 1px solid var(--ul-grey-1a);
+
+	&:last-child {
+		border-bottom: none;
+	}
+}
+
+// $width sets the dialog's preferred width on tablet/desktop.
+// Mobile-first: fit within the viewport with dvh-aware max-height.
+@mixin dialog-base($width: 55rem) {
+	border: none;
+	border-radius: $radius-md;
+	box-shadow: $shadow-dialog;
+	padding: 0;
+	width: calc(100vw - 1rem);
+	max-width: calc(100vw - 1rem);
+	max-height: calc(100dvh - 1rem);
+	overflow: visible;
+	background: var(--ul-grey-1b);
+	color: var(--ul-grey-8);
+
+	@include up($breakpoint-sm) {
+		width: min(#{$width}, 90vw);
+		max-width: 90vw;
+		max-height: 90vh;
+	}
+
+	&::backdrop {
+		background: rgba(0, 0, 0, .55);
+		backdrop-filter: blur(2px);
+		-webkit-backdrop-filter: blur(2px);
+	}
+
+	&[open] {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+}
+
+@mixin dialog-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: $space-sm;
+	padding: $bar-padding-y $bar-padding-x $space-md;
+	border-top: 1px solid var(--ul-grey-1a);
+	flex-shrink: 0;
+}
+
+// Vertical label + input stack used inside dialog forms.
+@mixin form-row {
+	display: flex;
+	flex-direction: column;
+	gap: .35rem;
+
+	label {
+		font-size: .8rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: .04em;
+		color: var(--ul-grey-6);
+	}
+
+	@include input-selectors {
+		@include ul-input;
+	}
+}
+
+@mixin add-form-row {
+	display: flex;
+	gap: $space-sm;
+	align-items: center;
+	padding: $bar-padding-y $bar-padding-x;
+	border-top: 1px solid var(--ul-grey-1a);
+	background: var(--ul-grey-1a);
+}
+
+@mixin empty-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: $space-sm;
+	padding: $space-xl;
+	color: var(--ul-grey-6);
+	text-align: center;
+
+	.material-symbols-outlined,
+	.material-icons {
+		font-size: 2.5rem;
+		opacity: .4;
+	}
+}
+
+// -- Dropdowns -----------------------------------------------------------------
+
+@mixin dropdown-item {
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	width: 100%;
+	padding: 8px 14px;
+	font-size: .875rem;
+	font-weight: 500;
+	color: var(--ul-grey-8);
+	text-decoration: none;
+	background: none;
+	border: none;
+	cursor: pointer;
+	text-align: left;
+	transition: background .12s;
+	box-sizing: border-box;
+
+	.material-icons,
+	.material-symbols-outlined {
+		font-size: 1.05rem;
+		color: var(--ul-grey-7);
+		flex-shrink: 0;
+	}
+
+	&:hover {
+		background: var(--ul-grey-1);
+
+		.material-icons,
+		.material-symbols-outlined {
+			color: var(--primary-color);
+		}
+	}
+}
+
+@mixin dropdown-reveal($open-selector: '.is-open > &') {
+	opacity: 0;
+	transform: translateY(-6px);
+	pointer-events: none;
+	transition: opacity .15s ease, transform .15s ease;
+
+	#{$open-selector} {
+		opacity: 1;
+		transform: translateY(0);
+		pointer-events: auto;
+	}
+}

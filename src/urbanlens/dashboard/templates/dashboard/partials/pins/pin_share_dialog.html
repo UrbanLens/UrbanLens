@@ -1,0 +1,23 @@
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Share Pin" %}
+<div class="ul-dialog-body">
+  {% if shared_to %}
+    <p><strong>{{ pin.display_label }}</strong> was shared with {{ shared_to.username }}.</p>
+  {% else %}
+    <p>Choose one friend to share <strong>{{ pin.display_label }}</strong> with.</p>
+    {% if friends %}
+    <form hx-post="{% url 'pin.share.send' pin.slug %}" hx-target="#pin-share-dialog" hx-swap="innerHTML">
+      {% csrf_token %}
+      <label for="pin-share-profile">Friend</label>
+      <select id="pin-share-profile" name="profile_id" required>
+        {% for friend in friends %}<option value="{{ friend.id }}">{{ friend.username }}</option>{% endfor %}
+      </select>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-share-dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary"><i class="material-symbols-outlined">ios_share</i> Share</button>
+      </div>
+    </form>
+    {% else %}
+      <p>You do not have any connected friends to share with yet.</p>
+    {% endif %}
+  {% endif %}
+</div>

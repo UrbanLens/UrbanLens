@@ -1,0 +1,1169 @@
+<style>
+/* -- Import wizard dialog ----------------------------------------------- */
+#import-dialog {
+    max-width: 620px;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 10rem);
+}
+
+/* Step header */
+.iw-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--ul-border, #e0e0e0);
+    flex-shrink: 0;
+}
+.iw-header h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+.iw-step-dots {
+    margin-right: 2em;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.iw-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e0e0e0;
+    transition: background .2s;
+}
+.iw-dot.active { background: #2196F3; }
+.iw-dot.done   { background: #43a047; }
+
+/* Step wrappers must be flex columns so .iw-body can scroll within the dialog.
+   Use :not([hidden]) so this display:flex never fights the hidden attribute. */
+#iw-step-1:not([hidden]),
+#iw-step-parsing:not([hidden]),
+#iw-step-2:not([hidden]),
+#iw-step-3:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Step bodies */
+.iw-body {
+    padding: 20px 24px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+.iw-footer {
+    padding: 14px 24px;
+    border-top: 1px solid var(--ul-border, #e0e0e0);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+    background: var(--ul-grey-1, #fff);
+}
+
+/* Close button override */
+#closeImportDialog {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    color: #9aa0a6;
+    line-height: 1;
+    font-size: 20px;
+}
+#closeImportDialog:hover { color: #1a1a1a; background: rgba(0,0,0,.06); }
+#closeImportDialog:disabled { opacity: .35; cursor: not-allowed; }
+
+/* -- Step 1: Upload --------------------------------------------------- */
+.iw-hint {
+    color: #5f6368;
+    font-size: .83rem;
+    margin: 0 0 8px;
+    line-height: 1.5;
+}
+.iw-takeout-help-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0 0 18px;
+    color: var(--ul-primary-color);
+    font-size: .83rem;
+    cursor: pointer;
+}
+.iw-takeout-help-toggle i { font-size: 1rem; }
+.iw-takeout-help-toggle:hover { text-decoration: underline; }
+.iw-takeout-help {
+    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0 0 18px;
+    font-size: .83rem;
+    color: var(--ul-grey-9, #333);
+    line-height: 1.5;
+}
+.iw-takeout-help ol {
+    margin: 0;
+    padding-left: 1.2em;
+}
+.iw-takeout-help li { margin-bottom: 6px; }
+.iw-takeout-help li:last-child { margin-bottom: 0; }
+.iw-takeout-help a { color: var(--ul-primary-color); }
+.iw-file-zone {
+    border: 1.5px dashed var(--ul-grey-1a);
+    border-radius: 10px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s, background .18s;
+    background: var(--ul-grey-1);
+}
+.iw-file-zone:hover, .iw-file-zone.drag-over {
+    border-color: var(--ul-primary-color);
+    background: var(--ul-grey-1);
+}
+.iw-file-zone i { font-size: 2.2rem; color: var(--ul-primary-color); display: block; margin-bottom: 8px; }
+.iw-file-zone-label { font-size: .9rem; color: #5f6368; }
+.iw-file-zone-label strong { color: var(--ul-primary-color); cursor: pointer; }
+.iw-file-input { display: none; }
+.iw-selected-files {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.iw-file-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ul-grey-1);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: .82rem;
+    color: var(--ul-grey-9);
+}
+.iw-file-chip i { font-size: 1rem; color: var(--ul-primary-color); }
+.iw-file-chip-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iw-file-chip-remove {
+    background: none; border: none; cursor: pointer;
+    color: var(--ul-grey-7); padding: 0; line-height: 1;
+    font-size: .9rem;
+}
+.iw-file-chip-remove:hover { color: var(--ul-text-danger); }
+
+/* Parse loading spinner */
+.iw-parsing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 14px;
+    color: var(--ul-grey-5);
+    font-size: .9rem;
+}
+.iw-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--ul-grey-1a);
+    border-top-color: var(--ul-primary-color);
+    border-radius: 50%;
+    animation: iw-spin .7s linear infinite;
+}
+@keyframes iw-spin { to { transform: rotate(360deg); } }
+
+/* -- Step 2: Preview --------------------------------------------------- */
+.iw-preview-summary {
+    font-size: .85rem;
+    color: var(--ul-grey-5);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.iw-preview-summary a {
+    font-size: .8rem;
+    color: var(--ul-primary-color);
+    text-decoration: none;
+    cursor: pointer;
+}
+.iw-preview-summary a:hover { text-decoration: underline; }
+
+.iw-list-group {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+.iw-list-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--ul-grey-1);
+    cursor: pointer;
+    user-select: none;
+}
+.iw-list-toggle { color: #5f6368; font-size: 1.1rem; transition: transform .15s; }
+.iw-list-toggle.collapsed { transform: rotate(-90deg); }
+.iw-list-name { font-weight: 600; font-size: .9rem; flex: 1; }
+.iw-list-count { font-size: .78rem; color: var(--ul-grey-7); }
+
+.iw-list-meta {
+    padding: 10px 14px;
+    border-top: 1px solid var(--ul-border, #e0e0e0);
+    background: var(--ul-grey-0);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.iw-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: .83rem;
+    color: #5f6368;
+}
+.iw-meta-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+/* Override Materialize's global checkbox reset inside the wizard */
+.iw-meta-row input[type=checkbox] {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    width: 15px !important;
+    height: 15px !important;
+    margin: 0 !important;
+    flex-shrink: 0;
+    accent-color: #2196F3;
+    cursor: pointer;
+}
+/* Suppress the Materialize pseudo-element replacement inside the wizard */
+.iw-meta-row label:before,
+.iw-meta-row label:after { display: none !important; }
+
+/* Badge picker */
+.iw-badge-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.iw-badge-row-label { font-size: .78rem; color: #9aa0a6; white-space: nowrap; }
+.iw-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: .78rem;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: opacity .15s, box-shadow .15s;
+    background: #f0f0f0;
+    color: #333;
+    user-select: none;
+}
+.iw-badge-pill.selected {
+    border-color: currentColor;
+    box-shadow: 0 0 0 2px rgba(33,150,243,.15);
+}
+.iw-badge-pill i { font-size: .85rem; }
+.iw-badge-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: .78rem;
+    border: 1.5px dashed #c8d0d8;
+    background: none;
+    color: #5f6368;
+    cursor: pointer;
+}
+.iw-badge-add:hover { border-color: #2196F3; color: #2196F3; }
+
+/* Badge dropdown */
+.iw-badge-dropdown {
+    position: absolute;
+    z-index: 9999;
+    background: var(--ul-grey-1, #fff);
+    border: 1px solid var(--ul-border, #e0e0e0);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.14);
+    padding: 6px;
+    width: 220px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.iw-badge-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .83rem;
+    color: var(--ul-grey-9);
+}
+.iw-badge-dropdown-item:hover { background: var(--ul-grey-1); }
+.iw-badge-dropdown-item.checked { background: var(--ul-grey-1); }
+.iw-badge-dropdown-item i { font-size: 1rem; }
+.iw-badge-dropdown-check { margin-left: auto; color: var(--ul-primary-color); font-size: .9rem; }
+
+/* Pin list */
+.iw-pin-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--ul-grey-1a);
+    max-height: 220px;
+    overflow-y: auto;
+}
+.iw-pin-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    transition: background .1s;
+    cursor: pointer;
+}
+.iw-pin-row:last-child { border-bottom: none; }
+.iw-pin-row:hover { background: var(--ul-grey-1); }
+/* Override Materialize's global checkbox reset inside the pin list */
+.iw-pin-row input[type=checkbox] {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    position: static !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    width: 14px !important;
+    height: 14px !important;
+    margin: 0 !important;
+    flex-shrink: 0;
+    accent-color: var(--ul-primary-color);
+    cursor: pointer;
+}
+.iw-pin-name { font-size: .85rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Private toggle button */
+.iw-pin-private-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--ul-grey-7); padding: 2px 3px; flex-shrink: 0;
+    line-height: 1; border-radius: 4px;
+    transition: color .15s;
+    display: flex; align-items: center;
+}
+.iw-pin-private-btn i { font-size: 1rem; }
+.iw-pin-private-btn:hover { color: var(--ul-text-danger); }
+.iw-pin-private-btn.is-private { color: #c0392b; }
+.iw-pin-row.is-private { background: rgba(192,57,43,.04); }
+
+/* Deselected row */
+.iw-pin-row.deselected .iw-pin-name { opacity: .4; text-decoration: line-through; }
+
+/* Private info banner */
+.iw-private-info-box {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: #fdf0ee; border: 1px solid #e8c2be;
+    border-radius: 8px; padding: 10px 14px;
+    font-size: .82rem; color: #5f6368;
+    margin-top: 12px;
+}
+.iw-private-info-box i { color: #c0392b; font-size: 1.05rem; flex-shrink: 0; margin-top: .1rem; }
+.iw-private-info-box strong { color: #c0392b; }
+
+/* Preview footer count */
+#iw-selected-count { font-size: .85rem; color: #5f6368; }
+
+/* -- Step 3: Progress --------------------------------------------------- */
+.iw-progress-header {
+    font-size: .92rem;
+    font-weight: 600;
+    margin-bottom: 14px;
+    color: var(--ul-grey-9);
+}
+.iw-progress-bar-track {
+    background: #f0f0f0;
+    border-radius: 6px;
+    overflow: hidden;
+    height: 6px;
+    margin-bottom: 10px;
+}
+.iw-progress-bar-fill {
+    height: 100%;
+    background: #2196F3;
+    border-radius: 6px;
+    transition: width .3s ease;
+    width: 0%;
+}
+.iw-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+.iw-progress-pct { font-size: 1.4rem; font-weight: 700; color: #2196F3; letter-spacing: -.02em; }
+.iw-progress-count { font-size: .83rem; color: var(--ul-grey-7); }
+.iw-current-name {
+    font-size: .82rem; color: var(--ul-grey-5);
+    height: 1.2em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    margin-bottom: 14px;
+}
+.iw-stats {
+    display: flex;
+    gap: 18px;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+    padding: 10px 0;
+    border-top: 1px solid var(--ul-grey-1a);
+    margin-bottom: 14px;
+}
+.iw-stats strong { color: var(--ul-grey-9); }
+
+/* Per-item log */
+.iw-item-log {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--ul-border, #e0e0e0);
+    border-radius: 8px;
+    font-size: .8rem;
+    background-color: var(--ul-grey-2);
+}
+.iw-log-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(0,0,0,.04);
+}
+.iw-log-row:last-child { border-bottom: none; }
+.iw-log-icon { flex-shrink: 0; font-size: .95rem; width: 18px; text-align: center; }
+.iw-log-icon.spin { animation: iw-spin .6s linear infinite; color: #90caf9; }
+.iw-log-icon.created { color: #43a047; }
+.iw-log-icon.existed { color: #9aa0a6; }
+.iw-log-icon.skipped { color: #e57373; }
+.iw-log-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ul-grey-0); }
+.iw-log-status { font-size: .72rem; color: #9aa0a6; flex-shrink: 0; }
+</style>
+
+<div class="dialog-overlay" id="import-screen"></div>
+<div class="ul-dialog dialog" id="import-dialog">
+    <button class="btn-close" id="closeImportDialog" aria-label="Close">
+        <i class="material-icons" style="font-size:1.2rem;vertical-align:middle">close</i>
+    </button>
+
+    <!-- Header with step indicator -->
+    <div class="iw-header dialog-header">
+        <h2 id="iw-title">Import Pins</h2>
+        <div class="iw-step-dots">
+            <div class="iw-dot active" id="iw-dot-1"></div>
+            <div class="iw-dot" id="iw-dot-2"></div>
+            <div class="iw-dot" id="iw-dot-3"></div>
+        </div>
+    </div>
+
+    <!-- -- Step 1: Upload ------------------------------------------ -->
+    <div id="iw-step-1">
+        <div class="iw-body">
+            <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
+            <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
+                <i class="material-symbols-outlined">help_outline</i>
+                <span>How do I get a Google Takeout file?</span>
+            </button>
+            <div class="iw-takeout-help" id="iw-takeout-help" hidden>
+                <ol>
+                    <li>Go to <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a> and sign in with the Google account that has your saved places.</li>
+                    <li>Click <strong>Deselect all</strong>, then scroll down and check only <strong>Saved</strong> (this covers your Google Maps lists).</li>
+                    <li>Click <strong>Next step</strong>, choose how you'd like to receive the export (an emailed download link is simplest), and click <strong>Create export</strong>.</li>
+                    <li>Google will email you a download link, usually within a few minutes. Download the .zip file it sends you.</li>
+                    <li>Come back here and drop that .zip file into the upload area below - no need to unzip it first.</li>
+                </ol>
+            </div>
+            <div class="iw-file-zone" id="iw-file-zone">
+                <i class="material-symbols-outlined">cloud_upload</i>
+                <span class="iw-file-zone-label">
+                    Drop files here or <strong id="iw-browse-label">browse</strong>
+                </span>
+                <input type="file" class="iw-file-input" id="iw-file-input" multiple
+                       accept=".kml,.kmz,.json,.geojson,.csv,.zip,.tgz,.tar.gz">
+            </div>
+            <div class="iw-selected-files" id="iw-selected-files"></div>
+        </div>
+        <div class="iw-footer">
+            <button id="iw-btn-upload" class="btn btn--primary btn--lg btn--submit" disabled>Continue →</button>
+        </div>
+    </div>
+
+    <!-- -- Step 1b: Parsing spinner (inline) ----------------------- -->
+    <div id="iw-step-parsing" hidden>
+        <div class="iw-body">
+            <div class="iw-parsing">
+                <div class="iw-spinner"></div>
+                <span>Reading files...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- -- Step 2: Preview ----------------------------------------- -->
+    <div id="iw-step-2" hidden>
+        <div class="iw-body" id="iw-preview-body">
+            <div class="iw-preview-summary">
+                <span id="iw-preview-total-label"></span>
+                <a id="iw-toggle-all">Deselect all</a>
+            </div>
+            <div id="iw-lists-container"></div>
+            <div id="iw-private-info" hidden>
+                <div class="iw-private-info-box">
+                    <i class="material-symbols-outlined">lock</i>
+                    <span><strong>Private pins</strong> are not linked to the community wiki. Their exact location is only visible to you.</span>
+                </div>
+            </div>
+        </div>
+        <div class="iw-footer">
+            <span id="iw-selected-count" style="margin-right:auto"></span>
+            <label class="iw-meta-row" style="font-size:.85rem;color:#5f6368;cursor:pointer">
+                <input type="checkbox" id="iw-auto-tag">
+                Auto Tag
+            </label>
+            <button id="iw-btn-back" class="btn btn--ghost" style="padding:9px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:none;cursor:pointer;font-size:.88rem;color:#5f6368;">← Back</button>
+            <button id="iw-btn-confirm" class="btn btn--primary btn--lg btn--submit" disabled>Import</button>
+        </div>
+    </div>
+
+    <!-- -- Step 3: Progress ---------------------------------------- -->
+    <div id="iw-step-3" hidden>
+        <div class="iw-body">
+            <div class="iw-progress-header" id="iw-progress-header">Importing...</div>
+            <div class="iw-progress-bar-track">
+                <div class="iw-progress-bar-fill" id="iw-bar"></div>
+            </div>
+            <div class="iw-progress-meta">
+                <strong class="iw-progress-pct" id="iw-pct">0%</strong>
+                <span class="iw-progress-count" id="iw-count">Preparing...</span>
+            </div>
+            <div class="iw-current-name" id="iw-current-name"></div>
+            <div class="iw-stats">
+                <span>Created <strong id="iw-n-created">0</strong></span>
+                <span>Existed <strong id="iw-n-exists">0</strong></span>
+                <span>Skipped <strong id="iw-n-skipped">0</strong></span>
+            </div>
+            <div class="iw-item-log" id="iw-item-log"></div>
+        </div>
+        <div class="iw-footer">
+            <button id="iw-btn-done" class="btn btn--primary btn--lg btn--submit" hidden>Done</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* -- State ------------------------------------------------------------- */
+var parsedData = null;   // {lists, total, badges} from server
+var selectedFiles = [];  // FileList-like array
+var abortCtrl = null;
+var importing = false;
+var needsConfirm = false;
+var allSelected = true;
+
+/* -- DOM references --------------------------------------------------- */
+var $ = function (id) { return document.getElementById(id); };
+
+var steps = {
+    upload:    $('iw-step-1'),
+    parsing:   $('iw-step-parsing'),
+    preview:   $('iw-step-2'),
+    progress:  $('iw-step-3'),
+};
+var dots = [$('iw-dot-1'), $('iw-dot-2'), $('iw-dot-3')];
+
+/* -- Utility ----------------------------------------------------------- */
+function showStep(name, dotIdx) {
+    Object.values(steps).forEach(function (el) { el.hidden = true; });
+    steps[name].hidden = false;
+    dots.forEach(function (d, i) {
+        d.className = 'iw-dot' + (i < dotIdx ? ' done' : i === dotIdx ? ' active' : '');
+    });
+    $('iw-title').textContent = {
+        upload: 'Import Pins',
+        parsing: 'Import Pins',
+        preview: 'Review Import',
+        progress: 'Importing...',
+    }[name];
+}
+
+function getCsrfToken() {
+    var el = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (el) return el.value;
+    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : '';
+}
+
+/* -- Close dialog ------------------------------------------------------ */
+function closeDialog() {
+    if (importing) {
+        if (!confirm('Import is still in progress. Leave and stop importing?')) return;
+        if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+        importing = false;
+    } else if (needsConfirm) {
+        if (!confirm('Leave the import wizard? Your progress will be lost.')) return;
+    }
+    if (abortCtrl) { abortCtrl.abort(); abortCtrl = null; }
+    var overlay = $('import-screen');
+    var dialog  = $('import-dialog');
+    if (overlay) overlay.remove();
+    if (dialog)  dialog.remove();
+    window.removeEventListener('beforeunload', beforeUnloadHandler);
+}
+
+function beforeUnloadHandler(e) {
+    if (importing || needsConfirm) { e.preventDefault(); e.returnValue = ''; }
+}
+window.addEventListener('beforeunload', beforeUnloadHandler);
+
+$('import-screen').addEventListener('click', closeDialog);
+$('closeImportDialog').addEventListener('click', closeDialog);
+
+/* -- Step 1: Takeout help toggle ---------------------------------------- */
+$('iw-takeout-help-toggle').addEventListener('click', function () {
+    var help = $('iw-takeout-help');
+    var expanded = !help.hidden;
+    help.hidden = expanded;
+    $('iw-takeout-help-toggle').setAttribute('aria-expanded', String(!expanded));
+});
+
+/* -- Step 1: File picking ---------------------------------------------- */
+var fileInput = $('iw-file-input');
+var fileZone  = $('iw-file-zone');
+
+$('iw-browse-label').addEventListener('click', function () { fileInput.click(); });
+fileZone.addEventListener('click', function (e) {
+    if (e.target === fileZone || e.target.classList.contains('iw-file-zone-label')) fileInput.click();
+});
+
+fileInput.addEventListener('change', function () { handleFiles(Array.from(fileInput.files)); });
+
+fileZone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    fileZone.classList.add('drag-over');
+});
+fileZone.addEventListener('dragleave', function () { fileZone.classList.remove('drag-over'); });
+fileZone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    fileZone.classList.remove('drag-over');
+    handleFiles(Array.from(e.dataTransfer.files));
+});
+
+function handleFiles(newFiles) {
+    newFiles.forEach(function (f) {
+        if (!selectedFiles.find(function (x) { return x.name === f.name && x.size === f.size; }))
+            selectedFiles.push(f);
+    });
+    renderFileChips();
+}
+
+function renderFileChips() {
+    var container = $('iw-selected-files');
+    container.innerHTML = '';
+    selectedFiles.forEach(function (f, idx) {
+        var chip = document.createElement('div');
+        chip.className = 'iw-file-chip';
+        chip.innerHTML =
+            '<i class="material-symbols-outlined">insert_drive_file</i>' +
+            '<span class="iw-file-chip-name">' + escHtml(f.name) + '</span>' +
+            '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
+        container.appendChild(chip);
+    });
+    container.querySelectorAll('.iw-file-chip-remove').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            selectedFiles.splice(parseInt(btn.dataset.idx), 1);
+            renderFileChips();
+        });
+    });
+    $('iw-btn-upload').disabled = selectedFiles.length === 0;
+}
+
+/* -- Step 1 → Step 2: Parse -------------------------------------------- */
+$('iw-btn-upload').addEventListener('click', async function () {
+    if (selectedFiles.length === 0) return;
+    showStep('parsing', 0);
+    $('closeImportDialog').disabled = true;
+
+    var formData = new FormData();
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+    selectedFiles.forEach(function (f) { formData.append('upload_files', f); });
+
+    try {
+        var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData });
+        if (!res.ok) {
+            var err = await res.json().catch(function () { return {}; });
+            throw new Error(err.error || 'Server error ' + res.status);
+        }
+        parsedData = await res.json();
+        needsConfirm = true;
+        $('closeImportDialog').disabled = false;
+        renderPreview(parsedData);
+        showStep('preview', 1);
+    } catch (err) {
+        $('closeImportDialog').disabled = false;
+        showStep('upload', 0);
+        toastr.error(err.message, 'Could not read files');
+    }
+});
+
+/* -- Step 2: Render preview -------------------------------------------- */
+function renderPreview(data) {
+    var lists = data.lists;
+    var badges = data.badges || [];
+    allSelected = true;
+
+    $('iw-preview-total-label').textContent =
+        data.total + ' pin' + (data.total !== 1 ? 's' : '') +
+        ' across ' + lists.length + ' list' + (lists.length !== 1 ? 's' : '');
+
+    var container = $('iw-lists-container');
+    container.innerHTML = '';
+
+    lists.forEach(function (lst, listIdx) {
+        var group = document.createElement('div');
+        group.className = 'iw-list-group';
+        group.dataset.listIdx = listIdx;
+
+        /* Header */
+        var header = document.createElement('div');
+        header.className = 'iw-list-header';
+        header.innerHTML =
+            '<i class="material-icons iw-list-toggle" id="iw-toggle-' + listIdx + '">expand_more</i>' +
+            '<span class="iw-list-name">' + escHtml(lst.stem) + '</span>' +
+            '<span class="iw-list-count" id="iw-list-count-' + listIdx + '">' + lst.pins.length + ' pins</span>';
+        group.appendChild(header);
+
+        /* Meta (always visible) */
+        var meta = document.createElement('div');
+        meta.className = 'iw-list-meta';
+
+        /* Create category checkbox */
+        var catRow = document.createElement('div');
+        catRow.className = 'iw-meta-row';
+        var catId = 'iw-cat-' + listIdx;
+        catRow.innerHTML =
+            '<label>' +
+            '<input type="checkbox" id="' + catId + '" data-list="' + listIdx + '" checked>' +
+            'Create category <em>"' + escHtml(lst.stem) + '"</em>' +
+            '</label>';
+        meta.appendChild(catRow);
+
+        /* Badge picker row */
+        if (badges.length > 0) {
+            var badgeRow = document.createElement('div');
+            badgeRow.className = 'iw-meta-row';
+            var badgeInner = document.createElement('div');
+            badgeInner.className = 'iw-badge-row';
+            badgeInner.id = 'iw-badges-' + listIdx;
+            badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
+
+            var addBtn = document.createElement('button');
+            addBtn.className = 'iw-badge-add';
+            addBtn.type = 'button';
+            addBtn.dataset.listIdx = listIdx;
+            addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add badge';
+            badgeInner.appendChild(addBtn);
+
+            badgeRow.appendChild(badgeInner);
+            meta.appendChild(badgeRow);
+            lst._selectedBadgeIds = [];
+
+            addBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openBadgeDropdown(listIdx, badges, addBtn);
+            });
+        } else {
+            lst._selectedBadgeIds = [];
+        }
+
+        group.appendChild(meta);
+
+        /* Pin list */
+        var pinList = document.createElement('ul');
+        pinList.className = 'iw-pin-list';
+        pinList.id = 'iw-pins-' + listIdx;
+        lst.pins.forEach(function (pin, pinIdx) {
+            pin._selected = true;
+            pin._private  = false;
+            var row = document.createElement('li');
+            row.className = 'iw-pin-row';
+            row.dataset.listIdx = listIdx;
+            row.dataset.pinIdx = pinIdx;
+            var cbId = 'iw-pin-' + listIdx + '-' + pinIdx;
+            row.innerHTML =
+                '<input type="checkbox" id="' + cbId + '" checked>' +
+                '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || '(unnamed)') + '">' +
+                escHtml(pin.name || '(unnamed)') + '</label>' +
+                '<button type="button" class="iw-pin-private-btn" title="Mark as private">' +
+                '<i class="material-symbols-outlined">lock_open</i></button>';
+            var cb = row.querySelector('input[type=checkbox]');
+            cb.addEventListener('change', function () {
+                pin._selected = cb.checked;
+                row.classList.toggle('deselected', !cb.checked);
+                updateListCount(listIdx);
+                updateSelectedCount();
+            });
+            var privBtn = row.querySelector('.iw-pin-private-btn');
+            privBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                pin._private = !pin._private;
+                privBtn.classList.toggle('is-private', pin._private);
+                privBtn.querySelector('i').textContent = pin._private ? 'lock' : 'lock_open';
+                privBtn.title = pin._private ? 'Mark as public' : 'Mark as private';
+                row.classList.toggle('is-private', pin._private);
+                updatePrivateInfo();
+            });
+            pinList.appendChild(row);
+        });
+        group.appendChild(pinList);
+
+        /* Collapse/expand */
+        var toggleIcon = header.querySelector('.iw-list-toggle');
+        header.addEventListener('click', function (e) {
+            if (e.target.closest('.iw-badge-add')) return;
+            var collapsed = pinList.hidden;
+            pinList.hidden = !collapsed;
+            toggleIcon.classList.toggle('collapsed', !collapsed);
+        });
+
+        container.appendChild(group);
+    });
+
+    updateSelectedCount();
+}
+
+/* Badge dropdown */
+var openDropdown = null;
+function openBadgeDropdown(listIdx, badges, anchor) {
+    closeOpenDropdown();
+
+    var lst = parsedData.lists[listIdx];
+    var dropdown = document.createElement('div');
+    dropdown.className = 'iw-badge-dropdown';
+    dropdown.id = 'iw-bdrop-' + listIdx;
+
+    badges.forEach(function (b) {
+        var item = document.createElement('div');
+        item.className = 'iw-badge-dropdown-item' + (lst._selectedBadgeIds.indexOf(b.id) >= 0 ? ' checked' : '');
+        var iconHtml = b.icon
+            ? '<i class="material-icons" style="font-size:1rem' + (b.color ? ';color:' + b.color : '') + '">' + escHtml(b.icon) + '</i>'
+            : '<i class="material-icons" style="font-size:1rem;opacity:.3">label</i>';
+        item.innerHTML = iconHtml + '<span>' + escHtml(b.name) + '</span>';
+        if (lst._selectedBadgeIds.indexOf(b.id) >= 0) {
+            item.innerHTML += '<i class="material-icons iw-badge-dropdown-check">check</i>';
+        }
+        item.addEventListener('click', function () {
+            toggleBadgeOnList(listIdx, b);
+            dropdown.remove();
+            openDropdown = null;
+        });
+        dropdown.appendChild(item);
+    });
+
+    document.body.appendChild(dropdown);
+    openDropdown = dropdown;
+
+    var rect = anchor.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.left = rect.left + 'px';
+
+    setTimeout(function () {
+        document.addEventListener('click', closeOpenDropdown, { once: true });
+    }, 0);
+}
+function closeOpenDropdown() {
+    if (openDropdown) { openDropdown.remove(); openDropdown = null; }
+}
+
+function toggleBadgeOnList(listIdx, badge) {
+    var lst = parsedData.lists[listIdx];
+    var ids = lst._selectedBadgeIds;
+    var badgeRow = $('iw-badges-' + listIdx);
+    var existIdx = ids.indexOf(badge.id);
+    if (existIdx >= 0) {
+        ids.splice(existIdx, 1);
+        var pill = badgeRow.querySelector('[data-badge-id="' + badge.id + '"]');
+        if (pill) pill.remove();
+    } else {
+        ids.push(badge.id);
+        var pill = document.createElement('span');
+        pill.className = 'iw-badge-pill selected';
+        pill.dataset.badgeId = badge.id;
+        pill.title = 'Click to remove';
+        if (badge.color) pill.style.setProperty('color', badge.color);
+        if (badge.icon) {
+            pill.innerHTML = '<i class="material-icons" style="font-size:.85rem">' + escHtml(badge.icon) + '</i>';
+        }
+        pill.innerHTML += '<span>' + escHtml(badge.name) + '</span>';
+        pill.addEventListener('click', function () { toggleBadgeOnList(listIdx, badge); });
+        var addBtn = badgeRow.querySelector('.iw-badge-add');
+        badgeRow.insertBefore(pill, addBtn);
+    }
+}
+
+/* Select-all toggle */
+$('iw-toggle-all').addEventListener('click', function () {
+    allSelected = !allSelected;
+    $('iw-toggle-all').textContent = allSelected ? 'Deselect all' : 'Select all';
+    parsedData.lists.forEach(function (lst, idx) {
+        lst.pins.forEach(function (pin) { pin._selected = allSelected; });
+        updateListCount(idx);
+    });
+    document.querySelectorAll('.iw-pin-row').forEach(function (row) {
+        var cb = row.querySelector('input[type=checkbox]');
+        cb.checked = allSelected;
+        row.classList.toggle('deselected', !allSelected);
+    });
+    updateSelectedCount();
+});
+
+function updateListCount(listIdx) {
+    if (!parsedData) return;
+    var lst = parsedData.lists[listIdx];
+    var total = lst.pins.length;
+    var selected = lst.pins.filter(function (p) { return p._selected; }).length;
+    var el = $('iw-list-count-' + listIdx);
+    if (!el) return;
+    el.textContent = selected === total
+        ? total + ' pin' + (total !== 1 ? 's' : '')
+        : selected + ' / ' + total + ' pins';
+}
+
+function updateSelectedCount() {
+    var n = 0;
+    if (parsedData) {
+        parsedData.lists.forEach(function (lst) {
+            lst.pins.forEach(function (p) { if (p._selected) n++; });
+        });
+    }
+    $('iw-selected-count').textContent = n + ' pin' + (n !== 1 ? 's' : '') + ' selected';
+    $('iw-btn-confirm').disabled = n === 0;
+    updatePrivateInfo();
+}
+
+function updatePrivateInfo() {
+    var anyPrivate = false;
+    if (parsedData) {
+        parsedData.lists.forEach(function (lst) {
+            lst.pins.forEach(function (p) { if (p._private) anyPrivate = true; });
+        });
+    }
+    $('iw-private-info').hidden = !anyPrivate;
+}
+
+$('iw-btn-back').addEventListener('click', function () { needsConfirm = false; showStep('upload', 0); });
+
+/* -- Step 2 → Step 3: Confirm import ---------------------------------- */
+$('iw-btn-confirm').addEventListener('click', async function () {
+    if (!parsedData) return;
+
+    var payload = {
+        auto_tag: $('iw-auto-tag').checked,
+        lists: parsedData.lists.map(function (lst, idx) {
+            var catEl = document.getElementById('iw-cat-' + idx);
+            return {
+                stem: lst.stem,
+                create_category: catEl ? catEl.checked : false,
+                badge_ids: lst._selectedBadgeIds || [],
+                pins: lst.pins
+                    .filter(function (p) { return p._selected; })
+                    .map(function (p) {
+                        return {
+                            name: p.name,
+                            lat: p.lat,
+                            lng: p.lng,
+                            description: p.description,
+                            cid: p.cid,
+                            badge_ids: [],
+                            is_private: p._private || false,
+                        };
+                    }),
+            };
+        }).filter(function (l) { return l.pins.length > 0; }),
+    };
+
+    if (payload.lists.length === 0) { toastr.warning('No pins selected.'); return; }
+
+    showStep('progress', 2);
+    $('closeImportDialog').disabled = true;
+    importing = true;
+    abortCtrl = new AbortController();
+
+    try {
+        var res = await fetch('{% url "pin.import.confirmed" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify(payload),
+            signal: abortCtrl.signal,
+        });
+
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        while (true) {
+            var chunk = await reader.read();
+            if (chunk.done) break;
+            buf += decoder.decode(chunk.value, { stream: true });
+            var parts = buf.split('\n\n');
+            buf = parts.pop();
+            parts.forEach(function (part) {
+                part = part.trim();
+                if (part.startsWith('data: ')) {
+                    try { handleProgressEvent(JSON.parse(part.slice(6))); } catch (_) {}
+                }
+            });
+        }
+    } catch (err) {
+        if (err.name === 'AbortError') return;
+        importing = false;
+        $('closeImportDialog').disabled = false;
+        toastr.error(err.message, 'Import failed');
+    }
+});
+
+/* -- Progress event handler -------------------------------------------- */
+var logRows = [];
+var MAX_LOG = 40;
+
+function handleProgressEvent(evt) {
+    switch (evt.type) {
+        case 'start':
+            $('iw-count').textContent = '0 of ' + evt.total;
+            break;
+
+        case 'progress':
+            $('iw-bar').style.width = evt.percent + '%';
+            $('iw-pct').textContent = evt.percent + '%';
+            $('iw-count').textContent = evt.current + ' of ' + evt.total;
+            $('iw-current-name').textContent = evt.name || '';
+            $('iw-n-created').textContent = evt.created;
+            $('iw-n-exists').textContent = evt.exists;
+            $('iw-n-skipped').textContent = evt.skipped;
+            addLogRow(evt.name, 'spin', '');
+            if (logRows.length > 1) {
+                var prev = logRows[logRows.length - 2];
+                finaliseLogRow(prev, evt);
+            }
+            break;
+
+        case 'complete':
+            $('iw-bar').style.width = '100%';
+            $('iw-pct').textContent = '100%';
+            $('iw-count').textContent = 'Done';
+            $('iw-current-name').textContent = '';
+            $('iw-n-created').textContent = evt.created;
+            $('iw-n-exists').textContent = evt.exists;
+            $('iw-n-skipped').textContent = evt.skipped;
+            if (logRows.length > 0) finaliseLogRow(logRows[logRows.length - 1], evt);
+            $('iw-progress-header').textContent = 'Import complete';
+            $('iw-progress-header').style.color = '#43a047';
+            importing = false;
+            needsConfirm = false;
+            $('closeImportDialog').disabled = false;
+            $('iw-btn-done').hidden = false;
+            document.querySelector('.iw-step-dots').style.display = 'none';
+            toastr.success(
+                evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
+                'Import complete', { timeOut: 8000 }
+            );
+            break;
+
+        case 'error':
+            importing = false;
+            $('closeImportDialog').disabled = false;
+            toastr.error(evt.message, 'Import error');
+            break;
+    }
+}
+
+function addLogRow(name, iconClass, statusLabel) {
+    var log = $('iw-item-log');
+    var row = document.createElement('div');
+    row.className = 'iw-log-row';
+    row.innerHTML =
+        '<i class="material-icons iw-log-icon ' + iconClass + '">' + iconForClass(iconClass) + '</i>' +
+        '<span class="iw-log-name">' + escHtml(name || '...') + '</span>' +
+        '<span class="iw-log-status">' + statusLabel + '</span>';
+    log.appendChild(row);
+    logRows.push(row);
+    if (logRows.length > MAX_LOG) {
+        var old = logRows.shift();
+        if (old.parentNode) old.parentNode.removeChild(old);
+    }
+    log.scrollTop = log.scrollHeight;
+}
+
+function finaliseLogRow(row, evt) {
+    /* The last progress event tells us the cumulative totals, but not which
+       outcome this specific pin had.  We infer: the running deltas reveal it. */
+    var icon = row.querySelector('.iw-log-icon');
+    var statusEl = row.querySelector('.iw-log-status');
+    /* We store the running totals on the row element for diff comparison */
+    var prevCreated = parseInt(row.dataset.created || 0);
+    var curCreated  = parseInt(evt.created || 0);
+    var prevExists  = parseInt(row.dataset.exists  || 0);
+    var curExists   = parseInt(evt.exists  || 0);
+
+    var cls, mat, lbl;
+    if (curCreated > prevCreated) { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
+    else if (curExists > prevExists) { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
+    else { cls = 'skipped'; mat = 'cancel'; lbl = 'skipped'; }
+
+    icon.className = 'material-icons iw-log-icon ' + cls;
+    icon.textContent = mat;
+    if (statusEl) statusEl.textContent = lbl;
+
+    /* Tag the row for the next diff */
+    row.dataset.created = evt.created;
+    row.dataset.exists  = evt.exists;
+}
+
+function iconForClass(cls) {
+    return cls === 'spin' ? 'sync' : cls === 'created' ? 'check_circle' : cls === 'existed' ? 'remove_circle_outline' : 'cancel';
+}
+
+/* -- Step 3: Done button ----------------------------------------------- */
+$('iw-btn-done').addEventListener('click', closeDialog);
+
+/* -- Helpers ----------------------------------------------------------- */
+function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtCoord(n) { return typeof n === 'number' ? n.toFixed(4) : n; }
+
+/* -- Init -------------------------------------------------------------- */
+showStep('upload', 0);
+
+})();
+</script>

@@ -1,0 +1,679 @@
+{# Admin-only dev toolbar - shown when the site environment is Development. #}
+<div id="dev-toolbar" class="dev-toolbar dev-toolbar--no-transition{% if dev_toolbar_theme_mode == 'dark' %} dev-toolbar--dark-active{% endif %}" data-collapsed="false">
+    <div class="dev-toolbar__header">
+        <button type="button"
+                class="dev-toolbar__drag-handle"
+                id="dev-toolbar-drag"
+                title="Drag to move"
+                aria-label="Drag toolbar">
+            <i class="material-icons" aria-hidden="true">drag_indicator</i>
+        </button>
+        <button type="button"
+                class="dev-toolbar__toggle"
+                id="dev-toolbar-collapse"
+                title="Collapse toolbar"
+                aria-expanded="true"
+                aria-controls="dev-toolbar-body">
+            <i class="material-icons dev-toolbar__chevron" aria-hidden="true">expand_more</i>
+            <span class="dev-toolbar__title">Dev Tools</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__reset-position"
+                id="dev-toolbar-reset-position"
+                title="Reset position"
+                aria-label="Reset toolbar position">
+            <i class="material-icons" aria-hidden="true">restart_alt</i>
+        </button>
+    </div>
+    <div class="dev-toolbar__body" id="dev-toolbar-body">
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__theme-toggle"
+                id="dev-toolbar-theme-toggle"
+                title="Toggle theme"
+                aria-label="Toggle theme"
+                hx-post="{% url 'dev_toolbar.toggle_theme' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <span class="dev-toolbar__theme-icons" aria-hidden="true">
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--light{% if dev_toolbar_theme_mode == 'light' %} is-active{% endif %}">light_mode</i>
+                <i class="material-icons dev-toolbar__theme-icon dev-toolbar__theme-icon--dark{% if dev_toolbar_theme_mode == 'dark' %} is-active{% endif %}">dark_mode</i>
+            </span>
+            <span class="dev-toolbar__theme-label">{% if dev_toolbar_theme_mode == 'dark' %}Dark{% elif dev_toolbar_theme_mode == 'light' %}Light{% else %}Theme{% endif %}</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool"
+                id="dev-toolbar-refresh-pin-cache"
+                title="Clear local pin cache and reload from server"
+                aria-label="Refresh pin cache">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">cached</i>
+            <span class="dev-toolbar__tool-label">Refresh pin cache</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool"
+                id="dev-toolbar-toggle-debug-overlay"
+                title="Show/hide API debug info (search terms & cache status) for this pin"
+                aria-label="Toggle API debug info">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">bug_report</i>
+            <span class="dev-toolbar__tool-label">API debug info</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-clear-page-cache"
+                title="Clear cached external-API results shown on this page"
+                aria-label="Clear page API cache">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">layers_clear</i>
+            <span class="dev-toolbar__tool-label">Clear page API cache</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-reset-onboarding"
+                title="Show onboarding tips and hints again"
+                aria-label="Reset onboarding"
+                hx-post="{% url 'dev_toolbar.reset_onboarding' %}"
+                hx-swap="none"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">school</i>
+            <span class="dev-toolbar__tool-label">Reset onboarding</span>
+        </button>
+        <button type="button"
+                class="dev-toolbar__tool dev-toolbar__tool--danger"
+                id="dev-toolbar-clear-session"
+                title="Clear browser session storage and log out"
+                aria-label="Clear session">
+            <i class="material-icons dev-toolbar__tool-icon" aria-hidden="true">logout</i>
+            <span class="dev-toolbar__tool-label">Clear session</span>
+        </button>
+    </div>
+</div>
+<script>
+(function () {
+    var toolbar = document.getElementById('dev-toolbar');
+    if (!toolbar) return;
+
+    var collapseBtn = document.getElementById('dev-toolbar-collapse');
+    var dragHandle = document.getElementById('dev-toolbar-drag');
+    var resetPositionBtn = document.getElementById('dev-toolbar-reset-position');
+    var body = document.getElementById('dev-toolbar-body');
+    var storageKey = 'dev-toolbar-collapsed';
+    var positionKey = 'dev-toolbar-position';
+    var POSITION_TRANSITION_MS = 350;
+    var positionAnimating = false;
+    var reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var defaultAnchors = {
+        left: parseFloat(getComputedStyle(toolbar).left) || 16,
+        bottom: parseFloat(getComputedStyle(toolbar).bottom) || 48,
+    };
+
+    function positionAnimationsEnabled() {
+        return !reducedMotionQuery.matches;
+    }
+
+    function hasCustomPosition() {
+        try { return !!localStorage.getItem(positionKey); } catch (_) { return false; }
+    }
+
+    function getSavedPosition() {
+        try {
+            var raw = localStorage.getItem(positionKey);
+            if (!raw) return null;
+            var pos = JSON.parse(raw);
+            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                return clampPosition(pos.left, pos.top);
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function ensurePixelPosition() {
+        if (toolbar.style.top && toolbar.style.left) return;
+        var rect = toolbar.getBoundingClientRect();
+        toolbar.style.bottom = 'auto';
+        toolbar.style.right = 'auto';
+        toolbar.style.left = rect.left + 'px';
+        toolbar.style.top = rect.top + 'px';
+    }
+
+    function getDefaultPosition() {
+        var height = toolbar.offsetHeight;
+        return clampPosition(
+            defaultAnchors.left,
+            window.innerHeight - height - defaultAnchors.bottom,
+        );
+    }
+
+    function applyDefaultPosition() {
+        toolbar.style.left = '';
+        toolbar.style.top = '';
+        toolbar.style.bottom = '';
+        toolbar.style.right = '';
+    }
+
+    function finishPositionAnimation() {
+        positionAnimating = false;
+        toolbar.classList.remove('dev-toolbar--position-animating');
+    }
+
+    function animateToPosition(left, top, onComplete) {
+        ensurePixelPosition();
+        positionAnimating = true;
+        toolbar.classList.remove('dev-toolbar--no-transition');
+        toolbar.classList.add('dev-toolbar--position-animating');
+
+        var finished = false;
+        function complete() {
+            if (finished) return;
+            finished = true;
+            toolbar.removeEventListener('transitionend', onTransitionEnd);
+            clearTimeout(fallbackTimer);
+            finishPositionAnimation();
+            if (onComplete) onComplete();
+        }
+
+        function onTransitionEnd(e) {
+            if (e.target !== toolbar) return;
+            if (e.propertyName === 'left' || e.propertyName === 'top') complete();
+        }
+
+        toolbar.addEventListener('transitionend', onTransitionEnd);
+        var fallbackTimer = setTimeout(complete, POSITION_TRANSITION_MS + 50);
+
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                toolbar.style.left = left + 'px';
+                toolbar.style.top = top + 'px';
+            });
+        });
+    }
+
+    function updateNavButton(collapsed) {
+        var btn = document.getElementById('nav-devtools-btn');
+        if (!btn) return;
+        if (collapsed) {
+            btn.disabled = false;
+            btn.classList.remove('is-active');
+            btn.title = 'Open Dev Tools (Ctrl+Shift+.)';
+        } else {
+            btn.disabled = true;
+            btn.classList.add('is-active');
+            btn.title = 'Dev Tools is open';
+        }
+    }
+
+    function navCollapseTarget() {
+        var navBtn = document.getElementById('nav-user-btn');
+        if (!navBtn) return null;
+        var rect = navBtn.getBoundingClientRect();
+        var w = toolbar.offsetWidth || 160;
+        var h = toolbar.offsetHeight || 40;
+        return clampPosition(
+            rect.left + rect.width / 2 - w / 2,
+            rect.top + rect.height / 2 - h / 2
+        );
+    }
+
+    function _collapseToNav(instant) {
+        if (instant || !positionAnimationsEnabled()) {
+            toolbar.style.opacity = '';
+            toolbar.classList.add('dev-toolbar--hidden');
+            applyDefaultPosition();
+            return;
+        }
+
+        ensurePixelPosition();
+        positionAnimating = true;
+        toolbar.classList.remove('dev-toolbar--no-transition');
+        toolbar.classList.add('dev-toolbar--position-animating');
+
+        var done = false;
+        function onDone() {
+            if (done) return;
+            done = true;
+            toolbar.removeEventListener('transitionend', onTransitionEnd);
+            clearTimeout(fallback);
+            finishPositionAnimation();
+            toolbar.classList.add('dev-toolbar--hidden');
+            applyDefaultPosition();
+            toolbar.style.opacity = '';
+        }
+        function onTransitionEnd(e) {
+            if (e.target !== toolbar) return;
+            if (e.propertyName === 'opacity') onDone();
+        }
+        toolbar.addEventListener('transitionend', onTransitionEnd);
+        var fallback = setTimeout(onDone, POSITION_TRANSITION_MS + 100);
+
+        var dest = navCollapseTarget();
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                if (dest) {
+                    toolbar.style.left = dest.left + 'px';
+                    toolbar.style.top = dest.top + 'px';
+                }
+                toolbar.style.opacity = '0';
+            });
+        });
+    }
+
+    function _expandFromNav(instant) {
+        var dest = navCollapseTarget();
+        var saved = getSavedPosition();
+        var animate = !instant && positionAnimationsEnabled() && dest !== null;
+
+        toolbar.classList.add('dev-toolbar--no-transition');
+        if (animate) {
+            toolbar.style.bottom = 'auto';
+            toolbar.style.right = 'auto';
+            toolbar.style.left = dest.left + 'px';
+            toolbar.style.top = dest.top + 'px';
+            toolbar.style.opacity = '0';
+        }
+        toolbar.classList.remove('dev-toolbar--hidden');
+
+        if (animate) {
+            requestAnimationFrame(function () {
+                toolbar.classList.remove('dev-toolbar--no-transition');
+                requestAnimationFrame(function () {
+                    if (saved) {
+                        toolbar.style.left = saved.left + 'px';
+                        toolbar.style.top = saved.top + 'px';
+                    } else {
+                        var defPos = getDefaultPosition();
+                        toolbar.style.left = defPos.left + 'px';
+                        toolbar.style.top = defPos.top + 'px';
+                    }
+                    toolbar.style.opacity = '';
+                });
+            });
+        } else {
+            if (saved) {
+                applyPosition(saved.left, saved.top, false);
+            } else {
+                applyDefaultPosition();
+            }
+            toolbar.style.opacity = '';
+            requestAnimationFrame(function () {
+                toolbar.classList.remove('dev-toolbar--no-transition');
+            });
+        }
+    }
+
+    function setCollapsed(collapsed, instant) {
+        var wasCollapsed = toolbar.dataset.collapsed === 'true';
+        if (wasCollapsed === collapsed) return;
+
+        toolbar.dataset.collapsed = collapsed ? 'true' : 'false';
+        if (body) {
+            body.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+            if (collapsed) {
+                body.setAttribute('inert', '');
+            } else {
+                body.removeAttribute('inert');
+            }
+        }
+        if (collapseBtn) {
+            collapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            collapseBtn.title = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+        }
+        try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (_) {}
+
+        if (collapsed) {
+            _collapseToNav(instant);
+        } else {
+            _expandFromNav(instant);
+        }
+        updateNavButton(collapsed);
+    }
+
+    try {
+        if (localStorage.getItem(storageKey) === '1') {
+            setCollapsed(true, true);
+        } else {
+            restorePosition();
+            updateNavButton(false);
+        }
+    } catch (_) {
+        restorePosition();
+        updateNavButton(false);
+    }
+
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            toolbar.classList.remove('dev-toolbar--no-transition');
+        });
+    });
+
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', function () {
+            if (positionAnimating) return;
+            setCollapsed(toolbar.dataset.collapsed !== 'true');
+        });
+    }
+
+    function clampPosition(left, top) {
+        var rect = toolbar.getBoundingClientRect();
+        var width = rect.width || toolbar.offsetWidth;
+        var height = rect.height || toolbar.offsetHeight;
+        var maxLeft = Math.max(0, window.innerWidth - width);
+        var maxTop = Math.max(0, window.innerHeight - height);
+        return {
+            left: Math.min(Math.max(0, left), maxLeft),
+            top: Math.min(Math.max(0, top), maxTop),
+        };
+    }
+
+    function applyPosition(left, top, persist) {
+        var pos = clampPosition(left, top);
+        toolbar.classList.add('dev-toolbar--no-transition');
+        toolbar.style.bottom = 'auto';
+        toolbar.style.right = 'auto';
+        toolbar.style.left = pos.left + 'px';
+        toolbar.style.top = pos.top + 'px';
+        if (persist) {
+            try { localStorage.setItem(positionKey, JSON.stringify(pos)); } catch (_) {}
+        }
+        requestAnimationFrame(function () {
+            toolbar.classList.remove('dev-toolbar--no-transition');
+        });
+    }
+
+    function resetPosition() {
+        applyDefaultPosition();
+        try { localStorage.removeItem(positionKey); } catch (_) {}
+    }
+
+    function restorePosition() {
+        var saved = getSavedPosition();
+        if (!saved) return;
+        applyPosition(saved.left, saved.top, false);
+    }
+
+    if (resetPositionBtn) {
+        resetPositionBtn.addEventListener('click', function () {
+            resetPosition();
+        });
+    }
+
+    if (dragHandle) {
+        var dragging = false;
+        var startX = 0;
+        var startY = 0;
+        var startLeft = 0;
+        var startTop = 0;
+
+        function stopDragging(e) {
+            if (!dragging) return;
+            dragging = false;
+            toolbar.classList.remove('dev-toolbar--dragging');
+            if (e && dragHandle.hasPointerCapture(e.pointerId)) {
+                dragHandle.releasePointerCapture(e.pointerId);
+            }
+            var rect = toolbar.getBoundingClientRect();
+            applyPosition(rect.left, rect.top, true);
+        }
+
+        dragHandle.addEventListener('pointerdown', function (e) {
+            if (toolbar.dataset.collapsed === 'true' || positionAnimating) return;
+            if (e.button !== 0) return;
+            e.preventDefault();
+            dragging = true;
+            toolbar.classList.add('dev-toolbar--dragging');
+            toolbar.classList.add('dev-toolbar--no-transition');
+            dragHandle.setPointerCapture(e.pointerId);
+            var rect = toolbar.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = rect.left;
+            startTop = rect.top;
+            toolbar.style.bottom = 'auto';
+            toolbar.style.right = 'auto';
+            toolbar.style.left = startLeft + 'px';
+            toolbar.style.top = startTop + 'px';
+        });
+
+        dragHandle.addEventListener('pointermove', function (e) {
+            if (!dragging) return;
+            applyPosition(startLeft + (e.clientX - startX), startTop + (e.clientY - startY), false);
+        });
+
+        dragHandle.addEventListener('pointerup', stopDragging);
+        dragHandle.addEventListener('pointercancel', stopDragging);
+    }
+
+    window.addEventListener('resize', function () {
+        if (toolbar.dataset.collapsed === 'true') return;
+        if (toolbar.style.top) {
+            var rect = toolbar.getBoundingClientRect();
+            applyPosition(rect.left, rect.top, true);
+        }
+    });
+
+    function applyTheme(theme) {
+        var root = document.getElementById('html-root');
+        if (!root) return;
+        if (theme === 'system') {
+            var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        } else {
+            root.setAttribute('data-theme', theme);
+        }
+    }
+
+    function updateThemeToggle(isDark) {
+        var btn = document.getElementById('dev-toolbar-theme-toggle');
+        if (!btn) return;
+        toolbar.classList.toggle('dev-toolbar--dark-active', isDark);
+        var lightIcon = btn.querySelector('.dev-toolbar__theme-icon--light');
+        var darkIcon = btn.querySelector('.dev-toolbar__theme-icon--dark');
+        var label = btn.querySelector('.dev-toolbar__theme-label');
+        if (lightIcon) lightIcon.classList.toggle('is-active', !isDark);
+        if (darkIcon) darkIcon.classList.toggle('is-active', isDark);
+        if (label) label.textContent = isDark ? 'Dark' : 'Light';
+        btn.title = isDark ? 'Dark mode active - click to switch to light' : 'Light mode active - click to switch to dark';
+    }
+
+    function syncThemeToggleFromDom() {
+        var root = document.getElementById('html-root');
+        var theme = root ? root.getAttribute('data-theme') : 'light';
+        updateThemeToggle(theme === 'dark');
+    }
+
+    syncThemeToggleFromDom();
+
+    document.body.addEventListener('devThemeChanged', function (e) {
+        var theme = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.value);
+        if (!theme) return;
+        applyTheme(theme);
+        var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        updateThemeToggle(isDark);
+    });
+
+    function isMapDarkEffective(mode) {
+        if (mode === 'dark') return true;
+        if (mode === 'light') return false;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function updateMapDarkToggle(storedMode) {
+        var btn = document.getElementById('dev-toolbar-map-dark-toggle');
+        if (!btn) return;
+        btn.dataset.mapDarkMode = storedMode;
+        var isDark = isMapDarkEffective(storedMode);
+        var lightIcon = btn.querySelector('.dev-toolbar__theme-icon--light');
+        var darkIcon = btn.querySelector('.dev-toolbar__theme-icon--dark');
+        var label = btn.querySelector('.dev-toolbar__theme-label');
+        if (lightIcon) lightIcon.classList.toggle('is-active', !isDark);
+        if (darkIcon) darkIcon.classList.toggle('is-active', isDark);
+        if (label) {
+            if (storedMode === 'system') {
+                label.textContent = 'Map';
+            } else {
+                label.textContent = isDark ? 'Map dark' : 'Map light';
+            }
+        }
+        btn.title = isDark
+            ? 'Map dark mode active - click to switch to light'
+            : 'Map light mode active - click to switch to dark';
+    }
+
+    function syncMapDarkToggleFromDom() {
+        var btn = document.getElementById('dev-toolbar-map-dark-toggle');
+        if (!btn) return;
+        updateMapDarkToggle(btn.dataset.mapDarkMode || 'light');
+    }
+
+    syncMapDarkToggleFromDom();
+
+    document.body.addEventListener('devMapDarkModeChanged', function (e) {
+        var mode = typeof e.detail === 'string' ? e.detail : (e.detail && e.detail.value);
+        if (!mode) return;
+        updateMapDarkToggle(mode);
+        if (typeof window.applyMapDarkMode === 'function') {
+            window.applyMapDarkMode(mode);
+        }
+    });
+
+    function clearOnboardingStorage() {
+        var keysToRemove = [];
+        var i;
+        var key;
+        try {
+            for (i = 0; i < localStorage.length; i++) {
+                key = localStorage.key(i);
+                if (key && (key.indexOf('ul_onboarding_v1_') === 0 || key.indexOf('ul_explainer_collapsed_') === 0)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(function (k) { localStorage.removeItem(k); });
+        } catch (_) {}
+        keysToRemove = [];
+        try {
+            for (i = 0; i < sessionStorage.length; i++) {
+                key = sessionStorage.key(i);
+                if (key && key.indexOf('ul_onboarding_v1_') === 0) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(function (k) { sessionStorage.removeItem(k); });
+        } catch (_) {}
+    }
+
+    document.body.addEventListener('devOnboardingReset', function () {
+        clearOnboardingStorage();
+        if (window.toastr) toastr.success('Onboarding reset. Reloading...');
+        window.setTimeout(function () { window.location.reload(); }, 350);
+    });
+
+    document.body.addEventListener('devSessionCleared', function () {
+        try { sessionStorage.clear(); } catch (_) {}
+        if (window.toastr) toastr.info('Session cleared. Reloading...');
+        window.setTimeout(function () { window.location.reload(); }, 350);
+    });
+
+    var pinCacheBtn = document.getElementById('dev-toolbar-refresh-pin-cache');
+    if (pinCacheBtn) {
+        pinCacheBtn.addEventListener('click', function () {
+            if (typeof window.forceRefreshPinCache !== 'function') {
+                if (window.toastr) toastr.warning('Open the map page to refresh the pin cache.');
+                return;
+            }
+            if (pinCacheBtn.disabled) return;
+            pinCacheBtn.disabled = true;
+            pinCacheBtn.classList.add('is-busy');
+            window.forceRefreshPinCache()
+                .then(function (count) {
+                    var n = typeof count === 'number' ? count : '';
+                    if (window.toastr) {
+                        toastr.success(n !== '' ? 'Pin cache refreshed (' + n + ' pins).' : 'Pin cache refreshed from server.');
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('[Dev toolbar] Pin cache refresh failed:', err);
+                    if (window.toastr) toastr.error('Pin cache refresh failed.');
+                })
+                .finally(function () {
+                    pinCacheBtn.disabled = false;
+                    pinCacheBtn.classList.remove('is-busy');
+                });
+        });
+    }
+
+    var debugToggleBtn = document.getElementById('dev-toolbar-toggle-debug-overlay');
+    if (debugToggleBtn) {
+        debugToggleBtn.addEventListener('click', function () {
+            if (typeof window.togglePinDebugOverlay !== 'function') {
+                if (window.toastr) toastr.warning('Open a pin detail page to use API debug info.');
+                return;
+            }
+            window.togglePinDebugOverlay();
+        });
+    }
+
+    var clearPageCacheBtn = document.getElementById('dev-toolbar-clear-page-cache');
+    if (clearPageCacheBtn) {
+        clearPageCacheBtn.addEventListener('click', function () {
+            if (typeof window.clearPinResultCache !== 'function') {
+                if (window.toastr) toastr.warning('Open a pin detail page to clear its API cache.');
+                return;
+            }
+            if (!window.confirm('Clear cached API results for this pin and reload?')) return;
+            window.clearPinResultCache();
+        });
+    }
+
+    // Keyboard shortcut: Ctrl+Shift+.
+    document.addEventListener('keydown', function (e) {
+        if (e.ctrlKey && e.shiftKey && e.code === 'Period') {
+            e.preventDefault();
+            if (positionAnimating) return;
+            setCollapsed(toolbar.dataset.collapsed !== 'true');
+        }
+    });
+
+    // Nav dropdown "Dev Tools" button
+    var navDevtoolsBtn = document.getElementById('nav-devtools-btn');
+    if (navDevtoolsBtn) {
+        navDevtoolsBtn.addEventListener('click', function () {
+            if (window.closeNavDropdown) window.closeNavDropdown();
+            if (!positionAnimating) setCollapsed(false);
+        });
+    }
+
+    var clearSessionBtn = document.getElementById('dev-toolbar-clear-session');
+    if (clearSessionBtn) {
+        clearSessionBtn.addEventListener('click', function () {
+            if (clearSessionBtn.disabled) return;
+            if (!window.confirm('Clear your session and log out? Tab session storage will be wiped.')) return;
+            clearSessionBtn.disabled = true;
+            clearSessionBtn.classList.add('is-busy');
+            fetch('{% url "dev_toolbar.clear_session" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'HX-Request': 'true',
+                },
+                credentials: 'same-origin',
+            })
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    var trigger = resp.headers.get('HX-Trigger');
+                    if (trigger) {
+                        try {
+                            var events = JSON.parse(trigger);
+                            Object.keys(events).forEach(function (name) {
+                                document.body.dispatchEvent(new CustomEvent(name, { detail: events[name] }));
+                            });
+                        } catch (_) {}
+                    } else {
+                        document.body.dispatchEvent(new CustomEvent('devSessionCleared'));
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('[Dev toolbar] Clear session failed:', err);
+                    if (window.toastr) toastr.error('Could not clear session.');
+                    clearSessionBtn.disabled = false;
+                    clearSessionBtn.classList.remove('is-busy');
+                });
+        });
+    }
+}());
+</script>

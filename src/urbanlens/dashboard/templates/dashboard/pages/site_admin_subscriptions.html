@@ -1,0 +1,103 @@
+{% extends 'dashboard/themes/base.html' %}
+{% block content %}
+<div class="site-admin-page page-content subscription-admin-page">
+  <div class="site-admin-header">
+    <h1 class="site-admin-title"><i class="material-symbols-outlined">workspace_premium</i> Subscription Access</h1>
+    <p class="site-admin-subtitle">Gift subscription access to users.</p>
+    <div class="site-admin-breadcrumb"><a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link"><i class="material-symbols-outlined">arrow_back</i> Admin Home</a></div>
+  </div>
+  {% if saved %}
+  <div class="site-admin-notice site-admin-notice--success">
+    <i class="material-symbols-outlined">check_circle</i>
+    Subscription {{ saved }}.
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="site-admin-notice">
+    <i class="material-symbols-outlined">error</i>
+    {{ error }}
+  </div>
+  {% endif %}
+  <div class="subscription-grid">
+    <section class="site-admin-card ul-section card">
+      <div class="card-header"><i class="material-symbols-outlined">add_moderator</i><span>Grant role</span></div>
+      <form method="post" class="site-admin-form">{% csrf_token %}
+        <input type="hidden" name="action" value="grant">
+        <div class="form-row"><label for="user_identifier">Username or email</label><input id="user_identifier" name="user_identifier" placeholder="jane or jane@example.com" required></div>
+        <div class="form-row"><label for="role_slug">Role</label><select id="role_slug" name="role_slug">{% for role in roles %}<option value="{{ role.slug }}">{{ role.name }}</option>{% endfor %}</select></div>
+        <div class="form-row"><label for="duration_months">Duration</label><select id="duration_months" name="duration_months"><option value="indefinite">Indefinite</option><option value="1">1 month</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></div>
+        <div class="form-actions"><button class="btn btn--primary btn--lg" type="submit"><i class="material-symbols-outlined">verified_user</i> Grant access</button></div>
+      </form>
+    </section>
+    <section class="site-admin-card ul-section card">
+      <div class="card-header">
+        <i class="material-symbols-outlined">manage_accounts</i>
+        <span>Your active grants</span>
+      </div>
+      <div class="subscription-list">
+        <div class="subscription-list__head" aria-hidden="true">
+          <span class="subscription-list__col subscription-list__col--user">User</span>
+          <span class="subscription-list__col subscription-list__col--role">Role</span>
+          <span class="subscription-list__col subscription-list__col--expires">Expires</span>
+          <span class="subscription-list__col subscription-list__col--actions">Actions</span>
+        </div>
+        <ul class="subscription-list__items">
+          {% for grant in grants %}
+          <li class="subscription-list__item">
+            <div class="subscription-list__col subscription-list__col--user">
+              <span class="subscription-list__label">User</span>
+              <div class="subscription-list__value">
+                <strong class="subscription-list__username">{{ grant.user.username }}</strong>
+                <span class="subscription-list__email">{{ grant.user.email }}</span>
+              </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--role">
+              <span class="subscription-list__label">Role</span>
+              <div class="subscription-list__value">
+                <span class="role-pill">
+                  <i class="material-symbols-outlined">auto_awesome</i>
+                  {{ grant.role.name }}
+                </span>
+              </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--expires">
+              <span class="subscription-list__label">Expires</span>
+              <div class="subscription-list__value">
+                {% if grant.expires_at %}
+                {{ grant.expires_at|date:'M j, Y' }}
+                {% else %}
+                <span class="subscription-list__indefinite">Indefinite</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--actions">
+              <span class="subscription-list__label">Actions</span>
+              <div class="subscription-list__value">
+                <form method="post" class="inline-sub-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="subscription_id" value="{{ grant.id }}">
+                  <select name="duration_months">
+                    <option value="1">1 month</option>
+                    <option value="3">3 months</option>
+                    <option value="6">6 months</option>
+                    <option value="12">12 months</option>
+                    <option value="indefinite">Indefinite</option>
+                  </select>
+                  <button class="btn btn--ghost" name="action" value="update">Update</button>
+                  <button class="btn btn--danger" name="action" value="revoke">Revoke</button>
+                </form>
+              </div>
+            </div>
+          </li>
+          {% empty %}
+          <li class="subscription-list__empty">
+            <i class="material-symbols-outlined">inbox</i>
+            <span>No active subscription grants yet.</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

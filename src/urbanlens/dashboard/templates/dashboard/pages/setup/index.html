@@ -1,0 +1,629 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}Setup - {{ settings.app_title }}{% endblock %}
+
+{% block content %}
+<div class="setup-wizard">
+    <div class="setup-wizard__layout">
+
+        {# -- Sidebar ------------------------------------------------------ #}
+        <aside class="setup-wizard__sidebar">
+            <div class="setup-wizard__brand">
+                <i class="material-icons brand-icon">explore</i>
+                <div class="brand-name" id="sidebar-title">{{ setup_app_title }}</div>
+                <div class="brand-label">Setup Wizard</div>
+            </div>
+
+            <ul class="setup-stepper" id="setup-stepper">
+                <li class="setup-stepper__item setup-stepper__item--active" data-step="1">
+                    <span class="step-icon"><span class="step-num">1</span></span>
+                    <span class="step-label">Welcome</span>
+                </li>
+                <li class="setup-stepper__item" data-step="2">
+                    <span class="step-icon"><span class="step-num">2</span></span>
+                    <span class="step-label">Your Profile</span>
+                </li>
+                <li class="setup-stepper__item" data-step="3">
+                    <span class="step-icon"><span class="step-num">3</span></span>
+                    <span class="step-label">Name Your App</span>
+                </li>
+                <li class="setup-stepper__item" data-step="4">
+                    <span class="step-icon"><span class="step-num">4</span></span>
+                    <span class="step-label">Integrations</span>
+                </li>
+                <li class="setup-stepper__item" data-step="5">
+                    <span class="step-icon"><span class="step-num">5</span></span>
+                    <span class="step-label">All Done</span>
+                </li>
+            </ul>
+        </aside>
+
+        {# -- Main content -------------------------------------------------- #}
+        <div class="setup-wizard__content">
+            <div class="setup-wizard__progress">
+                <div class="progress-bar" id="setup-progress" style="width:20%"></div>
+            </div>
+
+            {# -- Step 1: Welcome ------------------------------------------- #}
+            <div class="setup-step setup-step--active" data-step="1">
+                <div class="setup-step__eyebrow">Getting started</div>
+                <h1 class="setup-step__title">Welcome to UrbanLens</h1>
+                <p class="setup-step__subtitle">
+                    This quick wizard will help you personalise your install and see what's available.
+                </p>
+
+                <div class="setup-highlights">
+                    <div class="setup-highlights__item">
+                        <i class="material-symbols-outlined">map</i>
+                        <div>
+                            <div class="setup-highlights__label">Interactive Map</div>
+                            <div class="setup-highlights__desc">Pin and organise urbex locations with custom markers, notes, and tags.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-symbols-outlined">group</i>
+                        <div>
+                            <div class="setup-highlights__label">Trips & Friends</div>
+                            <div class="setup-highlights__desc">Plan collaborative trips, share locations, and manage access.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-symbols-outlined">psychology</i>
+                        <div>
+                            <div class="setup-highlights__label">AI Assistance</div>
+                            <div class="setup-highlights__desc">AI-powered category suggestions and location enrichment via optional API keys.</div>
+                        </div>
+                    </div>
+                    <div class="setup-highlights__item">
+                        <i class="material-symbols-outlined">photo_library</i>
+                        <div>
+                            <div class="setup-highlights__label">Photo Galleries</div>
+                            <div class="setup-highlights__desc">Upload and browse photos with GPS metadata and location attribution.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setup-step--actions">
+                    <button class="btn btn--primary btn--lg btn--submit" onclick="goToStep(2)">
+                        Get Started
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# -- Step 2: Your Profile --------------------------------------- #}
+            <div class="setup-step" data-step="2">
+                <div class="setup-step__eyebrow">Step 2 of 5</div>
+                <h1 class="setup-step__title">Your Profile</h1>
+                <p class="setup-step__subtitle">
+                    Choose a username and avatar for your admin account. You can always change these later in your profile settings.
+                </p>
+
+                {# Username #}
+                <div class="setup-field" style="margin-bottom:20px;">
+                    <label class="setup-field-label" for="setup-username-input" style="display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;color:var(--ul-grey-9)">
+                        Username
+                    </label>
+                    <div class="setup-username-row">
+                        <div class="setup-username-group">
+                            <span class="setup-username-group__prefix" aria-hidden="true">@</span>
+                            <input type="text" id="setup-username-input" class="setup-username-group__input"
+                                   maxlength="30"
+                                   value="{{ current_username }}"
+                                   autocomplete="username" spellcheck="false">
+                        </div>
+                        <span id="setup-username-hint" class="setup-username-hint"></span>
+                    </div>
+                    <p style="font-size:.75rem;color:#9aa0a6;margin:4px 0 0;">3-30 characters: letters, numbers, and underscores only.</p>
+                </div>
+
+                {# Avatar #}
+                <div class="setup-field">
+                    <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:10px;color:var(--ul-text,#1f2937)">
+                        Profile Photo
+                        <span id="setup-avatar-status" style="font-size:.78rem;font-weight:400;margin-left:8px;color:#9aa0a6;"></span>
+                    </label>
+                    <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+                        <div style="flex-shrink:0;">
+                            {% if current_avatar_url %}
+                            <img src="{{ current_avatar_url }}" id="setup-avatar-preview"
+                                 style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--ul-border,#e0e0e0);" alt="Avatar">
+                            {% else %}
+                            <div id="setup-avatar-preview"
+                                 style="width:72px;height:72px;border-radius:50%;background:var(--ul-grey-1,#f3f4f6);border:2px solid var(--ul-border,#e0e0e0);display:flex;align-items:center;justify-content:center;">
+                                <i class="material-icons" style="font-size:2rem;color:#9aa0a6;">person</i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-grey-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;" title="Upload your own photo">
+                                <i class="material-icons" style="font-size:1.6rem;color:#9aa0a6;">upload</i>
+                                <span>Upload</span>
+                                <input type="file" accept="image/*" id="setup-avatar-upload" style="display:none">
+                            </label>
+                            {% if gravatar_preview_url %}
+                            <button type="button" id="setup-avatar-gravatar-btn"
+                                    data-gravatar-url="{{ gravatar_preview_url }}"
+                                    style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:var(--ul-grey-1,#fff);font-size:.75rem;color:#5f6368;min-width:64px;"
+                                    title="Use your Gravatar">
+                                <img src="{{ gravatar_preview_url }}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;" alt="Gravatar">
+                                <span>Gravatar</span>
+                            </button>
+                            {% endif %}
+                            {% for opt in emoji_options %}
+                            <button type="button" class="setup-avatar-emoji-btn"
+                                    data-animal="{{ opt.animal }}" data-color="{{ opt.color }}"
+                                    style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:none;font-size:.75rem;color:#5f6368;min-width:64px;"
+                                    title="{{ opt.animal|title }} emoji avatar">
+                                <div style="width:52px;height:52px;border-radius:50%;background:{{ opt.color }};display:flex;align-items:center;justify-content:center;font-size:28px;line-height:1;">{{ opt.emoji }}</div>
+                                <span>{{ opt.animal|title }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setup-step--actions" style="margin-top:24px;">
+                    <button class="btn btn--ghost" onclick="goToStep(1)">
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                        Back
+                    </button>
+                    <button class="btn btn--primary btn--lg btn--submit" onclick="goToStep(3)">
+                        Next
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# -- Step 3: Name Your App -------------------------------------- #}
+            <div class="setup-step" data-step="3">
+                <div class="setup-step__eyebrow">Step 3 of 5</div>
+                <h1 class="setup-step__title">Name Your App</h1>
+                <p class="setup-step__subtitle">
+                    Give your instance a name. It appears in the browser tab and navigation header.
+                    You can always change this later in Site Admin.
+                </p>
+
+                <div class="setup-title-row">
+                    <label for="app-title-input">App name</label>
+                    <input type="text" id="app-title-input" name="app_title"
+                           value="{{ setup_app_title }}" maxlength="100"
+                           placeholder="{{ suggested_app_title }}" autocomplete="off">
+                    <span class="setup-save-status" id="title-save-status">✓ Saved</span>
+                </div>
+
+                {% if not is_official_urbanlens_site %}
+                <div class="setup-title-notice" id="title-reserved-notice" hidden>
+                    <i class="material-icons setup-title-notice__icon" aria-hidden="true">info</i>
+                    <div>
+                        <p class="setup-title-notice__message" id="title-reserved-message"></p>
+                        <p class="setup-title-notice__label">Here are a few ideas:</p>
+                        <ul class="setup-title-notice__suggestions" id="title-suggestion-list">
+                            {% for suggestion in app_title_suggestions %}
+                            <li>
+                                <button type="button" class="setup-title-suggestion-btn" data-title="{{ suggestion }}">
+                                    {{ suggestion }}
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="setup-title-preview">
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                    <span class="preview-dot"></span>
+                    <div class="preview-tab">
+                        <i class="material-symbols-outlined">explore</i>
+                        <span id="title-preview-value">{{ setup_app_title }}</span>
+                    </div>
+                </div>
+
+                <div class="setup-step--actions">
+                    <button class="btn btn--ghost" onclick="goToStep(2)">
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                        Back
+                    </button>
+                    <button class="btn btn--primary btn--lg btn--submit" onclick="goToStep(4)">
+                        Next
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# -- Step 4: Integrations --------------------------------------- #}
+            <div class="setup-step" data-step="4">
+                <div class="setup-step__eyebrow">Step 4 of 5</div>
+                <h1 class="setup-step__title">Integrations</h1>
+                <p class="setup-step__subtitle">
+                    These optional features activate when you set the corresponding environment variables
+                    in your <code>.env</code> file and restart the app. Unconfigured integrations are
+                    simply hidden from users.
+                </p>
+
+                <div class="setup-feature-scroll">
+                    {% for group in features %}
+                    <div class="setup-feature-group">
+                        <div class="setup-feature-group__header">
+                            <i class="material-icons">{{ group.icon }}</i>
+                            {{ group.label }}
+                        </div>
+                        <div class="setup-feature-grid">
+                            {% for item in group.items %}
+                            <div class="setup-feature-card{% if item.configured %} setup-feature-card--ok{% else %} setup-feature-card--missing{% endif %}">
+                                <div class="setup-feature-card__row">
+                                    <span class="setup-feature-card__name">{{ item.name }}</span>
+                                    <span class="setup-feature-card__badge">
+                                        {% if item.configured %}✓ Configured{% else %}Not set{% endif %}
+                                    </span>
+                                </div>
+                                <div class="setup-feature-card__desc">{{ item.description }}</div>
+                                {% if not item.configured %}
+                                <div class="setup-feature-card__env">{{ item.env_var }}</div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="setup-step--actions">
+                    <button class="btn btn--ghost" onclick="goToStep(3)">
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                        Back
+                    </button>
+                    <button class="btn btn--primary btn--lg btn--submit" onclick="goToStep(5)">
+                        Next
+                        <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-left:.25rem">arrow_forward</i>
+                    </button>
+                </div>
+            </div>
+
+            {# -- Step 5: Done ----------------------------------------------- #}
+            <div class="setup-step" data-step="5">
+                <div class="setup-complete">
+                    <div class="setup-complete__icon">
+                        <i class="material-symbols-outlined">check_circle</i>
+                    </div>
+                    <h1 class="setup-complete__title">You're all set!</h1>
+                    <p class="setup-complete__body">
+                        <strong id="done-app-title">{{ setup_app_title }}</strong> is ready to go.
+                        Open Site Admin to finish configuring your site.
+                    </p>
+                    <div class="setup-complete--actions">
+                        <button class="btn btn--ghost" onclick="goToStep(4)">
+                            <i class="material-icons" style="vertical-align:middle;font-size:1rem">arrow_back</i>
+                            Back
+                        </button>
+                        <form method="post" action="{% url 'setup' %}" style="display:inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="complete">
+                            <button type="submit" class="btn btn--primary btn--lg btn--submit">
+                                <i class="material-icons" style="vertical-align:middle;font-size:1rem;margin-right:.25rem">admin_panel_settings</i>
+                                Open Site Admin
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>{# /.setup-wizard__content #}
+    </div>{# /.setup-wizard__layout #}
+</div>{# /.setup-wizard #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    var SETUP_URL = '{% url "setup" %}';
+    var IS_OFFICIAL_SITE = {{ is_official_urbanlens_site|yesno:"true,false" }};
+    var SUGGESTED_APP_TITLE = '{{ suggested_app_title|escapejs }}';
+    var URBANLENS_TITLE_NOTICE = '{{ urbanlens_title_notice|escapejs }}';
+
+    var currentStep = 1;
+    var TOTAL_STEPS = 5;
+
+    var steps        = document.querySelectorAll('.setup-step');
+    var stepperItems = document.querySelectorAll('.setup-stepper__item');
+    var progressBar  = document.getElementById('setup-progress');
+    var titleInput   = document.getElementById('app-title-input');
+    var saveStatus   = document.getElementById('title-save-status');
+    var titlePreview = document.getElementById('title-preview-value');
+    var sidebarTitle = document.getElementById('sidebar-title');
+    var doneTitle    = document.getElementById('done-app-title');
+    var titleNotice  = document.getElementById('title-reserved-notice');
+    var titleNoticeMessage = document.getElementById('title-reserved-message');
+    var _saveTimer;
+
+    function normalizeAppTitle(title) {
+        return title.toLowerCase().replace(/[^a-z]+/g, '');
+    }
+
+    function isReservedUrbanlensTitle(title) {
+        return normalizeAppTitle(title) === 'urbanlens';
+    }
+
+    function shouldShowTitleReservedNotice(title) {
+        var trimmed = title.trim();
+        return !IS_OFFICIAL_SITE && trimmed !== '' && isReservedUrbanlensTitle(trimmed);
+    }
+
+    function defaultAppTitleFallback() {
+        return IS_OFFICIAL_SITE ? 'UrbanLens' : SUGGESTED_APP_TITLE;
+    }
+
+    function showTitleReservedNotice(message) {
+        if (titleNoticeMessage) {
+            titleNoticeMessage.textContent = message || URBANLENS_TITLE_NOTICE;
+        }
+        if (titleNotice) {
+            titleNotice.hidden = false;
+        }
+        if (titleInput) {
+            titleInput.setAttribute('aria-invalid', 'true');
+        }
+    }
+
+    function hideTitleReservedNotice() {
+        if (titleNotice) {
+            titleNotice.hidden = true;
+        }
+        if (titleInput) {
+            titleInput.removeAttribute('aria-invalid');
+        }
+    }
+
+    function validateAppTitle(title) {
+        if (shouldShowTitleReservedNotice(title)) {
+            showTitleReservedNotice(URBANLENS_TITLE_NOTICE);
+            return false;
+        }
+        hideTitleReservedNotice();
+        return true;
+    }
+
+    window.goToStep = function (n) {
+        if (n > currentStep && currentStep === 3 && titleInput) {
+            var titleValue = titleInput.value.trim();
+            if (!titleValue || !validateAppTitle(titleValue)) {
+                if (!titleValue) {
+                    titleInput.focus();
+                }
+                return;
+            }
+        }
+
+        currentStep = n;
+
+        steps.forEach(function (s) {
+            var active = parseInt(s.dataset.step, 10) === n;
+            s.classList.toggle('setup-step--active', active);
+        });
+
+        stepperItems.forEach(function (item) {
+            var sn = parseInt(item.dataset.step, 10);
+            item.classList.toggle('setup-stepper__item--active', sn === n);
+            item.classList.toggle('setup-stepper__item--done', sn < n);
+
+            // Swap number for check icon on completed steps
+            var numEl = item.querySelector('.step-num');
+            if (numEl) {
+                if (sn < n) {
+                    numEl.className = 'material-icons';
+                    numEl.textContent = 'check';
+                } else {
+                    numEl.className = 'step-num';
+                    numEl.textContent = sn;
+                }
+            }
+        });
+
+        if (progressBar) {
+            progressBar.style.width = (n / TOTAL_STEPS * 100) + '%';
+        }
+    };
+
+    // Live title preview + debounced save
+    if (titleInput) {
+        hideTitleReservedNotice();
+        validateAppTitle(titleInput.value);
+
+        titleInput.addEventListener('input', function () {
+            var v = this.value.trim() || defaultAppTitleFallback();
+            if (titlePreview) titlePreview.textContent = v;
+            if (sidebarTitle) sidebarTitle.textContent = v;
+            if (doneTitle) doneTitle.textContent = v;
+            validateAppTitle(this.value.trim());
+
+            if (window.autosaveGuard) window.autosaveGuard.markDirty();
+            clearTimeout(_saveTimer);
+            _saveTimer = setTimeout(saveTitle, 900);
+        });
+    }
+
+    document.querySelectorAll('.setup-title-suggestion-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!titleInput) return;
+            titleInput.value = btn.dataset.title || '';
+            titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+            titleInput.focus();
+        });
+    });
+
+    function saveTitle() {
+        if (!titleInput) return;
+        var v = titleInput.value.trim();
+        if (!v) return;
+        if (!validateAppTitle(v)) return;
+
+        var guard = window.autosaveGuard;
+        if (guard) guard.saveStarted();
+        fetch(SETUP_URL, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': CSRF,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=save_title&app_title=' + encodeURIComponent(v),
+        }).then(function (r) {
+            if (r.ok) {
+                if (guard) guard.markClean();
+                if (saveStatus) {
+                    saveStatus.classList.add('setup-save-status--visible');
+                    clearTimeout(saveStatus._t);
+                    saveStatus._t = setTimeout(function () {
+                        saveStatus.classList.remove('setup-save-status--visible');
+                    }, 2200);
+                }
+            } else if (r.status === 400 && !IS_OFFICIAL_SITE) {
+                return r.json().then(function (data) {
+                    showTitleReservedNotice(data.error || URBANLENS_TITLE_NOTICE);
+                });
+            }
+        }).catch(function () {}).finally(function () {
+            if (guard) guard.saveFinished();
+        });
+    }
+
+    // -- Step 2: Profile - username + avatar ----------------------------------
+    var PROFILE_URL = '{% url "profile.field.update" %}';
+
+    function setAvatarStatus(text, color) {
+        var el = document.getElementById('setup-avatar-status');
+        if (el) { el.textContent = text; el.style.color = color || '#9aa0a6'; }
+    }
+
+    function updateSetupAvatarPreview(url) {
+        if (!url) return;
+        var el = document.getElementById('setup-avatar-preview');
+        if (!el) return;
+        if (el.tagName === 'IMG') {
+            el.src = url + '?' + Date.now();
+        } else {
+            var img = document.createElement('img');
+            img.src = url + '?' + Date.now();
+            img.id = 'setup-avatar-preview';
+            img.alt = 'Avatar';
+            img.style.cssText = 'width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--ul-border,#e0e0e0);';
+            el.parentNode.replaceChild(img, el);
+        }
+    }
+
+    function saveProfileField(field, value, isFile) {
+        var fd = new FormData();
+        fd.append('csrfmiddlewaretoken', CSRF);
+        fd.append('field', field);
+        if (isFile) { fd.append('file_value', value); } else { fd.append('value', value); }
+        return fetch(PROFILE_URL, { method: 'POST', body: fd }).then(function (r) { return r.json(); });
+    }
+
+    // Username: debounced availability check + save on blur
+    var setupUsernameInput = document.getElementById('setup-username-input');
+    var setupUsernameHint  = document.getElementById('setup-username-hint');
+    var _unameCheckTimer;
+    var _lastCheckedUsername = '';
+
+    function checkSetupUsername(username) {
+        if (!username || username === _lastCheckedUsername) return;
+        _lastCheckedUsername = username;
+        setupUsernameHint.textContent = '';
+        if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+            setupUsernameHint.style.color = '#e53935';
+            setupUsernameHint.textContent = '3-30 chars: letters, numbers, underscores';
+            return;
+        }
+        fetch(PROFILE_URL + '?field=username&value=' + encodeURIComponent(username))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.available) {
+                    setupUsernameHint.style.color = '#43a047';
+                    setupUsernameHint.textContent = '✓ Available';
+                } else {
+                    setupUsernameHint.style.color = '#e53935';
+                    setupUsernameHint.textContent = d.reason || 'Unavailable';
+                }
+            }).catch(function () {});
+    }
+
+    if (setupUsernameInput) {
+        setupUsernameInput.addEventListener('input', function () {
+            clearTimeout(_unameCheckTimer);
+            var v = setupUsernameInput.value.trim();
+            _unameCheckTimer = setTimeout(function () { checkSetupUsername(v); }, 400);
+        });
+        setupUsernameInput.addEventListener('blur', function () {
+            var v = setupUsernameInput.value.trim();
+            if (!v || !/^[a-zA-Z0-9_]{3,30}$/.test(v)) return;
+            saveProfileField('username', v, false)
+                .then(function (d) {
+                    if (d.ok) {
+                        setupUsernameHint.style.color = '#43a047';
+                        setupUsernameHint.textContent = '✓ Saved';
+                    } else {
+                        setupUsernameHint.style.color = '#e53935';
+                        setupUsernameHint.textContent = d.error || 'Save failed';
+                    }
+                }).catch(function () {
+                    setupUsernameHint.style.color = '#e53935';
+                    setupUsernameHint.textContent = 'Save failed';
+                });
+        });
+    }
+
+    // Avatar: file upload
+    var setupAvatarUpload = document.getElementById('setup-avatar-upload');
+    if (setupAvatarUpload) {
+        setupAvatarUpload.addEventListener('change', function () {
+            if (!setupAvatarUpload.files.length) return;
+            setAvatarStatus('Saving...', '#9aa0a6');
+            saveProfileField('avatar', setupAvatarUpload.files[0], true)
+                .then(function (d) {
+                    if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
+                    else { setAvatarStatus('✗ ' + (d.error || 'Failed'), '#e53935'); }
+                }).catch(function () { setAvatarStatus('Failed', '#e53935'); });
+        });
+    }
+
+    // Avatar: gravatar
+    var setupGravatarBtn = document.getElementById('setup-avatar-gravatar-btn');
+    if (setupGravatarBtn) {
+        setupGravatarBtn.addEventListener('click', function () {
+            setAvatarStatus('Saving...', '#9aa0a6');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', CSRF);
+            fd.append('field', 'avatar_gravatar');
+            fetch(PROFILE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
+                    else { setAvatarStatus('✗ ' + (d.error || 'Failed'), '#e53935'); }
+                }).catch(function () { setAvatarStatus('Failed', '#e53935'); });
+        });
+    }
+
+    // Avatar: emoji options
+    document.querySelectorAll('.setup-avatar-emoji-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            setAvatarStatus('Saving...', '#9aa0a6');
+            var fd = new FormData();
+            fd.append('csrfmiddlewaretoken', CSRF);
+            fd.append('field', 'avatar_emoji');
+            fd.append('animal', btn.dataset.animal);
+            fd.append('color', btn.dataset.color);
+            fetch(PROFILE_URL, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { setAvatarStatus('✓ Saved', '#43a047'); updateSetupAvatarPreview(d.avatar_url); }
+                    else { setAvatarStatus('✗ ' + (d.error || 'Failed'), '#e53935'); }
+                }).catch(function () { setAvatarStatus('Failed', '#e53935'); });
+        });
+    });
+}());
+</script>
+{% endblock %}

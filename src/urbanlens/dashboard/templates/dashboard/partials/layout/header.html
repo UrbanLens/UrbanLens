@@ -1,0 +1,259 @@
+<nav class="app-nav">
+    <div class="app-nav-inner">
+
+        {# -- Brand ------------------------------------------------------------ #}
+        <a href="{% url 'home' %}" class="app-nav-brand">
+            <img src="/static/logo.png" alt="UrbanLens logo" class="app-nav-logo">
+            <span class="app-nav-brand-name">UrbanLens</span>
+        </a>
+
+        {# -- Primary links ----------------------------------------------------- #}
+        <ul class="app-nav-links">
+            {% if user.is_authenticated %}
+            <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+            <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+            {% else %}
+            <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+            {% endif %}
+        </ul>
+
+        {# -- Hamburger (mobile only) -------------------------------------------- #}
+        <button class="app-nav-hamburger" id="nav-hamburger-btn" type="button"
+                aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="app-nav-drawer">
+            <i class="material-icons" id="nav-hamburger-icon">menu</i>
+        </button>
+
+        {# -- Right: user menu or login ------------------------------------------ #}
+        <div class="app-nav-right">
+            {% if user.is_authenticated %}
+
+            {# -- Notification bell -------------------------------------------- #}
+            <div class="nav-notif" id="nav-notif">
+                <button class="nav-notif-btn" id="nav-notif-btn" type="button"
+                        aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+                    <i class="material-icons nav-notif-icon">notifications</i>
+                    <span id="notif-badge-wrap"
+                          hx-get="{% url 'notifications.unread_count' %}"
+                          hx-trigger="load, notifCountRefresh from:body"
+                          hx-swap="innerHTML">
+                    </span>
+                </button>
+                <div class="nav-notif-panel" id="notif-dropdown-wrap" role="menu"
+                     hx-get="{% url 'notifications.dropdown' %}"
+                     hx-trigger="notifOpen from:body"
+                     hx-swap="innerHTML">
+                </div>
+            </div>
+
+            <div class="nav-user" id="nav-user">
+                <button class="nav-user-btn" id="nav-user-btn" type="button"
+                        aria-haspopup="menu" aria-expanded="false" aria-controls="nav-dropdown">
+                    <div class="nav-avatar">
+                        {% if user.profile.avatar %}
+                        <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img">
+                        {% else %}
+                        <span class="nav-avatar-initial">{{ user.username|first|upper }}</span>
+                        {% endif %}
+                    </div>
+                    <span class="nav-user-name">{{ user.username }}</span>
+                    <i class="material-icons nav-chevron">expand_more</i>
+                </button>
+
+                <div class="nav-dropdown" id="nav-dropdown" role="menu" aria-label="User menu">
+
+                    {# Identity header #}
+                    <div class="nav-dropdown-identity">
+                        <div class="nav-dropdown-avatar">
+                            {% if user.profile.avatar %}
+                            <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img">
+                            {% else %}
+                            <span class="nav-avatar-initial nav-avatar-initial--lg">{{ user.username|first|upper }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="nav-dropdown-user-text">
+                            {% if user.get_full_name %}
+                            <span class="nav-dropdown-fullname">{{ user.get_full_name }}</span>
+                            {% endif %}
+                            <span class="nav-dropdown-username">@{{ user.username }}</span>
+                        </div>
+                    </div>
+
+                    <div class="nav-dropdown-sep" role="separator"></div>
+
+                    <a href="{% url 'profile.view' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-symbols-outlined">person</i>
+                        <span>Profile</span>
+                    </a>
+                    <a href="{% url 'settings.view' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-symbols-outlined">settings</i>
+                        <span>Settings</span>
+                    </a>
+                    <a href="{% url 'tools.index' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-symbols-outlined">build</i>
+                        <span>Tools</span>
+                    </a>
+                    {% if user.is_superuser or perms.dashboard.view_site_admin %}
+                    <a href="{% url 'site_admin_home' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-symbols-outlined">admin_panel_settings</i>
+                        <span>Site Admin</span>
+                    </a>
+                    {% endif %}
+                    {% if show_dev_toolbar %}
+                    <button type="button" class="nav-dropdown-item nav-dropdown-item--devtools" id="nav-devtools-btn" role="menuitem" title="Toggle Dev Tools (Ctrl+Shift+.)">
+                        <i class="material-symbols-outlined">terminal</i>
+                        <span>Dev Tools</span>
+                        <span class="nav-devtools-shortcut">Ctrl+⇧+.</span>
+                    </button>
+                    {% endif %}
+
+                    <div class="nav-dropdown-sep" role="separator"></div>
+
+                    <form method="post" action="{% url 'logout' %}" class="nav-dropdown-logout-form">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-dropdown-item nav-dropdown-item--signout" role="menuitem">
+                            <i class="material-symbols-outlined">logout</i>
+                            <span>Sign out</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <a href="{% url 'login' %}" class="app-nav-link">Login</a>
+            {% endif %}
+        </div>
+
+    </div>
+</nav>
+
+{# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
+<div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
+    <ul class="app-nav-drawer-links">
+        <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+        {% if user.is_authenticated %}
+        <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+        <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+        {% endif %}
+        <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+    </ul>
+</div>
+
+<script>
+(function () {
+    var menu      = document.getElementById('nav-user');
+    var btn       = document.getElementById('nav-user-btn');
+    var notifWrap = document.getElementById('nav-notif');
+    var notifBtn  = document.getElementById('nav-notif-btn');
+    var _loaded   = false;
+
+    function openMenu() {
+        if (!menu) return;
+        closeNotif();
+        menu.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+    }
+    function closeMenu() {
+        if (!menu) return;
+        menu.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    window.closeNavDropdown = closeMenu;
+    function openNotif() {
+        if (!notifWrap) return;
+        closeMenu();
+        notifWrap.classList.add('is-open');
+        notifBtn.setAttribute('aria-expanded', 'true');
+        if (!_loaded) { _loaded = true; document.body.dispatchEvent(new Event('notifOpen')); }
+    }
+    function closeNotif() {
+        if (!notifWrap) return;
+        notifWrap.classList.remove('is-open');
+        notifBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            menu.classList.contains('is-open') ? closeMenu() : openMenu();
+        });
+    }
+
+    if (notifBtn) {
+        notifBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            notifWrap.classList.contains('is-open') ? closeNotif() : openNotif();
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function (ev) {
+            var t = ev.detail.target;
+            if (!t) return;
+            if (t.id === 'notif-dropdown-wrap' || t.id === 'notif-dropdown' ||
+                (t.classList && t.classList.contains('notif-item'))) {
+                htmx.trigger(document.body, 'notifCountRefresh');
+            }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function (ev) {
+            var elt = ev.detail.elt;
+            if (!elt || !elt.classList || !elt.classList.contains('notif-item')) return;
+            if (!ev.detail.successful) return;
+            var url = elt.dataset.notifUrl;
+            if (url && elt.classList.contains('notif-item--unread')) {
+                window.location = url;
+            }
+        });
+
+        document.getElementById('notif-dropdown-wrap').addEventListener('click', function (ev) {
+            var item = ev.target.closest('.notif-item--link:not(.notif-item--unread)');
+            if (!item || !item.dataset.notifUrl) return;
+            window.location = item.dataset.notifUrl;
+        });
+    }
+
+    // Single document click handler - closes whichever dropdown was not clicked in
+    document.addEventListener('click', function (e) {
+        if (menu      && !menu.contains(e.target))      closeMenu();
+        if (notifWrap && !notifWrap.contains(e.target)) closeNotif();
+    });
+
+    // Escape closes both
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { closeMenu(); closeNotif(); closeDrawer(); }
+    });
+
+    // -- Mobile hamburger drawer -----------------------------------------------
+    var hamburgerBtn  = document.getElementById('nav-hamburger-btn');
+    var hamburgerIcon = document.getElementById('nav-hamburger-icon');
+    var navDrawer     = document.getElementById('app-nav-drawer');
+
+    function openDrawer() {
+        if (!navDrawer) return;
+        navDrawer.classList.add('is-open');
+        navDrawer.setAttribute('aria-hidden', 'false');
+        if (hamburgerBtn) hamburgerBtn.setAttribute('aria-expanded', 'true');
+        if (hamburgerIcon) hamburgerIcon.textContent = 'close';
+    }
+    function closeDrawer() {
+        if (!navDrawer) return;
+        navDrawer.classList.remove('is-open');
+        navDrawer.setAttribute('aria-hidden', 'true');
+        if (hamburgerBtn) hamburgerBtn.setAttribute('aria-expanded', 'false');
+        if (hamburgerIcon) hamburgerIcon.textContent = 'menu';
+    }
+
+    if (hamburgerBtn) {
+        hamburgerBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            navDrawer.classList.contains('is-open') ? closeDrawer() : openDrawer();
+        });
+    }
+
+    // Close drawer on outside click
+    document.addEventListener('click', function (e) {
+        if (navDrawer && navDrawer.classList.contains('is-open') &&
+            !navDrawer.contains(e.target) && hamburgerBtn && !hamburgerBtn.contains(e.target)) {
+            closeDrawer();
+        }
+    });
+}());
+</script>

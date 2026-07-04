@@ -1,0 +1,16 @@
+{% if result == "request_sent" %}
+<div class="invite-result invite-result--success">
+    <i class="material-icons">check_circle</i>
+    <span>Friend request sent to <strong>{{ username }}</strong>.</span>
+</div>
+{% elif result == "invite_sent" %}
+<div class="invite-result invite-result--success">
+    <i class="material-icons">mail</i>
+    <span>Invitation emailed to <strong>{{ email }}</strong>. They'll get a friend request automatically when they join.</span>
+</div>
+{% else %}
+<div class="invite-result invite-result--error">
+    <i class="material-icons">error</i>
+    <span>Something went wrong. Please try again.</span>
+</div>
+{% endif %}

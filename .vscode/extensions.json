@@ -1,0 +1,14 @@
+{
+	"recommendations": [
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-python.mypy-type-checker",
+		"charliermarsh.ruff",
+		"eamodio.gitlens",
+		"github.vscode-pull-request-github",
+		"atlassian.atlascode"
+	],
+	"unwantedRecommendations": [
+		"ms-python.isort"
+	]
+}

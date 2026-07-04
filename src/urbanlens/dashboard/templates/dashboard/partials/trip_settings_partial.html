@@ -1,0 +1,97 @@
+<div id="trip-settings-content">
+	{% if saved %}
+	<div class="site-admin-notice site-admin-notice--success" style="margin-bottom:.75rem">
+		<i class="material-icons">check_circle</i> Settings saved.
+	</div>
+	{% endif %}
+	<form hx-post="{% url 'trips.settings' trip.uuid %}"
+	      hx-target="#trip-settings-content"
+	      hx-swap="innerHTML"
+	      class="trip-create-form">
+		{% csrf_token %}
+
+		<div class="form-row">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
+					<strong>Allow members to add people</strong>
+					<span class="trip-setting-desc">Members can invite other users to join this trip.</span>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if trip.allow_add_members == 'none' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_members" value="none" {% if trip.allow_add_members == 'none' %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_members == 'organizers' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_members" value="organizers" {% if trip.allow_add_members == 'organizers' %}checked{% endif %}>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_members == 'everyone' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_members" value="everyone" {% if trip.allow_add_members == 'everyone' %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
+					<strong>Allow members to add activities</strong>
+					<span class="trip-setting-desc">Members can add new activities to this trip.</span>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if trip.allow_add_activities == 'none' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_activities" value="none" {% if trip.allow_add_activities == 'none' %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_activities == 'organizers' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_activities" value="organizers" {% if trip.allow_add_activities == 'organizers' %}checked{% endif %}>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_add_activities == 'everyone' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_add_activities" value="everyone" {% if trip.allow_add_activities == 'everyone' %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
+					<strong>Allow members to edit activities</strong>
+					<span class="trip-setting-desc">Members can edit and delete activities.</span>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if trip.allow_edit_activities == 'none' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_edit_activities" value="none" {% if trip.allow_edit_activities == 'none' %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_edit_activities == 'organizers' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_edit_activities" value="organizers" {% if trip.allow_edit_activities == 'organizers' %}checked{% endif %}>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_edit_activities == 'everyone' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_edit_activities" value="everyone" {% if trip.allow_edit_activities == 'everyone' %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-row">
+			<div class="trip-setting-row">
+				<div class="trip-setting-label">
+					<strong>Enable comments</strong>
+					<span class="trip-setting-desc">Allow members to leave comments on this trip.</span>
+				</div>
+				<div class="trip-setting-pills" role="group">
+					<label class="trip-setting-pill{% if trip.allow_comments == 'none' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_comments" value="none" {% if trip.allow_comments == 'none' %}checked{% endif %}>No one
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_comments == 'organizers' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_comments" value="organizers" {% if trip.allow_comments == 'organizers' %}checked{% endif %}>Organizers
+					</label>
+					<label class="trip-setting-pill{% if trip.allow_comments == 'everyone' %} trip-setting-pill--active{% endif %}">
+						<input type="radio" name="allow_comments" value="everyone" {% if trip.allow_comments == 'everyone' %}checked{% endif %}>Everyone
+					</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="form-actions">
+			<button type="submit" class="submit-button btn btn--primary btn--lg">Save Settings</button>
+		</div>
+	</form>
+</div>

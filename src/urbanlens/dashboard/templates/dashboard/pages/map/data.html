@@ -1,0 +1,50 @@
+<div id="map-body">
+<script>
+{
+    _filterMode = true;
+    clusterGroup.clearLayers();
+    _markerMap.clear();
+    // Push filter state into URL so Back button and refresh preserve filters
+    (function() {
+        const form = document.getElementById('filter-form');
+        if (form) {
+            const params = new URLSearchParams(new FormData(form));
+            // Remove empty values
+            const clean = new URLSearchParams();
+            for (const [k, v] of params.entries()) { if (v !== '') clean.append(k, v); }
+            history.replaceState({ filter: clean.toString() }, '', _urlWithMapView(clean));
+        }
+    })();
+
+    const batch = [];
+    {% for pin in map_data %}
+    (function() {
+        const p = {
+            id: "{{ pin.id|default_if_none:'' }}",
+            latitude: "{{ pin.latitude }}",
+            longitude: "{{ pin.longitude }}",
+            icon: "{{ pin.icon|default_if_none:'' }}",
+            color: "{{ pin.color|default_if_none:'' }}",
+            uuid: "{{ pin.uuid }}",
+            slug: "{{ pin.slug }}",
+            name: "{{ pin.name|default_if_none:''|escapejs }}",
+            description: "{{ pin.description|default_if_none:''|escapejs }}",
+            rating: "{{ pin.rating|stringformat:'s' }}",
+            status: "{{ pin.status|default_if_none:''|escapejs }}",
+            categories: "{{ pin.categories|default_if_none:''|escapejs }}",
+            last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
+            tags: "{{ pin.tags|default_if_none:''|escapejs }}",
+            tags_data: {{ pin.tags_data_json|default:'[]'|safe }},
+            viewLocationUrl: "{% url 'pin.details' pin.slug %}"
+        };
+        if (p.latitude && p.longitude) {
+            const m = _buildMarker(p);
+            if (m) { _markerMap.set(p.uuid, m); batch.push(m); }
+        }
+    })();
+    {% endfor %}
+    if (batch.length) clusterGroup.addLayers(batch);
+    if (window.updatePinCounter) window.updatePinCounter();
+}
+</script>
+</div>

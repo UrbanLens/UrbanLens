@@ -1,0 +1,25 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Resend verification - UrbanLens{% endblock %}
+
+{% block auth_header %}
+<h1 class="auth-title">Resend verification</h1>
+<p class="auth-subtitle">We'll send you a new link</p>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="auth-form" novalidate>
+    {% csrf_token %}
+    <div class="auth-field">
+        <label for="resend-email">Email address</label>
+        <input type="email" id="resend-email" name="email"
+               value="{{ email }}"
+               placeholder="you@example.com"
+               autocomplete="email" autofocus>
+    </div>
+    <button type="submit" class="btn btn--primary auth-submit-btn">Send verification email</button>
+</form>
+<div class="auth-footer">
+    <a href="{% url 'login' %}" style="font-size:.82rem;color:#9ca3af;font-weight:400">Back to sign in</a>
+</div>
+{% endblock %}

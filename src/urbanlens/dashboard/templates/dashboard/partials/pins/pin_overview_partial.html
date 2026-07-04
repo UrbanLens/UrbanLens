@@ -1,0 +1,152 @@
+<div id="pin-overview"{% if oob %} hx-swap-oob="outerHTML"{% endif %} data-pin-version="{{ client_version }}">
+
+    {# -- Title + community wiki box ----------------------------------------- #}
+    <div class="pin-overview-title-row">
+        <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
+
+        {% if pin.is_private %}
+        <div class="pin-wiki-box pin-wiki-box--private">
+            <i class="material-symbols-outlined">lock</i>
+            <span>Private pin - no community wiki entry.</span>
+        </div>
+        {% elif pin.location and pin.location.slug %}
+        <div class="pin-wiki-box" id="pin-location-section">
+            <i class="material-symbols-outlined">public</i>
+            <div class="pin-wiki-box-info">
+                <span class="pin-wiki-box-label">Community Wiki</span>
+                <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
+                   data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
+                    {{ pin.location.name }}
+                    <i class="material-symbols-outlined">open_in_new</i>
+                </a>
+            </div>
+            <div class="pin-wiki-box-actions">
+                {% if overlapping_location_count > 1 %}
+                <button type="button" class="btn pin-loc-change-btn"
+                        hx-get="{% url 'pin.link' pin.slug %}"
+                        hx-target="#pin-location-picker"
+                        hx-swap="innerHTML"
+                        data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
+                        title="Switch to a different shared location">
+                    <i class="material-symbols-outlined">swap_horiz</i>
+                </button>
+                {% endif %}
+                <button type="button" class="btn pin-loc-detach-btn"
+                        hx-post="{% url 'pin.link' pin.slug %}"
+                        hx-target="#pin-overview"
+                        hx-swap="outerHTML"
+                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                        hx-confirm="Detach from this location? Your pin will get its own independent community wiki."
+                        data-tooltip="Unlink this pin from the shared location. Your pin will get its own private wiki page that only you can edit."
+                        title="Detach from this shared location">
+                    <i class="material-symbols-outlined">link_off</i>
+                </button>
+            </div>
+            {# Picker panel drops down from here when "Change" is clicked #}
+            <div id="pin-location-picker"></div>
+        </div>
+        {% elif pin.effective_latitude %}
+        <div class="pin-wiki-box pin-wiki-box--unlinked">
+            <i class="material-symbols-outlined">link_off</i>
+            <span>Not linked to a shared location.</span>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-get="{% url 'pin.link' pin.slug %}"
+                    hx-target="#pin-location-picker"
+                    hx-swap="innerHTML">
+                <i class="material-symbols-outlined">search</i> Find
+            </button>
+            <div id="pin-location-picker"></div>
+        </div>
+        {% endif %}
+    </div>
+
+    {# -- Details card ----------------------------------------------------- #}
+    <div class="pin-details location-details card"
+         data-collapse-scope="pin" data-collapse-section="details">
+        <div class="card-header">
+            <i class="material-symbols-outlined">info</i>
+            <span>Details</span>
+            <button type="button" class="btn btn--icon-sm" title="Share pin"
+                    hx-get="{% url 'pin.share.dialog' pin.slug %}"
+                    hx-target="#pin-share-dialog"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-share-dialog').showModal()}">
+                <i class="material-symbols-outlined">ios_share</i>
+            </button>
+            <button type="button" class="btn btn--icon-sm" title="Edit details"
+                    onclick="urbanlensCapturePinEditOriginals(); document.getElementById('pin-edit-dialog').showModal()">
+                <i class="material-symbols-outlined">edit</i>
+            </button>
+        </div>
+        <div class="details-grid">
+            {% if pin.description %}
+            <div class="detail-row full-width">
+                <span class="field-label">Description</span>
+                <span class="field-value">{{ pin.description }}</span>
+            </div>
+            {% endif %}
+            <div class="pin-stats">
+                {% if pin.has_place_name %}
+                <div class="pin-stat-item pin-stat-item--place">
+                    <span class="field-label">Place Name</span>
+                    <span class="field-value">{{ pin.place_name }}</span>
+                </div>
+                {% endif %}
+
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
+
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
+
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="rating" label="Rating" help="Your quality rating for this location." modifier="" wide=False client_version=client_version %}
+
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=True client_version=client_version %}
+            </div>
+            {% if pin.effective_official_name %}
+            <div class="detail-row">
+                <span class="field-label">Official Name</span>
+                <span class="field-value">{{ pin.effective_official_name }}</span>
+            </div>
+            {% endif %}
+            {% if pin.effective_address %}
+            <div class="detail-row">
+                <span class="field-label">Address</span>
+                <span class="field-value">{{ pin.effective_address }}</span>
+            </div>
+            {% endif %}
+            {% if pin.effective_latitude and pin.effective_longitude %}
+            <div class="detail-row">
+                <span class="field-label">Coordinates</span>
+                <span class="field-value">{{ pin.effective_latitude|floatformat:5 }}, {{ pin.effective_longitude|floatformat:5 }}</span>
+            </div>
+            {% endif %}
+            {% if pin.date_abandoned %}
+            <div class="detail-row">
+                <span class="field-label">Abandoned</span>
+                <span class="field-value">{{ pin.date_abandoned|date:"M j, Y" }}</span>
+            </div>
+            {% endif %}
+            {% if pin.effective_date_last_active %}
+            <div class="detail-row">
+                <span class="field-label">Last Active</span>
+                <span class="field-value">{{ pin.effective_date_last_active|date:"M j, Y" }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {# Security indicators - only shown when at least one is non-unknown #}
+        {% if pin.fences != "unknown" or pin.alarms != "unknown" or pin.cameras != "unknown" or pin.security != "unknown" or pin.signs != "unknown" or pin.vps != "unknown" or pin.plywood != "unknown" or pin.locked != "unknown" %}
+        <div class="security-indicators">
+            <span class="security-indicators-label">Security</span>
+            <div class="security-chips">
+                {% if pin.fences != "unknown" %}<span class="security-chip security-chip--{{ pin.fences }}">Fences: {{ pin.get_fences_display }}</span>{% endif %}
+                {% if pin.alarms != "unknown" %}<span class="security-chip security-chip--{{ pin.alarms }}">Alarms: {{ pin.get_alarms_display }}</span>{% endif %}
+                {% if pin.cameras != "unknown" %}<span class="security-chip security-chip--{{ pin.cameras }}">Cameras: {{ pin.get_cameras_display }}</span>{% endif %}
+                {% if pin.security != "unknown" %}<span class="security-chip security-chip--{{ pin.security }}">Security: {{ pin.get_security_display }}</span>{% endif %}
+                {% if pin.signs != "unknown" %}<span class="security-chip security-chip--{{ pin.signs }}">Signs: {{ pin.get_signs_display }}</span>{% endif %}
+                {% if pin.vps != "unknown" %}<span class="security-chip security-chip--{{ pin.vps }}">VPS: {{ pin.get_vps_display }}</span>{% endif %}
+                {% if pin.plywood != "unknown" %}<span class="security-chip security-chip--{{ pin.plywood }}">Plywood: {{ pin.get_plywood_display }}</span>{% endif %}
+                {% if pin.locked != "unknown" %}<span class="security-chip security-chip--{{ pin.locked }}">Locked: {{ pin.get_locked_display }}</span>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

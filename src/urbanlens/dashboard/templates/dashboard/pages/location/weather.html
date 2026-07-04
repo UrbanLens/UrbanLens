@@ -1,0 +1,37 @@
+<div class="weather-widget card" id="weather-forecast-section">
+    <div class="card-header">
+        <i class="material-symbols-outlined">wb_sunny</i>
+        <h3>Weather Forecast</h3>
+    </div>
+    {% if forecast %}
+    <div class="weather-strip-scroll">
+        <div class="weather-strip">
+            {% for item in forecast %}
+            <div class="wx-entry">
+                <div class="wx-time">{{ item.date|date:"D" }}<br>{{ item.date|date:"g A" }}</div>
+                <img class="wx-icon"
+                     src="https://openweathermap.org/img/wn/{{ item.weather.0.icon }}@2x.png"
+                     alt="{{ item.weather.0.main }}"
+                     width="48" height="48">
+                <div class="wx-temp">{{ item.main.temp|floatformat:"0" }}°<span class="wx-unit">F</span></div>
+                <div class="wx-condition">{{ item.weather.0.main }}</div>
+                <div class="wx-meta">
+                    <span title="Humidity"><i class="material-symbols-outlined">water_drop</i>{{ item.main.humidity }}%</span>
+                    <span title="Wind"><i class="material-symbols-outlined">air</i>{{ item.wind.speed|floatformat:"0" }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% elif error %}
+    <div class="view-unavailable">
+        <i class="material-symbols-outlined">cloud_off</i>
+        <span>{{ error }}</span>
+    </div>
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-symbols-outlined">cloud_off</i>
+        <span>Weather data is not available at the moment.</span>
+    </div>
+    {% endif %}
+</div>

@@ -1,0 +1,143 @@
+<div id="street-view-section" class="street-view card card--primary"
+     data-collapse-scope="pin" data-collapse-section="street-view">
+    {% for entry in debug_entries %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ entry.source }}"
+          data-debug-query="{{ entry.query }}"
+          data-debug-cache="{{ entry.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ entry.count }}"></span>
+    {% endfor %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">streetview</i>
+        <h3>Street View</h3>
+    </div>
+
+    {% if slides %}
+    <div class="sv-carousel" id="sv-carousel">
+        <div class="sv-slides-wrapper">
+            {% for slide in slides %}
+            <div class="sv-slide{% if forloop.first %} is-active{% endif %}"
+                 data-source="{{ slide.source }}"
+                 data-date="{{ slide.date }}"
+                 {% if slide.heading is not None %}data-heading="{{ slide.heading|floatformat:0 }}"{% endif %}
+                 {% if slide.latitude is not None %}data-lat="{{ slide.latitude|floatformat:5 }}"{% endif %}
+                 {% if slide.longitude is not None %}data-lng="{{ slide.longitude|floatformat:5 }}"{% endif %}>
+                {% if forloop.first and google_maps_api_key %}
+                {# First slide: interactive embed so the user can pan/look around. #}
+                {% with sv_lat=slide.latitude|default:pin.effective_latitude sv_lng=slide.longitude|default:pin.effective_longitude %}
+                {% if sv_lat and sv_lng %}
+                <iframe class="sv-embed"
+                        src="https://www.google.com/maps/embed/v1/streetview?key={{ google_maps_api_key }}&location={{ sv_lat }},{{ sv_lng }}{% if slide.heading is not None %}&heading={{ slide.heading|floatformat:0 }}{% endif %}&pitch=0&fov=80"
+                        allowfullscreen
+                        loading="eager"
+                        referrerpolicy="no-referrer-when-downgrade"
+                        title="Interactive Street View"></iframe>
+                {% else %}
+                <img src="{{ slide.img_src }}"
+                     class="sv-img"
+                     alt="{{ slide.source }} - {{ slide.date }}"
+                     onerror="_svRemoveSlide(this)">
+                {% endif %}
+                {% endwith %}
+                {% else %}
+                <img src="{{ slide.img_src }}"
+                     class="sv-img"
+                     alt="{{ slide.source }} - {{ slide.date }}"
+                     onerror="_svRemoveSlide(this)">
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="sv-controls">
+            <button class="sv-btn sv-prev" onclick="_svPrev()" aria-label="Previous image"
+                    title="Previous image">
+                <i class="material-symbols-outlined">chevron_left</i>
+            </button>
+            <div class="sv-meta">
+                <span class="sv-source"></span>
+                <span class="sv-date"></span>
+                <span class="sv-heading"></span>
+            </div>
+            <button class="sv-btn sv-next" onclick="_svNext()" aria-label="Next image"
+                    title="Next image">
+                <i class="material-symbols-outlined">chevron_right</i>
+            </button>
+        </div>
+
+        <div class="sv-dots" id="sv-dots"></div>
+    </div>
+
+    <script>
+    (function () {
+        var _svIdx = 0;
+
+        function _svSlides() {
+            var c = document.getElementById('sv-carousel');
+            return c ? Array.from(c.querySelectorAll('.sv-slide')) : [];
+        }
+
+        function _svShow(idx) {
+            var slides = _svSlides();
+            if (!slides.length) return;
+            _svIdx = ((idx % slides.length) + slides.length) % slides.length;
+            slides.forEach(function (s, i) { s.classList.toggle('is-active', i === _svIdx); });
+            var active = slides[_svIdx];
+            if (!active) return;
+            document.querySelector('#sv-carousel .sv-source').textContent = active.dataset.source || '';
+            document.querySelector('#sv-carousel .sv-date').textContent   = active.dataset.date   || '';
+            var headingEl = document.querySelector('#sv-carousel .sv-heading');
+            headingEl.textContent = 'heading' in active.dataset
+                ? '⇨ ' + active.dataset.heading + '°'
+                : '';
+            _svRebuildDots(slides.length);
+        }
+
+        function _svRebuildDots(count) {
+            var el = document.getElementById('sv-dots');
+            if (!el) return;
+            el.innerHTML = '';
+            for (var i = 0; i < count; i++) {
+                var dot = document.createElement('button');
+                dot.type = 'button';
+                dot.className = 'sat-dot' + (i === _svIdx ? ' is-active' : '');
+                dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+                (function (idx) { dot.addEventListener('click', function () { _svShow(idx); }); }(i));
+                el.appendChild(dot);
+            }
+        }
+
+        window._svRemoveSlide = function (img) {
+            var slide = img.closest('.sv-slide');
+            if (!slide) return;
+            var wasActive = slide.classList.contains('is-active');
+            slide.remove();
+            var slides = _svSlides();
+            if (!slides.length) {
+                var c = document.getElementById('sv-carousel');
+                if (c) {
+                    c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>'
+                        + '<span>No street-level imagery available for this location.</span></div>';
+                }
+                return;
+            }
+            if (wasActive) {
+                _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
+            }
+            _svShow(_svIdx);
+        };
+
+        window._svPrev = function () { _svShow(_svIdx - 1); };
+        window._svNext = function () { _svShow(_svIdx + 1); };
+
+        _svShow(0);
+    }());
+    </script>
+
+    {% else %}
+    <div class="view-unavailable">
+        <i class="material-symbols-outlined">broken_image</i>
+        <span>{{ error|default:"Street view unavailable." }}</span>
+    </div>
+    {% endif %}
+</div>

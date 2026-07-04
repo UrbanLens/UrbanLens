@@ -1,0 +1,164 @@
+{# Partial: KPI cards + top locations. Loaded via HTMX on the stats page. #}
+<div class="stats-kpi-sections">
+
+    <section class="stats-kpi-section" aria-labelledby="stats-section-users">
+        <h2 class="stats-kpi-section-title" id="stats-section-users">
+            <i class="material-symbols-outlined">people</i>
+            Community
+        </h2>
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
+                    <i class="material-icons" style="color:#0891b2">people</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_users }}</div>
+                    <div class="stats-kpi-label">Total Users</div>
+                    <div class="stats-kpi-sub">+{{ new_users_30d }} in last 30 days</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
+                    <i class="material-icons" style="color:#16a34a">person</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ active_users_30d }}</div>
+                    <div class="stats-kpi-label">Active Users</div>
+                    <div class="stats-kpi-sub">logged in last 30 days</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(20,184,166,.12)">
+                    <i class="material-icons" style="color:#14b8a6">people_alt</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_friendships }}</div>
+                    <div class="stats-kpi-label">Friendships</div>
+                    <div class="stats-kpi-sub">accepted connections</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats-kpi-section" aria-labelledby="stats-section-content">
+        <h2 class="stats-kpi-section-title" id="stats-section-content">
+            <i class="material-symbols-outlined">explore</i>
+            Content
+        </h2>
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
+                    <i class="material-icons" style="color:#7c3aed">place</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_locations }}</div>
+                    <div class="stats-kpi-label">Locations</div>
+                    <div class="stats-kpi-sub">+{{ new_locations_30d }} in last 30 days</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
+                    <i class="material-icons" style="color:#d97706">push_pin</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_pins }}</div>
+                    <div class="stats-kpi-label">Pins</div>
+                    <div class="stats-kpi-sub">avg {{ avg_pins_per_user }} per user</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(236,72,153,.12)">
+                    <i class="material-icons" style="color:#ec4899">photo_library</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_photos }}</div>
+                    <div class="stats-kpi-label">Photos</div>
+                    <div class="stats-kpi-sub">user-uploaded images</div>
+                </div>
+            </div>
+            {% if total_reviews is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(251,191,36,.12)">
+                    <i class="material-icons" style="color:#f59e0b">star</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_reviews }}</div>
+                    <div class="stats-kpi-label">Reviews</div>
+                    <div class="stats-kpi-sub">location reviews</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if total_trips is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(99,102,241,.12)">
+                    <i class="material-icons" style="color:#6366f1">directions_car</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_trips }}</div>
+                    <div class="stats-kpi-label">Trips</div>
+                    <div class="stats-kpi-sub">{% if new_trips_30d %}+{{ new_trips_30d }} in last 30 days{% else %}planned adventures{% endif %}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="stats-kpi-section" aria-labelledby="stats-section-admin">
+        <h2 class="stats-kpi-section-title" id="stats-section-admin">
+            <i class="material-symbols-outlined">admin_panel_settings</i>
+            Roles
+        </h2>
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(59,130,246,.12)">
+                    <i class="material-icons" style="color:#3b82f6">workspace_premium</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_subscriptions }}</div>
+                    <div class="stats-kpi-label">Subscriptions</div>
+                    <div class="stats-kpi-sub">active grants</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(239,68,68,.12)">
+                    <i class="material-icons" style="color:#ef4444">admin_panel_settings</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">{{ total_site_admins }}</div>
+                    <div class="stats-kpi-label">Site Admins</div>
+                    <div class="stats-kpi-sub">members of site_admin</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+{% if top_locations %}
+<div class="site-admin-card ul-section card">
+    <div class="card-header">
+        <i class="material-symbols-outlined">leaderboard</i>
+        <span>Most Pinned Locations</span>
+    </div>
+    <table class="stats-table">
+        <thead>
+            <tr><th>#</th><th>Location</th><th>Pins</th></tr>
+        </thead>
+        <tbody>
+            {% for loc in top_locations %}
+            <tr>
+                <td class="stats-table-rank">{{ forloop.counter }}</td>
+                <td>
+                    {% if loc.slug %}
+                    <a href="{% url 'location.wiki' loc.slug %}" class="stats-table-link">{{ loc.name }}</a>
+                    {% else %}
+                    {{ loc.name }}
+                    {% endif %}
+                </td>
+                <td class="stats-table-count">{{ loc.pin_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

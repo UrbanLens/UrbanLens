@@ -1,60 +1,122 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-# 	File: docker-compose.yml                                                   #
-# 	Author: Jess Mann                                                          #
-# 	Email: jess@manlyphotos.com                                                #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	Copyright (c) 2023 Urban Lens                                              #
-################################################################################
-version: '3.8'
+# Shared build configuration - all three app containers use the same image.
+# UL_ENVIRONMENT is passed as a build arg (not just a runtime env var) so the
+# Dockerfile can install requirements/prod.txt for staging/production builds
+# instead of requirements/dev.txt (which pulls in linters, mypy, pytest, etc).
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+
+# Full environment for the app server and celery workers (need all API keys).
+# UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
+# binary directly, which avoids the "install postgresql-client-<ver>" error
+# when the wrapper can't find a local cluster matching the remote server.
+x-app-env: &app-env
+  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_APP_PORT: ${UL_APP_PORT:-21800}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
+  UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
+  UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
+  UL_DISCORD_CLIENT_SECRET: ${UL_DISCORD_CLIENT_SECRET}
+  UL_GOOGLE_UNRESTRICTED_API_KEY: ${UL_GOOGLE_UNRESTRICTED_API_KEY}
+  UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY: ${UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY}
+  UL_GOOGLE_SEARCH_TENANT: ${UL_GOOGLE_SEARCH_TENANT}
+  UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
+  UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
+  UL_NPS_API_KEY: ${UL_NPS_API_KEY}
+  UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
+  UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
+  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
+
+# Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
+x-beat-env: &beat-env
+  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+
+# Project name is derived from the environment so each of prod/dev/test/staging
+# gets its own Compose namespace - this prefixes default (unnamed) networks and
+# volumes automatically, in addition to the explicit container_names below.
+name: urbanlens-${UL_ENVIRONMENT:-production}
 
 services:
   app:
-    container_name: urbanlens_app
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app
     build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - GIT_EMAIL=${GIT_EMAIL}
-        - GIT_NAME=${GIT_NAME}  
-        - GH_TOKEN=${GH_TOKEN}
-        - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-    depends_on:
-      - db
+      <<: *app-build
 
-    # Overrides default command so things don't shut down after the process ends.
-    command: sleep infinity
+    restart: unless-stopped
+
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
 
     volumes:
       - logs:/var/log
+      - static_volume:/app/src/urbanlens/frontend/static
+      - media_volume:/app/src/urbanlens/media
+      - backups:/app/src/backups
 
     networks:
       app_network:
         aliases:
           - urbanlens_app
 
-    ports:
-      - "6565:8000"
-
     environment:
-      - GIT_EMAIL=${GIT_EMAIL}
-      - GIT_NAME=${GIT_NAME}
-      - GH_TOKEN=${GH_TOKEN}
-      - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_NAME=${DB_NAME:-postgres}
-      - DB_PASS=${DB_PASS:-postgres}
-      - DB_HOST=${DB_HOST:-urbanlens_db}
-      - DB_PORT=${DB_PORT:-5432}
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      <<: *app-env
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  nginx:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_nginx
+    image: nginxinc/nginx-unprivileged:alpine
+    volumes:
+      - static_volume:/app/src/urbanlens/frontend/static
+      - media_volume:/app/src/urbanlens/media
+      - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./src/urbanlens/config/nginx/django.conf:/etc/nginx/conf.d/django.conf:ro
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${UL_APP_PORT:-21800}:8080"
+    depends_on:
+      - app
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_nginx
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/nginx-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   db:
-    container_name: urbanlens_db
-    image: postgres:latest
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_db
+    # Pin to the same major version as postgresql-client-17 in the Dockerfile so
+    # the pg_dump binary and server protocol stay in sync.
+    image: postgis/postgis:17-3.5
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -62,15 +124,15 @@ services:
       app_network:
         aliases:
           - urbanlens_db
-      
+
     environment:
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_DB=${DB_NAME:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASS:-postgres}
-      - POSTGRES_PORT=${DB_PORT:-5432}
+      - POSTGRES_USER=${UL_DB_USER:-postgres}
+      - POSTGRES_DB=${UL_DB_NAME:-postgres}
+      - POSTGRES_PASSWORD=${UL_DB_PASS:-postgres}
+      - POSTGRES_PORT=${UL_DB_PORT:-5432}
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
       interval: 10s
       timeout: 10s
       retries: 9
@@ -81,10 +143,90 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  celery-worker:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_worker
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log
+      - media_volume:/app/src/urbanlens/media
+      - backups:/app/src/backups
+    networks:
+      - app_network
+    environment:
+      <<: *app-env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  celery-beat:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_beat
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log
+    networks:
+      - app_network
+    environment:
+      <<: *beat-env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  valkey:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_valkey
+    image: valkey/valkey:7-alpine
+    user: nobody
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_valkey
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
 volumes:
   postgres-data:
   logs:
+  static_volume:
+  media_volume:
+  backups:
 
 networks:
   app_network:
     driver: bridge
+    # Docker defaults new bridge networks to dual-stack, handing containers a ULA
+    # IPv6 address alongside IPv4. Gunicorn only binds 0.0.0.0:8000, so nginx's
+    # proxy_pass DNS lookup for urbanlens_app can resolve the unreachable AAAA
+    # record and log "upstream server temporarily disabled" before falling back
+    # to IPv4. Disable IPv6 here so only the working A record is ever returned.
+    enable_ipv6: false

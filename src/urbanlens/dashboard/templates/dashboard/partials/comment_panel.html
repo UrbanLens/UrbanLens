@@ -1,0 +1,23 @@
+{% load dashboard_tags %}
+<div class="comment-panel card" id="comment-panel">
+  <div class="card-header">
+    <i class="material-icons">chat</i>
+    <span>Comments</span>
+    {% if rendered_comments %}<span class="badge">{{ rendered_comments|length }}</span>{% endif %}
+  </div>
+
+  {% if rendered_comments %}
+  <ul class="comment-list">
+    {% for item in rendered_comments %}
+    {% with c=item.comment %}
+    <li class="comment-item" id="comment-{{ c.id }}">
+      {% include "dashboard/partials/_comment_body.html" with comment=c rendered_text=item.rendered_text reactions=item.reactions replies=item.replies context_type=context_type pin=pin location=location profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=False %}
+    </li>
+    {% endwith %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {# ── Compose form ── #}
+  {% include "dashboard/partials/_comment_compose.html" with context_type=context_type pin=pin location=location profile=profile parent_id="" %}
+</div>

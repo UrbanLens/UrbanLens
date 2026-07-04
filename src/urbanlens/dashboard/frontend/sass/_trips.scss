@@ -1,0 +1,2288 @@
+@use "sass:color";
+@use 'variables' as *;
+
+// -- Trip planning ---------------------------------------------------------
+
+
+.trips-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.trips-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 .25rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--ul-grey-8);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.7rem;
+        color: $color-blue-500;
+    }
+}
+
+.trips-subtitle {
+    margin: 0;
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+}
+
+.trips-header-right {
+    display: flex;
+    align-items: center;
+}
+
+.trips-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--ul-grey-6);
+    max-width: 28rem;
+    margin: 0 auto;
+
+    .trips-empty-icon-wrap {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 1.25rem;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--ul-grey-0a));
+        border: 1px solid var(--ul-grey-1a);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .trips-empty-icon {
+        font-size: 2.2rem;
+        color: $color-blue-500;
+    }
+
+    .trips-empty-title {
+        margin: 0 0 .35rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--ul-grey-8);
+    }
+
+    .trips-empty-text {
+        margin: 0 0 1.5rem;
+        font-size: .95rem;
+        line-height: 1.5;
+        color: var(--ul-grey-7);
+    }
+
+    .btn--primary {
+        margin-top: 0;
+    }
+}
+
+.trip-card-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+
+    @media (min-width: 720px) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    @media (min-width: 1200px) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.trip-card {
+    position: relative;
+    border: 1px solid var(--ul-grey-1a);
+    background-color: var(--ul-grey-0b);
+    border-radius: 14px;
+    overflow: hidden;
+    transition: box-shadow .2s, border-color .2s, transform .2s;
+
+    &:hover {
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
+        background-color: var(--ul-grey-0a);
+        transform: translateY(-2px);
+
+        .trip-card-arrow {
+            color: $color-blue-500;
+            transform: translateX(2px);
+        }
+    }
+}
+
+.trip-card-link {
+    display: flex;
+    flex-direction: column;
+    gap: .65rem;
+    padding: 1.1rem 1.15rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    min-height: 100%;
+}
+
+.trip-card-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--ul-grey-5);
+}
+
+.trip-card--upcoming .trip-card-accent {
+    background: linear-gradient(90deg, $color-blue-400, $color-blue-600);
+}
+
+.trip-card--active .trip-card-accent {
+    background: linear-gradient(90deg, $color-green-400, $color-green-600);
+}
+
+.trip-card--past .trip-card-accent {
+    background: linear-gradient(90deg, var(--ul-grey-5));
+}
+
+.trip-card--planning .trip-card-accent {
+    background: linear-gradient(90deg, $color-amber-400, $color-amber-500);
+}
+
+.trip-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding-top: .15rem;
+}
+
+.trip-card-status {
+    display: inline-flex;
+    align-items: center;
+    padding: .18rem .55rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    border: 1px solid transparent;
+
+    &--upcoming {
+        background: rgba($color-blue-500, .1);
+        color: $color-blue-700;
+        border-color: rgba($color-blue-500, .18);
+    }
+
+    &--active {
+        background: rgba($color-green-500, .1);
+        color: $color-green-700;
+        border-color: rgba($color-green-500, .18);
+    }
+
+    &--past {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-6);
+        border-color: var(--ul-grey-1a);
+    }
+
+    &--planning {
+        background: rgba($color-amber-500, .12);
+        color: $color-amber-700;
+        border-color: rgba($color-amber-500, .2);
+    }
+}
+
+.trip-card-updated {
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+}
+
+.trip-card-name {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1.08rem;
+    line-height: 1.3;
+    color: var(--ul-grey-8);
+}
+
+.trip-card-dates {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .35rem .5rem;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+        color: $color-blue-500;
+    }
+
+    &--muted {
+        color: var(--ul-grey-6);
+        font-style: italic;
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: var(--ul-grey-5);
+        }
+    }
+}
+
+.trip-card-duration {
+    display: inline-flex;
+    align-items: center;
+    padding: .12rem .45rem;
+    border-radius: 999px;
+    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-grey-1a);
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+}
+
+.trip-card-desc {
+    margin: 0;
+    font-size: .84rem;
+    line-height: 1.45;
+    color: var(--ul-grey-7);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.trip-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .1rem;
+}
+
+.trip-card-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .28rem .55rem;
+    border-radius: 999px;
+    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-grey-1a);
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .95rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.trip-card-footer {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-top: auto;
+    padding-top: .55rem;
+    border-top: 1px solid var(--ul-grey-4);
+}
+
+.trip-card-members {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.trip-card-member-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--ul-grey-0);
+    background: $color-light-blue-100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -7px;
+
+    &:first-child {
+        margin-left: 0;
+    }
+}
+
+.trip-card-member-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.trip-card-member-avatar-initial {
+    font-weight: 700;
+    font-size: .72rem;
+    color: $color-blue-500;
+    text-transform: uppercase;
+}
+
+.trip-card-member-overflow {
+    margin-left: .15rem;
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--ul-grey-6);
+}
+
+.trip-card-meta {
+    flex: 1;
+    min-width: 0;
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: .2rem;
+        font-size: .76rem;
+        color: var(--ul-grey-6);
+        @include truncate;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .95rem;
+        }
+    }
+}
+
+.trip-card-role {
+    color: $color-amber-700 !important;
+    font-weight: 600;
+}
+
+.trip-card-arrow {
+    color: var(--ul-grey-5);
+    flex-shrink: 0;
+    transition: color .15s, transform .15s;
+}
+
+// -- Trip detail page ------------------------------------------------------
+
+.trip-detail-page {
+    //padding: 1.5rem 1rem 3rem;
+}
+
+.trip-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.trip-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    text-decoration: none;
+    margin-bottom: .5rem;
+
+    &:hover {
+        color: $color-blue-500;
+    }
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+}
+
+.trip-detail-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0 0 .35rem;
+    color: var(--ul-grey-8);
+}
+
+.trip-detail-description {
+    margin: 0 0 .5rem;
+    color: var(--ul-grey-7);
+}
+
+.trip-detail-dates {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+}
+
+.trip-detail-header-right {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+    opacity: 0.75;
+
+    &:hover {
+        opacity: 1;
+    }
+}
+
+.trip-detail-body {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.trip-detail-section {
+    min-width: 0;
+}
+
+.trip-detail-aside {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    min-width: 0;
+
+    @media (max-width: 600px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+// -- Sortable sections -----------------------------------------------------
+
+.trip-sections {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr;
+    align-items: start;
+
+    @include up($breakpoint-md) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.trip-section {
+    position: relative;
+
+    &:hover .trip-section-grip {
+        opacity: 1;
+    }
+
+    &--ghost {
+        opacity: 0.3;
+        border-radius: 10px;
+        outline: 2px dashed var(--ul-grey-1a);
+    }
+
+    &--chosen {
+        .trip-section-grip {
+            opacity: 1;
+            color: var(--ul-grey-7);
+        }
+    }
+}
+
+.trip-section-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.15s;
+    color: var(--ul-grey-6);
+    margin-bottom: -4px;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &:hover {
+        color: var(--ul-grey-7);
+    }
+}
+
+// -- Trip panels (shared) --------------------------------------------------
+
+.trip-panel {
+    &.card {
+        padding: 0;
+    }
+
+    .card-header {
+        padding: .75rem 1rem;
+        border-bottom: 1px solid var(--ul-grey-4);
+        font-weight: 600;
+        font-size: .9rem;
+
+        .badge {
+            background: var(--ul-grey-1a);
+            color: var(--ul-grey-7);
+            border-radius: 99px;
+            font-size: .72rem;
+            font-weight: 700;
+            padding: 1px 7px;
+        }
+    }
+}
+
+// -- Activities view toggle -------------------------------------------------
+
+.view-toggle-group {
+    display: flex;
+    gap: 1px;
+    background: var(--ul-grey-1);
+    border-radius: 7px;
+    padding: 2px;
+}
+
+.view-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+    }
+
+    &.view-toggle-btn--active {
+        background: var(--ul-grey-0);
+        color: $color-blue-500;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+    }
+}
+
+// -- Calendar view ---------------------------------------------------------
+
+.activity-view--calendar {
+    padding: .75rem 1rem 1rem;
+}
+
+.cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .65rem;
+}
+
+.cal-month-label {
+    font-weight: 600;
+    font-size: .95rem;
+    color: var(--ul-grey-8);
+}
+
+.cal-nav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ul-grey-7);
+    transition: background .15s, color .15s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.2rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-8);
+    }
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr)); // minmax(0,1fr) prevents any column widening to fit content
+    gap: 2px;
+}
+
+.cal-cell {
+    min-height: 54px;
+    min-width: 0; // prevent grid cells from growing beyond 1fr share
+    overflow: hidden;
+    border-radius: 5px;
+    padding: .25rem .3rem;
+
+    &--header {
+        min-height: 0;
+        font-size: .7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--ul-grey-6);
+        text-align: center;
+        padding: .2rem 0 .35rem;
+    }
+
+    &--empty {
+        background: var(--ul-grey-1);
+        opacity: .4;
+    }
+
+    &--has-events {
+        background: var(--ul-grey-0);
+    }
+
+    &--today {
+        background: var(--ul-grey-0a);
+
+        .cal-day-num {
+            background: $color-blue-500;
+            color: var(--ul-grey-5);
+        }
+    }
+}
+
+.cal-day-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: .75rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    margin-bottom: .15rem;
+}
+
+.cal-events {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cal-event {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: .66rem;
+    background: $color-blue-500;
+    color: var(--ul-grey-5);
+    border-radius: 3px;
+    padding: 1px 4px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: background .1s;
+
+    &:hover {
+        background: $color-blue-600;
+    }
+}
+
+.cal-event-num {
+    background: rgba(255, 255, 255, .25);
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-size: .65rem;
+}
+
+.cal-event-title {
+    @include truncate;
+    min-width: 0;
+}
+
+.trip-panel-empty {
+    padding: 1.25rem 1rem;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-style: italic;
+    margin: 0;
+}
+
+.trip-panel-loading {
+    padding: 1.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+}
+
+.rotating {
+    animation: spin 1s linear infinite;
+}
+
+// -- Activities ------------------------------------------------------------
+
+.trip-activity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.trip-activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-4);
+    transition: opacity .2s, background .15s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
+
+    &.trip-activity--highlighted {
+        background: var(--ul-grey-0a);
+        border-left: 3px solid $color-blue-500;
+        padding-left: calc(1rem - 3px);
+    }
+
+    // Show action buttons only on hover
+    &:hover .trip-activity-actions {
+        opacity: 1;
+    }
+}
+
+.trip-activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ul-grey-0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+        color: $color-blue-500;
+    }
+}
+
+.trip-activity-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: $color-blue-500;
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid var(--ul-grey-1a);
+    box-shadow: 0 1px 4px rgba($color-blue-500, .4);
+}
+
+.trip-activity-actions {
+    display: flex;
+    align-items: center;
+    gap: .15rem;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+.trip-activity-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.trip-activity-name {
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--ul-grey-8);
+}
+
+.trip-activity-time {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    font-size: .78rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .95rem;
+    }
+}
+
+.trip-activity-notes {
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+}
+
+.trip-activity-attr {
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.trip-attr-link {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+        color: $color-indigo-600;
+    }
+}
+
+// -- Members ---------------------------------------------------------------
+
+.trip-member-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.trip-member-item {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .6rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-4);
+    transition: opacity .2s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
+}
+
+.trip-member-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: $color-light-blue-100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.trip-member-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.trip-member-avatar-initial {
+    font-weight: 700;
+    font-size: .9rem;
+    color: $color-blue-500;
+    text-transform: uppercase;
+}
+
+.trip-member-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.trip-member-name {
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--ul-grey-8);
+
+    &--link {
+        text-decoration: none;
+        color: inherit;
+
+        &:hover {
+            text-decoration: underline;
+            color: $color-indigo-600;
+        }
+    }
+}
+
+.trip-member-username {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.trip-member-badge {
+    font-size: .7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+
+    &--creator {
+        background: var(--ul-accent-amber-bg);
+        color: var(--ul-accent-amber);
+        border: 1px solid $color-amber-200;
+    }
+
+    &--organizer {
+        background: var(--ul-accent-purple-bg);
+        color: $color-indigo-600;
+        border: 1px solid $color-indigo-300;
+    }
+}
+
+.trip-organizer-btn {
+    color: var(--ul-grey-6);
+
+    &--active {
+        color: $color-indigo-600 !important;
+
+        &:hover {
+            background: var(--ul-accent-purple-bg) !important;
+        }
+    }
+}
+
+// -- Comments --------------------------------------------------------------
+
+.trip-comment-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.trip-comment-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .875rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-4);
+    transition: opacity .2s, background .15s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background: var(--ul-grey-0);
+
+        .detail-pin-action-btn {
+            opacity: 1;
+        }
+    }
+
+    &.is-deleting {
+        opacity: .25;
+        pointer-events: none;
+    }
+
+    // Fade in delete button only on hover
+    .detail-pin-action-btn {
+        opacity: 0;
+        transition: opacity .15s;
+        align-self: flex-start;
+        margin-top: .1rem;
+    }
+}
+
+// Comment avatar - slightly larger than member list avatar
+.trip-member-avatar.trip-comment-avatar {
+    width: 36px;
+    height: 36px;
+}
+
+.trip-comment-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.trip-comment-meta {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    margin-bottom: .25rem;
+}
+
+.trip-comment-author {
+    font-weight: 600;
+    font-size: .875rem;
+    color: var(--ul-grey-8);
+}
+
+.trip-comment-date {
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+    letter-spacing: .01em;
+}
+
+.trip-comment-text {
+    margin: 0;
+    font-size: .875rem;
+    color: var(--ul-grey-8);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.trip-comment-empty {
+    margin-bottom: 0;
+}
+
+.trip-comment-form {
+    padding: .875rem 1rem;
+    border-top: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-1);
+    border-radius: 0 0 $radius-md $radius-md;
+}
+
+.trip-comment-compose {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+}
+
+.trip-comment-compose-avatar {
+    margin-top: .15rem;
+    flex-shrink: 0;
+}
+
+.trip-comment-compose-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.trip-comment-input {
+    width: 100%;
+    border: 1px solid var(--ul-grey-1a);
+    ;
+    border-radius: 8px;
+    padding: .55rem .75rem;
+    font-size: .875rem;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    transition: border-color .15s, box-shadow .15s;
+
+    &:focus {
+        outline: none;
+        border-color: $color-blue-300;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+    }
+
+    &::placeholder {
+        color: var(--ul-grey-6);
+    }
+}
+
+.trip-comment-compose-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .5rem;
+}
+
+// -- Create/edit trip dialog -----------------------------------------------
+
+.trip-create-dialog {
+    @include dialog-base(32rem);
+
+    .trip-create-form {
+        padding: 1rem 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+        flex: 1;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        box-sizing: border-box;
+
+        input, textarea, select {
+            background-color: var(--ul-grey-0a);
+        }
+
+        @include up($breakpoint-sm) {
+            padding: 1.25rem 1.5rem 1.5rem;
+        }
+    }
+}
+
+// -- Location search autocomplete ------------------------------------------
+
+.activity-location-search-wrap {
+    position: relative;
+}
+
+.location-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    ;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
+    z-index: 100;
+    max-height: 220px;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.location-suggestion-item {
+    padding: .5rem .75rem;
+    font-size: .88rem;
+    cursor: pointer;
+    color: var(--ul-grey-8);
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+}
+
+.activity-location-display {
+    display: block;
+    margin-top: .3rem;
+    font-size: .82rem;
+    color: $color-blue-500;
+    font-style: italic;
+}
+
+// -- Trip activity map -----------------------------------------------------
+
+.trip-map-wrap {
+    margin: 0 0 1.5rem;
+    border-radius: 10px;
+    border: 1px solid var(--ul-grey-1a);
+    ;
+    position: relative;
+
+    #trip-map {
+        height: 340px;
+        width: 100%;
+    }
+
+    .trip-map-empty {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 500;
+        max-width: calc(100% - 2rem);
+        padding: .65rem 1rem;
+        text-align: center;
+        color: var(--ul-grey-7);
+        font-size: .88rem;
+        margin: 0;
+        pointer-events: none;
+        background: color-mix(in srgb, var(--ul-grey-0) 88%, transparent);
+        border-radius: 8px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, .12);
+    }
+}
+
+.trip-map-overlay {
+    position: absolute;
+    bottom: 30px;
+    left: 10px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+
+    >* {
+        pointer-events: auto;
+    }
+}
+
+.trip-map-past-btn {
+    opacity: 0.8;
+
+    &:hover {
+        opacity: 1;
+    }
+
+    &--active {
+        background: $color-blue-500;
+        border-color: $color-blue-600;
+        color: var(--ul-grey-5);
+
+        &:hover {
+            background: $color-blue-800;
+        }
+    }
+}
+
+// -- Activity status (proposed = grey, confirmed = blue) -------------------
+
+.trip-activity-num--proposed {
+    background: var(--ul-grey-6) !important;
+    box-shadow: 0 1px 4px rgba(var(--ul-grey-4), .4) !important;
+}
+
+.trip-map-marker--proposed:not(.trip-map-marker--highlighted) {
+    background: var(--ul-grey-6);
+    box-shadow: 0 2px 6px rgba(var(--ul-grey-4), .5);
+    opacity: 0.75;
+}
+
+.trip-status-btn {
+    opacity: 0;
+    transition: opacity .15s;
+
+    &--proposed {
+        color: var(--ul-grey-6);
+    }
+
+    &--confirmed {
+        color: $color-blue-500;
+    }
+}
+
+.trip-activity-item:hover .trip-status-btn,
+.trip-activity-item:hover .trip-complete-btn {
+    opacity: 1;
+}
+
+// -- Completed activity ----------------------------------------------------
+
+.trip-activity--completed {
+    opacity: 0.65;
+
+    .trip-activity-name {
+        text-decoration: line-through;
+        color: var(--ul-grey-6);
+    }
+}
+
+.trip-activity-icon--completed {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+        color: $color-green-500;
+    }
+}
+
+.trip-complete-btn {
+    opacity: 0;
+    transition: opacity .15s;
+    color: $color-green-500 !important;
+
+    &:hover {
+        background: $color-green-100 !important;
+        color: $color-green-600 !important;
+    }
+}
+
+// -- Activity tabs ---------------------------------------------------------
+
+.activity-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    padding: 0 .5rem;
+    gap: .15rem;
+}
+
+.activity-tab {
+    padding: .45rem .85rem;
+    font-size: .8rem;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+    margin-bottom: -1px;
+
+    &:hover {
+        color: var(--ul-grey-7);
+    }
+
+    &--active {
+        color: $color-blue-500;
+        border-bottom-color: $color-blue-500;
+    }
+}
+
+// -- Calendar event status -------------------------------------------------
+
+.cal-event--proposed {
+    background: var(--ul-grey-6);
+
+    &:hover {
+        background: var(--ul-grey-7);
+    }
+}
+
+.cal-event--dragging {
+    opacity: .45;
+    cursor: grabbing;
+}
+
+.cal-cell--drag-over {
+    background: $color-blue-100 !important;
+    outline: 2px dashed $color-blue-500;
+}
+
+// -- Member RSVP -----------------------------------------------------------
+
+.trip-member-rsvp {
+    font-size: .7rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+
+    &--yes {
+        background: $color-green-100;
+        color: $color-green-600;
+        border: 1px solid $color-green-200;
+    }
+
+    &--no {
+        background: var(--ul-grey-0a);
+        color: $color-red-600;
+        border: 1px solid $color-red-200;
+    }
+
+    &--maybe {
+        background: var(--ul-accent-amber-bg);
+        color: var(--ul-accent-amber);
+        border: 1px solid $color-amber-200;
+    }
+
+    &--none {
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-6);
+        border: 1px solid var(--ul-grey-1a);
+        ;
+    }
+
+    &--mine {
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+        background: none;
+        border: none;
+        padding: 2px 5px;
+
+        &.trip-member-rsvp--none {
+            display: none;
+        }
+
+        &:hover {
+            filter: brightness(.93);
+        }
+    }
+}
+
+// -- RSVP inline popup (replaces the top banner) ---------------------------
+
+.trip-member-rsvp-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.rsvp-popup {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    box-shadow: $shadow-md;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 200;
+    min-width: 80px;
+
+    // display:flex overrides the HTML [hidden] attribute by default - be explicit
+    &[hidden] {
+        display: none;
+    }
+}
+
+.rsvp-popup-opt {
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    background: none;
+    border: none;
+    color: $text-primary;
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+
+    &--yes {
+        color: $color-green-600;
+
+        &:hover {
+            background: $color-green-100;
+        }
+    }
+
+    &--no {
+        color: $color-red-600;
+
+        &:hover {
+            background: var(--ul-grey-0a);
+        }
+    }
+
+    &--maybe {
+        color: var(--ul-accent-amber);
+
+        &:hover {
+            background: var(--ul-accent-amber-bg);
+        }
+    }
+
+    &--clear {
+        color: $text-muted;
+    }
+}
+
+.trip-member-actions {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    opacity: 0.75;
+
+    &:hover {
+        opacity: 1;
+    }
+}
+
+.rsvp-select-wrap {
+    position: relative;
+}
+
+.rsvp-select {
+    font-size: .78rem;
+    padding: .2rem .5rem;
+    border: 1.5px solid var(--ul-grey-1a);
+    ;
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    cursor: pointer;
+    outline: none;
+    transition: border-color .15s;
+
+    &:focus,
+    &:hover {
+        border-color: $color-blue-500;
+    }
+}
+
+.trip-leave-btn {
+    color: $color-red-500;
+
+    &:hover {
+        color: $color-red-600;
+        background: var(--ul-grey-0a);
+    }
+}
+
+// -- Status pill toggle (replaces radio group) -----------------------------
+
+.status-pill-toggle {
+    display: inline-flex;
+    border: 1.5px solid var(--ul-grey-1a);
+    ;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--ul-grey-1);
+}
+
+.status-pill-btn {
+    padding: .38rem .8rem;
+    font-size: .8rem;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--ul-grey-6);
+    transition: background .15s, color .15s;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .95rem;
+    }
+
+    &+& {
+        border-left: 1.5px solid var(--ul-grey-1a);
+    }
+
+    &:hover {
+        color: var(--ul-grey-7);
+        background: var(--ul-grey-4);
+    }
+
+    &.is-active[data-value="proposed"] {
+        background: var(--ul-grey-7);
+        color: var(--ul-grey-5);
+    }
+
+    &.is-active[data-value="confirmed"] {
+        background: $color-blue-500;
+        color: var(--ul-grey-5);
+    }
+}
+
+// -- Your RSVP banner ------------------------------------------------------
+
+.trip-your-rsvp {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem 1rem;
+    background: var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-grey-1a);
+    flex-wrap: wrap;
+}
+
+.trip-your-rsvp-label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    white-space: nowrap;
+}
+
+.trip-map-marker {
+    background: $color-blue-500;
+    border: 2px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+    position: absolute; // must match Leaflet's .leaflet-marker-icon so transform-based positioning works
+    transition: background .15s, transform .15s;
+
+    // Absolute centering avoids fighting Leaflet's .leaflet-marker-icon { display: block }
+    .trip-map-marker-num {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ul-grey-5);
+        line-height: 1;
+    }
+
+    &.trip-map-marker--highlighted {
+        background: $color-amber-500;
+        transform: scale(1.25);
+        box-shadow: 0 3px 10px rgba($color-amber-500, .5);
+    }
+}
+
+// -- Location suggestion enhancements --------------------------------------
+
+.location-suggestion-header {
+    padding: .3rem .75rem;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-6);
+    background: var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-grey-4);
+    cursor: default;
+}
+
+.location-suggestion-geocoded {
+    background-color: var(--ul-grey-1);
+
+    &::before {
+        content: '📍 ';
+        font-size: .85em;
+    }
+}
+
+.location-suggestion-empty {
+    color: var(--ul-grey-6);
+    font-style: italic;
+    cursor: default;
+
+    &:hover {
+        background: transparent;
+    }
+}
+
+// -- RSVP pill buttons -----------------------------------------------------
+
+.rsvp-pill-group {
+    display: flex;
+    gap: .3rem;
+    flex-wrap: wrap;
+}
+
+.rsvp-pill-btn {
+    padding: .28rem .7rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    border: 1.5px solid var(--ul-grey-1a);
+    ;
+    background: transparent;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+
+    &:hover {
+        border-color: var(--ul-grey-6);
+        background: var(--ul-grey-1);
+    }
+
+    &.is-active {
+        &[data-rsvp="yes"] {
+            background: $color-green-500;
+            border-color: $color-green-500;
+            color: var(--ul-grey-5);
+        }
+
+        &[data-rsvp="no"] {
+            background: $color-red-500;
+            border-color: $color-red-500;
+            color: var(--ul-grey-5);
+        }
+
+        &[data-rsvp="maybe"] {
+            background: $color-amber-500;
+            border-color: $color-amber-500;
+            color: var(--ul-grey-5);
+        }
+
+        &[data-rsvp=""] {
+            background: var(--ul-grey-6);
+            border-color: var(--ul-grey-6);
+            color: var(--ul-grey-5);
+        }
+    }
+}
+
+// -- Trip settings form ----------------------------------------------------
+
+.trip-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    padding: .45rem 0;
+}
+
+.trip-setting-label {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    flex: 1;
+
+    strong {
+        font-size: .875rem;
+    }
+}
+
+.trip-setting-desc {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    font-weight: 400;
+}
+
+.trip-setting-pills {
+    display: flex;
+    gap: .25rem;
+    flex-shrink: 0;
+}
+
+.trip-setting-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .7rem;
+    border-radius: 20px;
+    border: 1px solid var(--ul-grey-1a);
+    background-color: var(--ul-grey-1a);
+    font-size: .78rem;
+    font-weight: 500;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: background .1s, border-color .1s, color .1s;
+    white-space: nowrap;
+
+    input[type="radio"] {
+        display: none;
+    }
+
+    &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
+        background: var(--ul-grey-4);
+        border-color: var(--ul-grey-1a);
+    }
+
+    &--active {
+        background: var(--ul-grey-0a);
+        border-color: $color-blue-500;
+        color: $color-blue-700;
+    }
+
+    &--disabled {
+        opacity: .45;
+        cursor: not-allowed;
+    }
+}
+
+// -- Multi-month calendar --------------------------------------------------
+
+.cal-month-section-label {
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ul-grey-6);
+    text-align: center;
+    padding: .9rem 0 .3rem;
+}
+
+.cal-month-section-sep {
+    height: 1px;
+    background: var(--ul-grey-1a);
+    margin: .75rem 0 .25rem;
+}
+
+// -- Trip weather panel --------------------------------------------------------
+
+#trip-weather-panel.trip-panel.card {
+    padding: 0;
+
+    .trip-panel-empty {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-style: normal;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.1rem;
+        }
+    }
+}
+
+.trip-weather-body {
+    padding: .75rem 1rem 1rem;
+}
+
+// -- Per-day sections ----------------------------------------------------------
+
+.trip-weather-days {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.trip-weather-day {
+    border: 1px solid var(--ul-grey-4);
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.trip-weather-day-header {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .5rem .75rem .45rem;
+    background: var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-grey-4);
+
+    .trip-weather-day-dow {
+        font-weight: 600;
+        font-size: .85rem;
+        color: var(--ul-grey-8);
+    }
+
+    .trip-weather-day-date {
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+// -- Activity rows -------------------------------------------------------------
+
+.trip-weather-activities {
+    display: flex;
+    flex-direction: column;
+}
+
+.trip-weather-activity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: .65rem .75rem;
+
+    &+& {
+        border-top: 1px solid var(--ul-grey-1a);
+    }
+
+    .trip-weather-activity-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 0 0 160px;
+
+        .trip-weather-activity-time {
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .trip-weather-activity-name {
+            font-size: .85rem;
+            font-weight: 500;
+            color: $text-primary;
+            @include truncate;
+        }
+    }
+
+    .trip-weather-activity-forecast {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+// -- Inline weather slot -------------------------------------------------------
+
+.trip-weather-slot-inline {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.trip-weather-slot-icon {
+    width: 46px;
+    height: 46px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.trip-weather-slot-temps {
+    display: flex;
+    flex-direction: column;
+
+    .trip-weather-slot-temp {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: $text-primary;
+        line-height: 1.1;
+    }
+
+    .trip-weather-slot-feels {
+        font-size: .72rem;
+        color: $text-muted;
+    }
+}
+
+.trip-weather-slot-right {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.trip-weather-slot-desc {
+    font-size: .78rem;
+    color: $text-secondary;
+    margin: 0 0 .25rem;
+    line-height: 1.3;
+}
+
+.trip-weather-slot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem .55rem;
+    font-size: .72rem;
+    color: $text-muted;
+
+    span {
+        display: flex;
+        align-items: center;
+        gap: .15rem;
+    }
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .85rem;
+    }
+}
+
+// -- N/A states ----------------------------------------------------------------
+
+.trip-weather-na {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    color: $text-muted;
+    font-style: italic;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+    }
+}
+
+// -- Activity datetime row (start/end fields side-by-side) ---------------------
+
+.activity-datetime-row {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-wrap: wrap;
+
+    input[type="date"],
+    input[type="time"] {
+        flex: 1 1 120px;
+    }
+
+    .btn--ghost {
+        flex-shrink: 0;
+        padding: .2rem .4rem;
+        font-size: .78rem;
+    }
+}
+
+// -- Child trip search in activity dialogs --------------------------------------
+
+.activity-child-trip-wrap {
+    position: relative;
+
+    .location-suggestions {
+        top: 100%;
+        z-index: 200;
+    }
+}
+
+.trip-activity-child-trip {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .78rem;
+    color: var(--primary-color);
+    margin-top: .1rem;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .95rem;
+    }
+}
+
+// -- Split form actions (delete left, save/cancel right) -----------------------
+
+.form-actions--split {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.form-actions-right {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+}
+
+.btn-danger {
+    @include btn-base;
+    padding: .45rem .85rem;
+    border: 1.5px solid $danger-color;
+    background: transparent;
+    color: $danger-color;
+    font-size: .88rem;
+
+    &:hover {
+        background: $danger-color;
+        color: var(--ul-grey-5);
+    }
+}
+
+// -- Activity voting ------------------------------------------------------------
+
+.activity-vote-row {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin-top: .35rem;
+}
+
+.activity-vote-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .2rem .4rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-muted;
+    font-size: .75rem;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-0);
+    }
+
+    &--active {
+        border-color: transparent;
+
+        &.activity-vote-btn--up {
+            background: $color-green-100;
+            color: $color-green-600;
+        }
+
+        &.activity-vote-btn--down {
+            background: var(--ul-grey-0a);
+            color: $color-red-600;
+        }
+    }
+
+    &--clear {
+        border-color: transparent;
+        color: $text-muted;
+        padding: .2rem .3rem;
+
+        &:hover {
+            background: var(--ul-grey-0);
+            color: $text-secondary;
+        }
+    }
+}
+
+.activity-vote-count {
+    font-weight: 600;
+    font-size: .75rem;
+    min-width: .75ch;
+}
+
+// -- Hide-location form toggle --------------------------------------------------
+
+.form-row--toggle {
+    padding: .35rem 0 .1rem;
+}
+
+.activity-hide-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    cursor: pointer;
+    font-size: .84rem;
+    color: $text-secondary;
+    user-select: none;
+
+    input[type="checkbox"] {
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1rem;
+        color: $text-muted;
+    }
+}
+
+.trip-activity-name--secret {
+    font-style: italic;
+    color: $text-muted;
+}
+
+// -- Map right-click context menu ----------------------------------------------
+
+.trip-map-ctx-menu {
+    position: absolute;
+    z-index: 1200;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    padding: .25rem 0;
+    min-width: 180px;
+    pointer-events: all;
+}
+
+.trip-map-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .55rem .9rem;
+    border: none;
+    background: none;
+    font-size: .88rem;
+    color: $text-primary;
+    cursor: pointer;
+    text-align: left;
+    transition: background .1s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+        color: var(--primary-color);
+    }
+
+    &:hover {
+        background: $surface-hover;
+    }
+}
+
+// -- Child-trip ghost markers on the trip map ----------------------------------
+
+.trip-map-marker--child-trip {
+    opacity: .65;
+    border: 2px dashed $color-blue-300 !important;
+    background: rgba(33, 150, 243, .12) !important;
+
+    .trip-map-marker-num {
+        color: $color-blue-800;
+        font-size: .7rem;
+    }
+}
+
+// -- Settings radio pills for friend request visibility ------------------------
+
+.settings-friend-request-row {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    margin-top: .5rem;
+}
+
+.settings-friend-request-option {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .85rem;
+    border: 1.5px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    cursor: pointer;
+    font-size: .88rem;
+    color: $text-primary;
+    transition: border-color .15s, background .15s;
+    background: var(--card-bg, #fff);
+
+    input[type="radio"] {
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+    }
+
+    &:has(input:checked),
+    &.active {
+        border-color: var(--primary-color);
+        background: var(--ul-grey-0);
+        color: var(--primary-color);
+        font-weight: 500;
+    }
+
+    &:hover:not(:has(input:checked)) {
+        border-color: color.adjust($primary-color, $lightness: 20%);
+        background: var(--ul-grey-0);
+    }
+
+    // Dark mode
+    [data-theme="dark"] & {
+        background: var(--ul-grey-9);
+        border-color: var(--ul-grey-1a);
+        color: var(--ul-grey-1a);
+
+        &:has(input:checked),
+        &.active {
+            background: rgba(33, 150, 243, .15);
+            border-color: var(--primary-color);
+            color: $color-blue-300;
+        }
+    }
+}

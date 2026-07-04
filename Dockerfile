@@ -1,105 +1,130 @@
-################################################################################
-#                                                                              #
-# Metadata:                                                                    #
-#                                                                              #
-# 	File: Dockerfile                                                           #
-# 	Project: src                                                               #
-# 	
-# 	Author: Jess Mann                                                          #
-# 	Email: jess@manlyphotos.com                                                    #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	
-# 	Modified By: Jess Mann                                                     #
-#                                                                              #
-# 	-----                                                                      #
-#                                                                              #
-# 	Copyright (c) 2023 Urban Lens                                               #
-################################################################################
+# Allow future upgrades by pinning the base image version here
+ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 
-# Allow future upgrades
-ARG PYTHON_BASE_IMAGE_VERSION=0-3.11
-ARG GIT_EMAIL
-ARG GIT_NAME
-ARG GH_TOKEN
-ARG SSH_PRIVATE_KEY
-ARG DB_NAME
-ARG DB_USER
-ARG DB_PASS
-ARG DB_HOST
-ARG DB_PORT
-ARG ENVIRONMENT
+FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
-# AppServer image
-FROM mcr.microsoft.com/devcontainers/python:${PYTHON_BASE_IMAGE_VERSION} AS base
+# Controls which requirements file gets installed below. staging/production
+# install only prod.txt (no linters/test tools/debug toolbar); everything
+# else (local, development, testing) installs dev.txt, which pulls in prod.txt
+# via -r plus the dev-only tooling.
+ARG UL_ENVIRONMENT=production
 
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
 # Environment variables
-# TODO: multi-stage build to hide env vars
 ENV PYTHONDONTWRITEBYTECODE=1 \
-	PYTHONUNBUFFERED=1 \
-	LANG=en_US.UTF-8 \
-	LANGUAGE=en_US.UTF-8 \
-	LC_ALL=en_US.UTF-8 \
-	LC_CTYPE=en_US.UTF-8 \
-	GH_TOKEN=${GH_TOKEN} \
-	GIT_NAME=${GIT_NAME} \
-	GIT_EMAIL=${GIT_EMAIL} \
-	DB_NAME=${DB_NAME} \
-	DB_USER=${DB_USER} \
-	DB_PASS=${DB_PASS} \
-	DB_HOST=${DB_HOST} \
-	DB_PORT=${DB_PORT} \
-	ENVIRONMENT=${ENVIRONMENT} \
-	NODE_ENV=${ENVIRONMENT}
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src
 
-# Set Git config
-RUN if [ -n "$GIT_EMAIL" ]; then \
-	git config --global user.email "${GIT_EMAIL}"; \
-	fi
-RUN if [ -n "$GIT_NAME" ]; then \
-	git config --global user.name "${GIT_NAME}"; \
-	fi
-
-# Add SSH keys based on build args
-RUN if [ -n "$SSH_PRIVATE_KEY" ]; then \
-	mkdir -p /root/.ssh/ && \
-	echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa && \
-	chmod 600 /root/.ssh/id_rsa && \
-	ssh-keyscan github.com >> /root/.ssh/known_hosts; \
-	fi
-
-# Add Github cli repo
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-	&& sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-	&& echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null 
-
-# Dependencies for building packages
+# Install system dependencies and PostgreSQL 17 client from PGDG.
+# The versioned binary at /usr/lib/postgresql/17/bin/pg_dump is used directly
+# (via UL_PG_DUMP_BIN) to avoid the pg_wrapper dispatcher requiring a running
+# local cluster.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
-	apt-get install -y --no-install-recommends \
-	curl gcc vim pkg-config \
-	build-essential \
-	unzip \
-	postgresql-client \
-	git \
-	gh \
-	iputils-ping \
-	wget && \
-	apt-get clean && \
-	rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
+    install -d /usr/share/postgresql-common/pgdg && \
+    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
+    . /etc/os-release && \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        locales \
+        unzip \
+        postgresql-client-17 \
+        git \
+        iputils-ping \
+        libgdal-dev \
+        wget \
+        gosu && \
+    sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen && \
+    pg_dump --version && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install npm
-RUN curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash - && \
-	apt-get install -y nodejs
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    LC_CTYPE=en_US.UTF-8
+
+# Install Bun (JS runtime + package manager) via the official Docker image.
+# This avoids the curl-to-bash NVM install and gives a reproducible binary.
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+
+# Create a non-root user before the source tree is copied in, so COPY --chown
+# below can set ownership at copy time instead of needing a separate `chown -R`
+# afterward. 
+RUN groupadd --gid 1001 appuser && \
+    useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
 
 # Handle Python requirements
-COPY config/requirements.txt /tmp/pip-tmp/
-RUN pip3 --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements.txt
+COPY requirements /tmp/pip-tmp/requirements/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
+        pip install -r /tmp/pip-tmp/requirements/prod.txt; \
+    else \
+        pip install -r /tmp/pip-tmp/requirements/dev.txt; \
+    fi
 
-# Copy init.py into the container
-COPY UrbanLens/bin/init.py /usr/local/bin/urbanlens_init.py
+# Set the working directory
+WORKDIR /app
 
-ENTRYPOINT ["/bin/bash", "-c", "python /usr/local/bin/urbanlens_init.py & sleep infinity"]
+# Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
+# so this layer is cached independently of unrelated source changes below.
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
+
+# Copy all source files into the container, setting ownership at copy time
+# (avoids a slow recursive chown - see the useradd comment above).
+COPY --chown=appuser:appuser . /app
+
+# Install the package in editable mode
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e .
+
+# Pre-create every directory appuser writes to at runtime, so it never needs
+# write access to root-owned parent dirs (volume mounts are handled separately
+# by docker-entrypoint.sh):
+#   - AppSettings.ensure_paths() dirs: /app/src/urbanlens/ (capital-U, legacy
+#     runtime-data tree distinct from the lowercase source), /app/src/logs/,
+#     /app/src/backups/
+#   - bun build output: dashboard/frontend and core/frontend inside the source tree
+#
+# These are all gitignored (bun build output, logs, downloads, backups), so
+# git never tracks them and they don't exist after COPY --chown above
+RUN mkdir -p \
+        /app/src/urbanlens/downloads/downloads \
+        /app/src/urbanlens/downloads/exports \
+        /app/src/urbanlens/frontend/static \
+        /app/src/backups \
+        /app/src/logs \
+        /app/src/urbanlens/dashboard/frontend \
+        /app/src/urbanlens/core/frontend && \
+    touch \
+        /app/src/logs/app.log \
+        /app/src/logs/debugging.log \
+        /app/src/logs/test.log && \
+    chown -R appuser:appuser \
+        /app/src/urbanlens/downloads \
+        /app/src/urbanlens/frontend \
+        /app/src/urbanlens/dashboard/frontend \
+        /app/src/urbanlens/core/frontend \
+        /app/src/backups \
+        /app/src/logs
+
+# Git >= 2.35.2 refuses to run in directories not owned by the current user.
+# COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
+# Writing to /etc/gitconfig (--system) applies the exception to all users.
+RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
+        git config --system safe.directory /app; \
+    fi
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Entrypoint fixes volume-mount ownership then drops to appuser via gosu
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["python", "/app/src/bin/init.py"]
