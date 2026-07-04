@@ -18,10 +18,14 @@ if TYPE_CHECKING:
 _SENSITIVE_PARAM_NAMES = frozenset({"key", "api_key", "apikey", "token", "secret", "password", "access_token"})
 _COORDINATE_PARAM_NAMES = frozenset({"lat", "lng", "lon", "latitude", "longitude", "latlng", "gscoord"})
 
+_REDACTION_SALT = b"urbanlens:redact:v1"
+_PBKDF2_ITERATIONS = 310_000
+
 
 def _fingerprint(value: str) -> str:
-    """Return a short, non-reversible SHA-256 fingerprint of ``value``."""
-    return hashlib.sha256(value.encode()).hexdigest()[:8]
+    """Return a short, deterministic PBKDF2-HMAC-SHA256 fingerprint of ``value``."""
+    digest = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), _REDACTION_SALT, _PBKDF2_ITERATIONS)
+    return digest.hex()[:8]
 
 
 def redact_secret(value: str | None) -> str:

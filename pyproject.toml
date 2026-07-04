@@ -725,7 +725,6 @@ ignore = [
     # Keep these off
     "TRY300",  # Consider moving to else -- this discourages final unindented returns for future proofing
     "ARG002",  # unused method argument: `kwargs`
-    "RUF072",  # unnecessary noqa ignore -- TODO until we have all our tools consistently enforcing rules
     "E501",    # Line too long
     "COM812",  # Recommended to turn off by pre-commit ruff hook
     "FIX002",  # TODOs

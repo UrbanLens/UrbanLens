@@ -8,16 +8,21 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, TypedDict
 
+import requests
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
-import requests
 
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
+from urbanlens.dashboard.models.trips.model import (
+    Trip,
+    TripActivity,
+    TripComment,
+    TripMembership,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -27,7 +32,6 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.trips.model import TripActivityVote as _TripActivityVote
     from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
 
 logger = logging.getLogger(__name__)
@@ -710,8 +714,14 @@ class TripActivityVoteView(LoginRequiredMixin, View):
 
 def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Build comment panel context with activity mentions and re-render."""
-    from urbanlens.dashboard.controllers.comments import _ALLOWED_EMOJIS, _aggregate_reactions
-    from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
+    from urbanlens.dashboard.controllers.comments import (
+        _ALLOWED_EMOJIS,
+        _aggregate_reactions,
+    )
+    from urbanlens.dashboard.services.mentions import (
+        render_comment_text,
+        viewer_pinned_uuids,
+    )
 
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
@@ -951,9 +961,11 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
 
-        # Bounding the candidate keeps the adjacent `\s*` groups below from being
-        # handed enough repeated whitespace to hit their polynomial worst case.
-        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$", q) if len(q) <= 64 else None
+        # The separator is a single merged character class rather than
+        # `\s*[, ]\s*` - adjacent `\s*` groups flanking a class that also
+        # matches whitespace let a run of spaces be split among the three
+        # groups in many equivalent ways, which is a polynomial ReDoS.
+        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)\s*$", q) if len(q) <= 64 else None
         coordinate_results: list[dict] = []
         if coordinate_match:
             lat = float(coordinate_match.group(1))
@@ -1443,7 +1455,9 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+        from urbanlens.dashboard.services.apis.weather.gateway import (
+            OpenWeatherMapGateway,
+        )
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)

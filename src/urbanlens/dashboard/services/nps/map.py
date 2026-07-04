@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
-import geopandas as gpd
+import geopandas
 from shapely.geometry import Point
 
 from urbanlens.dashboard.services.gateway import Gateway
@@ -35,7 +35,7 @@ class NPSMapGateway(Gateway):
         response.raise_for_status()
 
         # Load the GeoJSON into a GeoDataFrame
-        park_boundaries = gpd.read_file(response.content)
+        park_boundaries = geopandas.read_file(response.content)
 
         # Check if the point is within any of the park boundaries
         for _, park in park_boundaries.iterrows():
