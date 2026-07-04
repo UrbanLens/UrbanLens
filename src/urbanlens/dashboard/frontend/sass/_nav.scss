@@ -262,7 +262,8 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
         line-height: 1em;
     }
 
-    i.material-icons {
+    i.material-icons,
+    i.material-symbols-outlined {
         line-height: 1em;
         height: 1em;
     }
@@ -270,14 +271,16 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     &--signout {
         color: #{$color-red-900};
 
-        .material-icons {
+        .material-icons,
+        .material-symbols-outlined {
             color: #{$color-red-900};
         }
 
         &:hover {
             background: var(--ul-grey-0);
 
-            .material-icons {
+            .material-icons,
+            .material-symbols-outlined {
                 color: #{$color-red-900};
             }
         }
