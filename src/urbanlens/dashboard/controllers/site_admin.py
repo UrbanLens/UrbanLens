@@ -49,13 +49,7 @@ def _monthly_series(queryset, date_field: str, months: int = 12) -> tuple[list[s
     # First day of the oldest month we care about
     start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=(months - 1) * 30)).replace(day=1)
 
-    rows = (
-        queryset.filter(**{f"{date_field}__gte": start})
-        .annotate(_month=TruncMonth(date_field))
-        .values("_month")
-        .annotate(n=Count("id"))
-        .order_by("_month")
-    )
+    rows = queryset.filter(**{f"{date_field}__gte": start}).annotate(_month=TruncMonth(date_field)).values("_month").annotate(n=Count("id")).order_by("_month")
     by_month = {r["_month"]: r["n"] for r in rows}
 
     labels: list[str] = []
@@ -107,7 +101,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         # The user should never be anonymous, but just in case.
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
-        
+
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
         return render(
@@ -531,14 +525,16 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         enriched = []
         for cfg in configs:
             summary = summaries.get(cfg.service, {})
-            enriched.append({
-                "config": cfg,
-                "calls_30d": summary.get("total", 0),
-                "blocked_30d": summary.get("blocked", 0),
-                "geo_skipped_30d": summary.get("geo_skipped", 0),
-                "errors_30d": summary.get("errors", 0),
-                "avg_ms": round(summary.get("avg_response_ms") or 0),
-            })
+            enriched.append(
+                {
+                    "config": cfg,
+                    "calls_30d": summary.get("total", 0),
+                    "blocked_30d": summary.get("blocked", 0),
+                    "geo_skipped_30d": summary.get("geo_skipped", 0),
+                    "errors_30d": summary.get("errors", 0),
+                    "avg_ms": round(summary.get("avg_response_ms") or 0),
+                }
+            )
 
         return render(
             request,
@@ -579,9 +575,11 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if not cfg:
             if is_htmx:
                 response = HttpResponse(status=404)
-                response["HX-Trigger"] = json.dumps({
-                    "showToast": {"level": "error", "message": "Service not found - no changes saved."},
-                })
+                response["HX-Trigger"] = json.dumps(
+                    {
+                        "showToast": {"level": "error", "message": "Service not found - no changes saved."},
+                    }
+                )
                 return response
             return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=error")
 
@@ -638,6 +636,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_subscriptions = 0
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
+
             total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
 
         infra_services = collect_infrastructure_service_stats()
@@ -730,6 +729,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         total_subscriptions = 0
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
+
             total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
 
         total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
@@ -737,25 +737,24 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         total_reviews = None
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.reviews.model import Review
+
             total_reviews = Review.objects.count()
 
         total_trips = None
         new_trips_30d = None
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.trips.model import Trip
+
             total_trips = Trip.objects.count()
             new_trips_30d = Trip.objects.filter(created__gte=thirty_days_ago).count()
 
         top_locations: list = []
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.location.model import Location as Loc
+
             if hasattr(Loc.objects, "annotate_pin_count"):
                 top_locations = list(
-                    Loc.objects.filter(pins__isnull=False)
-                    .distinct()
-                    .annotate_pin_count()
-                    .order_by("-pin_count")[:10]
-                    .values("name", "slug", "pin_count"),
+                    Loc.objects.filter(pins__isnull=False).distinct().annotate_pin_count().order_by("-pin_count")[:10].values("name", "slug", "pin_count"),
                 )
 
         return render(
@@ -822,10 +821,7 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
                 "git_has_newer_commits": git_update.has_newer_commits,
                 "git_available": git_update.git_available,
                 "git_remote_refreshed": git_update.remote_refreshed,
-                "show_git_pull_button": (
-                    SiteSettings.get_current().show_dev_admin_features(request.user)
-                    and git_update.has_newer_commits
-                ),
+                "show_git_pull_button": (SiteSettings.get_current().show_dev_admin_features(request.user) and git_update.has_newer_commits),
                 "infrastructure_services": collect_infrastructure_service_stats(),
                 "backup_stats": collect_backup_stats(),
             },
@@ -852,18 +848,20 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
             for svc in sorted(SERVICE_REGISTRY):
                 cfg = rate_configs.get(svc)
                 row = summaries.get(svc, {})
-                api_usage.append({
-                    "service": svc,
-                    "display_name": cfg.display_name if cfg else SERVICE_REGISTRY[svc].display_name,
-                    "enabled": cfg.enabled if cfg else True,
-                    "calls_per_day": cfg.calls_per_day if cfg else SERVICE_REGISTRY[svc].calls_per_day,
-                    "usa_only": cfg.usa_only if cfg else SERVICE_REGISTRY[svc].usa_only,
-                    "total": row.get("total", 0),
-                    "blocked": row.get("blocked", 0),
-                    "geo_skipped": row.get("geo_skipped", 0),
-                    "errors": row.get("errors", 0),
-                    "avg_ms": round(row.get("avg_response_ms") or 0),
-                })
+                api_usage.append(
+                    {
+                        "service": svc,
+                        "display_name": cfg.display_name if cfg else SERVICE_REGISTRY[svc].display_name,
+                        "enabled": cfg.enabled if cfg else True,
+                        "calls_per_day": cfg.calls_per_day if cfg else SERVICE_REGISTRY[svc].calls_per_day,
+                        "usa_only": cfg.usa_only if cfg else SERVICE_REGISTRY[svc].usa_only,
+                        "total": row.get("total", 0),
+                        "blocked": row.get("blocked", 0),
+                        "geo_skipped": row.get("geo_skipped", 0),
+                        "errors": row.get("errors", 0),
+                        "avg_ms": round(row.get("avg_response_ms") or 0),
+                    }
+                )
 
         return render(
             request,

@@ -759,7 +759,8 @@
         const a = e.target.closest('a[href]');
         if (!a) return;
         const href = a.getAttribute('href');
-        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0 || a.target === '_blank') return;
+        const scheme = href ? href.trim().toLowerCase() : '';
+        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
         e.preventDefault();
         const proceed = window.confirmDialog
             ? window.confirmDialog({ title: 'Leave page?', message: EXPORT_LEAVE_MSG, confirmLabel: 'Leave anyway', danger: true })

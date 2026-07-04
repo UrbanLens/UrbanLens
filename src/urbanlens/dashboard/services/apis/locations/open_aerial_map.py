@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox_str
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -89,10 +90,10 @@ class OpenAerialMapGateway(SatelliteViewProvider):
             data = self.search_imagery_for_coordinates(latitude, longitude, delta=0.005, limit=limit)
         except Exception as exc:
             # TODO: Catch specific exception
-            logger.warning("OpenAerialMap search failed for %s, %s: %s", latitude, longitude, exc)
+            logger.warning("OpenAerialMap search failed for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 
-        for item in (data.get("results") or []):
+        for item in data.get("results") or []:
             thumbnail = item.get("thumbnail")
             if not thumbnail:
                 continue

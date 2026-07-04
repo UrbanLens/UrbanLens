@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-@pytest.fixture(scope="session", autouse=True)  # noqa: RUF076 - We explicitly want global and implicit autouse.
+@pytest.fixture(scope="session", autouse=True)
 def block_external_network() -> Iterator[None]:
     """Deny accidental internet access in tests while allowing localhost."""
     if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() in {"true", "1", "yes"}:

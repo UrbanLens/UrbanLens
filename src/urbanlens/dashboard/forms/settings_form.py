@@ -82,9 +82,7 @@ class PrivacySettingsForm(forms.ModelForm):
         choices=VisibilityChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Trip Pins",
-        help_text=(
-            "Who can see pins you share to a trip? Other trip members will only see the pin name."
-        ),
+        help_text=("Who can see pins you share to a trip? Other trip members will only see the pin name."),
     )
     viewer_photo_filter = forms.ChoiceField(
         choices=VisibilityChoice.choices,
@@ -282,12 +280,7 @@ class MapCenterForm(forms.ModelForm):
         instance = super().save(commit=False)
         if instance.map_center_mode != MapCenterMode.CUSTOM:
             # Restore original custom coordinates from the database.
-            original = (
-                type(instance)
-                .objects.filter(pk=instance.pk)
-                .values("map_custom_latitude", "map_custom_longitude")
-                .first()
-            ) or {}
+            original = (type(instance).objects.filter(pk=instance.pk).values("map_custom_latitude", "map_custom_longitude").first()) or {}
             instance.map_custom_latitude = original.get("map_custom_latitude")
             instance.map_custom_longitude = original.get("map_custom_longitude")
         if commit:

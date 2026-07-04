@@ -193,9 +193,7 @@ def collect_valkey_stats() -> InfrastructureServiceStat:
             icon="memory",
             status="disabled",
             status_label="Not configured",
-            metrics=(
-                ServiceMetric("Status", "UL_VALKEY_URL is not set"),
-            ),
+            metrics=(ServiceMetric("Status", "UL_VALKEY_URL is not set"),),
         )
 
     client: redis.Redis | None = None
@@ -378,9 +376,7 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
             icon="public",
             status="unavailable",
             status_label="Unreachable",
-            metrics=(
-                ServiceMetric("Health URL", health_url),
-            ),
+            metrics=(ServiceMetric("Health URL", health_url),),
         )
 
 

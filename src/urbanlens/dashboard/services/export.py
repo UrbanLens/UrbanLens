@@ -297,12 +297,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = (
-        Pin.objects.filter(profile=profile)
-        .select_related("location")
-        .prefetch_related("badges")
-        .order_by("created")
-    )
+    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
 
     rows = []
     for pin in pins:
@@ -339,12 +334,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     """Export pins as a Google Takeout-compatible CSV file."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = (
-        Pin.objects.filter(profile=profile)
-        .select_related("location")
-        .prefetch_related("badges")
-        .order_by("created")
-    )
+    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -368,11 +358,7 @@ def _export_badges(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
     # Export user-owned badges plus global badges that are assigned to the user's pins.
     user_badges = Badge.objects.filter(profile=profile).prefetch_related("parents", "pins")
-    global_assigned = (
-        Badge.objects.filter(profile__isnull=True, pins__profile=profile)
-        .distinct()
-        .prefetch_related("parents", "pins")
-    )
+    global_assigned = Badge.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
 
     seen: set[int] = set()
     rows = []
@@ -394,10 +380,7 @@ def _export_badges(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "is_user_badge": badge.profile_id is not None,
                 "is_protected": badge.is_protected,
                 "parent_uuids": [str(p.uuid) for p in badge.parents.all()],
-                "pin_uuids": [
-                    str(p.uuid)
-                    for p in badge.pins.filter(profile=profile)
-                ],
+                "pin_uuids": [str(p.uuid) for p in badge.pins.filter(profile=profile)],
             },
         )
 
@@ -409,16 +392,8 @@ def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> N
     """Export friendship connections as a list of relationship records."""
     from urbanlens.dashboard.models.friendship.model import Friendship
 
-    friendships = (
-        Friendship.objects.filter(from_profile=profile)
-        .select_related("to_profile__user")
-        .order_by("created")
-    )
-    incoming = (
-        Friendship.objects.filter(to_profile=profile)
-        .select_related("from_profile__user")
-        .order_by("created")
-    )
+    friendships = Friendship.objects.filter(from_profile=profile).select_related("to_profile__user").order_by("created")
+    incoming = Friendship.objects.filter(to_profile=profile).select_related("from_profile__user").order_by("created")
 
     rows = []
     for f in friendships:
@@ -454,11 +429,7 @@ def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") ->
     """Export all visit history records for the user's pins."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    visits = (
-        PinVisit.objects.filter(pin__profile=profile)
-        .select_related("pin")
-        .order_by("visited_at")
-    )
+    visits = PinVisit.objects.filter(pin__profile=profile).select_related("pin").order_by("visited_at")
 
     rows = [
         {
@@ -478,11 +449,7 @@ def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") ->
 def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.comments.model import Comment
 
-    comments = (
-        Comment.objects.filter(profile=profile)
-        .select_related("pin__location", "location")
-        .order_by("created")
-    )
+    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
 
     rows = []
     for comment in comments:
@@ -543,12 +510,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.trips.model import Trip
 
-    trips = (
-        Trip.objects.filter(profiles=profile)
-        .prefetch_related("profiles__user")
-        .select_related("creator__user")
-        .order_by("created")
-    )
+    trips = Trip.objects.filter(profiles=profile).prefetch_related("profiles__user").select_related("creator__user").order_by("created")
 
     rows = []
     for trip in trips:

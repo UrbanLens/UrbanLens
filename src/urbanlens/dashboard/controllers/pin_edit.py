@@ -84,20 +84,24 @@ def _overview_context(pin: Pin) -> dict:
     from urbanlens.dashboard.models.pin.model import PinType
 
     detail_pin_icon_choices = [
-        ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
-        ("star", "Star"), ("warning", "Warning"), ("info", "Info"),
-        ("camera_alt", "Camera"), ("local_parking", "Parking"),
-        ("stairs", "Stairs"), ("elevator", "Elevator"),
-        ("exit_to_app", "Exit"), ("lock", "Lock"),
-        ("construction", "Construction"), ("emergency", "Emergency"),
+        ("place", "Place"),
+        ("business", "Building"),
+        ("door_front", "Entrance"),
+        ("star", "Star"),
+        ("warning", "Warning"),
+        ("info", "Info"),
+        ("camera_alt", "Camera"),
+        ("local_parking", "Parking"),
+        ("stairs", "Stairs"),
+        ("elevator", "Elevator"),
+        ("exit_to_app", "Exit"),
+        ("lock", "Lock"),
+        ("construction", "Construction"),
+        ("emergency", "Emergency"),
     ]
 
     lat, lng = pin.effective_latitude, pin.effective_longitude
-    overlapping_location_count = (
-        Location.objects.get_all_for_point(float(lat), float(lng)).count()
-        if lat is not None and lng is not None
-        else 0
-    )
+    overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
 
     if pin.location and not pin.location.slug:
         pin.location.ensure_slug()
@@ -331,11 +335,29 @@ class PinEditView(LoginRequiredMixin, View):
             setattr(pin, sf, val)
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
-        pin.save(update_fields=[
-            "name", "name_is_user_provided", "description", "pin_type", "priority", "vulnerability", "danger", "last_visited",
-            "fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked",
-            "date_abandoned", "date_last_active", "updated",
-        ])
+        pin.save(
+            update_fields=[
+                "name",
+                "name_is_user_provided",
+                "description",
+                "pin_type",
+                "priority",
+                "vulnerability",
+                "danger",
+                "last_visited",
+                "fences",
+                "alarms",
+                "cameras",
+                "security",
+                "signs",
+                "vps",
+                "plywood",
+                "locked",
+                "date_abandoned",
+                "date_last_active",
+                "updated",
+            ]
+        )
 
         if should_alias_previous_name:
             try:
@@ -376,7 +398,9 @@ class PinEditView(LoginRequiredMixin, View):
                 cat = Badge.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
                 if cat is None:
                     cat, _ = Badge.objects.get_or_create(
-                        name=name, kind="category", profile=pin.profile,
+                        name=name,
+                        kind="category",
+                        profile=pin.profile,
                     )
                 pin.badges.add(cat)
 
@@ -502,11 +526,7 @@ class PinRelinkView(LoginRequiredMixin, View):
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
-        locations = (
-            Location.objects.get_all_for_point(float(lat), float(lng))
-            if lat is not None and lng is not None
-            else Location.objects.none()
-        )
+        locations = Location.objects.get_all_for_point(float(lat), float(lng)) if lat is not None and lng is not None else Location.objects.none()
         return render(
             request,
             "dashboard/partials/pins/pin_location_picker.html",

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -40,9 +41,7 @@ class MapillaryGateway(StreetViewProvider):
     def _auth_params(self) -> dict[str, str]:
         if not self.access_token:
             raise ValueError(
-                "Mapillary access token is not set. "
-                "Set UL_MAPILLARY_ACCESS_TOKEN to a client access token from "
-                "https://www.mapillary.com/dashboard/developers",
+                "Mapillary access token is not set. Set UL_MAPILLARY_ACCESS_TOKEN to a client access token from https://www.mapillary.com/dashboard/developers",
             )
         return {"access_token": self.access_token}
 
@@ -103,12 +102,12 @@ class MapillaryGateway(StreetViewProvider):
         """
         if not self.access_token:
             return
-        
+
         try:
             data = self.search_images_near_coordinates(latitude, longitude, radius=radius, limit=limit)
         except Exception as exc:
             # TODO: Catch specific exception
-            logger.warning("Mapillary search failed for %s, %s: %s", latitude, longitude, exc)
+            logger.warning("Mapillary search failed for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 
         for item in data.get("data", []):
@@ -121,7 +120,7 @@ class MapillaryGateway(StreetViewProvider):
             coords = geom.get("coordinates") or []
             img_lon = coords[0] if len(coords) >= 2 else None
             img_lat = coords[1] if len(coords) >= 2 else None
-            
+
             yield StreetViewSlide(
                 img_src=img_url,
                 source="Mapillary",

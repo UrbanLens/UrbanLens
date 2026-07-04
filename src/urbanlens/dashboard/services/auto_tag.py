@@ -351,12 +351,7 @@ class AutoTagService:
                 "Wrap each selection in ANSWER tags: <ANSWER>Factory</ANSWER><ANSWER>Ruins</ANSWER>. "
                 "If nothing in the list fits well, return no ANSWER tags."
             )
-        return (
-            f"Identify the {kind}(s) that best describe this urbex location. "
-            f"Examples: {_FALLBACK_EXAMPLES}. "
-            "Wrap each answer: <ANSWER>Factory</ANSWER>. "
-            "Return only well-fitting entries."
-        )
+        return f"Identify the {kind}(s) that best describe this urbex location. Examples: {_FALLBACK_EXAMPLES}. Wrap each answer: <ANSWER>Factory</ANSWER>. Return only well-fitting entries."
 
     @staticmethod
     def _build_prompt(target: Pin | Location) -> str:

@@ -29,23 +29,72 @@ class AvatarService:
     """
 
     ANIMAL_EMOJIS: dict[str, str] = {
-        "badger": "🦡", "bear": "🐻", "beetle": "🪲", "bison": "🦬",
-        "bobcat": "🐱", "buck": "🦌", "crane": "🦢", "crow": "🐦‍⬛",
-        "deer": "🦌", "dove": "🕊️", "duck": "🦆", "eagle": "🦅",
-        "elk": "🫎", "falcon": "🦅", "ferret": "🐾", "finch": "🐦",
-        "fox": "🦊", "gecko": "🦎", "goat": "🐐", "grouse": "🐦",
-        "hawk": "🦅", "heron": "🦢", "ibis": "🦢", "jackal": "🐺",
-        "jaguar": "🐆", "jay": "🐦", "kestrel": "🦅", "kite": "🐦",
-        "lark": "🐦", "linnet": "🐦", "lynx": "🐱", "mink": "🦦",
-        "mole": "🐭", "moose": "🫎", "moth": "🦋", "newt": "🦎",
-        "nighthawk": "🦅", "otter": "🦦", "owl": "🦉", "peregrine": "🦅",
-        "pika": "🐰", "pine": "🌲", "puma": "🦁", "quail": "🐦",
-        "raven": "🐦‍⬛", "robin": "🐦", "salamander": "🦎", "shrew": "🐭",
-        "skunk": "🦨", "snipe": "🐦", "sparrow": "🐦", "starling": "🐦",
-        "stoat": "🐾", "stork": "🦢", "swift": "🐦", "thrush": "🐦",
-        "toad": "🐸", "viper": "🐍", "vole": "🐭", "wagtail": "🐦",
-        "warbler": "🐦", "weasel": "🐾", "whippet": "🐕", "widgeon": "🦆",
-        "wolf": "🐺", "wren": "🐦",
+        "badger": "🦡",
+        "bear": "🐻",
+        "beetle": "🪲",
+        "bison": "🦬",
+        "bobcat": "🐱",
+        "buck": "🦌",
+        "crane": "🦢",
+        "crow": "🐦‍⬛",
+        "deer": "🦌",
+        "dove": "🕊️",
+        "duck": "🦆",
+        "eagle": "🦅",
+        "elk": "🫎",
+        "falcon": "🦅",
+        "ferret": "🐾",
+        "finch": "🐦",
+        "fox": "🦊",
+        "gecko": "🦎",
+        "goat": "🐐",
+        "grouse": "🐦",
+        "hawk": "🦅",
+        "heron": "🦢",
+        "ibis": "🦢",
+        "jackal": "🐺",
+        "jaguar": "🐆",
+        "jay": "🐦",
+        "kestrel": "🦅",
+        "kite": "🐦",
+        "lark": "🐦",
+        "linnet": "🐦",
+        "lynx": "🐱",
+        "mink": "🦦",
+        "mole": "🐭",
+        "moose": "🫎",
+        "moth": "🦋",
+        "newt": "🦎",
+        "nighthawk": "🦅",
+        "otter": "🦦",
+        "owl": "🦉",
+        "peregrine": "🦅",
+        "pika": "🐰",
+        "pine": "🌲",
+        "puma": "🦁",
+        "quail": "🐦",
+        "raven": "🐦‍⬛",
+        "robin": "🐦",
+        "salamander": "🦎",
+        "shrew": "🐭",
+        "skunk": "🦨",
+        "snipe": "🐦",
+        "sparrow": "🐦",
+        "starling": "🐦",
+        "stoat": "🐾",
+        "stork": "🦢",
+        "swift": "🐦",
+        "thrush": "🐦",
+        "toad": "🐸",
+        "viper": "🐍",
+        "vole": "🐭",
+        "wagtail": "🐦",
+        "warbler": "🐦",
+        "weasel": "🐾",
+        "whippet": "🐕",
+        "widgeon": "🦆",
+        "wolf": "🐺",
+        "wren": "🐦",
     }
 
     COLORS: list[str] = list(MaterialColor.values)
@@ -66,8 +115,8 @@ class AvatarService:
             f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
             '<text x="100" y="140" text-anchor="middle" font-size="110" '
             'font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif">'
-            f'{emoji}</text>'
-            '</svg>'
+            f"{emoji}</text>"
+            "</svg>"
         )
 
     @classmethod
@@ -89,10 +138,7 @@ class AvatarService:
         n = min(n, len(candidates), len(cls.COLORS))
         chosen_animals = _random.sample(candidates, n)
         chosen_colors = _random.sample(cls.COLORS, n)
-        return [
-            {"animal": animal, "emoji": emoji, "color": chosen_colors[i]}
-            for i, (animal, emoji) in enumerate(chosen_animals)
-        ]
+        return [{"animal": animal, "emoji": emoji, "color": chosen_colors[i]} for i, (animal, emoji) in enumerate(chosen_animals)]
 
     @classmethod
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:

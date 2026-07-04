@@ -514,7 +514,8 @@ function updateMergeIconPreview(ns) {
     var color = (document.getElementById(ns + '-merge-edit-color') || {}).value || '';
     var preview = document.getElementById(ns + '-merge-edit-icon-preview');
     if (!preview) return;
-    var ics = color ? 'color:' + color + ';' : '';
+    var safeColor = /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : '';
+    var ics = safeColor ? 'color:' + safeColor + ';' : '';
     if (!icon) {
         preview.innerHTML = '<i class="material-icons tag-icon-empty" style="font-size:1.2rem">label</i>';
     } else if (/^[a-z_]+$/.test(icon)) {

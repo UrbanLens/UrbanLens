@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from urbanlens.dashboard.services.redact import redact_coordinate
+
 
 @dataclass(frozen=True, slots=True)
 class _BBox:
@@ -93,10 +95,14 @@ def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
         return True
 
     import logging
+
     logging.getLogger(__name__).debug(
-        "Skipping %s call: coordinates (%.4f, %.4f) are outside the USA",
-        service, lat or 0, lng or 0,
+        "Skipping %s call: coordinates (%s, %s) are outside the USA",
+        service,
+        redact_coordinate(lat),
+        redact_coordinate(lng),
     )
     from urbanlens.dashboard.services.rate_limiter import log_api_call
+
     log_api_call(service, success=True, was_geo_filtered=True)
     return False

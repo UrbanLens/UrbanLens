@@ -1,0 +1,40 @@
+# See https://pre-commit.com for more information
+default_language_version:
+    python: python3.12
+
+default_install_hook_types: [pre-commit, pre-push]
+files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml)|.+/requirements/.*\.txt)$'
+exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
+
+# GITHUB
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+    -   id: check-yaml
+    -   id: check-added-large-files
+    -   id: check-ast
+    -   id: check-json
+    -   id: check-case-conflict
+    -   id: check-merge-conflict
+    -   id: check-toml
+    -   id: detect-private-key
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+    -   id: requirements-txt-fixer
+    -   id: mixed-line-ending
+        args: [--fix=lf]
+    -   id: debug-statements
+
+# RUFF
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+        always_run: true
+        pass_filenames: false

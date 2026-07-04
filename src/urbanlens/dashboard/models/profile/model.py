@@ -119,10 +119,7 @@ class Profile(abstract.HasSlug):
         max_length=20,
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYONE,
-        help_text=(
-            "When you share one of your pins as a trip activity, who can see the "
-            "actual location? Members outside this setting will only see the pin name."
-        ),
+        help_text=("When you share one of your pins as a trip activity, who can see the actual location? Members outside this setting will only see the pin name."),
     )
 
     # Contact information and its visibility
@@ -464,14 +461,8 @@ class Profile(abstract.HasSlug):
                 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
                 accepted = FriendshipStatus.ACCEPTED
-                my_friends = (
-                    set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True))
-                    | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
-                )
-                their_friends = (
-                    set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True))
-                    | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
-                )
+                my_friends = set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
+                their_friends = set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
                 return bool(my_friends & their_friends)
             if visibility == VisibilityChoice.COMMON_TRIP:
                 from urbanlens.dashboard.models.trips.model import TripMembership

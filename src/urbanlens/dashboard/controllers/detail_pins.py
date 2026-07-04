@@ -23,9 +23,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        detail_pins = (
-            pin.detail_pins.select_related("location").order_by("pin_type", "name")
-        )
+        detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/detail_pins_panel.html",
@@ -117,9 +115,7 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        detail_pins = (
-            pin.detail_pins.order_by("pin_type", "name")
-        )
+        detail_pins = pin.detail_pins.order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [dp.to_detail_json() for dp in detail_pins]})
 
 
@@ -128,11 +124,7 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = (
-            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
-            .select_related("profile__user")
-            .order_by("pin_type", "name")
-        )
+        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
         data = []
         viewer = request.user if request.user.is_authenticated else None
         for dp in detail_pins:
@@ -156,11 +148,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = (
-            Pin.objects.filter(parent_location=location, parent_pin__isnull=True)
-            .select_related("profile__user")
-            .order_by("pin_type", "name")
-        )
+        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",
@@ -263,11 +251,13 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             LocationEdit.objects.create(
                 location=location,
                 editor=profile,
-                changes={"detail_pin_moved": {
-                    "pin": detail_pin.effective_name,
-                    "from": [str(old_lat), str(old_lon)],
-                    "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
-                }},
+                changes={
+                    "detail_pin_moved": {
+                        "pin": detail_pin.effective_name,
+                        "from": [str(old_lat), str(old_lon)],
+                        "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
+                    }
+                },
             )
 
         return JsonResponse({"ok": True})

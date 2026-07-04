@@ -69,17 +69,18 @@ class RegridGateway(Gateway, BoundaryProvider):
             object.__setattr__(self, "token", os.environ.get("REGRID_TOKEN"))
         if not self.token:
             raise ValueError(
-                "RegridGateway requires an API token: pass token=... or set the "
-                "REGRID_TOKEN environment variable. Generate one at "
-                "https://app.regrid.com/account/api",
+                "RegridGateway requires an API token: pass token=... or set the REGRID_TOKEN environment variable. Generate one at https://app.regrid.com/account/api",
             )
 
-    def _request(self, method: str, path: str, *, params: dict[str, Any] | None = None,
-                 json_body: dict[str, Any] | None = None) -> dict:
+    def _request(self, method: str, path: str, *, params: dict[str, Any] | None = None, json_body: dict[str, Any] | None = None) -> dict:
         params = {k: v for k, v in (params or {}).items() if v is not None}
         params.setdefault("token", self.token)
         response = self.session.request(
-            method, f"{self.BASE_URL}{path}", params=params, json=json_body, timeout=60,
+            method,
+            f"{self.BASE_URL}{path}",
+            params=params,
+            json=json_body,
+            timeout=60,
         )
         if response.status_code >= 400:
             raise GatewayRequestError(
@@ -89,26 +90,22 @@ class RegridGateway(Gateway, BoundaryProvider):
 
     # -- Parcels by identifier ------------------------------------------------
 
-    def get_parcel_by_point(self, lat: float, lon: float, *, radius: float = 0,
-                             limit: int = 20, **extra: Any) -> dict:
+    def get_parcel_by_point(self, lat: float, lon: float, *, radius: float = 0, limit: int = 20, **extra: Any) -> dict:
         """Reverse-geocode a lat/lon to the parcel(s) containing (or near) it."""
         params = {"lat": lat, "lon": lon, "radius": radius, "limit": limit, **extra}
         return self._request("GET", "/api/v2/parcels/point", params=params)
 
-    def get_parcel_by_apn(self, parcelnumb: str, *, path: str | None = None,
-                           limit: int = 20, **extra: Any) -> dict:
+    def get_parcel_by_apn(self, parcelnumb: str, *, path: str | None = None, limit: int = 20, **extra: Any) -> dict:
         """Look up parcel(s) by Assessor's Parcel Number (APN/PIN)."""
         params = {"parcelnumb": parcelnumb, "path": path, "limit": limit, **extra}
         return self._request("GET", "/api/v2/parcels/apn", params=params)
 
-    def get_parcel_by_address(self, query: str, *, path: str | None = None,
-                               limit: int = 20, **extra: Any) -> dict:
+    def get_parcel_by_address(self, query: str, *, path: str | None = None, limit: int = 20, **extra: Any) -> dict:
         """Look up parcel(s) by street address (fuzzy-ish, ranked by relevance)."""
         params = {"query": query, "path": path, "limit": limit, **extra}
         return self._request("GET", "/api/v2/parcels/address", params=params)
 
-    def search_by_owner(self, owner: str, *, path: str | None = None,
-                         limit: int = 20, **extra: Any) -> dict:
+    def search_by_owner(self, owner: str, *, path: str | None = None, limit: int = 20, **extra: Any) -> dict:
         """Search parcels by owner name, "Last, First" prefix match. US only."""
         if len(owner) < 4:
             raise ValueError("Regrid owner search requires at least 4 characters.")
@@ -130,8 +127,7 @@ class RegridGateway(Gateway, BoundaryProvider):
         validate_bbox(bbox)
         return self.query_by_geometry(bbox_to_polygon_geojson(bbox), limit=limit, **extra)
 
-    def query_by_geometry(self, geojson: dict, *, radius: float = 0,
-                           limit: int = 1000, **extra: Any) -> dict:
+    def query_by_geometry(self, geojson: dict, *, radius: float = 0, limit: int = 1000, **extra: Any) -> dict:
         """Parcel search over an arbitrary GeoJSON geometry (Polygon, MultiPolygon, ...).
 
         Response includes an ``area`` block (acres/sq_meters/sq_miles) for the
@@ -147,9 +143,7 @@ class RegridGateway(Gateway, BoundaryProvider):
 
     # -- Nationwide field query ---------------------------------------------
 
-    def query_by_fields(self, fields: dict[str, dict[str, Any]], *, geojson: dict | None = None,
-                         limit: int = 20, offset_id: int | None = None, count: bool = False,
-                         path: str | None = None, **extra: Any) -> dict:
+    def query_by_fields(self, fields: dict[str, dict[str, Any]], *, geojson: dict | None = None, limit: int = 20, offset_id: int | None = None, count: bool = False, path: str | None = None, **extra: Any) -> dict:
         """Query parcels nationwide by up to 4 schema fields at once.
 
         ``fields`` maps field name -> {operator: value}, e.g.::
@@ -163,13 +157,15 @@ class RegridGateway(Gateway, BoundaryProvider):
         nin, ilike (text only), order (ASC/DESC).
         """
         params: dict[str, Any] = {
-            "limit": limit, "offset_id": offset_id, "count": count, "path": path, **extra,
+            "limit": limit,
+            "offset_id": offset_id,
+            "count": count,
+            "path": path,
+            **extra,
         }
         for field_name, operators in fields.items():
             for operator, value in operators.items():
-                params[f"fields[{field_name}][{operator}]"] = (
-                    json.dumps(value) if isinstance(value, (list, tuple)) else value
-                )
+                params[f"fields[{field_name}][{operator}]"] = json.dumps(value) if isinstance(value, (list, tuple)) else value
         if geojson is not None:
             params["geojson"] = json.dumps(geojson)
         return self._request("GET", "/api/v2/parcels/query", params=params)

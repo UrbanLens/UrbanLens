@@ -12,6 +12,7 @@ import requests
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations import naming
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class GooglePlacesNameResolver:
                 radius=self.radius,
             )
         except (OSError, ValueError, requests.RequestException) as exc:
-            logger.debug("Google Places name lookup failed for %s,%s: %s", latitude, longitude, exc)
+            logger.debug("Google Places name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None
         for result in results:
             name = (result.get("name") or "").strip()
@@ -56,7 +57,7 @@ class GoogleGeocodingNameResolver:
         try:
             return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
         except (OSError, ValueError, requests.RequestException) as exc:
-            logger.debug("Google Geocoding name lookup failed for %s,%s: %s", latitude, longitude, exc)
+            logger.debug("Google Geocoding name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None
 
 

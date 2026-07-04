@@ -224,11 +224,13 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                     ],
                 )
                 logger.info(
-                    "prefetch_location_external_data: migrated Google Places cache for location %s", location_id,
+                    "prefetch_location_external_data: migrated Google Places cache for location %s",
+                    location_id,
                 )
         except Exception:
             logger.exception(
-                "prefetch_location_external_data: Google Places migration failed for location %s", location_id,
+                "prefetch_location_external_data: Google Places migration failed for location %s",
+                location_id,
             )
 
 
@@ -321,5 +323,3 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
-
-

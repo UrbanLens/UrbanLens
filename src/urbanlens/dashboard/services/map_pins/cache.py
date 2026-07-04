@@ -142,6 +142,7 @@ class MapPinCache:
         """Queue a full cache rebuild once when the cached page is missing."""
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import rebuild_map_pin_cache
+
         if not self.client or not self.profile_id:
             return
         try:

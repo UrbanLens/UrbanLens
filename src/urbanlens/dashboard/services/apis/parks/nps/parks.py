@@ -134,18 +134,20 @@ class NPSGateway(Gateway):
         places = []
         for _dist, park in nearby[:limit]:
             park_lat, park_lng = _parse_lat_long(park.get("latLong", ""))
-            places.append({
-                "place_id": f"nps_{park.get('parkCode', '')}",
-                "name": park.get("fullName", ""),
-                "lat": park_lat,
-                "lng": park_lng,
-                "source": "nps",
-                "description": park.get("description", ""),
-                "url": park.get("url", ""),
-                "types": ["national_park"],
-                "rating": None,
-                "vicinity": park.get("states", ""),
-            })
+            places.append(
+                {
+                    "place_id": f"nps_{park.get('parkCode', '')}",
+                    "name": park.get("fullName", ""),
+                    "lat": park_lat,
+                    "lng": park_lng,
+                    "source": "nps",
+                    "description": park.get("description", ""),
+                    "url": park.get("url", ""),
+                    "types": ["national_park"],
+                    "rating": None,
+                    "vicinity": park.get("states", ""),
+                }
+            )
         return places
 
     def find_park_near_location(
@@ -220,6 +222,7 @@ class NPSGateway(Gateway):
 
 
 # -- helpers --------------------------------------------------------------------
+
 
 def _parse_lat_long(lat_long_str: str) -> tuple[float | None, float | None]:
     """

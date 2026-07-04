@@ -65,11 +65,7 @@ def quadkeys_for_bbox(bbox: BBox, *, zoom: int) -> set[str]:
     min_lon, min_lat, max_lon, max_lat = bbox
     x_min, y_max = _lonlat_to_tile(min_lon, min_lat, zoom)
     x_max, y_min = _lonlat_to_tile(max_lon, max_lat, zoom)
-    return {
-        _tile_to_quadkey(x, y, zoom)
-        for x in range(min(x_min, x_max), max(x_min, x_max) + 1)
-        for y in range(min(y_min, y_max), max(y_min, y_max) + 1)
-    }
+    return {_tile_to_quadkey(x, y, zoom) for x in range(min(x_min, x_max), max(x_min, x_max) + 1) for y in range(min(y_min, y_max), max(y_min, y_max) + 1)}
 
 
 @dataclass(slots=True, kw_only=True)
@@ -87,7 +83,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
     quadkey_zoom: int = 9
     _dataset_links: list[dict[str, str]] | None = field(default=None, repr=False)
     bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
-    
+
     def _load_dataset_links(self) -> list[dict[str, str]]:
         if self._dataset_links is None:
             # Load from {PROJECT_ROOT}/data/dataset-links.csv
@@ -111,11 +107,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
         validate_bbox(bbox)
         candidate_quadkeys = quadkeys_for_bbox(bbox, zoom=self.quadkey_zoom)
         rows = self._load_dataset_links()
-        matches = [
-            row for row in rows
-            if row.get("QuadKey") in candidate_quadkeys
-            and (country is None or row.get("Location") == country)
-        ]
+        matches = [row for row in rows if row.get("QuadKey") in candidate_quadkeys and (country is None or row.get("Location") == country)]
 
         features: list[dict] = []
         for row in matches:
@@ -127,10 +119,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
                 if not stripped_line:
                     continue
                 parsed = json.loads(stripped_line)
-                feature = (
-                    parsed if parsed.get("type") == "Feature"
-                    else {"type": "Feature", "geometry": parsed, "properties": {}}
-                )
+                feature = parsed if parsed.get("type") == "Feature" else {"type": "Feature", "geometry": parsed, "properties": {}}
                 if feature_intersects_bbox(feature, bbox):
                     features.append(feature)
         return features

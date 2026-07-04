@@ -38,12 +38,7 @@ class MapPinPayloadService:
 
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
-        return (
-            query.select_related("location")
-            .annotate(map_rating=Subquery(latest_rating))
-            .prefetch_related(Prefetch("badges", queryset=Badge.objects.with_customizations_for(self.profile)))
-            .order_by("pk")
-        )
+        return query.select_related("location").annotate(map_rating=Subquery(latest_rating)).prefetch_related(Prefetch("badges", queryset=Badge.objects.with_customizations_for(self.profile))).order_by("pk")
 
     def page(self, query: QuerySet[Pin], *, cursor: int | None = None, limit: int | None = None, include_total: bool = False) -> MapPinPage:
         limit = min(max(int(limit or self.DEFAULT_LIMIT), 1), self.MAX_LIMIT)
@@ -83,10 +78,7 @@ class MapPinPayloadService:
             "profile": pin.profile_id,
             "rating": getattr(pin, "map_rating", None) or 0,
             "color": self._effective_color(pin, badges),
-            "tags": [
-                {"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon}
-                for t in display_badges
-            ],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in display_badges],
             "address": pin.effective_address,
         }
 

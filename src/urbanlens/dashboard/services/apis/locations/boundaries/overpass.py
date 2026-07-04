@@ -23,10 +23,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urba
 # element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The
 # split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex
 # alternation below is left intact.
-_DEFAULT_FEATURE_TAG_FILTER = (
-    '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]'
-    '|["railway"="station"]'
-)
+_DEFAULT_FEATURE_TAG_FILTER = '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]|["railway"="station"]'
 _TAG_FILTER_CLAUSE_SPLIT = re.compile(r"(?<=\])\|(?=\[)")
 OsmElementType = Literal["node", "way", "relation"]
 

@@ -99,7 +99,7 @@ class WikimediaGateway(MediaProvider):
         """
         results: list[dict[str, Any]] = []
         for i in range(0, len(titles), _TITLES_BATCH_SIZE):
-            results.extend(self._fetch_image_info_batch(titles[i:i + _TITLES_BATCH_SIZE]))
+            results.extend(self._fetch_image_info_batch(titles[i : i + _TITLES_BATCH_SIZE]))
         return results
 
     def _fetch_image_info_batch(self, titles: list[str]) -> list[dict[str, Any]]:
@@ -133,11 +133,7 @@ class WikimediaGateway(MediaProvider):
             if not mime.startswith("image/"):
                 continue  # skip audio/video/pdf files
             ext_meta = info.get("extmetadata", {})
-            description = (
-                ext_meta.get("ImageDescription", {}).get("value", "")
-                or ext_meta.get("ObjectName", {}).get("value", "")
-                or page.get("title", "").replace("File:", "")
-            )
+            description = ext_meta.get("ImageDescription", {}).get("value", "") or ext_meta.get("ObjectName", {}).get("value", "") or page.get("title", "").replace("File:", "")
             results.append(
                 {
                     "title": page.get("title", "").replace("File:", ""),

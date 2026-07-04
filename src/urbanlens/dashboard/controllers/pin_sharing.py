@@ -1,4 +1,5 @@
 """Controllers for sharing a single pin with one friend."""
+
 from __future__ import annotations
 
 from django.contrib import messages
@@ -95,10 +96,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
             importance=Importance.MEDIUM,
             notification_type=NotificationType.PIN_SHARED,
             title="Pin shared with you",
-            message=(
-                f"{sender.username} shared {pin.display_label} with you. You already have this location pinned."
-                if already_pinned else f"{sender.username} shared {pin.display_label} with you."
-            ),
+            message=(f"{sender.username} shared {pin.display_label} with you. You already have this location pinned." if already_pinned else f"{sender.username} shared {pin.display_label} with you."),
             url=reverse("pin.share.detail", kwargs={"share_id": share.id}),
         )
         share.notification = notification
@@ -134,6 +132,7 @@ class PinShareRespondView(LoginRequiredMixin, View):
             NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
         if request.headers.get("HX-Request"):
             from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+
             notifications = NotificationLog.objects.for_profile(request.user.profile).select_related("source_profile").order_by("-created")[:20]
             response = render(request, "dashboard/partials/notifications/notification_dropdown.html", {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()})
             return _trigger_badge_refresh(response)

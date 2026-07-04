@@ -80,7 +80,8 @@ class LocationQuerySet(abstract.QuerySet):
         from urbanlens.dashboard.models.campus.model import Campus
 
         with_polygon = Campus.objects.filter(
-            pin__isnull=True, generated_polygon__isnull=False,
+            pin__isnull=True,
+            generated_polygon__isnull=False,
         ).values("location_id")
         return self.exclude(pk__in=Subquery(with_polygon))
 

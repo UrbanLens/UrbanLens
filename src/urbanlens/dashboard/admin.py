@@ -49,10 +49,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "Environment",
             {
                 "fields": ["environment_override"],
-                "description": (
-                    "Override the deployment environment. "
-                    "Default uses the <code>UL_ENVIRONMENT</code> variable."
-                ),
+                "description": ("Override the deployment environment. Default uses the <code>UL_ENVIRONMENT</code> variable."),
             },
         ),
         (
@@ -65,20 +62,14 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "AI - Global",
             {
                 "fields": ["ai_enabled", "ai_provider"],
-                "description": (
-                    "Master controls for all AI features. "
-                    "Disabling <em>AI enabled</em> prevents every AI API call site-wide."
-                ),
+                "description": ("Master controls for all AI features. Disabling <em>AI enabled</em> prevents every AI API call site-wide."),
             },
         ),
         (
             "AI - Models",
             {
                 "fields": ["openai_model", "cloudflare_model"],
-                "description": (
-                    "Model names are only used for the matching provider. "
-                    "Changing the model here takes effect immediately - no restart needed."
-                ),
+                "description": ("Model names are only used for the matching provider. Changing the model here takes effect immediately - no restart needed."),
                 "classes": ["collapse"],
             },
         ),
@@ -93,10 +84,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "Google Places Layer",
             {
                 "fields": ["google_places_cache_days"],
-                "description": (
-                    "Controls the Places layer available to VIP users. "
-                    "Historical landmarks change rarely, so a long cache avoids unnecessary API calls."
-                ),
+                "description": ("Controls the Places layer available to VIP users. Historical landmarks change rarely, so a long cache avoids unnecessary API calls."),
             },
         ),
     ]
@@ -140,8 +128,7 @@ def _delete_unedited_community_pins(modeladmin, request: HttpRequest, queryset) 
     never_edited.delete()
     modeladmin.message_user(
         request,
-        f"Deleted {count} unedited community pin(s). "
-        "Note: these pins are NOT auto-recreated and must be re-added manually.",
+        f"Deleted {count} unedited community pin(s). Note: these pins are NOT auto-recreated and must be re-added manually.",
         messages.SUCCESS,
     )
 

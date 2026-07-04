@@ -69,11 +69,7 @@ class LoopNetGateway(Gateway):
         slug = quote_plus(address.replace(",", "").replace("  ", " "))
         url = _LOOPNET_SEARCH_TMPL.format(address=slug)
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
             "Accept-Language": "en-US,en;q=0.9",
         }
         try:
@@ -213,9 +209,7 @@ class LoopNetGateway(Gateway):
                     primary["property_details"] = details
 
             primary_listings.append(primary)
-            duplicate_links.extend(
-                {"label": _listing_label(entry), "url": entry["url"]} for entry in group if entry is not primary
-            )
+            duplicate_links.extend({"label": _listing_label(entry), "url": entry["url"]} for entry in group if entry is not primary)
 
         return primary_listings, duplicate_links
 
@@ -233,11 +227,7 @@ class LoopNetGateway(Gateway):
         import requests.exceptions
 
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
             "Accept-Language": "en-US,en;q=0.9",
         }
         try:

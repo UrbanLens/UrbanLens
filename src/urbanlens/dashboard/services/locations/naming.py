@@ -92,12 +92,16 @@ _DMS_COORDINATE_PATTERN = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+# Longest plausible decimal/DMS coordinate string is well under this; bounding
+# the input keeps the adjacent `\s*` groups above from being handed enough
+# repeated whitespace to hit their polynomial worst case.
+_MAX_COORDINATE_NAME_LENGTH = 64
+
 
 def is_coordinate_name(name: str) -> bool:
-    return (
-        _DECIMAL_COORDINATE_PATTERN.match(name) is not None
-        or _DMS_COORDINATE_PATTERN.match(name) is not None
-    )
+    if len(name) > _MAX_COORDINATE_NAME_LENGTH:
+        return False
+    return _DECIMAL_COORDINATE_PATTERN.match(name) is not None or _DMS_COORDINATE_PATTERN.match(name) is not None
 
 
 def normalize_name_for_comparison(name: str | None) -> str:

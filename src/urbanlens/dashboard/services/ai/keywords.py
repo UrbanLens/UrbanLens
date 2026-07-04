@@ -253,10 +253,7 @@ def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
     """Return the lazily-compiled pattern dict, building it on first access."""
     global _COMPILED  # noqa: PLW0603 # TODO Temporarily allow this approach.
     if _COMPILED is None:
-        _COMPILED = {
-            category: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns]
-            for category, patterns in CATEGORY_PATTERNS.items()
-        }
+        _COMPILED = {category: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns] for category, patterns in CATEGORY_PATTERNS.items()}
     return _COMPILED
 
 

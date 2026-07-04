@@ -1,9 +1,11 @@
 """Management command to diagnose Google Custom Search JSON API configuration."""
+
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway, _mask_secret
+from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway
+from urbanlens.dashboard.services.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 
@@ -23,8 +25,8 @@ class Command(BaseCommand):
         query = options["query"]
 
         self.stdout.write("Google Custom Search JSON API diagnostic")
-        self.stdout.write(f"  key: {_mask_secret(api_key)}")
-        self.stdout.write(f"  cx:  {_mask_secret(cx)}")
+        self.stdout.write(f"  key: {redact_secret(api_key)}")
+        self.stdout.write(f"  cx:  {redact_secret(cx)}")
         self.stdout.write(f"  query: {query}")
 
         gateway = GoogleCustomSearchGateway(api_key=api_key, cx=cx)

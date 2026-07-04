@@ -224,6 +224,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
 
@@ -264,7 +265,7 @@ def get_limit_config(service: str) -> Any:
 def service_is_permitted(service: str) -> bool:
     """
     Check if the service is enabled and not rate limited.
-    
+
     Args:
         service: The service key.
 
@@ -276,7 +277,7 @@ def service_is_permitted(service: str) -> bool:
 
 def service_is_enabled(service: str) -> bool:
     """Check if the service is enabled.
-    
+
     Args:
         service: The service key.
 
@@ -317,30 +318,24 @@ def check_rate_limit(service: str) -> bool:
 
     try:
         if config.calls_per_minute is not None:
-            recent_minute = (
-                ApiCallLog.objects.for_service(service)
-                .since(timedelta(minutes=1))
-                .exclude(was_geo_filtered=True)
-                .count()
-            )
+            recent_minute = ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).exclude(was_geo_filtered=True).count()
             if recent_minute >= config.calls_per_minute:
                 logger.warning(
                     "Rate limit hit for %s: %d/%d calls in last minute",
-                    service, recent_minute, config.calls_per_minute,
+                    service,
+                    recent_minute,
+                    config.calls_per_minute,
                 )
                 return False
 
         if config.calls_per_day is not None:
-            today_count = (
-                ApiCallLog.objects.for_service(service)
-                .today()
-                .exclude(was_geo_filtered=True)
-                .count()
-            )
+            today_count = ApiCallLog.objects.for_service(service).today().exclude(was_geo_filtered=True).count()
             if today_count >= config.calls_per_day:
                 logger.warning(
                     "Daily rate limit hit for %s: %d/%d calls today",
-                    service, today_count, config.calls_per_day,
+                    service,
+                    today_count,
+                    config.calls_per_day,
                 )
                 return False
     except Exception:
@@ -393,6 +388,7 @@ def log_api_call(
 # Session wrapper
 # ---------------------------------------------------------------------------
 
+
 class _RateLimitedSession:
     """Wraps ``requests.Session`` to enforce rate limits and log every call.
 
@@ -403,6 +399,7 @@ class _RateLimitedSession:
 
     def __init__(self, service_key: str) -> None:
         import requests
+
         self._service_key = service_key
         self._session = requests.Session()
 
@@ -443,7 +440,7 @@ class _RateLimitedSession:
                 was_rate_limited=True,
             )
             raise RateLimitExceededError(self._service_key)
-        
+
         if not service_is_enabled(self._service_key):
             log_api_call(
                 self._service_key,

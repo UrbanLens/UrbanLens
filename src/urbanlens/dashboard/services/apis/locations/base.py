@@ -65,9 +65,8 @@ class StreetViewSlide:
 
 class SatelliteViewProvider(Gateway, ABC):
     @abstractmethod
-    def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]:
-        ...
-    
+    def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
+
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> tuple[list[SatelliteSlide], bool]:
         cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
@@ -86,8 +85,7 @@ class SatelliteViewProvider(Gateway, ABC):
 
 class StreetViewProvider(Gateway, ABC):
     @abstractmethod
-    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
-        ...
+    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]: ...
 
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> tuple[list[StreetViewSlide], bool]:
         cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
@@ -170,12 +168,7 @@ def bbox_intersects(a: BBox, b: BBox) -> bool:
     """True if two bboxes overlap (touching edges count as overlap)."""
     a_min_lon, a_min_lat, a_max_lon, a_max_lat = a
     b_min_lon, b_min_lat, b_max_lon, b_max_lat = b
-    return (
-        a_min_lon <= b_max_lon
-        and a_max_lon >= b_min_lon
-        and a_min_lat <= b_max_lat
-        and a_max_lat >= b_min_lat
-    )
+    return a_min_lon <= b_max_lon and a_max_lon >= b_min_lon and a_min_lat <= b_max_lat and a_max_lat >= b_min_lat
 
 
 def _is_reasonable_default(polygon: Polygon) -> bool:
@@ -243,7 +236,7 @@ def _polygon_from_feature(feature: dict) -> Polygon | None:
         geometry = getattr(geometry, "__geo_interface__", None)
     if not geometry:
         return None
-    
+
     try:
         geom = GEOSGeometry(json.dumps(geometry), srid=4326)
     except (TypeError, ValueError):

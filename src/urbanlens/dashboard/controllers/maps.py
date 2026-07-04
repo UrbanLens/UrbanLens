@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -35,19 +36,57 @@ logger = logging.getLogger(__name__)
 _PIN_LIST_PAGE_SIZE = 25
 
 _US_STATE_CODES: dict[str, str] = {
-    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
-    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
-    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
-    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
-    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
-    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
-    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
-    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
-    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
-    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
-    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
-    "WI": "Wisconsin", "WY": "Wyoming", "DC": "Washington, D.C.",
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+    "DC": "Washington, D.C.",
 }
 
 
@@ -75,10 +114,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
         filter_badges_list = list(filter_badges)
-        filter_badges_json = _json.dumps([
-            {"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""}
-            for b in filter_badges_list
-        ])
+        filter_badges_json = _json.dumps([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -106,11 +142,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "show_places_layer": show_places_layer,
                 "use_pin_cache": profile.use_pin_cache,
                 **profile.get_map_center_template_context(),
-                "map_default_zoom": (
-                    profile.remembered_map_zoom
-                    if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom
-                    else profile.map_default_zoom or 13
-                ),
+                "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
                 "default_map_view": profile.default_map_view,
                 "map_dark_mode": profile.map_dark_mode,
             },
@@ -179,6 +211,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 profile=request.user.profile,
             )
             from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+
             if badge_ids:
                 pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
             else:
@@ -250,7 +283,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse(response)
         except (ValueError, KeyError, DatabaseError) as e:
             logger.exception("Failed to create pin: %s", e)
-            return HttpResponse(f"Error: {e!s}", status=400)
+            return HttpResponse("Error: failed to create pin.", status=400)
 
     def autocomplete_local(self, request, *args, **kwargs):
         """Fast autocomplete from local DB: pins, locations, aliases, badges, wiki.
@@ -347,6 +380,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         try:
             with urllib.request.urlopen(url, timeout=4) as resp:  # nosec B310
                 import json as _json
+
                 data = _json.loads(resp.read())
             available = data.get("status") == "OK"
         except Exception:
@@ -394,12 +428,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             for the requested page, plus the total match count.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = (
-            Pin.objects.filter(profile=profile)
-            .root_pins()
-            .select_related("location")
-            .prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
-        )
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
 
         search_form = SearchForm(request.GET)
         if search_form.is_valid():
@@ -429,7 +458,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def change_category(self, request, pin_slug, *args, **kwargs):
         # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-        
+
         category_id = request.POST.get("category")
         pin = Pin.objects.get(slug=pin_slug)
         pin.change_category(category_id)
@@ -503,6 +532,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Max
 
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
         last_updated = result["last_updated"]
@@ -590,6 +620,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         if badge_ids:
             from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+
             pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
         elif "badge_ids" in request.POST:
             pin.badges.clear()
@@ -675,27 +706,28 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                             continue
                         display_name = r.get("displayName", {})
                         name = display_name.get("text", "") if isinstance(display_name, dict) else str(display_name)
-                        places.append({
-                            "place_id": r.get("id", ""),
-                            "name": name,
-                            "lat": place_lat,
-                            "lng": place_lng,
-                            "source": "google",
-                            "rating": r.get("rating"),
-                            "user_ratings_total": r.get("userRatingCount"),
-                            "vicinity": r.get("shortFormattedAddress", ""),
-                            "types": r.get("types", []),
-                            "icon": "",
-                            "description": "",
-                            "url": "",
-                        })
+                        places.append(
+                            {
+                                "place_id": r.get("id", ""),
+                                "name": name,
+                                "lat": place_lat,
+                                "lng": place_lng,
+                                "source": "google",
+                                "rating": r.get("rating"),
+                                "user_ratings_total": r.get("userRatingCount"),
+                                "vicinity": r.get("shortFormattedAddress", ""),
+                                "types": r.get("types", []),
+                                "icon": "",
+                                "description": "",
+                                "url": "",
+                            }
+                        )
                 except Exception as exc:
                     # TODO: Catch specific exception
                     if "403" in str(exc):
                         logger.warning(
-                            "Google Places API returned 403 Forbidden - enable 'Places API (New)' "
-                            "in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. "
-                            "API key: %s...%s", api_key[:3], api_key[-3:],
+                            "Google Places API returned 403 Forbidden - enable 'Places API (New)' in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. API key: %s",
+                            redact_secret(api_key),
                         )
                     else:
                         logger.warning("Google Places nearby search failed: %s", exc)
@@ -730,19 +762,21 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 nearby_parks.sort(key=operator.itemgetter(0))
                 for _dist, park in nearby_parks[:20]:
                     park_lat, park_lng = _nps_parse_lat_long(park.get("latLong", ""))
-                    places.append({
-                        "place_id": f"nps_{park.get('parkCode', '')}",
-                        "name": park.get("fullName", ""),
-                        "lat": park_lat,
-                        "lng": park_lng,
-                        "source": "nps",
-                        "description": park.get("description", ""),
-                        "url": park.get("url", ""),
-                        "types": ["national_park"],
-                        "rating": None,
-                        "vicinity": _expand_state_codes(park.get("states", "")),
-                        "icon": "",
-                    })
+                    places.append(
+                        {
+                            "place_id": f"nps_{park.get('parkCode', '')}",
+                            "name": park.get("fullName", ""),
+                            "lat": park_lat,
+                            "lng": park_lng,
+                            "source": "nps",
+                            "description": park.get("description", ""),
+                            "url": park.get("url", ""),
+                            "types": ["national_park"],
+                            "rating": None,
+                            "vicinity": _expand_state_codes(park.get("states", "")),
+                            "icon": "",
+                        }
+                    )
             except Exception as exc:
                 logger.warning("NPS nearby search failed: %s", exc)
 
@@ -799,8 +833,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             detail = gateway.get_place_details(
                 place_id,
                 fields=[
-                    "name", "formatted_address", "rating", "editorial_summary",
-                    "opening_hours", "website", "url", "photos",
+                    "name",
+                    "formatted_address",
+                    "rating",
+                    "editorial_summary",
+                    "opening_hours",
+                    "website",
+                    "url",
+                    "photos",
                 ],
             )
         except Exception as exc:
@@ -833,9 +873,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if pin.get("tags"):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
-                    pin["tags_data"] = [
-                        {"name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags
-                    ]
+                    pin["tags_data"] = [{"name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:
                     pin["tags_data"] = [{"name": t} for t in tags]
@@ -900,7 +938,10 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     # round-trip by passing fetch_if_missing=False.
     fetch_if_missing = not is_meaningful_name(place_name)
     google_place = GooglePlaceService().get_or_create_for_coordinates(
-        lat, lon, place_name=place_name if is_meaningful_name(place_name) else None, fetch_if_missing=fetch_if_missing,
+        lat,
+        lon,
+        place_name=place_name if is_meaningful_name(place_name) else None,
+        fetch_if_missing=fetch_if_missing,
     )
     canonical_name = "Unnamed Location"
     if is_meaningful_name(place_name):

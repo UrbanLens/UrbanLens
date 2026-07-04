@@ -49,14 +49,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         if user_pin:
             lat = user_pin.effective_latitude
             lng = user_pin.effective_longitude
-            other_locations = (
-                Location.objects
-                .within_bounding_box(float(lat), float(lng))
-                .exclude(pk=location.pk)
-                .order_by("name")
-                if lat is not None and lng is not None
-                else Location.objects.none()
-            )
+            other_locations = Location.objects.within_bounding_box(float(lat), float(lng)).exclude(pk=location.pk).order_by("name") if lat is not None and lng is not None else Location.objects.none()
         else:
             other_locations = Location.objects.none()
 
@@ -64,12 +57,20 @@ class LocationWikiView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [
-            ("place", "Place"), ("business", "Building"), ("door_front", "Entrance"),
-            ("star", "Star"), ("warning", "Warning"), ("info", "Info"),
-            ("camera_alt", "Camera"), ("local_parking", "Parking"),
-            ("stairs", "Stairs"), ("elevator", "Elevator"),
-            ("exit_to_app", "Exit"), ("lock", "Lock"),
-            ("construction", "Construction"), ("emergency", "Emergency"),
+            ("place", "Place"),
+            ("business", "Building"),
+            ("door_front", "Entrance"),
+            ("star", "Star"),
+            ("warning", "Warning"),
+            ("info", "Info"),
+            ("camera_alt", "Camera"),
+            ("local_parking", "Parking"),
+            ("stairs", "Stairs"),
+            ("elevator", "Elevator"),
+            ("exit_to_app", "Exit"),
+            ("lock", "Lock"),
+            ("construction", "Construction"),
+            ("emergency", "Emergency"),
         ]
 
         return render(
@@ -222,8 +223,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
         if area_km2 > max_km2:
             return JsonResponse(
                 {
-                    "error": f"Bounding box is too large ({area_km2:,.0f} km²). "
-                    f"Maximum allowed area is {max_km2:,.0f} km².",
+                    "error": f"Bounding box is too large ({area_km2:,.0f} km²). Maximum allowed area is {max_km2:,.0f} km².",
                 },
                 status=400,
             )

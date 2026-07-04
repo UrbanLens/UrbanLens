@@ -44,10 +44,7 @@ class ApiRateLimit(abstract.Model):
     )
     usa_only = BooleanField(
         default=False,
-        help_text=(
-            "Skip API calls for coordinates outside the United States. "
-            "Enable for USA-centric services (NPS, LoopNet, Library of Congress, etc.)."
-        ),
+        help_text=("Skip API calls for coordinates outside the United States. Enable for USA-centric services (NPS, LoopNet, Library of Congress, etc.)."),
     )
     notes = TextField(
         blank=True,

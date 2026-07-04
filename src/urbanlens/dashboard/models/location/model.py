@@ -55,7 +55,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
     # External-source name for this location. User edits must never write this field.
     official_name = CharField(max_length=255, null=True, blank=True)
     description = TextField(null=True, blank=True)
-    
+
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
@@ -73,7 +73,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         name = self.official_name
         if not name:
             return None
-        
+
         parts = [name]
         if self.address_basic and self.address_basic != name:
             parts.append(self.address_basic)
@@ -87,7 +87,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         if include_country and self.country:
             parts.append(self.country)
         return " ".join(parts)
-    
+
     @property
     def categories(self):
         """Badges of kind "category" attached to this location."""
@@ -97,7 +97,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
     def tags(self):
         """Badges of kind "tag" attached to this location."""
         return self.badges.all().tags()
-    
+
     @property
     def statuses(self):
         """Badges of kind "status" attached to this location."""

@@ -725,7 +725,9 @@ ignore = [
     # Keep these off
     "TRY300",  # Consider moving to else -- this discourages final unindented returns for future proofing
     "ARG002",  # unused method argument: `kwargs`
+    "RUF072",  # unnecessary noqa ignore -- TODO until we have all our tools consistently enforcing rules
     "E501",    # Line too long
+    "COM812",  # Recommended to turn off by pre-commit ruff hook
     "FIX002",  # TODOs
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link for this TODO
@@ -785,7 +787,7 @@ ignore = [
     "BLE001",  # catch blind Exception
     "PLW1641", # implement __hash__
     "ISC003",  # implicit string concat
-    "SIM102",  # nested 
+    "SIM102",  # nested
     "TRY401",  # redundant exception object
     "RUF012",  # mutable class attributes -> ClassVar
     "FBT001",  # boolean position argument

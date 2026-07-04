@@ -76,11 +76,7 @@ def _sanitize_text_box_corner(geometry: dict) -> None:
     corner = geometry.get("box_corner")
     if corner is None:
         return
-    valid = (
-        isinstance(corner, (list, tuple))
-        and len(corner) == 2
-        and all(isinstance(n, (int, float)) and math.isfinite(n) for n in corner)
-    )
+    valid = isinstance(corner, (list, tuple)) and len(corner) == 2 and all(isinstance(n, (int, float)) and math.isfinite(n) for n in corner)
     if not valid:
         geometry.pop("box_corner", None)
 

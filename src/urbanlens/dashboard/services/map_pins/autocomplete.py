@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 class AutocompleteResult:
     """A single autocomplete suggestion returned to the client."""
 
-    type: str           # pin | location | place | address | coordinates
+    type: str  # pin | location | place | address | coordinates
     title: str
     subtitle: str
     lat: float | None
     lng: float | None
     zoom: int
-    icon: str           # Material Icons ligature name
+    icon: str  # Material Icons ligature name
     pin_slug: str | None = None
     place_id: str | None = None  # Google place_id for deferred coordinate resolution
 
@@ -83,13 +83,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         .select_related("location")
         .prefetch_related("badges", "aliases", "location__aliases")
         .filter(
-            Q(name__icontains=q)
-            | Q(aliases__name__icontains=q)
-            | Q(description__icontains=q)
-            | Q(badges__name__icontains=q)
-            | Q(location__name__icontains=q)
-            | Q(location__aliases__name__icontains=q)
-            | Q(location__description__icontains=q),
+            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | Q(badges__name__icontains=q) | Q(location__name__icontains=q) | Q(location__aliases__name__icontains=q) | Q(location__description__icontains=q),
         )
         .distinct()[:12]
     )
@@ -123,9 +117,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     seen_loc_ids: set[int] = set()
     loc_qs = (
         Location.objects.filter(
-            Q(name__icontains=q)
-            | Q(aliases__name__icontains=q)
-            | Q(description__icontains=q),
+            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q),
         )
         .filter(pins__profile=profile)
         .distinct()[:5]
@@ -277,12 +269,7 @@ def empty_suggestions(profile) -> list[AutocompleteResult]:
         state = row["location__administrative_area_level_1"] or ""
         count = row["pin_count"]
 
-        rep_pin = (
-            Pin.objects.filter(profile=profile, location__locality=locality)
-            .root_pins()
-            .select_related("location")
-            .first()
-        )
+        rep_pin = Pin.objects.filter(profile=profile, location__locality=locality).root_pins().select_related("location").first()
         if rep_pin is None:
             continue
         lat = rep_pin.effective_latitude
@@ -307,7 +294,8 @@ def empty_suggestions(profile) -> list[AutocompleteResult]:
 
 
 def resolve_google_place(
-    place_id: str, api_key: str,
+    place_id: str,
+    api_key: str,
 ) -> tuple[float | None, float | None, str | None]:
     """Look up coordinates for a Google place_id selected by the user.
 

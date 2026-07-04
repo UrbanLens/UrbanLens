@@ -45,9 +45,7 @@ def _add_visited_status(pin: Pin) -> None:
     """
     from urbanlens.dashboard.models.badges.model import Badge
 
-    visited_badge = (
-        Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    )
+    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
     if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
         pin.badges.add(visited_badge)
 
