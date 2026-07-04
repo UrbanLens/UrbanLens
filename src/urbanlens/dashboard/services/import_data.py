@@ -342,8 +342,14 @@ def _import_pins(
     ``LocationCreationService.create_for_pin``. This avoids re-creating
     community wiki data (name, address, description) from a personal export,
     which may be stale or duplicate what's already on this instance.
+
+    Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create``
+    (the same helper the Google Takeout importer uses) rather than inserted
+    directly. Multiple exported pins commonly resolve to the same effective
+    coordinate (e.g. several pins that all rely on one shared Location for
+    placement), which would otherwise collide with the one-root-pin-per-point
+    per-profile database constraint.
     """
-    from django.contrib.gis.geos import Point
     from django.db import IntegrityError
 
     from urbanlens.dashboard.models.pin.model import Pin
@@ -356,47 +362,59 @@ def _import_pins(
         uuid_str = row.get("uuid", "")
 
         # Idempotency: skip pins that already exist for this user.
-        existing = Pin.objects.filter(uuid=uuid_str).first()
+        existing = Pin.objects.filter(uuid=uuid_str).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk
             result.inc_skipped("pins")
             continue
 
+        lat = row.get("latitude")
+        lng = row.get("longitude")
+        if lat is None or lng is None:
+            result.warnings.append(f"Could not import pin '{row.get('name', uuid_str)}': missing coordinates.")
+            result.inc_skipped("pins")
+            continue
+
+        defaults: dict[str, Any] = {
+            "name": row.get("name") or None,
+            "description": row.get("description") or "",
+            "icon": row.get("icon") or None,
+            "color": row.get("color") or None,
+            "priority": int(row.get("priority", 0)),
+            "is_private": bool(row.get("is_private", False)),
+            "pin_type": row.get("pin_type", "location"),
+            "detail_bg_color": row.get("detail_bg_color") or None,
+            "detail_bg_opacity": int(row.get("detail_bg_opacity", 80)),
+            "detail_border_color": row.get("detail_border_color") or None,
+            "detail_border_opacity": int(row.get("detail_border_opacity", 100)),
+        }
+        if uuid_str:
+            defaults["uuid"] = uuid_str
+
         try:
-            lat = row.get("latitude")
-            lng = row.get("longitude")
-            pin = Pin(
-                profile=profile,
-                name=row.get("name") or None,
-                description=row.get("description") or "",
-                icon=row.get("icon") or None,
-                color=row.get("color") or None,
-                priority=int(row.get("priority", 0)),
-                is_private=bool(row.get("is_private", False)),
-                pin_type=row.get("pin_type", "location"),
-                latitude=lat or None,
-                longitude=lng or None,
-                detail_bg_color=row.get("detail_bg_color") or None,
-                detail_bg_opacity=int(row.get("detail_bg_opacity", 80)),
-                detail_border_color=row.get("detail_border_color") or None,
-                detail_border_opacity=int(row.get("detail_border_opacity", 100)),
-            )
-            eff_lat = float(lat) if lat else 0.0
-            eff_lng = float(lng) if lng else 0.0
-            pin.point = Point(eff_lng, eff_lat, srid=4326)
-
-            pin.save()
-            pin_uuid_map[uuid_str] = pin.pk
-            result.inc_created("pins")
-
-            # Assign badges.
-            for badge_uuid in row.get("badge_uuids", []):
-                if badge_uuid in badge_uuid_map:
-                    pin.badges.add(badge_uuid_map[badge_uuid])
-
+            pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
         except (IntegrityError, ValueError, TypeError):
             logger.warning("Failed to import pin %s", uuid_str, exc_info=True)
             result.warnings.append(f"Could not import pin '{row.get('name', uuid_str)}'.")
+            continue
+
+        if pin is None:
+            result.inc_skipped("pins")
+            continue
+
+        if uuid_str:
+            pin_uuid_map[uuid_str] = pin.pk
+
+        if not created:
+            result.inc_skipped("pins")
+            continue
+
+        result.inc_created("pins")
+
+        # Assign badges.
+        for badge_uuid in row.get("badge_uuids", []):
+            if badge_uuid in badge_uuid_map:
+                pin.badges.add(badge_uuid_map[badge_uuid])
 
 
 def _import_visit_history(
