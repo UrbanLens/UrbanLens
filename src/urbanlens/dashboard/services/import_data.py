@@ -401,35 +401,43 @@ def _import_pins(
 
 
 def _create_location_from_data(loc_data: dict[str, Any]) -> Any:
-    """Create a new Location from exported location data."""
-    from django.contrib.gis.geos import Point
+    """Find or create a Location from exported location data.
+
+    Locations are unique on (latitude, longitude), and imported archives
+    routinely reference coordinates that already exist on this instance
+    (e.g. duplicate "unnamed" locations). Reuse the existing row within
+    proximity instead of raising an IntegrityError that would abort the
+    whole import over a single duplicate pin.
+    """
+    from django.db import IntegrityError
 
     from urbanlens.dashboard.models.location.model import Location
 
     try:
         lat = float(loc_data.get("latitude") or 0)
         lng = float(loc_data.get("longitude") or 0)
-        location = Location(
-            name=loc_data.get("name", "Unknown Location"),
-            description=loc_data.get("description") or "",
-            latitude=lat,
-            longitude=lng,
-            street_number=loc_data.get("street_number") or None,
-            route=loc_data.get("route") or None,
-            locality=loc_data.get("locality") or None,
-            administrative_area_level_1=loc_data.get("administrative_area_level_1") or None,
-            administrative_area_level_2=loc_data.get("administrative_area_level_2") or None,
-            administrative_area_level_3=loc_data.get("administrative_area_level_3") or None,
-            country=loc_data.get("country") or "United States",
-            zipcode=loc_data.get("zipcode") or None,
-            zipcode_suffix=loc_data.get("zipcode_suffix") or None,
-            point=Point(lng, lat, srid=4326),
-        )
-        location.save()
+        defaults = {
+            "name": loc_data.get("name", "Unknown Location"),
+            "description": loc_data.get("description") or "",
+            "street_number": loc_data.get("street_number") or None,
+            "route": loc_data.get("route") or None,
+            "locality": loc_data.get("locality") or None,
+            "administrative_area_level_1": loc_data.get("administrative_area_level_1") or None,
+            "administrative_area_level_2": loc_data.get("administrative_area_level_2") or None,
+            "administrative_area_level_3": loc_data.get("administrative_area_level_3") or None,
+            "country": loc_data.get("country") or "United States",
+            "zipcode": loc_data.get("zipcode") or None,
+            "zipcode_suffix": loc_data.get("zipcode_suffix") or None,
+        }
+        location, _created = Location.objects.get_nearby_or_create(lat, lng, defaults=defaults)
         return location
     except (ValueError, TypeError):
         logger.warning("Failed to create location from data: %s", loc_data.get("name"))
         return None
+    except IntegrityError:
+        # Lost a race with a concurrent import/request creating the same coordinates.
+        logger.warning("Duplicate location coordinates during import, reusing existing row: %s", loc_data.get("name"))
+        return Location.objects.filter(latitude=lat, longitude=lng).first()
 
 
 def _import_visit_history(

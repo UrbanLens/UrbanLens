@@ -18,6 +18,7 @@ Features planned for this release.
 * Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School")
 
 ## Medium Features
+* Audit the import process for security (unzip, etc)
 
 ## Larger Features
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]
