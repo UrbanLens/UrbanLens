@@ -224,15 +224,6 @@ dialog.tag-create-card.ul-dialog {
     margin-bottom: 0.6rem;
 }
 
-.tag-card-view {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.9rem 1rem;
-    border-radius: $radius-md;
-    border: 1px solid var(--ul-grey-1a);
-}
-
 .tag-card-icon {
     width: 44px;
     height: 44px;
@@ -403,6 +394,14 @@ dialog.tag-create-card.ul-dialog {
 }
 
 .tag-card-view {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    background: var(--ul-grey-2a);
+    border-radius: $radius-md;
+    border: 1px solid var(--ul-grey-1a);
+
     .tag-card-actions {
         display: flex;
         gap: 4px;
@@ -2823,5 +2822,11 @@ dialog.tag-create-card.ul-dialog {
             opacity: 0.6 !important;
             pointer-events: auto !important;
         }
+    }
+}
+
+[data-theme="dark"] {
+    .tag-card-view {
+        background: var(--ul-grey-1b);
     }
 }
