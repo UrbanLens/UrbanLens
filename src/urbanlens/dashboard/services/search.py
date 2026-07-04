@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from django.db import DatabaseError
 
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
