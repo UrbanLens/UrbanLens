@@ -129,6 +129,7 @@
 		flex-shrink: 0;
 		transition: background 0.2s, border-color 0.2s, color 0.2s;
 
+		.material-symbols-outlined,
 		.material-icons {
 			font-size: 0.8rem;
 		}
@@ -208,6 +209,7 @@
 		border: 1px solid var(--ul-grey-1a);
 		border-radius: 10px;
 
+		.material-symbols-outlined,
 		.material-icons {
 			font-size: 1.15rem;
 			color: var(--ul-accent, #0891b2);
@@ -434,6 +436,7 @@
 		color: var(--ul-grey-8);
 		max-width: 200px;
 
+		.material-symbols-outlined,
 		.material-icons { font-size: 0.85rem; color: var(--ul-accent, #0891b2); }
 
 		span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -463,6 +466,7 @@
 		color: var(--ul-grey-6);
 		margin-bottom: 0.5rem;
 
+		.material-symbols-outlined,
 		.material-icons { font-size: 0.85rem; }
 	}
 }
@@ -555,6 +559,7 @@
 		align-items: center;
 		justify-content: center;
 
+		.material-symbols-outlined,
 		.material-icons {
 			font-size: 2.5rem;
 			color: var(--ul-accent, #0891b2);

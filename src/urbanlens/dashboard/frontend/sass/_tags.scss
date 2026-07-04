@@ -375,7 +375,7 @@ dialog.tag-create-card.ul-dialog {
         padding: 1px 3px;
         opacity: 0.45;
         transition: opacity .15s;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 0.8rem;
             line-height: 1;
@@ -1620,6 +1620,7 @@ dialog.tag-create-card.ul-dialog {
     font-size: .85rem;
     color: $text-secondary;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem !important;
         color: $text-muted;
@@ -1892,6 +1893,7 @@ dialog.tag-create-card.ul-dialog {
     overflow: hidden;
     transition: opacity .18s ease .04s, transform .18s ease .04s, width .22s ease .04s, min-width .22s ease .04s, border-width .22s ease .04s, background .12s, color .12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
         pointer-events: none;
@@ -1949,6 +1951,7 @@ dialog.tag-create-card.ul-dialog {
         color: $color-indigo-600;
     }
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.05rem;
         pointer-events: none;
@@ -2260,7 +2263,7 @@ dialog.tag-create-card.ul-dialog {
         cursor: pointer;
         padding: 0;
         transition: background .15s, color .15s;
-
+        .material-symbols-outlined,
         .material-icons { font-size: 18px; }
 
         &:hover {
@@ -2331,8 +2334,11 @@ dialog.tag-create-card.ul-dialog {
         box-shadow: 0 0 0 2px var(--ul-color-accent-ring);
     }
 
-    .org-filter-chip .material-icons {
-        font-size: .85rem;
+    .org-filter-chip {
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .85rem;
+        }
     }
 
     .org-filter-color-row {
@@ -2405,7 +2411,7 @@ dialog.tag-create-card.ul-dialog {
         padding: 0;
         justify-content: center;
         flex-shrink: 0;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
         }
@@ -2448,6 +2454,7 @@ dialog.tag-create-card.ul-dialog {
     color: var(--ul-grey-6);
     transition: background .12s, border-color .12s, color .12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -2533,6 +2540,7 @@ dialog.tag-create-card.ul-dialog {
     transition: background .12s, color .12s, border-color .12s;
     flex-shrink: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2563,6 +2571,7 @@ dialog.tag-create-card.ul-dialog {
     border: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-0a);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
     }

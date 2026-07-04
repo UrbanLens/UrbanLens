@@ -142,7 +142,8 @@ body.page-index {
         align-items: center;
         justify-content: center;
         margin: 0 auto 1.1rem;
-
+        
+        .material-symbols-outlined,
         .material-icons {
             color: $color-indigo-600;
             font-size: 1.6rem;

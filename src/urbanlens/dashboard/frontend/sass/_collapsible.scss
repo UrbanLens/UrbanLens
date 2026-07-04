@@ -7,6 +7,7 @@
 .section-collapse-btn {
     @include icon-btn(28px);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.2rem;
         transition: transform .15s;
@@ -26,8 +27,12 @@
             display: none;
         }
 
-        .section-collapse-btn .material-icons {
-            transform: rotate(-180deg);
+        .section-collapse-btn {
+            
+            .material-symbols-outlined,
+            .material-icons {
+                transform: rotate(-180deg);
+            }
         }
     }
 }

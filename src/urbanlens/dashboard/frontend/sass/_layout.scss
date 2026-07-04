@@ -310,6 +310,7 @@ div.section {
         transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         flex-shrink: 0;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1.4rem;
             pointer-events: none;
@@ -397,6 +398,7 @@ div.section {
     color: var(--ul-grey-6);
     font-size: .9rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.4rem;
         opacity: .5;
@@ -424,6 +426,7 @@ div.section {
     color: var(--ul-grey-6);
     border-top: 1px solid var(--ul-grey-1a);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
         color: var(--ul-grey-4);

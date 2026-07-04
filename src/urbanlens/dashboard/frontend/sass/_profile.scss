@@ -80,6 +80,7 @@
     border: 2px solid var(--ul-button-border);
     transition: background-color 0.15s ease;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 15px;
     }
@@ -144,6 +145,7 @@
     white-space: nowrap;
     border: 1.5px solid;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
     }
@@ -199,6 +201,7 @@
     border: 1.5px solid;
     transition: background .13s, border-color .13s, color .13s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -265,6 +268,7 @@
     font-size: 0.875rem;
     color: $text-secondary;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 16px;
         opacity: 0.7;
@@ -395,6 +399,7 @@
     font-size: 0.95rem;
     color: var(--ul-grey-9);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
         color: var(--primary-color);
@@ -460,6 +465,7 @@
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--ul-grey-1a);
 
+    >.material-symbols-outlined,
     >.material-icons {
         font-size: 1.5rem;
         color: var(--primary-color);
@@ -859,6 +865,7 @@
     text-decoration: none;
     margin-bottom: 0.5rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -980,6 +987,7 @@
     align-items: center;
     justify-content: center;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 2.5rem;
         color: $text-secondary;
@@ -1000,6 +1008,7 @@
     cursor: pointer;
     transition: background 0.2s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -1181,6 +1190,7 @@ body .edit-profile-page .edit-username-input {
         box-shadow: 0 0 0 3px rgba($color-indigo-600, .12);
     }
 
+    .material-symbols-outlined,
     .material-icons { font-size: 1.6rem; color: var(--ul-grey-6); }
 }
 
@@ -1266,6 +1276,7 @@ body .edit-profile-page .edit-username-input {
     border-radius: 50%;
     transition: color 0.15s, background 0.15s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -1381,6 +1392,7 @@ body .edit-profile-page .edit-username-input {
     gap: 0.5rem;
     color: $text-secondary;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -1567,6 +1579,7 @@ body .edit-profile-page .edit-username-input {
     border-radius: $radius-sm;
     transition: color 0.12s, transform 0.1s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.35rem;
         display: block;
@@ -1599,6 +1612,7 @@ body .edit-profile-page .edit-username-input {
     margin-left: 4px;
     transition: color 0.12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
         display: block;
@@ -1719,6 +1733,7 @@ body .edit-profile-page .edit-username-input {
     cursor: pointer;
     transition: background .13s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -1748,6 +1763,7 @@ body .edit-profile-page .edit-username-input {
     gap: .35rem;
     white-space: nowrap;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -1758,6 +1774,7 @@ body .edit-profile-page .edit-username-input {
         font-size: .78rem;
         font-weight: 600;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
         }
@@ -1862,6 +1879,7 @@ body .edit-profile-page .edit-username-input {
     border-radius: $radius-sm;
     font-size: 0.875rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -1993,6 +2011,7 @@ body .edit-profile-page .edit-username-input {
     outline: none;
     transition: background .12s, color .12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2228,6 +2247,7 @@ a.profile-stat--link {
     text-decoration: none;
     font-weight: 600;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
     }
@@ -2368,6 +2388,7 @@ a.profile-stat--link {
     color: $text-muted;
     margin-top: 2px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .8rem;
     }
@@ -2402,6 +2423,7 @@ a.profile-stat--link {
     color: $color-amber-800;
     margin: 0 0 .6rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2522,6 +2544,7 @@ a.profile-stat--link {
     border-radius: 6px;
     outline: none;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2582,6 +2605,7 @@ a.profile-stat--link {
     font-size: .85rem;
     font-weight: 600;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2613,6 +2637,7 @@ a.profile-stat--link {
     text-decoration: none;
     font-weight: 600;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
     }
@@ -2646,6 +2671,7 @@ a.profile-stat--link {
     color: $text-muted;
     text-decoration: none;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -2695,6 +2721,7 @@ a.profile-stat--link {
     padding: 3rem 1rem;
     text-align: center;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 3rem;
         color: var(--ul-grey-3);

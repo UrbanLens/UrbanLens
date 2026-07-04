@@ -455,6 +455,7 @@
     }
 
     .friends-empty {
+        .material-symbols-outlined,
         .material-icons {
             color: var(--ul-grey-7b);
         }
@@ -545,6 +546,7 @@
         &__icon-wrap {
             background: rgba(255, 255, 255, .04);
 
+            .material-symbols-outlined,
             .material-icons {
                 color: var(--ul-grey-6);
             }
@@ -579,6 +581,7 @@
         .notif-item__icon-wrap {
             background: rgba($color-indigo-600, .15);
 
+            .material-symbols-outlined,
             .material-icons {
                 color: $color-deep-purple-300;
             }
@@ -597,6 +600,7 @@
     .notif-item--unread .notif-item__icon-wrap--friend_accepted {
         background: rgba($color-green-600, .15);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-green-400;
         }
@@ -606,6 +610,7 @@
     .notif-item--unread .notif-item__icon-wrap--trip_updated {
         background: rgba($color-blue-600, .15);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-blue-500;
         }
@@ -615,6 +620,7 @@
     .notif-item--unread .notif-item__icon-wrap--comment_liked {
         background: rgba($color-pink-600, .15);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-pink-400;
         }
@@ -623,6 +629,7 @@
     .notif-item--unread .notif-item__icon-wrap--error {
         background: rgba($color-red-600, .15);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-red-400;
         }
@@ -631,6 +638,7 @@
     .notif-item--unread .notif-item__icon-wrap--warning {
         background: rgba($color-amber-600, .15);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-amber-400;
         }
@@ -659,8 +667,11 @@
         }
     }
 
-    .trips-title .material-icons {
-        color: $color-blue-500;
+    .trips-title {
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-blue-500;
+        }
     }
 
     .trips-empty .trips-empty-icon-wrap {
@@ -787,6 +798,7 @@
     .trip-activity-icon {
         background: $dk-navy;
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-blue-500;
         }
@@ -1386,7 +1398,8 @@
         &:has(input:checked) {
             border-color: #{$color-indigo-500};
             color: #{$color-indigo-100};
-    
+
+            .material-symbols-outlined,
             .material-icons {
                 color: #{$color-indigo-100};
             }

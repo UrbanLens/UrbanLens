@@ -29,6 +29,7 @@
     pointer-events: none;
     user-select: none;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -229,6 +230,7 @@
     color: var(--ul-grey-7);
     border-radius: 8px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
         color: var(--ul-grey-6);
@@ -313,6 +315,7 @@
         outline: none;
         flex-shrink: 0;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: .85rem;
         }
@@ -350,6 +353,7 @@
     transition: color .12s, border-color .12s, background .12s;
     position: relative;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -445,6 +449,7 @@
     align-items: center;
     padding: 1px 2px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .7rem;
         line-height: 1;
@@ -479,6 +484,7 @@
     color: var(--ul-grey-4);
     font-size: .75rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
         opacity: .5;
@@ -535,6 +541,7 @@
     color: var(--ul-grey-0);
     text-align: left;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
         color: var(--ul-grey-3);
@@ -543,7 +550,7 @@
     &:hover {
         background: var(--ul-grey-0);
         color: var(--ul-grey-9);
-
+        .material-symbols-outlined,
         .material-icons {
             color: var(--ul-grey-6);
         }
@@ -645,6 +652,7 @@
     color: $color-blue-600;
     margin: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .95rem;
     }
@@ -717,7 +725,7 @@
         color: #fff;
         cursor: pointer;
         transition: background .12s;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 15px;
         }
@@ -1109,7 +1117,7 @@
         color: $text-secondary;
         font-style: italic;
         font-size: .82rem;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem !important;
             color: var(--primary-color);
@@ -1239,7 +1247,7 @@
         color: var(--ul-grey-6);
         text-align: left;
         transition: background .1s;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
             color: $color-indigo-500;
@@ -1249,6 +1257,7 @@
             background: var(--ul-grey-0);
             color: $color-indigo-700;
 
+            .material-symbols-outlined,
             .material-icons {
                 color: $color-indigo-700;
             }
@@ -1312,6 +1321,7 @@
     font-size: .78rem;
     line-height: 1.25;
 
+    .material-symbols-outlined,
     .material-icons {
         flex: 0 0 auto;
         font-size: .95rem;
@@ -1573,6 +1583,7 @@
     transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
     padding: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -1741,10 +1752,12 @@
     color: $color-red-300;
 }
 
-.fp-reset .material-icons {
-    font-size: .9rem;
+.fp-reset {
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: .9rem;
+    }
 }
-
 /* Active-filter badge on the search button */
 #search-pins-button {
     position: relative;
@@ -2059,6 +2072,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         background: var(--ul-hover-bg);
     }
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -2068,6 +2082,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: none;  // hidden by default; shown via .addr-search-history--visible
     padding: 2px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .82rem;
     }
@@ -2299,6 +2314,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     align-items: center;
     gap: 8px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 2rem;
         color: var(--ul-grey-5);
@@ -2544,6 +2560,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     color: rgba(255, 255, 255, .38);
     margin-bottom: 5px;
 
+    .material-symbols-outlined,
     .material-icons { font-size: .85rem; flex-shrink: 0; }
 }
 
@@ -2583,6 +2600,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, .07);
     border-radius: 4px;
 
+    .material-symbols-outlined,
     .material-icons { font-size: 1.1rem; }
 }
 
@@ -2731,6 +2749,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     text-align: left;
     color: var(--ul-grey-5);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
         color: var(--ul-grey-4);
@@ -2739,7 +2758,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     &:hover {
         background: rgba(255, 255, 255, .08);
         color: #fff;
-
+        .material-symbols-outlined,
         .material-icons {
             color: #fff;
         }
@@ -2751,7 +2770,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
     &--danger {
         color: rgba(255, 100, 100, .75);
-
+        .material-symbols-outlined,
         .material-icons {
             color: rgba(255, 100, 100, .6);
         }
@@ -2760,6 +2779,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             background: rgba(255, 70, 70, .12);
             color: $color-red-500;
 
+            .material-symbols-outlined,
             .material-icons {
                 color: $color-red-500;
             }
@@ -3021,6 +3041,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: linear-gradient(135deg, #2563eb, #06b6d4);
     box-shadow: 0 10px 26px rgba(37, 99, 235, .28);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.45rem;
     }
@@ -3082,6 +3103,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: grid;
     place-items: center;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -3190,6 +3212,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: linear-gradient(135deg, #7c3aed, #06b6d4);
     box-shadow: 0 12px 28px rgba(124, 58, 237, .26);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.5rem;
     }
@@ -3251,6 +3274,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: grid;
     place-items: center;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -3335,13 +3359,17 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     transition: opacity 0.15s, background 0.15s;
     padding: 0;
 
+    .material-symbols-outlined,
     .material-icons { font-size: 1.1rem; }
 
     &:hover { opacity: 1; background: rgba(0, 0, 0, .06); }
 }
 
 .map-buttons.collapsed {
-    .map-toolbar-collapse .material-icons { content: 'chevron_left'; }
+    .material-symbols-outlined,
+    .map-toolbar-collapse {
+        .material-icons { content: 'chevron_left'; }
+    }
 }
 
 // -- Layers panel (bottom-left, Google Maps style) -----------------------------
@@ -3535,7 +3563,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         display: flex;
         align-items: center;
         justify-content: center;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
             color: var(--ul-grey-7);
@@ -3556,7 +3584,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             z-index: 1;
             pointer-events: none;
         }
-
+        .material-symbols-outlined,
         .material-icons {
             position: absolute;
             top: 0;
@@ -3616,6 +3644,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     text-transform: uppercase;
     margin-bottom: 5px;
 
+    .material-symbols-outlined,
     .material-icons { font-size: .85rem; }
 
     .fp-badge-col--incl & { color: rgba(134, 239, 172, .85); }
@@ -3662,6 +3691,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
     transition: background .12s, color .12s;
 
+    .material-symbols-outlined,
     .material-icons { font-size: .7rem; }
 
     &:hover {
@@ -3690,6 +3720,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: default;
     transition: background .12s, border-color .12s;
 
+    .material-symbols-outlined,
     .material-icons { font-size: .9rem; }
 
     &.fp-drag-over {
@@ -3869,6 +3900,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
     transition: background .15s, color .15s, border-color .15s;
 
+    .material-symbols-outlined,
     .material-icons { font-size: .75rem; }
 
     &:hover {

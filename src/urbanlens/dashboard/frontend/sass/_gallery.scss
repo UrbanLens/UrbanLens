@@ -25,7 +25,10 @@
     background: rgba(37, 99, 235, .08);
   }
 
-  .material-icons { font-size: 1.15rem; }
+  .material-symbols-outlined,
+  .material-icons { 
+    font-size: 1.15rem; 
+  }
 }
 
 // Full-page drop overlay
@@ -55,6 +58,7 @@
   box-shadow: 0 8px 32px rgba(37, 99, 235, .18);
   pointer-events: none;
 
+  .material-symbols-outlined,
   .material-icons {
     font-size: 3.5rem;
     color: var(--color-accent, #2563eb);
@@ -132,6 +136,7 @@
   display: flex;
   align-items: center;
 
+  .material-symbols-outlined,
   .material-icons {
     font-size: .9rem;
     color: var(--ul-grey-4);
@@ -160,6 +165,7 @@
   display: flex;
   align-items: center;
 
+  .material-symbols-outlined,
   .material-icons {
     font-size: 1rem;
     color: var(--ul-grey-4);
@@ -178,6 +184,7 @@
   color: var(--color-muted, #94a3b8);
   font-size: .9rem;
 
+  .material-symbols-outlined,
   .material-icons { font-size: 2.5rem; }
 }
 
@@ -232,6 +239,7 @@
 
   &:hover { background: rgba(200,0,0,.7); }
 
+  .material-symbols-outlined,
   .material-icons { font-size: 1.2rem; }
 }
 
@@ -251,6 +259,7 @@
 
   &:hover { background: rgba(255,255,255,.25); }
 
+  .material-symbols-outlined,
   .material-icons { font-size: 1.8rem; }
 
   &.lightbox-prev { left: .6rem; }
@@ -307,5 +316,6 @@
   text-shadow: 0 1px 3px rgba(0,0,0,.6);
   pointer-events: none;
 
+  .material-symbols-outlined,
   .material-icons { font-size: 1.4rem; }
 }

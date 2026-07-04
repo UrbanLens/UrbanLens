@@ -95,7 +95,7 @@
             align-items: center;
             gap: 1px;
         }
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: .65rem;
         }
@@ -118,6 +118,7 @@
     transition: background .15s, color .15s;
     flex-shrink: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -519,7 +520,7 @@
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1.15rem;
         }
@@ -641,7 +642,7 @@
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
-
+        .material-symbols-outlined,
         .material-icons { font-size: 1.15rem; }
 
         &:hover { background: var(--ul-grey-1a); }
@@ -781,7 +782,7 @@
         justify-content: center;
         background: var(--ul-grey-1);
         color: var(--ul-grey-4);
-
+        .material-symbols-outlined,
         .material-icons { font-size: 2rem; }
     }
 
@@ -819,6 +820,7 @@
             text-decoration: none;
             transition: color .12s;
 
+            .material-symbols-outlined,
             .material-icons { font-size: .85rem; }
 
             &:hover { color: var(--ul-grey-8); }
@@ -893,6 +895,7 @@
     font-size: .83rem;
     color: $color-light-blue-700;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
         flex-shrink: 0;
@@ -917,6 +920,7 @@
     text-decoration: none;
     transition: background .15s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .85rem;
     }
@@ -1317,6 +1321,7 @@ body.page-location-details {
     font-weight: 600;
     transition: background .15s, border-color .15s, color .15s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.05rem;
     }
@@ -1350,6 +1355,7 @@ body.page-location-details {
     font-size: .85rem;
     max-width: 100%;
 
+    > .material-symbols-outlined,
     > .material-icons {
         font-size: 1.15rem;
         color: $color-indigo-500;
@@ -1362,6 +1368,7 @@ body.page-location-details {
         color: $color-grey-0;
         font-size: .82rem;
 
+        > .material-symbols-outlined,
         > .material-icons {
             font-size: 1.05rem;
             color: $color-grey-0;
@@ -1401,6 +1408,7 @@ body.page-location-details {
     max-width: 240px;
     @include truncate;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .8rem;
         opacity: .6;
@@ -1434,6 +1442,7 @@ body.page-location-details {
     background: transparent;
     color: var(--ul-grey-6);
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -1493,6 +1502,7 @@ body.page-location-details {
     padding: 0;
     display: inline-flex;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -1556,6 +1566,7 @@ body.page-location-details {
     align-items: center;
     gap: .35rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -1713,6 +1724,7 @@ body.page-location-details {
     display: flex;
     align-items: center;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.05rem;
     }
@@ -2026,6 +2038,7 @@ body.page-location-details .pin-detail-grid {
             justify-content: center;
             color: var(--ul-grey-4, #94a3b8);
 
+            .material-symbols-outlined,
             .material-icons {
                 font-size: 2rem;
             }
@@ -2334,6 +2347,7 @@ body.page-location-details .pin-detail-grid {
     font-family: var(--ul-font-family, sans-serif);
     font-weight: 600;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -2347,7 +2361,7 @@ body.page-location-details .pin-detail-grid {
         cursor: pointer;
         padding: 0.125rem;
         line-height: 0;
-
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
         }

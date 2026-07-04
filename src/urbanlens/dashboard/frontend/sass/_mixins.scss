@@ -222,6 +222,7 @@ $inputs: (
 	padding: 0;
 	transition: background .12s, color .12s;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.1rem;
 	}
@@ -293,7 +294,8 @@ $inputs: (
 	border-bottom: 1px solid var(--ul-grey-1a);
 	background-color: var(--ul-grey-1a);
 	color: var(--ul-grey-8);
-	
+
+	i.material-symbols-outlined,
 	i.material-icons {
 		grid-area: header-icon;
 		font-size: 1.1rem;
@@ -420,6 +422,7 @@ $inputs: (
 	color: var(--ul-grey-6);
 	text-align: center;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 2.5rem;
 		opacity: .4;

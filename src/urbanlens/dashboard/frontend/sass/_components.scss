@@ -24,6 +24,7 @@
 	background-color: var(--ul-grey-1a);
 	color: var(--ul-grey-8);
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.1rem;
 		color: var(--primary-color);
@@ -165,6 +166,7 @@
 	font-size: 0.9rem;
 
 	i,
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.1rem;
 		color: var(--primary-color);
@@ -296,6 +298,7 @@
 	&--danger {
 		color: $color-red-1300;
 
+		.material-symbols-outlined,
 		.material-icons {
 			color: $color-red-1300;
 		}
@@ -303,6 +306,7 @@
 		&:hover {
 			background: $danger-bg;
 
+			.material-symbols-outlined,
 			.material-icons {
 				color: $color-red-1500;
 			}
@@ -340,6 +344,7 @@
 	transition: color .13s, border-color .13s;
 	text-decoration: none;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.05rem;
 	}
@@ -362,6 +367,7 @@
 	@include empty-state;
 	padding: 2.5rem $space-md;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 3rem;
 		opacity: .35;
@@ -384,6 +390,7 @@
 	font-size: .875rem;
 	border: 1px solid transparent;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.1rem;
 		flex-shrink: 0;
@@ -430,6 +437,7 @@
 	color: var(--ul-grey-8);
 	line-height: 1.4;
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: .95rem;
 	}
@@ -516,6 +524,8 @@
     input[type="radio"] {
         display: none;
     }
+	
+	.material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
         color: var(--ul-grey-6);
@@ -529,6 +539,7 @@
 		border-color: #{$color-indigo-500};
 		opacity: 1;
 
+        .material-symbols-outlined,
         .material-icons {
 			color: #{$color-indigo-500};
         }
@@ -684,6 +695,7 @@
 		&--danger {
 			color: $color-red-100;
 
+			.material-symbols-outlined,
 			.material-icons {
 				color: $color-red-100;
 			}

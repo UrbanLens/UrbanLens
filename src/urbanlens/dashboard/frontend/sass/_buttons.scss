@@ -27,6 +27,7 @@
 		color: var(--ul-grey-9a);
 	}
 
+	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.05em;
 		flex-shrink: 0;
@@ -81,6 +82,7 @@
 		&:hover {
 			background: color.scale($danger-bg, $lightness: -4%);
 
+			i.material-symbols-outlined,
 			i.material-icons {
 				color: $color-red-1300;
 			}		
@@ -115,6 +117,7 @@
 		height: 2.2rem;
 		flex-shrink: 0;
 
+		.material-symbols-outlined,
 		.material-icons {
 			font-size: 1.1rem;
 		}

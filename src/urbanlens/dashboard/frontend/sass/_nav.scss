@@ -64,6 +64,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
         background: rgba(255, 255, 255, 0.12);
     }
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.4rem;
     }
@@ -600,6 +601,7 @@ nav .brand-logo img {
         margin-top: .05rem;
         transition: background .15s ease, color .15s ease;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1.05rem;
             color: var(--ul-grey-6);
@@ -660,6 +662,7 @@ nav .brand-logo img {
         .notif-item__icon-wrap {
             background: var(--ul-accent-purple-bg);
 
+            .material-symbols-outlined,
             .material-icons {
                 color: var(--primary-color);
             }
@@ -685,6 +688,7 @@ nav .brand-logo img {
     &--unread &__icon-wrap--friend_accepted {
         background: $color-green-100;
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-green-600;
         }
@@ -694,6 +698,7 @@ nav .brand-logo img {
     &--unread &__icon-wrap--trip_updated {
         background: $color-blue-100;
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-blue-600;
         }
@@ -703,6 +708,7 @@ nav .brand-logo img {
     &--unread &__icon-wrap--comment_liked {
         background: $color-pink-100;
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-pink-600;
         }
@@ -711,6 +717,7 @@ nav .brand-logo img {
     &--unread &__icon-wrap--error {
         background: var(--ul-grey-0a);
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-red-600;
         }
@@ -719,6 +726,7 @@ nav .brand-logo img {
     &--unread &__icon-wrap--warning {
         background: var(--ul-accent-amber-bg);
 
+        .material-symbols-outlined,
         .material-icons {
             color: var(--ul-accent-amber);
         }
@@ -773,6 +781,7 @@ nav .brand-logo img {
     cursor: pointer;
     transition: background .15s, color .15s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }

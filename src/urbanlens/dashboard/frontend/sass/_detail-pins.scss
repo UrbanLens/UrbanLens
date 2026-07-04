@@ -128,13 +128,17 @@
     font-size: .82rem;
     color: var(--ul-grey-6);
 
+    .material-symbols-outlined,
     .material-icons {
         color: $color-blue-600;
     }
 
     // Set once a location has been placed - confirms the click/drag registered.
-    &.is-placed .material-icons {
-        color: $color-green-600;
+    &.is-placed {
+        .material-symbols-outlined,
+        .material-icons {
+            color: $color-green-600;
+        }
     }
 }
 
@@ -184,6 +188,7 @@
     cursor: pointer;
     transition: border-color .12s, background .12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 18px;
         color: var(--ul-grey-7);
@@ -198,6 +203,7 @@
         background: $color-blue-100;
         border-color: $color-blue-600;
 
+        .material-symbols-outlined,
         .material-icons {
             color: $color-blue-600;
         }
@@ -330,6 +336,7 @@
         outline: none;
         transition: background .12s, color .12s;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: 12px;
             line-height: 1;
@@ -383,7 +390,8 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background .15s;
-
+        
+        .material-symbols-outlined,
         .material-icons {
             font-size: 18px;
         }

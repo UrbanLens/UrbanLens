@@ -85,6 +85,7 @@
     flex-shrink: 0;
     transition: border-color 0.12s, color 0.12s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 0.95rem !important;
     }
@@ -215,6 +216,7 @@
     transition: background .12s, border-color .12s, color .12s;
     flex-shrink: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem !important;
     }

@@ -26,6 +26,7 @@
         font-weight: 700;
         white-space: nowrap;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: .95rem;
         }
@@ -121,6 +122,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         border: 1px dashed var(--ul-grey-1a);
         border-radius: 10px;
 
+        .material-symbols-outlined,
         .material-icons {
             font-size: 1.4rem;
             opacity: .55;
@@ -372,6 +374,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-8);
     margin: 0 0 .25rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
         color: $color-blue-500;
@@ -394,6 +397,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     font-weight: 500;
     margin-bottom: 1rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -473,6 +477,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-7);
     margin: 0 0 .75rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.15rem;
         color: $color-blue-500;
@@ -660,6 +665,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     text-transform: uppercase;
     letter-spacing: .03em;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem !important;
     }
@@ -702,6 +708,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     text-decoration: none;
     transition: color .15s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1rem;
     }
@@ -742,6 +749,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     background: rgba($color-blue-500, .12);
     flex-shrink: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.9rem;
         color: $color-blue-500;
@@ -774,6 +782,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     padding: .2rem .55rem;
     border-radius: 999px;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -808,6 +817,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     border-radius: 999px;
     padding: .3rem .75rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
@@ -833,6 +843,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     border-radius: 10px;
     padding: .9rem 1.1rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.6rem;
         flex-shrink: 0;
@@ -881,6 +892,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-6);
     margin: 0 0 .9rem;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.1rem;
     }
@@ -929,6 +941,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     border-radius: 11px;
     flex-shrink: 0;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: 1.45rem;
     }
@@ -1005,6 +1018,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     color: var(--ul-grey-5);
     transition: color .2s;
 
+    .material-symbols-outlined,
     .material-icons {
         font-size: .85rem;
         transition: transform .6s;
@@ -1013,6 +1027,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     &--active {
         color: $color-blue-500;
 
+        .material-symbols-outlined,
         .material-icons {
             transform: rotate(360deg);
         }
