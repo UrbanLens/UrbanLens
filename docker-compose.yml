@@ -224,3 +224,9 @@ volumes:
 networks:
   app_network:
     driver: bridge
+    # Docker defaults new bridge networks to dual-stack, handing containers a ULA
+    # IPv6 address alongside IPv4. Gunicorn only binds 0.0.0.0:8000, so nginx's
+    # proxy_pass DNS lookup for urbanlens_app can resolve the unreachable AAAA
+    # record and log "upstream server temporarily disabled" before falling back
+    # to IPv4. Disable IPv6 here so only the working A record is ever returned.
+    enable_ipv6: false
