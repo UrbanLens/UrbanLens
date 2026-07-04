@@ -96,7 +96,10 @@ class MediaProvider(Gateway, ABC):
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        cached = LocationCache.get_fresh(location, self.service_key)
+        if (service_key := self.service_key) is None:
+            raise RuntimeError(f"{type(self).__name__} has no service_key configured")
+
+        cached = LocationCache.get_fresh(location, service_key)
         if cached is not None:
             return [MediaItem(**item) for item in (cached.data or {}).get("items", [])], True
 
@@ -119,7 +122,7 @@ class MediaProvider(Gateway, ABC):
 
         LocationCache.set(
             location,
-            self.service_key,
+            service_key,
             {"items": [asdict(item) for item in items]},
             query_key=" | ".join(term for term in search_terms if term),
         )

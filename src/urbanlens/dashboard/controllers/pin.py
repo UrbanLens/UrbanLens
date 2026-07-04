@@ -35,8 +35,11 @@ from urbanlens.dashboard.services.search import format_search_date, get_search_g
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rest_framework.request import Request
 
+    from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 
 logger = logging.getLogger(__name__)
@@ -238,7 +241,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
         from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
-        factories = {
+        factories: dict[str, Callable[[], MediaProvider]] = {
             "smithsonian": lambda: SmithsonianGateway(api_key=settings.smithsonian_api_key or ""),
             "wikimedia": WikimediaGateway,
             "loc": LOCJsonGateway,

@@ -39,6 +39,9 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         On first access the boundary is auto-generated from the BoundaryProviderChain
         and cached in generated_polygon.  Subsequent loads hit the DB only.
         """
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
@@ -85,6 +88,9 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         Sending a GeoJSON polygon stores it as the user-drawn custom boundary.
         """
         from urbanlens.dashboard.models.location.model import Location
+
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)

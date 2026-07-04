@@ -349,9 +349,14 @@ REST_FRAMEWORK = {
 }
 
 LOG_DIR = os.getenv("UL_LOG_DIR", "/var/log/urbanlens")
+_log_file_path = os.path.join(LOG_DIR, "django.log")
 _log_handlers = ["console"]
 try:
     os.makedirs(LOG_DIR, exist_ok=True)
+    # Actually probe that the log file can be opened - makedirs succeeding
+    # doesn't guarantee it (e.g. a broken symlink or a read-only mount).
+    with open(_log_file_path, "a"):
+        pass
 except OSError:
     pass
 else:
@@ -373,7 +378,7 @@ LOGGING = {
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": os.path.join(LOG_DIR, "django.log"),
+            "filename": _log_file_path,
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 5,
             "formatter": "verbose",

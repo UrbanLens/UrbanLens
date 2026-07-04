@@ -71,8 +71,8 @@ def _outer_rings_from_element(element: dict) -> list[list[tuple[float, float]]]:
 def _polygon_from_element(element: dict) -> Polygon | None:
     """Extract the best polygon from an Overpass way or multipolygon relation."""
     rings = _outer_rings_from_element(element)
-    polygons = [_polygon_from_ring(ring) for ring in rings]
-    polygons = [polygon for polygon in polygons if polygon is not None]
+    raw_polygons = [_polygon_from_ring(ring) for ring in rings]
+    polygons: list[Polygon] = [polygon for polygon in raw_polygons if polygon is not None]
     if not polygons:
         return None
     return max(polygons, key=lambda polygon: polygon.area)

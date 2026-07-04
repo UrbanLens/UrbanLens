@@ -7,10 +7,7 @@ it was served from cache -- surfaced client-side via the Dev Tools toolbar.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
+from typing import Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +29,20 @@ class DebugEntry:
     count: int | None = None
 
 
-def can_view_debug_overlay(user: AbstractBaseUser | AnonymousUser) -> bool:
+class _PermissionCheckableUser(Protocol):
+    """Structural type for a user object that supports permission checks.
+
+    Matches both the concrete ``User`` model (via ``PermissionsMixin``) and
+    ``AnonymousUser`` without depending on either directly -- plain
+    ``AbstractBaseUser`` alone doesn't define ``has_perm``.
+    """
+
+    is_authenticated: bool
+
+    def has_perm(self, perm: str) -> bool: ...
+
+
+def can_view_debug_overlay(user: _PermissionCheckableUser) -> bool:
     """Whether ``user`` may see external-API query/cache-status debug info.
 
     Args:

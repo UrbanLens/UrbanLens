@@ -33,6 +33,11 @@ def _normalize_service_key(class_name: str) -> str:
 class ServiceMeta(ABCMeta):
     """Ensure Service subclasses always have a service_key."""
 
+    # Declared here (not in `Service`) so mypy treats every class this metaclass
+    # produces as carrying `service_key` -- the attribute is set below, on the
+    # class object itself, which `Service`'s own annotation doesn't cover.
+    service_key: str | None
+
     def __new__(
         mcls,
         name: str,
