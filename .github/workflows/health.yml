@@ -36,12 +36,12 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
 
-            #            - name: Install Dependencies
-            #              run: |
-            #                  python -m pip install --upgrade pip
-            #                  pip install -r $GITHUB_WORKSPACE/requirements/prod.txt
-            #                  python --version
-            #                  pip --version
+            - name: Install Dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install -r $GITHUB_WORKSPACE/requirements/dev.txt
+                  python --version
+                  pip --version
 
             - name: Linting with Ruff
               run: |

@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.2.0"
+version = "0.2.1"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -72,7 +72,7 @@ packages = ["src/urbanlens"]
 [tool.pydoctor]
 add-package = ["./src"]
 project-name = "Urban Lens"
-project-version = "0.2.0"
+project-version = "0.2.1"
 project-url = "https://github.com/UrbanLens/UrbanLens"
 html-output = "../docs/API"
 project-base-dir = "./UrbanLens"
@@ -719,7 +719,7 @@ line-ending = "auto"
 select = ["ALL"]
 
 # Turn on preview rules (newer checks; can be a bit more volatile)
-preview = true
+#preview = true
 
 ignore = [
     # Keep these off
@@ -745,13 +745,11 @@ ignore = [
     "PLR0913", # too-many-arguments
     "PLR0914", # too-many-locals
     "PLR0915", # too-many-statements
-    "PLW0717", # too-many-statements-in-try-clause
     "PLR1702", # too many nested blocks
     "D2",      # One-line docstring..., 1 blank line, etc
     "D400",    # first line should...
     "D401",    # first line should...
     "D415",    # first line should...
-    "D420",    # Incorrect doc section order
     "D421",    # Docstring should not begin with verb
     "CPY001",  # Missing copyright notice at top of file
     "DOC502",  # This discourages reporting raises from ancestors

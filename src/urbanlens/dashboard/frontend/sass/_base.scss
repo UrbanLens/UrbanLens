@@ -87,6 +87,16 @@ h1, h2, h3, h4, h5, h6 {
 body div.container {
     @include input-selectors {
         padding: 0.5em;
+        border-radius: $radius-sm;
+        border-color: var(--ul-grey-1);
+        background-color: var(--ul-grey-0);
+        color: var(--ul-grey-7);
+
+        &:active, &:hover, &:focus {
+            border-color: var(--ul-grey-2);
+            background-color: var(--ul-grey-0b);
+            color: var(--ul-grey-8);
+        }
     }
 }
 

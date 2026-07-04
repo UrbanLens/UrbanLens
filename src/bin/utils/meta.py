@@ -1,58 +1,48 @@
 from __future__ import annotations
 
-from enum import Enum
-from typing import TypedDict
+from typing import Literal, Required, TypedDict
 
 
-class LoggerLevels(Enum):
-    DEBUG = "debug"
-    INFO = "info"
-    ERROR = "error"
-    WARNING = "warning"
-    WARN = WARNING
-
-
-class YesNo(Enum):
-    YES = "yes"
-    Y = YES
-    NO = "no"
-    N = NO
-
-
-class Logger(TypedDict):
+class Logger(TypedDict, total=False):
     """
     Expected format for a "logger" in the settings file.
     """
 
-    level: LoggerLevels
+    level: int | str
     handlers: list[str]
-    propogate: YesNo
+    propagate: bool
 
 
-class LogFormatter(TypedDict):
+class LogFormatter(TypedDict, total=False):
     format: str
 
 
-class LogHandler(TypedDict):
-    level: LoggerLevels
-    formatter: str
-    stream: str
-    # class: str
+LogHandler = TypedDict(
+    "LogHandler",
+    {
+        "class": str,
+        "level": int | str,
+        "formatter": str,
+        "stream": str,
+    },
+    total=False,
+)
 
 
-class LogRoot(TypedDict):
-    level: LoggerLevels
-    handlers: list[LogHandler]
+class LogRoot(TypedDict, total=False):
+    level: int | str
+    handlers: list[str]
 
 
-class SettingsLog(TypedDict):
+class SettingsLog(TypedDict, total=False):
     """
     Expected format for the logging portion of the settings file.
 
-    This is useful to provide type hints in our editor.
+    This mirrors the schema accepted by ``logging.config.dictConfig``, so a valid
+    ``SettingsLog`` can be passed straight through to it.
     """
 
-    version: int
+    version: Required[Literal[1]]
     formatters: dict[str, LogFormatter]
     handlers: dict[str, LogHandler]
     loggers: dict[str, Logger]

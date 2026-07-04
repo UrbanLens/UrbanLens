@@ -1,6 +1,0 @@
-from urbanlens.dashboard.models.abstract import Manager, QuerySet
-
-class PinQuerySet(QuerySet): ...
-
-class PinManager(Manager, PinQuerySet):
-    def all(self) -> PinQuerySet: ...

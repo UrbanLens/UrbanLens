@@ -1,6 +1,0 @@
-from urbanlens.dashboard.models.abstract import Manager as AbstractManager, QuerySet as AbstractQuerySet
-
-class QuerySet(AbstractQuerySet): ...
-
-class Manager(AbstractManager, QuerySet):
-    def all(self) -> QuerySet: ...

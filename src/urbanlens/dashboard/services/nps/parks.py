@@ -30,6 +30,9 @@ class NPSGateway(Gateway):
         if not park_code:
             raise ValueError("Park code must be provided to retrieve images.")
 
+        if self.api_key is None:
+            # This is guaranteed non-None by __post_init__, but mypy doesn't know that.
+            raise ValueError("NPS API key must be provided.")
         headers = {"X-Api-Key": self.api_key}
         endpoint = f"{self.base_url}/parks"
         params = {"parkCode": park_code}

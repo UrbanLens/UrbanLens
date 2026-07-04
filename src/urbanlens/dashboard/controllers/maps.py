@@ -6,7 +6,6 @@ from typing import Any
 import urllib.parse
 import urllib.request
 
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
 from django.db.models import Prefetch
@@ -20,7 +19,11 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, Badge
+from urbanlens.dashboard.models.badges.model import (
+    COLOR_CHOICES,
+    ICON_CATEGORIES,
+    Badge,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
@@ -103,7 +106,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         import json as _json
 
         from urbanlens.dashboard.models.profile.model import MapCenterMode
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.models.subscriptions import (
+            SiteFeature,
+            user_has_feature,
+        )
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         from urbanlens.dashboard.models.badges.model import KIND_USER
@@ -231,8 +237,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # extra Places Details API call.
             if google_place_id and not is_private:
                 try:
-                    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
-                    from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+                    from urbanlens.dashboard.services.apis.locations.google.place_info import (
+                        GooglePlaceService,
+                    )
+                    from urbanlens.dashboard.services.locations.naming import (
+                        update_location_name_from_external_sources,
+                    )
 
                     gp_service = GooglePlaceService()
                     gp_service.ensure_linked_by_place_id(pin, google_place_id)
@@ -247,11 +257,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # the APIs on first load.
             if location and not is_private:
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import prefetch_location_external_data, refresh_pin_web_search
+                from urbanlens.dashboard.tasks import (
+                    prefetch_location_external_data,
+                    refresh_pin_web_search,
+                )
 
                 safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
 
-            from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+            from urbanlens.dashboard.models.subscriptions import (
+                SiteFeature,
+                user_has_feature,
+            )
 
             if location and not is_private and user_has_feature(request.user, SiteFeature.SEARCH):
                 safely_enqueue_task(refresh_pin_web_search, pin.pk)
@@ -308,7 +324,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Returns an empty list with ``disabled: true`` when no API key is
         configured so the client can suppress the source gracefully.
         """
-        from urbanlens.dashboard.services.map_pins.autocomplete import search_google_places
+        from urbanlens.dashboard.services.map_pins.autocomplete import (
+            search_google_places,
+        )
 
         q = (request.GET.get("q") or "").strip()
         if len(q) < 2:
@@ -340,7 +358,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         are intentionally omitted from the autocomplete response to avoid a
         Places Details API call for every suggestion shown.
         """
-        from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place
+        from urbanlens.dashboard.services.map_pins.autocomplete import (
+            resolve_google_place,
+        )
 
         place_id = (request.GET.get("place_id") or "").strip()
         if not place_id:
@@ -378,7 +398,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
         url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
         try:
-            with urllib.request.urlopen(url, timeout=4) as resp:  # nosec B310
+            with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310 # nosec B310
                 import json as _json
 
                 data = _json.loads(resp.read())
@@ -643,7 +663,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         from django.core.cache import cache as django_cache
 
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.models.subscriptions import (
+            SiteFeature,
+            user_has_feature,
+        )
 
         if not user_has_feature(request.user, SiteFeature.PLACES):
             return JsonResponse({"error": "forbidden"}, status=403)
@@ -693,7 +716,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 logger.info("Google Places skipped: no API key configured.")
             else:
                 try:
-                    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+                    from urbanlens.dashboard.services.apis.locations.google.places import (
+                        GooglePlacesGateway,
+                    )
 
                     gw = GooglePlacesGateway(api_key=api_key)
                     raw_results = gw.search_nearby(lat, lng, radius=radius, included_types=["historical_landmark"])
@@ -783,7 +808,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # -- Wikipedia --------------------------------------------------------
         if use_wiki:
             try:
-                from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+                from urbanlens.dashboard.services.apis.assets.wikipedia import (
+                    WikipediaGateway,
+                )
 
                 wiki_gw = WikipediaGateway()
                 wiki_places = wiki_gw.get_nearby_articles(lat, lng, radius_m=5000, limit=15)
@@ -806,7 +833,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Returns:
             JsonResponse: ``{"place": {...}}``
         """
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.models.subscriptions import (
+            SiteFeature,
+            user_has_feature,
+        )
 
         if not user_has_feature(request.user, SiteFeature.PLACES):
             return JsonResponse({"error": "forbidden"}, status=403)
@@ -827,7 +857,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"place": cached, "cached": True})
 
         try:
-            from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+            from urbanlens.dashboard.services.apis.locations.google.places import (
+                GooglePlacesGateway,
+            )
 
             gateway = GooglePlacesGateway(api_key=api_key)
             detail = gateway.get_place_details(
@@ -931,7 +963,9 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     Returns:
         The newly created Location instance.
     """
-    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+    from urbanlens.dashboard.services.apis.locations.google.place_info import (
+        GooglePlaceService,
+    )
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
     # When the caller already knows the canonical name we skip the geocoding

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
 try:
-    from tqdm import tqdm  # type: ignore[import-untyped]
+    from tqdm import tqdm
 
     _HAS_TQDM = True
 except ImportError:  # pragma: no cover - optional dependency
@@ -199,12 +199,14 @@ def _read_source(path: str) -> str:
     last_exc: Exception | None = None
     for encoding in _FALLBACK_ENCODINGS:
         try:
-            with open(path, encoding=encoding) as fh:  # noqa: FURB101 - TODO temporarily ignore
+            with open(path, encoding=encoding) as fh:
                 return fh.read()
         except (UnicodeDecodeError, UnicodeError) as exc:
             last_exc = exc
             continue
-    raise last_exc  # type: ignore[misc]
+    if last_exc is None:
+        raise ValueError(f"All encodings failed for {path}")
+    raise last_exc
 
 
 def _parse_file(path: str) -> FileAnalysis:
@@ -365,7 +367,7 @@ class AnalysisResult:
     errors: list[str]
 
 
-def analyze(  # noqa: PLR0917
+def analyze(
     root: str,
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,
@@ -583,7 +585,7 @@ def _build_findings(
     return findings
 
 
-def find_unused_functions(  # noqa: PLR0917
+def find_unused_functions(
     root: str,
     exclude_dirs: set[str] | None = None,
     exclude_files: set[str] | None = None,
@@ -756,7 +758,7 @@ def write_text_report(results: dict[str, list[Finding]], output_path: str) -> No
 
         for key, label in _REPORT_SECTIONS:
             findings = sorted(results.get(key, []), key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno))
-            counts_by_level = defaultdict(int)
+            counts_by_level: defaultdict[str, int] = defaultdict(int)
             for fi in findings:
                 counts_by_level[fi.confidence] += 1
             breakdown = ", ".join(f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl])

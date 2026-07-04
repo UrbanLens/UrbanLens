@@ -15,7 +15,7 @@ load_dotenv(find_dotenv())
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb"
+SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb"  # nosec B105 - dev-only settings module, never used in production
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -152,8 +152,8 @@ USE_X_FORWARDED_HOST = True
 
 CORS_ALLOWED_ORIGINS = [
     f'{protocol}{subdomain}{domain}'
-    for protocol in protocols 
-    for subdomain in subdomains 
+    for protocol in protocols
+    for subdomain in subdomains
     for domain in domains
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()

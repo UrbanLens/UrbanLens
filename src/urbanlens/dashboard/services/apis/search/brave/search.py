@@ -52,6 +52,9 @@ class BraveSearchGateway(Gateway):
             BraveSearchError: When the API key is missing or the request fails.
         """
         self._validate()
+        if self.api_key is None:
+            # This is guaranteed non-None by _validate(), but mypy doesn't know that.
+            raise BraveSearchError("UL_BRAVE_SEARCH_API_KEY is not configured.")
         params: dict[str, str | int] = {
             "q": query,
             "count": max(1, min(max_results, 20)),
