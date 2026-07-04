@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.2.1"
+version = "0.2.1b0"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -71,7 +71,6 @@ packages = ["src/urbanlens"]
 [tool.pydoctor]
 add-package = ["./src"]
 project-name = "Urban Lens"
-project-version = "0.2.1"
 project-url = "https://github.com/UrbanLens/UrbanLens"
 html-output = "../docs/API"
 project-base-dir = "./UrbanLens"

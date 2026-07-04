@@ -65,10 +65,10 @@
         padding: 3.5rem 0;
 
         &--muted {
-            background: var(--ul-surface-1, #{$color-indigo-50});
+            background: #{$color-indigo-50};
 
             .attr-section-title {
-                color: var(--ul-grey-9);
+                color: #{$color-grey-9};
             }
         }
     }
@@ -120,7 +120,7 @@
     }
 
     .attr-card {
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         border-radius: .85rem;
         padding: 1.35rem 1.25rem 1.25rem;
@@ -185,7 +185,7 @@
         gap: 1rem;
         padding: 1rem 1.1rem;
         border-radius: .75rem;
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
 
         h3 {
@@ -242,7 +242,7 @@
         font-size: .82rem;
         font-weight: 600;
         color: $color-indigo-700;
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0);
         border: 1px solid rgba($color-indigo-500, .18);
         text-decoration: none;
         transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -279,7 +279,7 @@
         height: 100%;
         padding: 1.1rem .85rem;
         border-radius: .85rem;
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         text-decoration: none;
         text-align: center;
@@ -319,7 +319,7 @@
         margin: 0;
         padding: 1rem 1.1rem;
         border-radius: .75rem;
-        background: var(--ul-surface-0, #fff);
+        background: var(--ul-grey-0);
         border: 1px dashed rgba($color-indigo-500, .22);
         color: var(--ul-text-secondary, #{$color-indigo-700});
         line-height: 1.6;

@@ -437,16 +437,11 @@ $z-nav: 1100;
     --ul-black-a: #{$color-grey-10a};
     --ul-black-b: #{$color-grey-10b};
 
-    // Semantic surface and control tokens keep nested UI from sharing one flat color.
-    --ul-surface-bg: var(--ul-grey-0);
-    --ul-surface-bg-elevated: var(--ul-grey-0a);
-    --ul-surface-bg-subtle: var(--ul-grey-1);
-    --ul-surface-header-bg: var(--ul-grey-1);
     --ul-control-bg: var(--ul-grey-0a);
     --ul-control-bg-hover: var(--ul-grey-0);
     --ul-control-border: var(--ul-grey-1b);
 
-    // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-surface...b instead.
+    // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-grey...b instead.
     --ul-border: var(--ul-grey-0b);
     --ul-border-strong: var(--ul-grey-1b);
 

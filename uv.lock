@@ -3933,7 +3933,7 @@ wheels = [
 
 [[package]]
 name = "urbanlens"
-version = "0.2.1"
+version = "0.2.1b0"
 source = { editable = "." }
 dependencies = [
     { name = "celery" },
