@@ -216,6 +216,8 @@ Features planned for future releases.
 * Visit log can include "with another user", which logs it / visually shows it, and notifies the other user to optionally accept the visit log as well.
 * "max members per trip" is not really the problem... "max pin shares per time period" is. We need to track and cap that instead, including through trips.
 * After invite -> Edit profile doesn't visually look very good.
+* Bookmark to add a pin to the menu for quick access (maybe?)
+* 2FA
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
