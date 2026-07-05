@@ -40,8 +40,6 @@ Features planned for this release.
 * Pin details page: Plus buttons don't look good again. [UL-275]
 * On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
-* Organize Page > Display Order Tab: Multi selections don't work as expected. No multi-select toolbar comes up, the edit button only edits one thing, and they don't drag together.
-* Organize Page: "Clear" button should only appear when appropriate.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
@@ -81,7 +79,7 @@ Features planned for this release.
 * Password Requirements should be reasonably strong. [UL-130]
 * User settings don't seem to properly save. [UL-34]
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
-* UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]
+* ~~UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]~~
 * Verify: Child trips work as expected. [UL-228]
 * Password reset should go to application page, not django password reset page. [UL-256]
 * Password reset should work elegantly with SSO users. [UL-257]
@@ -238,7 +236,6 @@ Features planned for future releases.
 * Pin Details Page: Google Image Search
 * Pin Details Page: Instagram location-tagged posts (subscription required? to discourage location-tagging).
 * When importing kmz, the suggested badge is "doc". It should be the filename.
-* Organize Page: Hide select box element. Rows can just be selectable. Simplifies ui.
 * Trip List > New Trip Dialog: Suggested title is "Detroit factory run". Generate a large number of other suggestions, so this doesn't get stale, and encourages trip planning. Also, trip name shouldn't be required.
 
 ## Really Big Ideas / Features

@@ -57,6 +57,26 @@
                 <input type="date" name="end_date" id="trip-end">
             </div>
         </div>
+        {% if friends %}
+        <div class="form-row">
+            <label>Invite friends</label>
+            <ul class="trip-invite-friend-list">
+                {% for friend in friends %}
+                <li class="trip-invite-friend-item">
+                    <label class="trip-invite-friend-label">
+                        <input type="checkbox" name="invite_profile_ids" value="{{ friend.id }}">
+                        {% if friend.avatar %}
+                        <img class="trip-invite-friend-avatar" src="{{ friend.avatar.url }}" alt="">
+                        {% else %}
+                        <span class="trip-invite-friend-avatar trip-invite-friend-avatar--placeholder">{{ friend.username|first|upper }}</span>
+                        {% endif %}
+                        <span class="trip-invite-friend-name">{{ friend.full_name|default:friend.username }}</span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Create Trip</button>
             <button type="button" class="btn btn--ghost"

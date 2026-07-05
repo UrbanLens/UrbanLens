@@ -286,6 +286,14 @@
     box-shadow: 0 0 0 2px rgba(33,150,243,.15);
 }
 .iw-badge-pill i { font-size: .85rem; }
+.iw-badge-pill-new {
+    background: none;
+    border-style: dashed;
+    border-color: #c8d0d8;
+    color: #5f6368;
+    cursor: default;
+}
+.iw-badge-pill-new i { color: #4caf50; font-size: 1rem; }
 .iw-badge-add {
     display: inline-flex;
     align-items: center;
@@ -772,16 +780,28 @@ function renderPreview(data) {
             'Create category <em>"' + escHtml(lst.stem) + '"</em>' +
             '</label>';
         meta.appendChild(catRow);
+        var catCheckbox = catRow.querySelector('input[type=checkbox]');
 
-        /* Badge picker row */
+        /* Badge picker row (always present so the new-category preview chip has somewhere to live) */
+        var badgeRow = document.createElement('div');
+        badgeRow.className = 'iw-meta-row';
+        var badgeInner = document.createElement('div');
+        badgeInner.className = 'iw-badge-row';
+        badgeInner.id = 'iw-badges-' + listIdx;
+        badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
+
+        /* Sample chip previewing the category badge that will be created on import */
+        var catPreview = document.createElement('span');
+        catPreview.className = 'iw-badge-pill iw-badge-pill-new';
+        catPreview.title = 'This category will be created when you import';
+        catPreview.innerHTML = '<i class="material-icons">fiber_new</i><span>' + escHtml(lst.stem) + '</span>';
+        catPreview.hidden = !catCheckbox.checked;
+        badgeInner.appendChild(catPreview);
+        catCheckbox.addEventListener('change', function () {
+            catPreview.hidden = !catCheckbox.checked;
+        });
+
         if (badges.length > 0) {
-            var badgeRow = document.createElement('div');
-            badgeRow.className = 'iw-meta-row';
-            var badgeInner = document.createElement('div');
-            badgeInner.className = 'iw-badge-row';
-            badgeInner.id = 'iw-badges-' + listIdx;
-            badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
-
             var addBtn = document.createElement('button');
             addBtn.className = 'iw-badge-add';
             addBtn.type = 'button';
@@ -789,17 +809,15 @@ function renderPreview(data) {
             addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add badge';
             badgeInner.appendChild(addBtn);
 
-            badgeRow.appendChild(badgeInner);
-            meta.appendChild(badgeRow);
-            lst._selectedBadgeIds = [];
-
             addBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 openBadgeDropdown(listIdx, badges, addBtn);
             });
-        } else {
-            lst._selectedBadgeIds = [];
         }
+
+        badgeRow.appendChild(badgeInner);
+        meta.appendChild(badgeRow);
+        lst._selectedBadgeIds = [];
 
         group.appendChild(meta);
 

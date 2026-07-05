@@ -420,12 +420,15 @@ class TripListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
+        from urbanlens.dashboard.services.connections import get_connections
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         trips = _trips_for_list(profile)
+        friends = get_connections(profile)
         return render(
             request,
             "dashboard/pages/trips/index.html",
-            {"trips": trips, "profile": profile, "page_name": "trips"},
+            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends},
         )
 
 
@@ -436,12 +439,16 @@ class TripCreateView(LoginRequiredMixin, View):
     """
 
     def post(self, request):
+        from urbanlens.dashboard.services.connections import get_connections
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
             body = json.loads(request.body) if request.body else {}
+            invite_ids = body.get("invite_profile_ids") or []
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
+            invite_ids = request.POST.getlist("invite_profile_ids")
 
         name = (body.get("name") or "").strip()
         if not name:
@@ -455,6 +462,16 @@ class TripCreateView(LoginRequiredMixin, View):
             creator=profile,
         )
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
+
+        # Only invite accepted friends - never trust arbitrary submitted profile IDs.
+        if invite_ids:
+            friend_ids = {str(f.id) for f in get_connections(profile)}
+            selected_ids = {pid for pid in invite_ids if str(pid) in friend_ids}
+            if selected_ids:
+                max_members = SiteSettings.get_current().max_trip_members
+                remaining = max_members - trip.profiles.count()
+                for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
+                    TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
 
         trips = _trips_for_list(profile)
         return render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
