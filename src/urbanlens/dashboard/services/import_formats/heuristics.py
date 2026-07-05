@@ -23,6 +23,11 @@ DEFAULT_NAME_KEYS: tuple[str, ...] = ("name", "place", "title", "label", "site_n
 #: a description. Checked before falling back to serialising the remaining properties.
 DEFAULT_DESC_KEYS: tuple[str, ...] = ("description", "desc", "comment", "notes", "note", "address")
 
+#: Keys checked (case-insensitively, in order) when guessing which attribute holds
+#: a latitude/longitude value in a generic (non-Google-Takeout) CSV row.
+DEFAULT_LATITUDE_KEYS: tuple[str, ...] = ("latitude", "lat")
+DEFAULT_LONGITUDE_KEYS: tuple[str, ...] = ("longitude", "lng", "lon", "long")
+
 
 def pick_name_and_description(
     properties: dict[str, Any],
@@ -62,6 +67,36 @@ def pick_name_and_description(
         description = _serialize_remaining(lowered, exclude=used_keys)
 
     return name, description
+
+
+def pick_latlon(
+    row: dict[str, Any],
+    *,
+    lat_keys: tuple[str, ...] = DEFAULT_LATITUDE_KEYS,
+    lng_keys: tuple[str, ...] = DEFAULT_LONGITUDE_KEYS,
+) -> tuple[float, float] | None:
+    """Guess a (latitude, longitude) pair from an arbitrary attribute mapping.
+
+    Args:
+        row: Attribute bag to inspect, e.g. a CSV ``DictReader`` row.
+        lat_keys: Candidate keys tried, in order, for latitude. Matched case-insensitively.
+        lng_keys: Candidate keys tried, in order, for longitude. Matched case-insensitively.
+
+    Returns:
+        A ``(latitude, longitude)`` float tuple, or ``None`` when either value is
+        missing or cannot be parsed as a float.
+    """
+    lowered = {str(key).strip().lower(): value for key, value in row.items() if key is not None}
+
+    lat_key = _first_matching_key(lowered, lat_keys)
+    lng_key = _first_matching_key(lowered, lng_keys)
+    if not lat_key or not lng_key:
+        return None
+
+    try:
+        return float(lowered[lat_key]), float(lowered[lng_key])
+    except (TypeError, ValueError):
+        return None
 
 
 def _first_matching_key(lowered: dict[str, Any], candidates: tuple[str, ...]) -> str | None:

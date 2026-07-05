@@ -1,207 +1,268 @@
-.page-help_import_pins {
-  .container {
-    padding: 1rem;
-  }
+@use 'variables' as *;
 
-  img {
-    max-width: 100%;
-  }
+.page-help_import_pins {
+    .container {
+        padding: $space-md;
+    }
+
+    img {
+        max-width: 100%;
+    }
 }
 
+// -- Hero ------------------------------------------------------------------
+
 .help-import-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
-  gap: 2rem;
-  align-items: center;
-  padding: 2rem;
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(31, 111, 235, .16), rgba(23, 185, 120, .12));
-  border: 1px solid var(--ul-border-color, rgba(148, 163, 184, .24));
+    display: grid;
+    gap: $space-lg;
+    align-items: center;
+    padding: $space-lg;
+    border-radius: $radius-md;
+    background: linear-gradient(135deg, var(--ul-color-accent-bg), var(--ul-color-success-bg));
+    border: 1px solid var(--ul-border);
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
+        padding: $space-xl;
+    }
 }
 
 .help-import-eyebrow {
-  text-transform: uppercase;
-  letter-spacing: .14em;
-  font-weight: 800;
-  color: var(--ul-color-primary, #2563eb);
-  margin: 0 0 .75rem;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 800;
+    color: var(--primary-color);
+    margin: 0 0 $space-sm;
 }
 
 .help-import-hero h1 {
-  font-size: clamp(2.4rem, 5vw, 4.5rem);
-  line-height: .95;
-  margin: 0 0 1rem;
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    line-height: 1.05;
+    margin: 0 0 $space-md;
 }
 
 .help-import-lede {
-  max-width: 720px;
-  font-size: 1.08rem;
-  line-height: 1.7;
-  color: var(--ul-text-muted, #64748b);
+    max-width: 720px;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--ul-grey-6);
 }
 
-.help-import-actions,
-.help-import-service-grid {
-  display: flex;
-  gap: .75rem;
-  flex-wrap: wrap;
-  margin-top: 1.25rem;
+.help-import-actions {
+    display: flex;
+    gap: $space-sm;
+    flex-wrap: wrap;
+    margin-top: $space-md;
 }
 
 .help-import-map-card {
-  position: relative;
-  overflow: hidden;
-  min-height: 280px;
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
-  background: #0f172a;
+    position: relative;
+    overflow: hidden;
+    min-height: 200px;
+    border-radius: $radius-md;
+    box-shadow: var(--ul-shadow-md);
+    background: var(--ul-grey-9);
 }
 
 .help-import-map-card img {
-  width: 100%;
-  height: 100%;
-  min-height: 280px;
-  object-fit: cover;
-  opacity: .82;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    object-fit: cover;
+    opacity: .9;
 }
 
-.help-import-pin {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 999px;
-  background: #fff;
-  color: #dc2626;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, .26);
-}
-
-.help-import-pin--one { top: 22%; left: 22%; }
-.help-import-pin--two { top: 48%; right: 18%; color: #2563eb; }
-.help-import-pin--three { bottom: 16%; left: 42%; color: #16a34a; }
+// -- Quick start -----------------------------------------------------------
 
 .help-import-quickstart,
-.help-import-layout { margin-top: 1.5rem; }
-
-.help-import-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+.help-import-layout {
+    margin-top: $space-lg;
 }
 
-.help-import-steps div,
-.help-import-section {
-  position: relative;
+.help-import-steps {
+    display: grid;
+    gap: $space-md;
+    padding: $space-md $bar-padding-x;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @include up($breakpoint-md) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
 }
 
 .help-import-steps span {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  margin-bottom: .75rem;
-  border-radius: 999px;
-  background: var(--ul-color-primary, #2563eb);
-  color: #fff;
-  font-weight: 800;
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    margin-bottom: $space-sm;
+    border-radius: $radius-full;
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 800;
 }
 
-.help-import-steps strong { display: block; font-size: 1.1rem; }
-.help-import-steps p { color: var(--ul-text-muted, #64748b); line-height: 1.55; }
+.help-import-steps strong {
+    display: block;
+    margin-bottom: $space-xs;
+    font-size: 1.05rem;
+}
+
+.help-import-steps p {
+    margin: 0;
+    color: var(--ul-grey-6);
+    line-height: 1.55;
+}
+
+// -- Layout: table of contents + article content ----------------------------
 
 .help-import-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
+    display: grid;
+    gap: $space-lg;
+    align-items: start;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: 260px minmax(0, 1fr);
+    }
 }
 
 .help-import-toc {
-  position: sticky;
-  top: 1rem;
+    padding: $space-md;
+
+    @include up($breakpoint-sm) {
+        position: sticky;
+        top: $space-md;
+    }
 }
 
-.help-import-toc h2,
-.help-import-section h2 { margin-top: 0; }
-
-.help-import-toc nav {
-  display: grid;
-  gap: .45rem;
+.help-import-toc h2 {
+    margin-top: 0;
 }
 
-.help-import-toc a,
+// A plain <nav> would otherwise pick up Materialize's global top-navbar
+// styling (pink background, fixed 56px height/line-height) - that clips this
+// link list down to a single visible row. The class gives us enough
+// specificity to reset it without !important.
+.help-import-toc-nav {
+    display: grid;
+    gap: $space-xs;
+    width: auto;
+    height: auto;
+    background: none;
+    line-height: normal;
+    color: inherit;
+}
+
+.help-import-toc-nav a,
 .help-import-link,
 .help-import-service-grid a {
-  color: var(--ul-color-primary, #2563eb);
-  font-weight: 700;
-  text-decoration: none;
+    color: var(--primary-color);
+    font-weight: 700;
+    text-decoration: none;
 }
 
-.help-import-toc a {
-  padding: .45rem .6rem;
-  border-radius: 10px;
+.help-import-toc-nav a {
+    display: block;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
 }
 
-.help-import-toc a:hover { background: rgba(37, 99, 235, .08); }
+.help-import-toc-nav a:hover {
+    background: var(--ul-hover-bg-primary);
+}
 
 .help-import-content {
-  display: grid;
-  gap: 1rem;
+    display: grid;
+    gap: $space-md;
 }
 
+// -- Article sections --------------------------------------------------------
+
 .help-import-section {
-  scroll-margin-top: 1.5rem;
-  padding-left: 5.25rem;
+    display: grid;
+    gap: $space-md;
+    padding: $space-lg;
+    scroll-margin-top: $space-md;
 }
 
 .help-import-section p,
 .help-import-section li {
-  line-height: 1.65;
+    line-height: 1.65;
+}
+
+.help-import-section-header {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+}
+
+.help-import-section-header h2 {
+    margin: 0;
 }
 
 .help-import-section-icon {
-  position: absolute;
-  left: 1.5rem;
-  top: 1.5rem;
-  display: grid;
-  place-items: center;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 18px;
-  background: rgba(37, 99, 235, .1);
-  color: var(--ul-color-primary, #2563eb);
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: $radius-md;
+    background: var(--ul-color-accent-bg);
+    color: var(--primary-color);
+}
+
+// Image + instructions side-by-side on wider screens to save vertical space;
+// a section with no image (a single child here) just uses the full width.
+.help-import-section-body {
+    display: grid;
+    gap: $space-md;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+        align-items: start;
+    }
+}
+
+.help-import-section-body > :only-child {
+    grid-column: 1 / -1;
+}
+
+.help-import-section-body img {
+    width: 100%;
+    border-radius: $radius-md;
 }
 
 .help-import-callout {
-  margin-top: 1rem;
-  padding: .9rem 1rem;
-  border-left: 4px solid var(--ul-color-primary, #2563eb);
-  border-radius: 12px;
-  background: rgba(37, 99, 235, .08);
+    padding: $space-sm $space-md;
+    border-left: 4px solid var(--primary-color);
+    border-radius: $radius-sm;
+    background: var(--ul-color-accent-bg);
 }
 
-.help-import-format-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: .75rem;
+// Technical/implementation-detail callouts are visually distinct from the
+// user-facing tips above - monospace + neutral grey signals "you probably
+// don't need to read this unless something isn't importing as expected."
+.help-import-callout--tech {
+    border-left-color: var(--ul-grey-4);
+    background: var(--ul-grey-1a);
+    font-family: monospace;
+    font-size: .85rem;
+}
+
+.help-import-format-grid,
+.help-import-service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: $space-sm;
 }
 
 .help-import-format-grid span,
 .help-import-service-grid a {
-  padding: .75rem .9rem;
-  border-radius: 14px;
-  background: rgba(148, 163, 184, .12);
-}
-
-@media (max-width: 900px) {
-  .help-import-hero,
-  .help-import-layout,
-  .help-import-steps { grid-template-columns: 1fr; }
-  .help-import-toc { position: static; }
-}
-
-@media (max-width: 600px) {
-  .help-import-hero { padding: 1.25rem; }
-  .help-import-section { padding-left: 1rem; padding-top: 5.25rem; }
+    padding: $space-sm $space-md;
+    border-radius: $radius-md;
+    background: var(--ul-grey-1a);
 }

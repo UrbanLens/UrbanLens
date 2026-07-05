@@ -11,6 +11,8 @@ import tarfile
 from typing import NamedTuple
 import zipfile
 
+from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS
+
 logger = logging.getLogger(__name__)
 
 # Archive magic bytes
@@ -175,8 +177,16 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         except ValueError:
             pass
 
-    # CSV: must be parseable text with at least one expected Google Takeout header.
+    # CSV: either a Google Takeout export (recognised by its header keywords) or a
+    # generic spreadsheet export that has its own explicit latitude and longitude
+    # columns (e.g. from Airtable, Google Sheets, or Excel).
     if any(h in first_line.lower() for h in ("url", "title", "note")):
+        return "csv"
+
+    columns = {column.strip().strip('"').lower() for column in first_line.split(",")}
+    has_latitude_column = any(key in columns for key in DEFAULT_LATITUDE_KEYS)
+    has_longitude_column = any(key in columns for key in DEFAULT_LONGITUDE_KEYS)
+    if has_latitude_column and has_longitude_column:
         return "csv"
 
     logger.debug("File content did not match any supported import format: %s", name)

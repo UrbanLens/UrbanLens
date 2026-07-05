@@ -17,12 +17,7 @@
     .attr-hero {
         padding: 3.5rem 1.5rem 2.75rem;
         text-align: center;
-        background: linear-gradient(
-            145deg,
-            $color-indigo-900 0%,
-            $color-indigo-900 45%,
-            $color-indigo-800 100%
-        );
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
         color: var(--ul-grey-4);
     }
 
@@ -355,6 +350,29 @@
 
         a {
             font-weight: 600;
+        }
+    }
+}
+
+[data-theme="dark"] {
+    .page-thanks {
+        .attr-contributor-login,
+        .attr-contributor-count,
+        .attr-chip,
+        .attr-list-item,
+        .attr-card {
+            span,
+            h3 a,
+            a {
+                color: #{$color-indigo-300};
+            }
+            
+            h3 a,
+            a {
+                &:hover {
+                    color: #{$color-indigo-400};
+                }
+            }
         }
     }
 }

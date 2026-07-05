@@ -28,7 +28,12 @@ from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, Sat
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
-from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
+from urbanlens.dashboard.services.import_formats.heuristics import (
+    DEFAULT_LATITUDE_KEYS,
+    DEFAULT_LONGITUDE_KEYS,
+    pick_latlon,
+    pick_name_and_description,
+)
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -233,48 +238,78 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return (heading + 360) % 360
 
     def _csv_row_iter(self, file_contents: str, user_profile: Profile) -> Generator[dict[str, Any] | None, None, None]:
-        """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.
+        """Generator yielding one pin_data dict per CSV row. Yields None for rows that fail.
+
+        Supports two CSV shapes:
+
+        - Google Takeout exports, identified by a ``URL`` column: coordinates and
+          the Google CID are extracted from the Maps URL, with ``Title``/``Note``/
+          ``Comment`` columns used for the name and description.
+        - Generic spreadsheet exports (Airtable, Google Sheets, Excel, etc.) that
+          have their own latitude/longitude columns: see
+          ``import_formats.heuristics.pick_latlon`` and ``pick_name_and_description``
+          for the recognised column names.
 
         Args:
             file_contents: Raw CSV text.
             user_profile: The profile to associate with each pin.
 
         Yields:
-            dict with pin fields, or None when geocoding fails.
+            dict with pin fields, or None when a row cannot be resolved to coordinates.
         """
         gateway = GoogleGeocodingGateway()
         reader = csv.DictReader(file_contents.splitlines())
         for row in reader:
             url = row.get("URL", "")
-            if not url:
-                if any(v.strip() for v in row.values()):
-                    logger.warning("Skipping CSV row with no URL: %s", row)
+            if url:
+                try:
+                    latitude, longitude = gateway.extract_coordinates_from_url(url)
+                except ValueError as exc:
+                    logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
+                    yield None
+                    continue
+
+                if latitude is None or longitude is None:
+                    logger.warning("Could not resolve coordinates for URL: %s", url)
+                    yield None
+                    continue
+
+                cid_match = _CID_RE.search(url)
+                cid = int(cid_match.group(1), 16) if cid_match else None
+
+                yield {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "profile": user_profile,
+                    "name": row.get("Title", "")[:255],
+                    "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
+                    "cid": cid,
+                }
+                continue
+
+            coords = pick_latlon(row)
+            if coords is None:
+                if any(v.strip() for v in row.values() if v):
+                    logger.warning("Skipping CSV row with no URL or latitude/longitude columns: %s", row)
                     yield None
                 else:
                     logger.debug("Skipping blank CSV row")
                 continue
-            try:
-                latitude, longitude = gateway.extract_coordinates_from_url(url)
-            except ValueError as exc:
-                logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
-                yield None
-                continue
 
-            if latitude is None or longitude is None:
-                logger.warning("Could not resolve coordinates for URL: %s", url)
-                yield None
-                continue
-
-            cid_match = _CID_RE.search(url)
-            cid = int(cid_match.group(1), 16) if cid_match else None
-
+            latitude, longitude = coords
+            # Exclude the matched coordinate columns so they don't also get
+            # serialised into the description by the "no description column
+            # found" fallback in pick_name_and_description.
+            latlon_keys = {*DEFAULT_LATITUDE_KEYS, *DEFAULT_LONGITUDE_KEYS}
+            remaining = {k: v for k, v in row.items() if k is not None and k.strip().lower() not in latlon_keys}
+            name, description = pick_name_and_description(remaining)
             yield {
                 "latitude": latitude,
                 "longitude": longitude,
                 "profile": user_profile,
-                "name": row.get("Title", "")[:255],
-                "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
-                "cid": cid,
+                "name": name[:255],
+                "description": description,
+                "cid": None,
             }
 
     def import_pins_streaming(

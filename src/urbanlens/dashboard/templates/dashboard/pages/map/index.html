@@ -514,6 +514,18 @@
 </dialog>
 
 <div id="importPinsModal"></div>
+<script>
+    // Deep-link support: pages like the import help center link here with
+    // ?import=1 to open the import dialog immediately instead of just landing
+    // on the map. Runs on DOMContentLoaded so htmx has already wired up the
+    // button's hx-get before we synthesize the click.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (new URLSearchParams(window.location.search).get('import') === '1') {
+            var importButton = document.getElementById('import-pins-button');
+            if (importButton) importButton.click();
+        }
+    });
+</script>
 {% endblock %}
 
 {% block footer %}

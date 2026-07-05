@@ -186,6 +186,18 @@ class ValidateContentTypeTests(TestCase):
         data = b"note,other\nsome note,val"
         self.assertEqual(validate_content_type("export.csv", data), "csv")
 
+    def test_csv_with_latitude_longitude_header(self):
+        data = b"name,latitude,longitude\nMy Place,42.3601,-71.0589"
+        self.assertEqual(validate_content_type("export.csv", data), "csv")
+
+    def test_csv_with_lat_lng_header(self):
+        data = b"Name,Lat,Lng\nMy Place,42.3601,-71.0589"
+        self.assertEqual(validate_content_type("export.csv", data), "csv")
+
+    def test_csv_with_only_latitude_column_returns_none(self):
+        data = b"name,latitude\nMy Place,42.3601"
+        self.assertIsNone(validate_content_type("export.csv", data))
+
     def test_too_small_file_returns_none(self):
         self.assertIsNone(validate_content_type("tiny.json", b"{}"))
 
