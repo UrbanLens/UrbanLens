@@ -2,7 +2,13 @@
 
 .page-help_import_pins {
     .container {
+        max-width: 100%;
+        margin: 0;
+    }
+    .page-inner {
         padding: $space-md;
+        max-width: 98vw;
+        margin: 0 auto;
     }
 
     img {
@@ -17,9 +23,7 @@
     gap: $space-lg;
     align-items: center;
     padding: $space-lg;
-    border-radius: $radius-md;
     background: linear-gradient(135deg, var(--ul-color-accent-bg), var(--ul-color-success-bg));
-    border: 1px solid var(--ul-border);
 
     @include up($breakpoint-sm) {
         grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
@@ -155,6 +159,7 @@
     background: none;
     line-height: normal;
     color: inherit;
+    box-shadow: none;
 }
 
 .help-import-toc-nav a,
@@ -241,6 +246,10 @@
     border-left: 4px solid var(--primary-color);
     border-radius: $radius-sm;
     background: var(--ul-color-accent-bg);
+
+    + .help-import-callout {
+        margin-top: 0.5rem;
+    }
 }
 
 // Technical/implementation-detail callouts are visually distinct from the

@@ -1254,18 +1254,19 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.tag-card--selected {
+// Organize badge cards are selected by clicking the row itself; the checkbox
+// stays in the DOM (for select-all bookkeeping) but is never shown to the user.
+.organize-page .tag-card .ul-checkbox-wrap {
+    display: none;
+}
+
+.organize-page .tag-card-view {
+    cursor: pointer;
+}
+
+.tag-card--selected .tag-card-view {
     border-color: var(--primary-color) !important;
     background: rgba(59, 130, 246, .08) !important;
-
-    .ul-checkbox {
-        background: var(--primary-color);
-        border-color: var(--primary-color);
-
-        &::after {
-            opacity: 1;
-        }
-    }
 }
 
 // -- Selection action bar ------------------------------------------------------
@@ -1869,7 +1870,7 @@ dialog.tag-create-card.ul-dialog {
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     padding: .6rem .85rem;
-    cursor: default;
+    cursor: pointer;
     transition: box-shadow .15s ease, background .12s, border-color .15s ease;
 
     &:hover {
@@ -2940,31 +2941,6 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// -- Priority panel tools (header right side) ----------------------------------
-
-.priority-panel-tools {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    flex-shrink: 0;
-}
-
-.priority-sel-info {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    font-size: .78rem;
-    font-weight: 700;
-    color: var(--primary-color);
-    padding: 0 10px;
-    background: color-mix(in srgb, $primary-color 12%, transparent);
-    border-radius: 999px;
-    border: 1.5px solid color-mix(in srgb, $primary-color 28%, transparent);
-    white-space: nowrap;
-
-    &[hidden] { display: none; }
-}
-
 // -- Priority multi-drag selection ---------------------------------------------
 
 .priority-item--selected {
@@ -2974,38 +2950,6 @@ dialog.tag-create-card.ul-dialog {
     .priority-drag-handle {
         color: var(--primary-color);
     }
-}
-
-.priority-sel-cb-wrap {
-    display: none;
-    width: 22px;
-    height: 22px;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    cursor: pointer;
-
-    &:hover .priority-sel-check {
-        border-color: var(--primary-color);
-    }
-}
-
-.priority-list.priority-select-mode .priority-sel-cb-wrap {
-    display: flex;
-}
-
-.priority-sel-cb {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--primary-color);
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-#priority-sel-toggle.active {
-    background: color-mix(in srgb, $primary-color 10%, var(--ul-grey-0));
-    border-color: color-mix(in srgb, $primary-color 35%, transparent);
-    color: var(--primary-color);
 }
 
 // -- Filter-bar open animation -------------------------------------------------

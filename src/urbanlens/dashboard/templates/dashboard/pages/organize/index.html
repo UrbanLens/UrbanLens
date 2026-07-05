@@ -97,18 +97,6 @@
                     {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
                 </h2>
             </div>
-            <div class="priority-panel-tools">
-                <span id="priority-sel-info" class="priority-sel-info" hidden></span>
-                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-clear" hidden
-                        onclick="window._clearPrioritySelection&&_clearPrioritySelection()">
-                    <i class="material-symbols-outlined">close</i> Clear
-                </button>
-                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-toggle"
-                        title="Select multiple items then drag any one to move them all together"
-                        onclick="window._togglePrioritySelectMode&&_togglePrioritySelectMode()">
-                    <i class="material-symbols-outlined">checklist</i> Select
-                </button>
-            </div>
         </div>
 
         {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
@@ -119,13 +107,6 @@
                 <div class="priority-drag-handle" title="Drag to reorder">
                     <i class="material-symbols-outlined">drag_indicator</i>
                 </div>
-                <label class="priority-sel-cb-wrap" title="Select for multi-drag">
-                    <input type="checkbox" class="priority-sel-cb" data-id="{{ item.id }}">
-                </label>
-                <label class="ul-checkbox-wrap" title="Select">
-                    <input type="checkbox" class="priority-sel-cb" data-{{ select_data_name }}-id="{{ badge.id }}" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
-                    <span class="ul-checkbox"></span>
-                </label>
                 <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
                     {% if item.custom_icon %}
                         <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
@@ -1514,35 +1495,25 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Selection -------------------------------------------------------------
     document.getElementById('tag-rows').addEventListener('click', function(e) {
-        if (!e.shiftKey) return;
-        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
-        e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
-        var idx = allWraps.indexOf(wrap);
-        var cb = wrap.querySelector('.tag-select-cb'); if (!cb) return;
-        var newChecked = !cb.checked;
-        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
-        var lastWrap = _lastTagClickIdx >= 0 ? allWraps[_lastTagClickIdx] : null;
-        var visIdx = visWraps.indexOf(wrap);
-        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
-        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
-        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
-        visWraps.slice(lo, hi + 1).forEach(function(w) {
-            var c = w.querySelector('.tag-select-cb'); if (!c) return;
-            c.checked = newChecked;
-            if (newChecked) _tagSelected.add(c.dataset.tagId); else _tagSelected.delete(c.dataset.tagId);
-        });
-        _lastTagClickIdx = idx;
-        _syncTagCheckboxes(); _updateTagBar();
-    });
-    document.getElementById('tag-rows').addEventListener('change', function(e) {
-        var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
-        var id = cb.dataset.tagId;
-        if (cb.checked) _tagSelected.add(id); else _tagSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
-        var wrap = cb.closest('.ul-checkbox-wrap');
-        var idx = wrap ? allWraps.indexOf(wrap) : -1;
-        if (idx >= 0) _lastTagClickIdx = idx;
+        var card = e.target.closest('.tag-card[data-tag-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(document.getElementById('tag-rows'), '.tag-card[data-tag-id]');
+        var idx = cards.indexOf(card);
+        var id = card.dataset.tagId;
+        if (e.shiftKey && _lastTagClickIdx >= 0) {
+            var lastCard = cards[_lastTagClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_tagSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = cards[i].dataset.tagId;
+                if (targetState) _tagSelected.add(cid); else _tagSelected.delete(cid);
+            }
+        } else {
+            if (_tagSelected.has(id)) _tagSelected.delete(id); else _tagSelected.add(id);
+            _lastTagClickIdx = idx;
+        }
         _syncTagCheckboxes(); _updateTagBar();
     });
 
@@ -1713,6 +1684,13 @@ window._orgBulkSync = function(n, opts) {
         _updateTagBulkState();
         document.getElementById('tag-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.tag = function(ids) {
+        _tagSelected = new Set(ids.map(String));
+        _syncTagCheckboxes();
+        _openTagBulkEditDialog();
+    };
 
     document.getElementById('tag-bulk-icon-nochange').addEventListener('change', function() {
         if (this.checked) {
@@ -1942,35 +1920,25 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Selection -------------------------------------------------------------
     document.getElementById('category-rows').addEventListener('click', function(e) {
-        if (!e.shiftKey) return;
-        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
-        e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
-        var idx = allWraps.indexOf(wrap);
-        var cb = wrap.querySelector('.cat-select-cb'); if (!cb) return;
-        var newChecked = !cb.checked;
-        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
-        var lastWrap = _lastCatClickIdx >= 0 ? allWraps[_lastCatClickIdx] : null;
-        var visIdx = visWraps.indexOf(wrap);
-        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
-        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
-        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
-        visWraps.slice(lo, hi + 1).forEach(function(w) {
-            var c = w.querySelector('.cat-select-cb'); if (!c) return;
-            c.checked = newChecked;
-            if (newChecked) _catSelected.add(c.dataset.catId); else _catSelected.delete(c.dataset.catId);
-        });
-        _lastCatClickIdx = idx;
-        _syncCatCheckboxes(); _updateCatBar();
-    });
-    document.getElementById('category-rows').addEventListener('change', function(e) {
-        var cb = e.target; if (!cb.classList.contains('cat-select-cb')) return;
-        var id = cb.dataset.catId;
-        if (cb.checked) _catSelected.add(id); else _catSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
-        var wrap = cb.closest('.ul-checkbox-wrap');
-        var idx = wrap ? allWraps.indexOf(wrap) : -1;
-        if (idx >= 0) _lastCatClickIdx = idx;
+        var card = e.target.closest('.tag-card[data-category-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(document.getElementById('category-rows'), '.tag-card[data-category-id]');
+        var idx = cards.indexOf(card);
+        var id = card.dataset.categoryId;
+        if (e.shiftKey && _lastCatClickIdx >= 0) {
+            var lastCard = cards[_lastCatClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_catSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = cards[i].dataset.categoryId;
+                if (targetState) _catSelected.add(cid); else _catSelected.delete(cid);
+            }
+        } else {
+            if (_catSelected.has(id)) _catSelected.delete(id); else _catSelected.add(id);
+            _lastCatClickIdx = idx;
+        }
         _syncCatCheckboxes(); _updateCatBar();
     });
 
@@ -2128,6 +2096,14 @@ window._orgBulkSync = function(n, opts) {
         _updateCatBulkState();
         document.getElementById('cat-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.category = function(ids) {
+        _catSelected = new Set(ids.map(String));
+        _syncCatCheckboxes();
+        _openCatBulkEditDialog();
+    };
+
     document.getElementById('cat-bulk-icon-nochange').addEventListener('change', function(){
         if(this.checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); var ic=document.getElementById('icon-current-cat-bulk-edit'); var ig=document.getElementById('icon-grid-cat-bulk-edit'); if(iv)iv.value=''; if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb)nb.classList.add('selected');}}
         _updateCatBulkState();
@@ -2340,6 +2316,14 @@ window._orgBulkSync = function(n, opts) {
         _updateStatusBulkState();
         document.getElementById('status-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.status = function(ids) {
+        _statusSelected = new Set(ids.map(function(id) { return parseInt(id, 10); }));
+        _lastStatusClickIdx = -1;
+        _syncStatusSelBar();
+        _openStatusBulkEditDialog();
+    };
 
     document.getElementById('status-bulk-icon-nochange').addEventListener('change', function() {
         if (this.checked) {
@@ -2662,7 +2646,7 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _prioritySortable = null;
     var _priorityOrderEditing = null;
-    var _prioritySelectMode = false;
+    var _lastPriorityClickIdx = -1;
 
     // Mount MultiDrag plugin (ships with Sortable.min.js standard build)
     if (window.Sortable && Sortable.MultiDrag) {
@@ -2806,39 +2790,45 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Multi-select helpers ---------------------------------------------------
 
-    function _updatePrioritySelBar() {
+    function _priorityItems() {
         var list = document.getElementById('priority-list');
-        if (!list) return;
-        var n = list.querySelectorAll('.priority-item--selected').length;
-        var infoEl = document.getElementById('priority-sel-info');
-        var clearBtn = document.getElementById('priority-sel-clear');
-        if (infoEl) { infoEl.textContent = n ? n + ' selected' : ''; infoEl.hidden = !n; }
-        if (clearBtn) clearBtn.hidden = !n;
+        return list ? Array.from(list.querySelectorAll('.priority-item[data-id]')) : [];
     }
 
-    window._clearPrioritySelection = function() {
-        var list = document.getElementById('priority-list');
-        if (!list) return;
-        list.querySelectorAll('.priority-item--selected').forEach(function(item) {
-            if (_prioritySortable && Sortable.utils) {
-                try { Sortable.utils.deselect(item); } catch (_) { item.classList.remove('priority-item--selected'); }
-            } else {
-                item.classList.remove('priority-item--selected');
-            }
-        });
-        list.querySelectorAll('.priority-sel-cb').forEach(function(cb) { cb.checked = false; });
-        _updatePrioritySelBar();
-    };
+    function _setPrioritySelected(item, selected) {
+        if (_prioritySortable && window.Sortable && Sortable.utils) {
+            try { selected ? Sortable.utils.select(item) : Sortable.utils.deselect(item); return; } catch (_) { /* fall through */ }
+        }
+        item.classList.toggle('priority-item--selected', selected);
+    }
 
-    window._togglePrioritySelectMode = function() {
-        var list = document.getElementById('priority-list');
-        var btn = document.getElementById('priority-sel-toggle');
-        if (!list || !btn) return;
-        _prioritySelectMode = !_prioritySelectMode;
-        list.classList.toggle('priority-select-mode', _prioritySelectMode);
-        btn.classList.toggle('active', _prioritySelectMode);
-        if (!_prioritySelectMode) window._clearPrioritySelection();
-    };
+    function _updatePrioritySelBar() {
+        window._orgBulk.deselect = _clearPrioritySelection;
+        window._orgBulk.edit = function() {
+            var items = document.querySelectorAll('#priority-list .priority-item--selected');
+            if (!items.length) return;
+            var kinds = new Set();
+            var ids = [];
+            items.forEach(function(item) { kinds.add(item.dataset.kind); ids.push(item.dataset.id); });
+            if (kinds.size > 1) {
+                toastr.warning('Select only tags, only categories, or only statuses to bulk edit them together.');
+                return;
+            }
+            var kind = Array.from(kinds)[0];
+            var opener = window._orgBulkEditByIds && window._orgBulkEditByIds[kind];
+            if (opener) opener(ids); else toastr.error('Bulk edit is not available for this type.');
+        };
+        var n = document.querySelectorAll('#priority-list .priority-item--selected').length;
+        _orgBulkSync(n, { hasEdit: true, hasMerge: false, hasDel: false });
+    }
+
+    function _clearPrioritySelection() {
+        _priorityItems().forEach(function(item) { _setPrioritySelected(item, false); });
+        _lastPriorityClickIdx = -1;
+        _updatePrioritySelBar();
+    }
+
+    window._orgRegisterSelectionClearer(_clearPrioritySelection);
 
     // -- Sortable initialization ------------------------------------------------
 
@@ -2859,47 +2849,45 @@ window._orgBulkSync = function(n, opts) {
         if (window.Sortable && Sortable.MultiDrag) {
             opts.multiDrag = true;
             opts.selectedClass = 'priority-item--selected';
-            opts.onSelect = function(evt) {
-                var cb = evt.item.querySelector('.priority-sel-cb');
-                if (cb) cb.checked = true;
-                _updatePrioritySelBar();
-            };
-            opts.onDeselect = function(evt) {
-                var cb = evt.item.querySelector('.priority-sel-cb');
-                if (cb) cb.checked = false;
-                _updatePrioritySelBar();
-            };
+            opts.onSelect = function() { _updatePrioritySelBar(); };
+            opts.onDeselect = function() { _updatePrioritySelBar(); };
         }
 
         _prioritySortable = new Sortable(list, opts);
     }
 
-    // Checkbox → SortableJS selection sync
-    document.addEventListener('change', function(e) {
-        var cb = e.target.closest('.priority-sel-cb');
-        if (!cb) return;
-        var item = cb.closest('.priority-item');
-        if (!item || !_prioritySortable) return;
-        try {
-            if (cb.checked) Sortable.utils.select(item);
-            else Sortable.utils.deselect(item);
-        } catch (_) {
-            item.classList.toggle('priority-item--selected', cb.checked);
-        }
-        _updatePrioritySelBar();
-    });
-
     document.getElementById('priority-list').addEventListener('click', function(e) {
         var badge = e.target.closest('.priority-order-badge');
         if (badge) { e.preventDefault(); _beginPriorityOrderEdit(badge); return; }
-        var btn = e.target.closest('[data-priority-jump]');
-        if (!btn) return;
-        var item = btn.closest('.priority-item');
-        var list = document.getElementById('priority-list');
-        if (!item || !list) return;
-        if (btn.dataset.priorityJump === 'top') list.insertBefore(item, list.firstElementChild);
-        else list.appendChild(item);
-        _savePriorityOrder(list, item);
+        var jumpBtn = e.target.closest('[data-priority-jump]');
+        if (jumpBtn) {
+            var jumpItem = jumpBtn.closest('.priority-item');
+            var list = document.getElementById('priority-list');
+            if (!jumpItem || !list) return;
+            if (jumpBtn.dataset.priorityJump === 'top') list.insertBefore(jumpItem, list.firstElementChild);
+            else list.appendChild(jumpItem);
+            _savePriorityOrder(list, jumpItem);
+            return;
+        }
+
+        var item = e.target.closest('.priority-item');
+        if (!item) return;
+        if (e.target.closest('.priority-drag-handle,.priority-order-editor,a,button,input,select,textarea')) return;
+
+        var items = _priorityItems();
+        var idx = items.indexOf(item);
+        var isSelected = item.classList.contains('priority-item--selected');
+
+        if (e.shiftKey && _lastPriorityClickIdx >= 0) {
+            var lastIdx = _lastPriorityClickIdx;
+            var lo = Math.min(idx, lastIdx), hi = Math.max(idx, lastIdx);
+            var targetState = !isSelected;
+            for (var i = lo; i <= hi; i++) _setPrioritySelected(items[i], targetState);
+        } else {
+            _setPrioritySelected(item, !isSelected);
+            _lastPriorityClickIdx = idx;
+        }
+        _updatePrioritySelBar();
     });
 
     window._initPrioritySortable = _initPrioritySortable;
@@ -2915,6 +2903,7 @@ window._orgBulkSync = function(n, opts) {
 (function () {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
+    var _lastPeopleClickIdx = -1;
     var _mergeUrl = '{% url "badge.multi_merge" badge_kind="people" %}';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
@@ -3006,6 +2995,13 @@ window._orgBulkSync = function(n, opts) {
         _updatePeopleBulkState();
         document.getElementById('people-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.people = function(ids) {
+        _peopleSelected = new Set(ids.map(function(id) { return parseInt(id, 10); }));
+        _applyPeopleCheck();
+        _openPeopleBulkEditDialog();
+    };
 
     var peopleBulkIconNochange = document.getElementById('people-bulk-icon-nochange');
     if (peopleBulkIconNochange) peopleBulkIconNochange.addEventListener('change', function() {
@@ -3104,11 +3100,26 @@ window._orgBulkSync = function(n, opts) {
     }
 
     var peopleRows = document.getElementById('people-badge-rows');
-    if (peopleRows) peopleRows.addEventListener('change', function (e) {
-        var cb = e.target.closest('.people-sel-cb');
-        if (!cb) return;
-        var id = parseInt(cb.dataset.peopleId || cb.dataset.id, 10);
-        if (cb.checked) _peopleSelected.add(id); else _peopleSelected.delete(id);
+    if (peopleRows) peopleRows.addEventListener('click', function (e) {
+        var card = e.target.closest('.tag-card[data-people-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(peopleRows, '.tag-card[data-people-id]');
+        var idx = cards.indexOf(card);
+        var id = parseInt(card.dataset.peopleId, 10);
+        if (e.shiftKey && _lastPeopleClickIdx >= 0) {
+            var lastCard = cards[_lastPeopleClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_peopleSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = parseInt(cards[i].dataset.peopleId, 10);
+                if (targetState) _peopleSelected.add(cid); else _peopleSelected.delete(cid);
+            }
+        } else {
+            if (_peopleSelected.has(id)) _peopleSelected.delete(id); else _peopleSelected.add(id);
+            _lastPeopleClickIdx = idx;
+        }
         _syncPeopleSelBar();
     });
 

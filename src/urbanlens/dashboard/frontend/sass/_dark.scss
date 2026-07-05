@@ -1087,7 +1087,7 @@
         }
     }
 
-    .tag-card--selected {
+    .tag-card--selected .tag-card-view {
         border-color: color.adjust($primary-color, $lightness: 10%) !important;
         background: rgba($color-blue-500, .1) !important;
     }
