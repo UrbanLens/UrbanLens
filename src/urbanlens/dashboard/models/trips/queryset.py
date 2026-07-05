@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class QuerySet(abstract.QuerySet):
+class TripQuerySet(abstract.QuerySet):
     """Custom queryset for Trip models."""
 
-    def for_list_page(self, profile: Profile) -> QuerySet:
+    def for_list_page(self, profile: Profile) -> TripQuerySet:
         """Return trips for the list page with counts and member prefetch.
 
         Args:
@@ -51,5 +51,5 @@ class QuerySet(abstract.QuerySet):
         )
 
 
-class Manager(abstract.Manager.from_queryset(QuerySet)):
+class TripManager(abstract.Manager.from_queryset(TripQuerySet)):
     """Custom query manager for Trip models."""

@@ -420,6 +420,14 @@
         padding: 0 1rem .35rem;
     }
 
+    .visit-participants {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+        font-style: italic;
+        margin-top: .2rem;
+        padding: 0 1rem .35rem;
+    }
+
     .visit-delete-btn {
         @include icon-btn-danger(24px);
         margin-left: auto;
@@ -452,6 +460,22 @@
         display: flex;
         gap: .5rem;
         padding-top: .25rem;
+    }
+
+    .visit-participant-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem .9rem;
+        max-height: 8rem;
+        overflow-y: auto;
+    }
+
+    .visit-participant-option {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .85rem;
+        font-weight: 400;
     }
 }
 

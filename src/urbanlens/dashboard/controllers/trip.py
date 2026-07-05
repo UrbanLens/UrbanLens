@@ -23,6 +23,8 @@ from urbanlens.dashboard.models.trips.model import (
     TripComment,
     TripMembership,
 )
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -208,6 +210,44 @@ def _activity_coords(act: TripActivity) -> tuple[float, float] | None:
     if act.location and act.location.latitude is not None and act.location.longitude is not None:
         return (float(act.location.latitude), float(act.location.longitude))
     return None
+
+
+def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
+    """Log the completer's own visit and suggest visits to other rsvp=yes trip members.
+
+    The completer's visit is logged immediately since completing the activity IS
+    their confirmation. Every other member who RSVP'd yes gets a suggestion to
+    accept or reject instead, since the system can't be sure they actually went.
+
+    Args:
+        trip: The trip the activity belongs to.
+        activity: The activity that was just marked completed.
+        completer: The profile who marked the activity completed.
+    """
+    if not activity.location_id:
+        return
+    coords = _activity_coords(activity)
+    if coords is None:
+        return
+    lat, lng = coords
+
+    pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
+    PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
+    sync_last_visited(pin)
+    add_visited_status(pin)
+
+    other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
+    for membership in other_yes:
+        create_visit_suggestion(
+            suggested_to=membership.profile,
+            suggested_by=completer,
+            visited_at=activity.scheduled_at,
+            location=activity.location,
+            latitude=lat,
+            longitude=lng,
+            candidate_profiles=[m.profile for m in other_yes if m.profile_id != membership.profile_id],
+            trip_activity=activity,
+        )
 
 
 def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:
@@ -661,6 +701,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
+        _create_visit_entries_for_completed_activity(trip, activity, profile)
 
         return _render_activities_panel(request, trip, profile)
 

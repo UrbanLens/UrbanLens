@@ -27,7 +27,11 @@ from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
+    from django.db.models import Manager as DjangoManager
+
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.markup.model import PinMarkup
+    from urbanlens.dashboard.models.pin.note import PinNote
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
 
 logger = logging.getLogger(__name__)
@@ -148,6 +152,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         parent_location_id: int | None
         parent_pin_id: int | None
         reviews: ReviewManager
+        notes: DjangoManager[PinNote]
+        markup_items: DjangoManager[PinMarkup]
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 

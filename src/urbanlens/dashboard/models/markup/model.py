@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.db.models import (
@@ -59,6 +60,21 @@ class PinMarkup(abstract.Model):
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    markup_type = CharField(max_length=20, choices=MarkupType.choices)
+    geometry = JSONField()
+    label = TextField(blank=True, default="")
+    color = CharField(max_length=20, blank=True, default="#e53e3e")
+    stroke_width = IntegerField(default=3)
+    border_color = CharField(max_length=20, blank=True, default="")
+    fill_opacity = IntegerField(default=87)
+    border_opacity = IntegerField(default=100)
+    security_indicator = CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        choices=SecurityIndicatorType.choices,
+    )
+
     parent_pin = ForeignKey(
         "dashboard.Pin",
         on_delete=CASCADE,
@@ -78,20 +94,11 @@ class PinMarkup(abstract.Model):
         on_delete=CASCADE,
         related_name="markup_items",
     )
-    markup_type = CharField(max_length=20, choices=MarkupType.choices)
-    geometry = JSONField()
-    label = TextField(blank=True, default="")
-    color = CharField(max_length=20, blank=True, default="#e53e3e")
-    stroke_width = IntegerField(default=3)
-    border_color = CharField(max_length=20, blank=True, default="")
-    fill_opacity = IntegerField(default=87)
-    border_opacity = IntegerField(default=100)
-    security_indicator = CharField(
-        max_length=20,
-        blank=True,
-        default="",
-        choices=SecurityIndicatorType.choices,
-    )
+
+    if TYPE_CHECKING:
+        parent_pin_id: int | None
+        parent_location_id: int | None
+        profile_id: int
 
     objects = PinMarkupManager()
 

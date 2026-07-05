@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.services.connections import get_connections
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     - viewer_friendship_status: status of the friendship between viewer and this profile
     - viewer_can_request: whether the viewer can send a friend request to this profile
     """
-    friendships = Friendship.objects.all().profile(profile.pk).is_friend().select_related("from_profile__user", "to_profile__user")
-
-    friend_profiles: list[Profile] = []
-    for f in friendships:
-        friend_profiles.append(f.to_profile if f.from_profile_id == profile.pk else f.from_profile)
+    friend_profiles = get_connections(profile)
 
     incoming_requests: list[Friendship] = []
     viewer_friendship: Friendship | None = None

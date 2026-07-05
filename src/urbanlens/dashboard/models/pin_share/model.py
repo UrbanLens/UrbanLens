@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from django.db.models import Index, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-
-
-class PinShareStatus(abstract.TextChoices):
-    PENDING = "pending", "Pending"
-    ACCEPTED = "accepted", "Accepted"
-    REJECTED = "rejected", "Rejected"
-    ALREADY_PINNED = "already_pinned", "Already pinned"
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 
 
 class PinShare(abstract.Model):
     """A one-to-one share of a single pin from one profile to another."""
+
+    status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
 
     pin = models.ForeignKey("dashboard.Pin", on_delete=models.CASCADE, related_name="shares")
     from_profile = models.ForeignKey("dashboard.Profile", on_delete=models.CASCADE, related_name="sent_pin_shares")
@@ -28,7 +26,12 @@ class PinShare(abstract.Model):
         null=True,
         blank=True,
     )
-    status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
+
+    if TYPE_CHECKING:
+        pin_id: int
+        from_profile_id: int
+        to_profile_id: int
+        notification_id: int | None
 
     @property
     def is_actionable(self) -> bool:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import CASCADE, ForeignKey, IntegerField, UniqueConstraint
 
@@ -18,6 +20,11 @@ class ProfileTrust(abstract.Model):
     cannot.  Each author may hold at most one trust rating per subject.
     """
 
+    rating = IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Trust level from 1 (low) to 5 (high).",
+    )
+
     author = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -28,10 +35,10 @@ class ProfileTrust(abstract.Model):
         on_delete=CASCADE,
         related_name="received_trust_ratings",
     )
-    rating = IntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)],
-        help_text="Trust level from 1 (low) to 5 (high).",
-    )
+
+    if TYPE_CHECKING:
+        author_id: int
+        subject_id: int
 
     class Meta(abstract.Model.Meta):
         constraints = [

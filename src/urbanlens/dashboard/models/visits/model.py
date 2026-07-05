@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Index, TextChoices, TextField, UUIDField
+from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -15,10 +15,22 @@ if TYPE_CHECKING:
 
 
 class VisitSource(TextChoices):
-    """Origin of a PinVisit record."""
+    """Origin of a PinVisit record.
+
+    - MANUAL: User manually added the visit.
+    - HISTORY: Imported from the user's location history.
+    - TRIP: Added from a trip the user attended.
+    - USER: Added by another user.
+    - PHOTO: Added when the user uploaded a photo with location metadata.
+    - GEOLOCATION: Added when the user's device provided a geolocation.
+    """
 
     MANUAL = "manual", "Manual"
-    GOOGLE_TAKEOUT = "google_takeout", "Google Takeout"
+    HISTORY = "history", "History"
+    TRIP = "trip", "Trip"
+    USER = "user", "User"
+    PHOTO = "photo", "Photo"
+    GEOLOCATION = "geolocation", "Geolocation"
 
 
 class PinVisit(abstract.Model):
@@ -33,6 +45,7 @@ class PinVisit(abstract.Model):
         visited_at: When the visit occurred.
         notes: Optional free-text note about the visit.
         source: Whether this was entered manually or imported from Google Takeout.
+        participants: Other profiles the pin owner says were present for this visit.
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
@@ -44,6 +57,11 @@ class PinVisit(abstract.Model):
     visited_at = DateTimeField()
     notes = TextField(null=True, blank=True)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
+    participants = ManyToManyField(
+        "dashboard.Profile",
+        blank=True,
+        related_name="visit_participations",
+    )
 
     objects = VisitManager()
 

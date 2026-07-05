@@ -33,6 +33,7 @@ from urbanlens.dashboard.controllers import (
     tools,
     trip,
     userprofile,
+    visit_suggestions,
     visits,
 )
 from urbanlens.dashboard.controllers.index import IndexController
@@ -732,6 +733,7 @@ urlpatterns = [
     ),
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
+    path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path(
         "notifications/",
         include(

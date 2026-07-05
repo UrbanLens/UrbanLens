@@ -220,6 +220,18 @@ Features planned for future releases.
 * After invite -> Edit profile doesn't visually look very good.
 * Bookmark to add a pin to the menu for quick access (maybe?)
 * 2FA
+* Tagging users in photos, and automatic face redactions based on user preferences.
+* Allow multiple email addresses to make it easier for other users to find you.
+* Allow searching by social media handle (maybe? We definitely need a user preference to allow this)
+* About / FAQ entries about privacy and consent. (no ips, no js tracking, consent first)
+* User option to opt-out of visit entry tracking.
+* Onboarding screen for "what do you care about", wherein they can opt out of everything privacy related.
+* Consider: "anonymize me" setting.
+* User setting for "make pins always private" - unless they manually attach to a location.
+* "I didn't come home" feature can be implemented via email prior to mobile app.
+* Create visit entry by geolocation.
+* Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env)
+* "Memories" page, showing location history and location visits over time.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

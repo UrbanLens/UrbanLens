@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db.models import CASCADE, ForeignKey, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -17,6 +19,8 @@ class ProfileNote(abstract.Model):
     cannot see it.  A viewer may keep multiple notes per subject.
     """
 
+    content = TextField(blank=True, default="")
+
     author = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -27,7 +31,10 @@ class ProfileNote(abstract.Model):
         on_delete=CASCADE,
         related_name="received_profile_notes",
     )
-    content = TextField(blank=True, default="")
+
+    if TYPE_CHECKING:
+        author_id: int
+        subject_id: int
 
     class Meta(abstract.Model.Meta):
         ordering = ["-created"]

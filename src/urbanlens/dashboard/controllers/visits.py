@@ -12,7 +12,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, sync_last_visited
 
 logger = logging.getLogger(__name__)
 
@@ -29,36 +31,12 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     Returns:
         Rendered HTML partial.
     """
-    page_obj = get_page(request, pin.visit_history.all(), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, pin.visit_history.all().prefetch_related("participants"), _VISITS_PAGE_SIZE)
     return render(
         request,
         "dashboard/partials/pins/_visit_history.html",
-        {"pin": pin, "page_obj": page_obj, "visits": page_obj.object_list},
+        {"pin": pin, "page_obj": page_obj, "visits": page_obj.object_list, "connections": get_connections(pin.profile)},
     )
-
-
-def _add_visited_status(pin: Pin) -> None:
-    """Add the profile's "Visited" status badge to the pin if not already present.
-
-    Args:
-        pin: Pin instance whose statuses should be updated.
-    """
-    from urbanlens.dashboard.models.badges.model import Badge
-
-    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
-        pin.badges.add(visited_badge)
-
-
-def _sync_last_visited(pin: Pin) -> None:
-    """Recompute pin.last_visited from the most recent PinVisit row.
-
-    Args:
-        pin: Pin instance to update in-place (saves only last_visited field).
-    """
-    latest = pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True).first()
-    pin.last_visited = latest
-    pin.save(update_fields=["last_visited"])
 
 
 class VisitHistoryView(LoginRequiredMixin, View):
@@ -105,9 +83,31 @@ class VisitHistoryView(LoginRequiredMixin, View):
             return HttpResponse("Invalid date format.", status=400)
 
         notes = request.POST.get("notes", "").strip() or None
-        PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL)
-        _sync_last_visited(pin)
-        _add_visited_status(pin)
+        visit = PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL)
+        sync_last_visited(pin)
+        add_visited_status(pin)
+
+        connections_by_id = {p.pk: p for p in get_connections(pin.profile)}
+        participant_ids = {int(pid) for pid in request.POST.getlist("participant_ids") if pid.strip().isdigit()}
+        participants = [connections_by_id[pid] for pid in participant_ids if pid in connections_by_id]
+        if participants:
+            visit.participants.set(participants)
+
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if participants and lat is not None and lng is not None:
+            for participant in participants:
+                others = [p for p in participants if p.pk != participant.pk]
+                create_visit_suggestion(
+                    suggested_to=participant,
+                    suggested_by=pin.profile,
+                    visited_at=visited_at,
+                    location=pin.location,
+                    latitude=lat,
+                    longitude=lng,
+                    candidate_profiles=others,
+                    origin_visit=visit,
+                    origin_pin=pin,
+                )
 
         return _render_visit_history(request, pin)
 
@@ -137,6 +137,6 @@ class VisitDeleteView(LoginRequiredMixin, View):
         )
         pin = visit.pin
         visit.delete()
-        _sync_last_visited(pin)
+        sync_last_visited(pin)
 
         return _render_visit_history(request, pin)

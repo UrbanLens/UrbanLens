@@ -13,6 +13,7 @@ from django.db.models import (
     Index,
     IntegerField,
     JSONField,
+    Manager as DjangoManager,
     ManyToManyField,
     UUIDField,
 )
@@ -20,7 +21,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.trips.queryset import Manager
+from urbanlens.dashboard.models.trips.queryset import TripManager
 
 if TYPE_CHECKING:
     from datetime import date
@@ -42,21 +43,6 @@ class Trip(abstract.Model):
     description = TextField(null=True, blank=True)
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
-
-    creator = ForeignKey(
-        "dashboard.Profile",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_trips",
-    )
-    # All participants including the creator - through TripMembership for RSVP tracking.
-    profiles: ManyToManyField[Profile, Profile] = ManyToManyField(
-        "dashboard.Profile",
-        blank=True,
-        related_name="trips",
-        through="TripMembership",
-    )
 
     PERM_NONE = "none"
     PERM_ORGANIZERS = "organizers"
@@ -92,7 +78,26 @@ class Trip(abstract.Model):
         help_text="Who can leave comments.",
     )
 
-    objects = Manager()
+    creator = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_trips",
+    )
+    # All participants including the creator - through TripMembership for RSVP tracking.
+    profiles: ManyToManyField[Profile, Profile] = ManyToManyField(
+        "dashboard.Profile",
+        blank=True,
+        related_name="trips",
+        through="TripMembership",
+    )
+
+    if TYPE_CHECKING:
+        creator_id: int | None
+        activities: DjangoManager[TripActivity]
+
+    objects = TripManager()
 
     def __str__(self) -> str:
         return self.name or f"Trip #{self.id}"
@@ -157,33 +162,6 @@ class TripActivity(abstract.Model):
     a trip so the user can re-sequence them.
     """
 
-    trip = ForeignKey(
-        Trip,
-        on_delete=CASCADE,
-        related_name="activities",
-    )
-    location = ForeignKey(
-        "dashboard.Location",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="trip_activities",
-    )
-    # Optional link to the adding user's personal Pin (for icon/status context).
-    pin = ForeignKey(
-        "dashboard.Pin",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="trip_activities",
-    )
-    added_by = ForeignKey(
-        "dashboard.Profile",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="trip_activities_added",
-    )
     STATUS_PROPOSED = "proposed"
     STATUS_CONFIRMED = "confirmed"
     STATUS_COMPLETED = "completed"
@@ -192,15 +170,6 @@ class TripActivity(abstract.Model):
         ("confirmed", "Confirmed"),
         ("completed", "Completed"),
     ]
-
-    # Optional link to a child trip (its activities appear on the parent map).
-    child_trip = ForeignKey(
-        Trip,
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
-        related_name="parent_activities",
-    )
 
     title = CharField(max_length=255, null=True, blank=True)
     notes = TextField(null=True, blank=True)
@@ -217,6 +186,49 @@ class TripActivity(abstract.Model):
         default=False,
         help_text="Hide location from the map. The activity still appears in the list as 'Secret Location'.",
     )
+
+    trip = ForeignKey(
+        Trip,
+        on_delete=CASCADE,
+        related_name="activities",
+    )
+    location = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trip_activities",
+    )
+    # Optional link to the adding user's personal Pin (for icon/status context).
+    # TODO: I don't think this should be necessary. Probably remove it.
+    pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trip_activities",
+    )
+    # Optional link to a child trip (its activities appear on the parent map).
+    child_trip = ForeignKey(
+        Trip,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="parent_activities",
+    )
+    added_by = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="trip_activities_added",
+    )
+    if TYPE_CHECKING:
+        location_id: int | None
+        child_trip_id: int | None
+        added_by_id: int | None
+        trip_id: int | None
+        pin_id: int | None
 
     @property
     def effective_title(self) -> str:
@@ -265,16 +277,17 @@ class TripMembership(abstract.Model):
         ("maybe", "Maybe"),
     ]
 
+    rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
+    is_organizer = BooleanField(
+        default=False,
+        help_text="Organizers have the same trip-management rights as the creator.",
+    )
+
     trip = ForeignKey(Trip, on_delete=CASCADE, related_name="memberships")
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
         related_name="trip_memberships",
-    )
-    rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
-    is_organizer = BooleanField(
-        default=False,
-        help_text="Organizers have the same trip-management rights as the creator.",
     )
 
     def __str__(self) -> str:
