@@ -236,18 +236,19 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
     sync_last_visited(pin)
     add_visited_status(pin)
 
-    other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
-    for membership in other_yes:
-        create_visit_suggestion(
-            suggested_to=membership.profile,
-            suggested_by=completer,
-            visited_at=activity.scheduled_at,
-            location=activity.location,
-            latitude=lat,
-            longitude=lng,
-            candidate_profiles=[m.profile for m in other_yes if m.profile_id != membership.profile_id],
-            trip_activity=activity,
-        )
+    if activity.scheduled_at is not None:
+        other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
+        for membership in other_yes:
+            create_visit_suggestion(
+                suggested_to=membership.profile,
+                suggested_by=completer,
+                visited_at=activity.scheduled_at,
+                location=activity.location,
+                latitude=lat,
+                longitude=lng,
+                candidate_profiles=[m.profile for m in other_yes if m.profile_id != membership.profile_id],
+                trip_activity=activity,
+            )
 
 
 def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:

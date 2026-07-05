@@ -49,18 +49,19 @@ class PinVisit(abstract.Model):
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
-    pin = ForeignKey(
-        "dashboard.Pin",
-        on_delete=CASCADE,
-        related_name="visit_history",
-    )
     visited_at = DateTimeField()
     notes = TextField(null=True, blank=True)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
+
     participants = ManyToManyField(
         "dashboard.Profile",
         blank=True,
         related_name="visit_participations",
+    )
+    pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=CASCADE,
+        related_name="visit_history",
     )
 
     objects = VisitManager()

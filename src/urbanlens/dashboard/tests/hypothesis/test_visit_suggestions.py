@@ -60,15 +60,16 @@ class BuildVisitSuggestionMessageTests(TestCase):
     """Fallback chain: official_name -> name -> city+state -> city -> generic."""
 
     def test_no_location_returns_generic(self) -> None:
-        self.assertEqual(build_visit_suggestion_message(None), "at a location")
+        self.assertEqual(build_visit_suggestion_message(location=None), "at a location")
+        self.assertEqual(build_visit_suggestion_message(), "at a location")
 
     def test_meaningful_official_name_is_used(self) -> None:
         location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill", name="Unnamed Location")
-        self.assertEqual(build_visit_suggestion_message(location), "at Old Mill")
+        self.assertEqual(build_visit_suggestion_message(location=location), "at Old Mill")
 
     def test_falls_back_to_name_when_official_name_not_meaningful(self) -> None:
         location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="N/A", name="Riverside Mill")
-        self.assertEqual(build_visit_suggestion_message(location), "at Riverside Mill")
+        self.assertEqual(build_visit_suggestion_message(location=location), "at Riverside Mill")
 
     def test_falls_back_to_city_and_state(self) -> None:
         location = baker.make(
@@ -80,7 +81,7 @@ class BuildVisitSuggestionMessageTests(TestCase):
             locality="Springfield",
             administrative_area_level_1="IL",
         )
-        self.assertEqual(build_visit_suggestion_message(location), "in Springfield, IL")
+        self.assertEqual(build_visit_suggestion_message(location=location), "in Springfield, IL")
 
     def test_falls_back_to_city_only(self) -> None:
         location = baker.make(
@@ -92,7 +93,7 @@ class BuildVisitSuggestionMessageTests(TestCase):
             locality="Springfield",
             administrative_area_level_1=None,
         )
-        self.assertEqual(build_visit_suggestion_message(location), "in Springfield")
+        self.assertEqual(build_visit_suggestion_message(location=location), "in Springfield")
 
     def test_generic_when_nothing_usable(self) -> None:
         location = baker.make(
@@ -104,14 +105,14 @@ class BuildVisitSuggestionMessageTests(TestCase):
             locality=None,
             administrative_area_level_1=None,
         )
-        self.assertEqual(build_visit_suggestion_message(location), "at a location")
+        self.assertEqual(build_visit_suggestion_message(location=location), "at a location")
 
     @given(sentinel=st.text(alphabet=st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll")), min_size=5, max_size=20))
     @_hyp
     def test_never_reads_pin_or_visit_fields(self, sentinel: str) -> None:
         """The function only accepts a Location, so it structurally cannot leak Pin/PinVisit data."""
         location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name=sentinel)
-        self.assertIn(sentinel, build_visit_suggestion_message(location))
+        self.assertIn(sentinel, build_visit_suggestion_message(location=location))
 
 
 class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
@@ -123,7 +124,7 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
 
     def test_falls_back_to_pin_official_name_when_no_location(self) -> None:
         pin = baker.make(Pin, profile=self.profile, location=None, is_private=True, official_name="Old Mill", name="my secret spot")
-        self.assertEqual(build_visit_suggestion_message(None, origin_pin=pin), "at Old Mill")
+        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "at Old Mill")
 
     def test_falls_back_to_pin_city_state_when_no_official_name(self) -> None:
         pin = baker.make(
@@ -135,17 +136,17 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
             locality="Springfield",
             administrative_area_level_1="IL",
         )
-        self.assertEqual(build_visit_suggestion_message(None, origin_pin=pin), "in Springfield, IL")
+        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "in Springfield, IL")
 
     def test_never_falls_back_to_pins_private_name(self) -> None:
         """Pin.name is the user's private custom label and must never appear in the message."""
         pin = baker.make(Pin, profile=self.profile, location=None, is_private=True, official_name=None, name="TOTALLY-SECRET-PIN-NAME", locality=None, administrative_area_level_1=None)
-        self.assertEqual(build_visit_suggestion_message(None, origin_pin=pin), "at a location")
+        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "at a location")
 
     def test_location_takes_priority_over_origin_pin_fallback(self) -> None:
         location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Location Wins")
         pin = baker.make(Pin, profile=self.profile, location=location, official_name="Pin Name Ignored")
-        self.assertEqual(build_visit_suggestion_message(location, origin_pin=pin), "at Location Wins")
+        self.assertEqual(build_visit_suggestion_message(location=location, official_name=pin.official_name), "at Location Wins")
 
 
 # ---------------------------------------------------------------------------

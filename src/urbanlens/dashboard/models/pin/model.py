@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.pin.note import PinNote
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
+    from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
         markup_items: DjangoManager[PinMarkup]
+        visit_history: DjangoManager[PinVisit]
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 

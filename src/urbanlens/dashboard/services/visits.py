@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_visit_suggestion_message(location: Location | None, *, origin_pin: Pin | None = None) -> str:
+def build_visit_suggestion_message(*, location: Location | None = None, official_name: str | None = None, city: str | None = None, state: str | None = None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
 
     Prefers the shared Location. When there is no Location - e.g. the origin pin is
@@ -42,10 +42,13 @@ def build_visit_suggestion_message(location: Location | None, *, origin_pin: Pin
         A short phrase like "at Old Mill" or "in Springfield, IL", or a generic
         fallback when no usable name or city/state is available from either source.
     """
-    official_name = location.official_name if location else (origin_pin.official_name if origin_pin else None)
+    if not official_name:
+        official_name = location.official_name if location else None
     canonical_name = location.name if location else None
-    city = location.city if location else (origin_pin.city if origin_pin else None)
-    state = location.state if location else (origin_pin.state if origin_pin else None)
+    if not city:
+        city = location.city if location else None
+    if not state:
+        state = location.state if location else None
 
     if is_meaningful_name(official_name):
         return f"at {official_name}"
@@ -172,7 +175,7 @@ def create_visit_suggestion(
     *,
     suggested_to: Profile,
     suggested_by: Profile | None,
-    visited_at: datetime.datetime,
+    visited_at: datetime.datetime | None = None,
     location: Location | None,
     latitude: float,
     longitude: float,
@@ -239,7 +242,7 @@ def create_visit_suggestion(
     if pref == DeliveryPreference.NONE:
         return suggestion
 
-    place = build_visit_suggestion_message(location, origin_pin=origin_pin)
+    place = build_visit_suggestion_message(location=location, official_name=origin_pin.official_name if origin_pin else None, city=origin_pin.city if origin_pin else None, state=origin_pin.state if origin_pin else None)
     who = suggested_by.username if suggested_by else "A connection"
     when = visited_at.strftime("%b %d, %Y")
     if existing_visit:

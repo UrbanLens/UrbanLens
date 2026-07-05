@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from django.db.models import CheckConstraint, Index, Q
 
@@ -48,6 +50,11 @@ class VisitSuggestion(abstract.Model):
             instead of the plain accept/reject shown for a first-time suggestion.
     """
 
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    visited_at = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=VisitSuggestionStatus.choices, default=VisitSuggestionStatus.PENDING)
+
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.SET_NULL,
@@ -55,10 +62,6 @@ class VisitSuggestion(abstract.Model):
         blank=True,
         related_name="visit_suggestions",
     )
-    latitude = models.DecimalField(max_digits=9, decimal_places=6)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6)
-    visited_at = models.DateTimeField()
-
     suggested_by = models.ForeignKey(
         "dashboard.Profile",
         on_delete=models.SET_NULL,
@@ -104,7 +107,15 @@ class VisitSuggestion(abstract.Model):
         null=True,
         blank=True,
     )
-    status = models.CharField(max_length=20, choices=VisitSuggestionStatus.choices, default=VisitSuggestionStatus.PENDING)
+
+    if TYPE_CHECKING:
+        location_id: int | None
+        suggested_by_id: int | None
+        suggested_to_id: int
+        origin_visit_id: int | None
+        trip_activity_id: int | None
+        existing_visit_id: int | None
+        notification_id: int | None
 
     objects = VisitSuggestionManager()
 
