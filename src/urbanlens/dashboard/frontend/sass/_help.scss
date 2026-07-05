@@ -1,7 +1,11 @@
-.help-import-page {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 2rem 1rem 4rem;
+.page-help_import_pins {
+  .container {
+    padding: 1rem;
+  }
+
+  img {
+    max-width: 100%;
+  }
 }
 
 .help-import-hero {
@@ -198,7 +202,6 @@
 }
 
 @media (max-width: 600px) {
-  .help-import-page { padding-inline: .5rem; }
   .help-import-hero { padding: 1.25rem; }
   .help-import-section { padding-left: 1rem; padding-top: 5.25rem; }
 }
