@@ -42,21 +42,21 @@
                     <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
                 </div>
                 <div class="friend-request-actions">
-                    <button type="button" class="btn btn-friend--accept"
+                    <button type="button" class="btn btn-friend btn-friend--accept"
                             hx-post="{% url 'friend.accept' req.from_profile.id %}"
                             hx-target="#friend_list"
                             hx-swap="outerHTML"
                             title="Accept">
                         <i class="material-symbols-outlined">check</i> Accept
                     </button>
-                    <button type="button" class="btn btn-friend--reject"
+                    <button type="button" class="btn btn-friend btn-friend--reject"
                             hx-post="{% url 'friend.reject' req.from_profile.id %}"
                             hx-target="#friend_list"
                             hx-swap="outerHTML"
                             title="Decline">
                         <i class="material-symbols-outlined">close</i> Decline
                     </button>
-                    <button type="button" class="btn btn-friend--ignore"
+                    <button type="button" class="btn btn-friend btn-friend--ignore"
                             hx-post="{% url 'friend.ignore' req.from_profile.id %}"
                             hx-target="#friend_list"
                             hx-swap="outerHTML"
