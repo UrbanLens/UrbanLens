@@ -10,15 +10,15 @@ Features planned for this release.
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Add descriptions to badges that are pre-populated. [UL-245]
 * Remove work account from github project. [UL-247]
-* Pull additional google place info from some supported google takeout files (Reviews.json, and others?)
-* Consider: handle temporary markers when a user pin exists on that exact point.
-* Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.)
-* Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc)
-* Main map > Edit pin dialog should have link to view full pin details.
-* Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School")
+* Pull additional google place info from some supported google takeout files (Reviews.json, and others?) [UL-262]
+* Consider: handle temporary markers when a user pin exists on that exact point. [UL-263]
+* Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
+* Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc) [UL-265]
+* Main map > Edit pin dialog should have link to view full pin details. [UL-266]
+* Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School") [UL-267]
 
 ## Medium Features
-* Audit the import process for security (unzip, etc)
+* Audit the import process for security (unzip, etc) [UL-268]
 
 ## Larger Features
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]
@@ -31,23 +31,23 @@ Features planned for this release.
 * Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
-* Organize: Bulk edit button doesn't open dialog.
-* When filtering the map by rating, I saw a single pin without a rating.
-* I somehow got myself into a filter being active that I couldn't identify?
-* When clearing a formula, it doesn't trigger a pin refresh.
-* Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??)
-* After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?)
-* Pin details page: Plus buttons don't look good again.
-* On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background.
-* Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh"
+* Organize: Bulk edit button doesn't open dialog. [UL-269]
+* When filtering the map by rating, I saw a single pin without a rating. [UL-270]
+* I somehow got myself into a filter being active that I couldn't identify? [UL-271]
+* When clearing a formula, it doesn't trigger a pin refresh. [UL-272]
+* Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??) [UL-273]
+* After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?) [UL-274]
+* Pin details page: Plus buttons don't look good again. [UL-275]
+* On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]
+* Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
 
 ## Map Search Filtering Polish
-* The view options in the toolbar need a new button for "street details". 
+* The view options in the toolbar need a new button for "street details". [UL-278]
 ---
-* Changing badge icon / color in organize doesn't immediately trigger cache update.
+* Changing badge icon / color in organize doesn't immediately trigger cache update. [UL-279]
 ---
-* Throughout site: tooltips clip (overflow: hidden)
-* Consider again: Pin count while filtering
+* Throughout site: tooltips clip (overflow: hidden) [UL-280]
+* Consider again: Pin count while filtering [UL-281]
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -84,7 +84,7 @@ Features planned for this release.
 * Password reset should go to application page, not django password reset page. [UL-256]
 * Password reset should work elegantly with SSO users. [UL-257]
 * Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
-* In tools page, do only admins have access to the db backup tool? I guess we should probably move that to an admin-only page to be certain. (also, page width is wrong).
+* In tools page, do only admins have access to the db backup tool? I guess we should probably move that to an admin-only page to be certain. (also, page width is wrong). [UL-282]
 
 # Future Features
 Features planned for future releases.
@@ -200,38 +200,38 @@ Features planned for future releases.
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 * ~~Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20")~~p, and allow multi-select before dragging to drag as a group. [UL-250]
 * Consider feature: on main map, the icon and the circle could be pulled from different places, allowing 2 pieces of information to be displayed about each pin. [UL-251]
-* "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk.
-* Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA.
-* Max zoom out on the map still isn't quite right. Try clamping?
-* Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.)
-* Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city.
-* pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.
-* Move inline JS into separate TS files for performance, maintainability, typescript.
-* Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it.
-* Reorganize api services
-* Reorganize template partials
-* AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc.
-* Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them)
-* Automatically mark nearby PD, public parking, etc.
-* On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated")
-* Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/
-* Visit log can include "with another user", which logs it / visually shows it, and notifies the other user to optionally accept the visit log as well.
-* "max members per trip" is not really the problem... "max pin shares per time period" is. We need to track and cap that instead, including through trips.
-* After invite -> Edit profile doesn't visually look very good.
-* Bookmark to add a pin to the menu for quick access (maybe?)
-* 2FA
-* Tagging users in photos, and automatic face redactions based on user preferences.
-* Allow multiple email addresses to make it easier for other users to find you.
-* Allow searching by social media handle (maybe? We definitely need a user preference to allow this)
-* About / FAQ entries about privacy and consent. (no ips, no js tracking, consent first)
-* User option to opt-out of visit entry tracking.
-* Onboarding screen for "what do you care about", wherein they can opt out of everything privacy related.
-* Consider: "anonymize me" setting.
-* User setting for "make pins always private" - unless they manually attach to a location.
-* "I didn't come home" feature can be implemented via email prior to mobile app.
-* Create visit entry by geolocation.
-* Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env)
-* "Memories" page, showing location history and location visits over time.
+* "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk. [UL-283]
+* Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA. [UL-284]
+* Max zoom out on the map still isn't quite right. Try clamping? [UL-285]
+* Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.) [UL-286]
+* Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city. [UL-287]
+* pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm. [UL-288]
+* Move inline JS into separate TS files for performance, maintainability, typescript. [UL-289]
+* Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it. [UL-290]
+* Reorganize api services [UL-291]
+* Reorganize template partials [UL-292]
+* AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]
+* Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them) [UL-294]
+* Automatically mark nearby PD, public parking, etc. [UL-295]
+* On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated") [UL-296]
+* Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/ [UL-297]
+* Visit log can include "with another user", which logs it / visually shows it, and notifies the other user to optionally accept the visit log as well. [UL-298]
+* "max members per trip" is not really the problem... "max pin shares per time period" is. We need to track and cap that instead, including through trips. [UL-299]
+* After invite -> Edit profile doesn't visually look very good. [UL-300]
+* Bookmark to add a pin to the menu for quick access (maybe?) [UL-301]
+* 2FA [UL-302]
+* Tagging users in photos, and automatic face redactions based on user preferences. [UL-303]
+* Allow multiple email addresses to make it easier for other users to find you. [UL-304]
+* Allow searching by social media handle (maybe? We definitely need a user preference to allow this) [UL-305]
+* About / FAQ entries about privacy and consent. (no ips, no js tracking, consent first) [UL-306]
+* User option to opt-out of visit entry tracking. [UL-307]
+* Onboarding screen for "what do you care about", wherein they can opt out of everything privacy related. [UL-308]
+* Consider: "anonymize me" setting. [UL-309]
+* User setting for "make pins always private" - unless they manually attach to a location. [UL-310]
+* "I didn't come home" feature can be implemented via email prior to mobile app. [UL-311]
+* Create visit entry by geolocation. [UL-312]
+* Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env) [UL-313]
+* "Memories" page, showing location history and location visits over time. [UL-314]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -283,21 +283,21 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Prevent users from "testing" if a location is abandoned by creating a test pin for it, then deleting said pin if no community wiki entry exists. Perhaps provide a delay before the community wiki entry is available to the user? Or cap pin creations? [UL-107]
 
 ## APIs to consider
-* Wayback
-* Apple Maps
-* OpenHistoricalMap
-* Tools listed by geohack: https://geohack.toolforge.org/geohack.php?pagename=White_House&params=38_53_52_N_77_02_11_W_type:landmark_region:US-DC
-* USGS M2M / EarthExplorer
-* USGS TNM API / topoView / HTMC
-* Esri World Imagery Wayback
-* OpenAerialMap
+* Wayback [UL-315]
+* Apple Maps [UL-316]
+* OpenHistoricalMap [UL-317]
+* Tools listed by geohack: https://geohack.toolforge.org/geohack.php?pagename=White_House&params=38_53_52_N_77_02_11_W_type:landmark_region:US-DC [UL-318]
+* USGS M2M / EarthExplorer [UL-319]
+* USGS TNM API / topoView / HTMC [UL-320]
+* Esri World Imagery Wayback [UL-321]
+* OpenAerialMap [UL-322]
 
 ### More difficult
-* ProQuest Digital Sanborn Maps
-* Sanborn Maps on AWS / public datasets
-* Map Warper / georeferenced map platforms
-* State/county GIS portals
-* LLM suggestion: build a provider abstraction like: coordinates → bbox → provider search → normalize result as {title, year, source, bounds, thumbnail, tile_url/download_url}
+* ProQuest Digital Sanborn Maps [UL-323]
+* Sanborn Maps on AWS / public datasets [UL-324]
+* Map Warper / georeferenced map platforms [UL-325]
+* State/county GIS portals [UL-326]
+* LLM suggestion: build a provider abstraction like: coordinates → bbox → provider search → normalize result as {title, year, source, bounds, thumbnail, tile_url/download_url} [UL-327]
 
 
 ## Code Quality
@@ -309,29 +309,31 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 Items previously listed in README.md that are not already tracked elsewhere in this file. Some of these may already be implemented, so this list should be looked over and pruned before being relied on.
 
 ### Data
-* Collect pin information during import.
-* Remove (or better integrate) pin status (visited vs "visited" tag vs visit history).
+* Collect pin information during import. [UL-328]
+* Remove (or better integrate) pin status (visited vs "visited" tag vs visit history). [UL-329]
 
 ### Community
-* Ability to @ friends in comments, etc.
-* User list (with privacy settings).
-* Ability to view other user profiles by clicking on comments, etc.
+* Ability to @ friends in comments, etc. [UL-330]
+* User list (with privacy settings). [UL-331]
+* Ability to view other user profiles by clicking on comments, etc. [UL-332]
 
 ### UI - General
-* Allow user to reorder pin details sections.
-* Change default pin details sections order.
+* Allow user to reorder pin details sections. [UL-333]
+* Change default pin details sections order. [UL-334]
 
 ### UI - Pin Detail Page
-* Map sometimes double scrolls (latency?).
-* Fix satellite view (street view may also be broken?).
-* Fix web results (web results filtering through AI?).
-* Fix boundary markup.
-* Fix security indicators.
-* Sections need stronger borders or colors.
-* When adding tags: the search bar needs padding.
+* Map sometimes double scrolls (latency?). [UL-335]
+* Fix satellite view (street view may also be broken?). [UL-336]
+* Fix web results (web results filtering through AI?). [UL-337]
+* Fix boundary markup, security indicators, and section visual separation. [UL-338]
+* When adding tags: the search bar needs padding. [UL-339]
 
 ### UI - Trip Details Page
-* Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons.
+* Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons. [UL-340]
+* Multiple trip UX improvements: whitespace, archiving, notifications, RSVP, variations, organizers, end dates, activity editor. [UL-341]
+* Add pins by clicking map, drag/drop, coordinate, or place lookup. [UL-342]
+* Comments: image upload indication, reply buttons, fix comment count and delete duplication bug. [UL-343]
+* 
 * Delete should probably not delete for everyone?
 * Main trip page: use the whitespace. Calendar? etc?
 * Allow archiving old events.
@@ -356,15 +358,15 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Bug: After deleting comment, the comment section duplicates itself.
 
 ### APIs
-* Use aliases with Smithsonian, etc.
-* Sunrise / sunset for weather.
+* Use aliases with Smithsonian, etc; fix often-incorrect Smithsonian results. [UL-344]
+* Sunrise / sunset for weather. [UL-345]
 * Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?).
 
 ### Misc
-* User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc.
-* Clicking on notification should take you to the relevant page.
-* Viewing notifications in the dropdown should mark them read. Not just clicking on them.
-* Hide "(schedule) Never" in pin popup for last visited. This is already implied.
+* User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc. [UL-346]
+* Clicking on notification should take you to the relevant page. [UL-347]
+* Viewing notifications in the dropdown should mark them read. Not just clicking on them. [UL-348]
+* Hide "(schedule) Never" in pin popup for last visited. This is already implied. [UL-349]
 
 ## To Investigate
-* When creating pin here: 39.15924, -84.68402... place name is "Mack", details ui sections are wonky, street view is black image.
+* When creating pin here: 39.15924, -84.68402... place name is "Mack", details ui sections are wonky, street view is black image. [UL-350]
