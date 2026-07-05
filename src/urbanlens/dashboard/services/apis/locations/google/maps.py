@@ -43,7 +43,7 @@ def _filename_stem(filename: str) -> str:
 
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterable, Iterator
 
     from urbanlens.dashboard.models.profile import Profile
 
@@ -342,7 +342,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "kml":
-                    data_list = self.takeout_kml_to_dict(text, user_profile)
+                    data_list = self.takeout_kml_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "csv":
@@ -506,7 +506,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if fmt == "json":
                     raw_pins: list[dict[str, Any]] = self.takeout_json_to_dict(text, user_profile)
                 elif fmt == "kml":
-                    raw_pins = self.takeout_kml_to_dict(text, user_profile)
+                    raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
                 elif fmt == "csv":
                     raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
                 else:
@@ -690,25 +690,52 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             },
         )
 
-    def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
+    @staticmethod
+    def _iter_kml_placemarks(features: Iterable[Any]) -> Iterator[Any]:
+        """Recursively yield every Placemark nested within KML Document/Folder containers.
+
+        KML files nest Placemarks at varying depths depending on the exporting
+        tool (e.g. Google MyMaps wraps every layer in a Folder, other tools may
+        put Placemarks directly under the Document), so the tree must be walked
+        rather than assuming a fixed depth.
+
+        Args:
+            features: An iterable of KML feature objects (Document, Folder, Placemark, etc).
+
+        Yields:
+            Placemark: Each Placemark found at any depth within *features*.
+        """
+        for feature in features:
+            if isinstance(feature, kml.Placemark):
+                yield feature
+            else:
+                children = getattr(feature, "features", None)
+                if children:
+                    yield from GoogleMapsGateway._iter_kml_placemarks(children)
+
+    def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
         try:
-            k = kml.KML()
-            k.from_string(file_contents)
+            # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`
+            # declaration (which every Google Takeout KML/KMZ has), so the raw
+            # bytes must be passed through undecoded and let lxml sniff the encoding.
+            k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
 
             pins: list[dict[str, Any]] = []
-            for feature in k.features():  # type: ignore[operator]
-                for placemark in feature.features():
-                    coords = placemark.geometry.coords[0]
+            for placemark in self._iter_kml_placemarks(k.features):
+                geometry = placemark.geometry
+                if geometry is None or not hasattr(geometry, "coords"):
+                    continue
+                coords = next(iter(geometry.coords))
 
-                    pins.append(
-                        {
-                            "latitude": coords[1],
-                            "longitude": coords[0],
-                            "profile": user_profile,
-                            "name": placemark.name,
-                            "description": placemark.description,
-                        },
-                    )
+                pins.append(
+                    {
+                        "latitude": coords[1],
+                        "longitude": coords[0],
+                        "profile": user_profile,
+                        "name": placemark.name,
+                        "description": placemark.description,
+                    },
+                )
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except (ValueError, AttributeError, UnicodeDecodeError) as e:

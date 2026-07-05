@@ -45,3 +45,4 @@ src/urbanlens/frontend/static/dashboard/images/
 .vscode/settings.json
 .cursor/
 src/urbanlens/frontend/static/icons/unused/
+sample_data/
