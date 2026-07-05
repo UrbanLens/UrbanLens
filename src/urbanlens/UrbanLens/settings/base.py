@@ -23,15 +23,20 @@ ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
+
+
 # Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
 # redirects in setup_test_environment(), but pytest-django imports settings
 # directly and does not run that project test runner hook.
-TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} or any(
+TESTING = _env_bool("DJANGO_TESTING", False) or any(
     arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "True" if _is_dev else "False").lower() in {"true", "1", "yes"}
+DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 
 # ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
 # a comma-separated list). Local environment defaults to wildcard-friendly hosts so
@@ -241,8 +246,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # by default so developers can access the site without TLS configuration.
 # Override via UL_UNSAFE_ALLOW_HTTP in .env (or set to False to enforce HTTPS locally).
 _http_default = "True" if _is_dev else "False"
-UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", _http_default).lower() in {"true", "1", "yes"}
+UNSAFE_ALLOW_HTTP = _env_bool("UL_UNSAFE_ALLOW_HTTP", _http_default == "True")
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
