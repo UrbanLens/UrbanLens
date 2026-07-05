@@ -1061,11 +1061,6 @@
         color: var(--ul-grey-7);
     }
 
-    .organize-tab.active {
-        color: color.adjust($primary-color, $lightness: 15%);
-        border-bottom-color: color.adjust($primary-color, $lightness: 15%);
-    }
-
     .cat-sel-bar.cat-sel-bar--active {
         background: rgba($color-blue-500, .1);
         border-color: rgba($color-blue-500, .35);
