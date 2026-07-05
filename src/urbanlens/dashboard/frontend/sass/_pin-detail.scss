@@ -1938,6 +1938,32 @@ body.page-location-details .pin-detail-grid {
                 }
             }
 
+            .detail-items {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem .6rem;
+            }
+
+            .detail-item {
+                display: flex;
+                flex-direction: column;
+                gap: .15rem;
+                flex: 0 1 auto;
+                min-width: 0;
+                max-width: 100%;
+                padding: .4rem .8rem;
+                border-radius: $radius-sm;
+                background: var(--ul-grey-0a);
+                border: 1px solid var(--ul-grey-1a);
+                transition: background-color .15s ease, border-color .15s ease;
+
+                &:hover {
+                    background: var(--ul-grey-1a);
+                    border-color: var(--ul-grey-2a, var(--ul-grey-1a));
+                }
+            }
+
             .pin-stats {
                 grid-column: 1 / -1;
                 display: flex;
