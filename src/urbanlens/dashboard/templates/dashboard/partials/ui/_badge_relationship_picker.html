@@ -1,7 +1,9 @@
 {% load dashboard_tags %}
-{# Reusable Parent/Child badge picker used by the create, edit, and bulk-edit badge dialogs.
+{% comment %}
+Reusable Parent/Child badge picker used by the create, edit, and bulk-edit badge dialogs.
    mode='replace': selections fully replace the badge's parents/children on save (create/edit forms).
-   mode='additive': selections are added to whatever's already related, never removed (bulk-edit). #}
+   mode='additive': selections are added to whatever's already related, never removed (bulk-edit).
+{% endcomment %}
 <div class="badge-rel-picker" data-picker-id="{{ instance_id }}" data-mode="{{ mode }}">
     <div class="badge-rel-selected-section">
         <div class="badge-rel-selected-group">
@@ -47,10 +49,10 @@
 
     {% if ns != 'people' %}
     <div class="badge-rel-tabs" role="tablist">
+        <button type="button" class="badge-rel-tab active" data-kind="" onclick="BadgeRelPicker.setTab('{{ instance_id }}','',this)">All</button>
         <button type="button" class="badge-rel-tab" data-kind="tag" onclick="BadgeRelPicker.setTab('{{ instance_id }}','tag',this)">Tags</button>
         <button type="button" class="badge-rel-tab" data-kind="category" onclick="BadgeRelPicker.setTab('{{ instance_id }}','category',this)">Categories</button>
         <button type="button" class="badge-rel-tab" data-kind="status" onclick="BadgeRelPicker.setTab('{{ instance_id }}','status',this)">Statuses</button>
-        <button type="button" class="badge-rel-tab active" data-kind="" onclick="BadgeRelPicker.setTab('{{ instance_id }}','',this)">All</button>
     </div>
     {% endif %}
 
