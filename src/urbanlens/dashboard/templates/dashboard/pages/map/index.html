@@ -766,10 +766,13 @@
         iconCreateFunction(cluster) {
             const n   = cluster.getChildCount();
             const siz = n < 10 ? 's' : n < 100 ? 'm' : 'l';
+            // Must match the width/height of .pin-cluster--{s,m,l} in _map.scss - a
+            // mismatch here makes the flex-centered wrapper squash into an oval.
+            const px  = { s: 34, m: 42, l: 50 }[siz];
             return L.divIcon({
                 html: `<div class="pin-cluster pin-cluster--${siz}"><span>${n}</span></div>`,
                 className: '',
-                iconSize: L.point(40, 40),
+                iconSize: L.point(px, px),
             });
         },
     });
