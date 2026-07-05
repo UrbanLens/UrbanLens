@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="Overpass API 0.7.62.11 87bfad18">
+<note>The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.</note>
+<meta osm_base="2026-07-05T04:44:10Z"/>
+
+  <way id="250264426">
+    <nd ref="2567526681"/>
+    <nd ref="2567526683"/>
+    <nd ref="2567526684"/>
+    <nd ref="2567526682"/>
+    <nd ref="2567526681"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="building" v="yes"/>
+    <tag k="height" v="7.4"/>
+    <tag k="nycdoitt:bin" v="1088345"/>
+  </way>
+  <way id="250264787">
+    <nd ref="2567529250"/>
+    <nd ref="2567529251"/>
+    <nd ref="2567529240"/>
+    <nd ref="2567529236"/>
+    <nd ref="2567529231"/>
+    <nd ref="2567529206"/>
+    <nd ref="2567529200"/>
+    <nd ref="2567529211"/>
+    <nd ref="2567529237"/>
+    <nd ref="2567529245"/>
+    <nd ref="2567529242"/>
+    <nd ref="2567529248"/>
+    <nd ref="2567529253"/>
+    <nd ref="2567529255"/>
+    <nd ref="2567529233"/>
+    <nd ref="2567529244"/>
+    <nd ref="2567529267"/>
+    <nd ref="2567529269"/>
+    <nd ref="2567529268"/>
+    <nd ref="2567529276"/>
+    <nd ref="2567529277"/>
+    <nd ref="2567529282"/>
+    <nd ref="2567529296"/>
+    <nd ref="11962751448"/>
+    <nd ref="11962751451"/>
+    <nd ref="2567529279"/>
+    <nd ref="2567529263"/>
+    <nd ref="2567529250"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="building" v="yes"/>
+    <tag k="height" v="27.6"/>
+    <tag k="nycdoitt:bin" v="1079685"/>
+  </way>
+  <way id="1191911824">
+    <nd ref="13987630344"/>
+    <nd ref="11065677175"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="end_date" v="1995"/>
+    <tag k="floating" v="no"/>
+    <tag k="man_made" v="pier"/>
+    <tag k="mooring" v="no"/>
+    <tag k="surface" v="steel"/>
+  </way>
+  <way id="1535154687">
+    <nd ref="13987630345"/>
+    <nd ref="13987630346"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="end_date" v="1995"/>
+    <tag k="floating" v="no"/>
+    <tag k="man_made" v="pier"/>
+    <tag k="mooring" v="no"/>
+    <tag k="surface" v="steel"/>
+  </way>
+  <way id="1535154688">
+    <nd ref="13987630347"/>
+    <nd ref="13987630348"/>
+    <nd ref="13987630346"/>
+    <nd ref="11065677175"/>
+    <nd ref="13987630349"/>
+    <nd ref="13987630350"/>
+    <nd ref="13987630354"/>
+    <nd ref="13987630347"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="area" v="yes"/>
+    <tag k="building" v="yes"/>
+    <tag k="man_made" v="crane"/>
+  </way>
+  <way id="1535154690">
+    <nd ref="13987630354"/>
+    <nd ref="13987630355"/>
+    <nd ref="13987630356"/>
+    <nd ref="13987630357"/>
+    <nd ref="13987630347"/>
+    <nd ref="13987630354"/>
+    <tag k="abandoned" v="yes"/>
+    <tag k="building" v="yes"/>
+  </way>
+  <node id="2567529200" lat="40.7259867" lon="-73.9794199"/>
+  <node id="2567529206" lat="40.7260114" lon="-73.9794019"/>
+  <node id="2567529211" lat="40.7260316" lon="-73.9795268"/>
+  <node id="2567529231" lat="40.7261321" lon="-73.9793136"/>
+  <node id="2567529233" lat="40.7261404" lon="-73.9797859"/>
+  <node id="2567529236" lat="40.7261531" lon="-73.9792982"/>
+  <node id="2567529237" lat="40.7261541" lon="-73.9794373"/>
+  <node id="2567529240" lat="40.7261644" lon="-73.9793250"/>
+  <node id="2567529242" lat="40.7261708" lon="-73.9795302"/>
+  <node id="2567529244" lat="40.7261858" lon="-73.9798940"/>
+  <node id="2567529245" lat="40.7261879" lon="-73.9795177"/>
+  <node id="2567529248" lat="40.7262128" lon="-73.9796303"/>
+  <node id="2567529250" lat="40.7262165" lon="-73.9792519"/>
+  <node id="2567529251" lat="40.7262278" lon="-73.9792786"/>
+  <node id="2567529253" lat="40.7262299" lon="-73.9796178"/>
+  <node id="2567529255" lat="40.7262629" lon="-73.9796963"/>
+  <node id="2567529263" lat="40.7262979" lon="-73.9791924"/>
+  <node id="2567529267" lat="40.7263369" lon="-73.9797835"/>
+  <node id="2567529268" lat="40.7263399" lon="-73.9797429"/>
+  <node id="2567529269" lat="40.7263523" lon="-73.9797723"/>
+  <node id="2567529276" lat="40.7264033" lon="-73.9796965"/>
+  <node id="2567529277" lat="40.7264156" lon="-73.9797259"/>
+  <node id="2567529279" lat="40.7264295" lon="-73.9790961"/>
+  <node id="2567529282" lat="40.7265003" lon="-73.9796640"/>
+  <node id="2567529296" lat="40.7266286" lon="-73.9795702"/>
+  <node id="11962751448" lat="40.7265816" lon="-73.9794583"/>
+  <node id="11962751451" lat="40.7264765" lon="-73.9792080"/>
+  <node id="11065677175" lat="40.7056020" lon="-73.9702441"/>
+  <node id="13987630344" lat="40.7053698" lon="-73.9702691"/>
+  <node id="13987630345" lat="40.7053770" lon="-73.9703909"/>
+  <node id="13987630346" lat="40.7056089" lon="-73.9703587"/>
+  <node id="13987630347" lat="40.7056561" lon="-73.9704059"/>
+  <node id="13987630348" lat="40.7056120" lon="-73.9704105"/>
+  <node id="13987630349" lat="40.7055993" lon="-73.9702005"/>
+  <node id="13987630350" lat="40.7056431" lon="-73.9701959"/>
+  <node id="13987630354" lat="40.7056530" lon="-73.9703626"/>
+  <node id="13987630355" lat="40.7056843" lon="-73.9703586"/>
+  <node id="13987630356" lat="40.7056898" lon="-73.9704355"/>
+  <node id="13987630357" lat="40.7056585" lon="-73.9704394"/>
+  <node id="2567526681" lat="40.7262740" lon="-73.9744011"/>
+  <node id="2567526682" lat="40.7264087" lon="-73.9743025"/>
+  <node id="2567526683" lat="40.7264413" lon="-73.9747961"/>
+  <node id="2567526684" lat="40.7265760" lon="-73.9746975"/>
+  <node id="357586404" lat="40.7063655" lon="-73.8014112">
+    <tag k="disused:amenity" v="school"/>
+    <tag k="ele" v="18"/>
+    <tag k="gnis:feature_id" v="963967"/>
+    <tag k="name" v="Saint Marys School"/>
+  </node>
+  <node id="357609017" lat="40.7434351" lon="-73.9895836">
+    <tag k="disused:amenity" v="school"/>
+    <tag k="ele" v="12"/>
+    <tag k="gnis:feature_id" v="2061944"/>
+    <tag k="historic" v="school"/>
+    <tag k="name" v="Trinity Chapel School"/>
+  </node>
+
+</osm>

@@ -16,8 +16,7 @@ import json
 import tarfile
 import zipfile
 
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.archive_extractor import (
@@ -200,6 +199,39 @@ class ValidateContentTypeTests(TestCase):
         data = b"this is just plain text with no known headers"
         self.assertIsNone(validate_content_type("text.txt", data))
 
+    def test_gpx_root_tag_identified(self):
+        data = b'<?xml version="1.0"?><gpx version="1.1"><wpt lat="1" lon="2"/></gpx>'
+        self.assertEqual(validate_content_type("track.gpx", data), "gpx")
+
+    def test_osm_xml_root_tag_identified(self):
+        data = b'<?xml version="1.0"?><osm version="0.6"><node id="1" lat="1" lon="2"/></osm>'
+        self.assertEqual(validate_content_type("export.osm", data), "osm_xml")
+
+    def test_wkt_point_identified(self):
+        data = b"POINT (-73.78633 40.64596)"
+        self.assertEqual(validate_content_type("geom.wkt", data), "wkt")
+
+    def test_wkt_polygon_case_insensitive(self):
+        data = b"polygon ((0 0, 1 0, 1 1, 0 0))"
+        self.assertEqual(validate_content_type("geom.wkt", data), "wkt")
+
+    def test_wkt_linestring_z_suffix(self):
+        data = b"LINESTRING Z (0 0 0, 1 1 1)"
+        self.assertEqual(validate_content_type("geom.wkt", data), "wkt")
+
+    def test_binary_wkb_point_identified(self):
+        # Little-endian WKB Point: byte order 01, geometry type 1 (Point), then coords.
+        data = bytes.fromhex("0101000000") + b"\x00" * 16
+        self.assertEqual(validate_content_type("geom.wkb", data), "wkb")
+
+    def test_hex_wkb_text_identified(self):
+        data = ("0101000000" + "00" * 16).encode("ascii")
+        self.assertEqual(validate_content_type("geom.wkb", data), "wkb")
+
+    def test_random_binary_not_misidentified_as_wkb(self):
+        data = b"\x05\x99\x12\x34\x56\x78\x9a\xbc\xde\xf0"
+        self.assertIsNone(validate_content_type("binary.dat", data))
+
 
 # ---------------------------------------------------------------------------
 # extract_archive - ZIP
@@ -265,6 +297,31 @@ class ExtractZipTests(TestCase):
         result = extract_archive(buf.getvalue())
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "places.json")
+
+    def test_extracts_shapefile_sidecar_extensions(self):
+        data = _make_zip(
+            {
+                "sites.shp": b"\x00\x00\x27\x0a" + b"\x00" * 96,
+                "sites.dbf": b"\x03" + b"\x00" * 31,
+                "sites.shx": b"\x00\x00\x27\x0a" + b"\x00" * 96,
+                "sites.prj": b'GEOGCS["WGS 84"]',
+            },
+        )
+        result = extract_archive(data)
+        names = {r.name for r in result}
+        self.assertEqual(names, {"sites.shp", "sites.dbf", "sites.shx", "sites.prj"})
+
+    def test_extracts_gpx_wkt_osm_files(self):
+        data = _make_zip(
+            {
+                "track.gpx": b"<gpx></gpx>",
+                "geom.wkt": b"POINT (0 0)",
+                "export.osm": b"<osm></osm>",
+            },
+        )
+        result = extract_archive(data)
+        names = {r.name for r in result}
+        self.assertEqual(names, {"track.gpx", "geom.wkt", "export.osm"})
 
 
 # ---------------------------------------------------------------------------

@@ -1088,6 +1088,15 @@ wheels = [
 ]
 
 [[package]]
+name = "gpxpy"
+version = "1.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/ad/6f1a34e702c72cb495bb258396f237ded76c00f9fe67054a44d778d24ed9/gpxpy-1.6.2.tar.gz", hash = "sha256:a72c484b97ec42b80834353b029cc8ee1b79f0ffca1179b2210bb3baf26c01ae", size = 111695, upload-time = "2023-11-29T17:25:38.391Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/9f/62df6c1e52462bdd04275b36cec49efa9e8af7e7b834499eb288f73dcfbc/gpxpy-1.6.2-py3-none-any.whl", hash = "sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a", size = 42649, upload-time = "2023-11-29T17:25:35.76Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -3933,7 +3942,7 @@ wheels = [
 
 [[package]]
 name = "urbanlens"
-version = "0.2.1b0"
+version = "0.2.2b0"
 source = { editable = "." }
 dependencies = [
     { name = "celery" },
@@ -3957,6 +3966,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "geopy" },
     { name = "gevent" },
+    { name = "gpxpy" },
     { name = "gunicorn" },
     { name = "humanize" },
     { name = "jinja2" },
@@ -4037,6 +4047,7 @@ requires-dist = [
     { name = "geopandas", specifier = "~=1.1.3" },
     { name = "geopy", specifier = "~=2.4.1" },
     { name = "gevent", specifier = "~=26.5.0" },
+    { name = "gpxpy", specifier = "~=1.6.2" },
     { name = "gunicorn", specifier = "~=26.0.0" },
     { name = "humanize", specifier = ">=4.15,<4.17" },
     { name = "jinja2", specifier = "~=3.1.6" },

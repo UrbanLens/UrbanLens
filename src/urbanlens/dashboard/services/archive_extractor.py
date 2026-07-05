@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import json
 import logging
+import re
+import struct
 import tarfile
 from typing import NamedTuple
 import zipfile
@@ -22,8 +24,28 @@ _MAX_FILE_COUNT = 1000
 
 # Only files with these extensions are considered when extracting from archives.
 # KMZ is included because it is itself a ZIP (containing KML) and may appear inside
-# an outer archive.
-_ARCHIVE_ALLOWED_EXTENSIONS = frozenset({"json", "kml", "csv", "kmz"})
+# an outer archive. shp/dbf/shx/prj/cpg are Shapefile sidecar parts, which are
+# grouped by filename stem elsewhere (see services.import_formats.shapefile)
+# rather than sniffed individually here.
+_ARCHIVE_ALLOWED_EXTENSIONS = frozenset(
+    {"json", "kml", "csv", "kmz", "gpx", "geojson", "wkt", "wkb", "osm", "shp", "dbf", "shx", "prj", "cpg"},
+)
+
+# XML root tags recognised at the archive-extraction/import-format-sniffing layer,
+# mapped to their format string. Checked in order; the first match within the
+# sniff window wins.
+_XML_TAG_FORMATS: tuple[tuple[str, str], ...] = (
+    ("<kml", "kml"),
+    ("<gpx", "gpx"),
+    ("<osm", "osm_xml"),
+)
+
+# WKT geometry type keywords (case-insensitive), optionally followed by a Z/M/ZM
+# dimensionality suffix (e.g. "POINT Z", "LINESTRING ZM").
+_WKT_GEOMETRY_RE = re.compile(
+    r"^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*(Z|M|ZM)?\s*\(",
+    re.IGNORECASE,
+)
 
 
 class ExtractedFile(NamedTuple):
@@ -77,8 +99,12 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     Validation is performed on the *content* of the file, not just its extension,
     to guard against misnamed or deliberately misleading uploads.
 
-    Supported return values: ``'json'``, ``'kml'``, ``'csv'``.
-    KMZ files are handled at the archive-extraction layer and are not returned here.
+    Supported return values: ``'json'``, ``'kml'``, ``'csv'``, ``'location_history'``,
+    ``'gpx'``, ``'wkt'``, ``'wkb'``, ``'osm_xml'``. KMZ files are handled at the
+    archive-extraction layer and are not returned here. Shapefile parts
+    (``.shp``/``.dbf``/``.shx``/``.prj``/``.cpg``) are not sniffed here either -
+    they are grouped by filename stem in ``services.import_formats.shapefile``
+    before this function is ever consulted for them.
 
     Args:
         name: Filename used only for diagnostic logging.
@@ -90,6 +116,11 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     if len(data) < 4:
         logger.debug("Skipping file too small to validate: %s", name)
         return None
+
+    # Binary WKB is checked before the UTF-8 decode attempt below, since it is
+    # (by definition) not text.
+    if _sniff_wkb(data):
+        return "wkb"
 
     # Binary files (those that can't decode as UTF-8) are rejected outright.
     try:
@@ -103,7 +134,7 @@ def validate_content_type(name: str, data: bytes) -> str | None:
 
     # JSON: must start with '{' or '[' and parse successfully.
     # Recognised variants:
-    #   "json"             - GeoJSON Saved Places (has "features")
+    #   "json"             - GeoJSON (Takeout "Saved Places" or generic FeatureCollection)
     #   "location_history" - Google Semantic Location History (has "timelineObjects")
     if text[0] in "{[":
         try:
@@ -119,20 +150,58 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         logger.debug("File is valid JSON but not a recognised import format: %s", name)
         return None
 
-    # KML: XML document that contains a <kml element within the first 2 kB.
-    if text.startswith(("<?xml", "<kml")):
-        if "<kml" in text[:2000]:
-            return "kml"
-        logger.debug("File is XML but does not look like KML: %s", name)
+    # XML: dispatch on root tag (KML/GPX/OSM XML all share the same shape otherwise).
+    if text.startswith(("<?xml", "<kml", "<gpx", "<osm")):
+        window = text[:2000]
+        for tag, fmt in _XML_TAG_FORMATS:
+            if tag in window:
+                return fmt
+        logger.debug("File is XML but does not match a known format: %s", name)
         return None
 
+    # WKT: first token is a recognised geometry keyword, e.g. "POINT (...)".
+    if _WKT_GEOMETRY_RE.match(text):
+        return "wkt"
+
+    first_line = text.split("\n", 1)[0].strip()
+
+    # Hex-encoded WKB text (e.g. copy-pasted from a PostGIS client's
+    # ST_AsHexEWKB output): same geometry-type sniff as binary WKB, applied to
+    # the decoded bytes of the first line.
+    if len(first_line) >= 10 and len(first_line) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in first_line):
+        try:
+            if _sniff_wkb(bytes.fromhex(first_line)):
+                return "wkb"
+        except ValueError:
+            pass
+
     # CSV: must be parseable text with at least one expected Google Takeout header.
-    first_line = text.split("\n", 1)[0].lower()
-    if any(h in first_line for h in ("url", "title", "note")):
+    if any(h in first_line.lower() for h in ("url", "title", "note")):
         return "csv"
 
     logger.debug("File content did not match any supported import format: %s", name)
     return None
+
+
+_WKB_GEOMETRY_TYPE_CODES = frozenset(range(1, 8))  # Point .. GeometryCollection
+
+
+def _sniff_wkb(data: bytes) -> bool:
+    """Return True if *data* looks like a binary WKB geometry.
+
+    Checks the leading byte-order flag (``0x00``/``0x01``) and the following
+    4-byte geometry-type code, masking out PostGIS EWKB's SRID/Z/M flag bits
+    and ISO SQL/MM's ``+1000``/``+2000``/``+3000`` dimensionality offsets so
+    every common WKB dialect is recognised.
+    """
+    if len(data) < 5 or data[0] not in (0, 1):
+        return False
+    endianness = "<" if data[0] == 1 else ">"
+    try:
+        (geom_code,) = struct.unpack_from(f"{endianness}I", data, 1)
+    except struct.error:
+        return False
+    return (geom_code & 0xFFFF) % 1000 in _WKB_GEOMETRY_TYPE_CODES
 
 
 # ---------------------------------------------------------------------------

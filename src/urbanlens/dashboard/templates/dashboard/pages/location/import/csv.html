@@ -484,7 +484,7 @@
     <!-- -- Step 1: Upload ------------------------------------------ -->
     <div id="iw-step-1">
         <div class="iw-body">
-            <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
+            <p class="iw-hint">KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. Multiple files accepted.</p>
             <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
                 <i class="material-symbols-outlined">help_outline</i>
                 <span>How do I get a Google Takeout file?</span>
@@ -504,7 +504,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.csv,.zip,.tgz,.tar.gz">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.zip,.tgz,.tar.gz">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
         </div>

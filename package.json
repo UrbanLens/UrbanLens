@@ -1,6 +1,6 @@
 {
     "name": "urbanlens",
-    "version": "0.2.1b0",
+    "version": "0.2.2b0",
     "description": "Mapping for Urban Explorers",
     "main": "index.js",
     "scripts": {

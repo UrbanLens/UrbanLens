@@ -279,7 +279,6 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]
-* Allow users to create and import pins without creating a community wiki entry. e.g. "My Girlfriend's House". [UL-106]
 * Prevent users from "testing" if a location is abandoned by creating a test pin for it, then deleting said pin if no community wiki entry exists. Perhaps provide a delay before the community wiki entry is available to the user? Or cap pin creations? [UL-107]
 
 ## APIs to consider
@@ -333,7 +332,6 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Multiple trip UX improvements: whitespace, archiving, notifications, RSVP, variations, organizers, end dates, activity editor. [UL-341]
 * Add pins by clicking map, drag/drop, coordinate, or place lookup. [UL-342]
 * Comments: image upload indication, reply buttons, fix comment count and delete duplication bug. [UL-343]
-* 
 * Delete should probably not delete for everyone?
 * Main trip page: use the whitespace. Calendar? etc?
 * Allow archiving old events.
@@ -358,9 +356,8 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Bug: After deleting comment, the comment section duplicates itself.
 
 ### APIs
-* Use aliases with Smithsonian, etc; fix often-incorrect Smithsonian results. [UL-344]
 * Sunrise / sunset for weather. [UL-345]
-* Address often incorrect Smithsonian results (AI filtering? Only names >= certain length?).
+* Address is often incorrect Smithsonian results (AI filtering? Only names >= certain length?).
 
 ### Misc
 * User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc. [UL-346]

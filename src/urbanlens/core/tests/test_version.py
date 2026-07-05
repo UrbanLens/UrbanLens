@@ -27,7 +27,7 @@ class AppVersionTests(TestCase):
 
     def test_pyproject_is_preferred_source(self) -> None:
         version = get_app_version()
-        self.assertEqual(version, "0.2.1b0")
+        self.assertEqual(version, "0.2.2b0")
 
 
 class FormatShortCommitTests(TestCase):

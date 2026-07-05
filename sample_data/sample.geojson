@@ -1,0 +1,118 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 3.2,
+        "place": "19 km W of Point MacKenzie, Alaska",
+        "title": "M 3.2 - 19 km W of Point MacKenzie, Alaska",
+        "time": 1783224031441,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -150.346,
+          61.376,
+          27.3
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 3.1,
+        "place": "76 km SSE of Lamoille, Nevada",
+        "title": "M 3.1 - 76 km SSE of Lamoille, Nevada",
+        "time": 1783210759062,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -115.1228,
+          40.093,
+          1.0913
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.5,
+        "place": "south of the Fiji Islands",
+        "title": "M 4.5 - south of the Fiji Islands",
+        "time": 1783209063012,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          179.3801,
+          -24.9821,
+          531.576
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "way/250264426",
+      "properties": {
+        "@id": "way/250264426",
+        "abandoned": "yes",
+        "building": "yes",
+        "height": "7.4",
+        "nycdoitt:bin": "1088345"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -73.9744011,
+              40.726274
+            ],
+            [
+              -73.9747961,
+              40.7264413
+            ],
+            [
+              -73.9746975,
+              40.726576
+            ],
+            [
+              -73.9743025,
+              40.7264087
+            ],
+            [
+              -73.9744011,
+              40.726274
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Cerknica lakeside path",
+        "highway": "path",
+        "surface": "gravel"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            14.357652292,
+            45.772163216
+          ],
+          [
+            14.294899916,
+            45.757933259
+          ]
+        ]
+      }
+    }
+  ]
+}
