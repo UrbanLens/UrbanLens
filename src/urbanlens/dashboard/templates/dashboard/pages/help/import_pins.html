@@ -1,0 +1,173 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="help-import-page page-content">
+    <section class="help-import-hero">
+        <div>
+            <p class="help-import-eyebrow">Help center</p>
+            <h1>Import pins into UrbanLens</h1>
+            <p class="help-import-lede">
+                Bring your saved places, field notes, GPS waypoints, and research datasets into UrbanLens.
+                Use this guide to export from common services, choose the right file, and upload it from the map import tool.
+            </p>
+            <div class="help-import-actions">
+                <a class="btn btn--primary" href="{% url 'pin.import.form' %}">
+                    <i class="material-symbols-outlined">upload_file</i> Open import tool
+                </a>
+                <a class="btn btn--ghost" href="#supported-formats">Supported formats</a>
+            </div>
+        </div>
+        <div class="help-import-visual" aria-hidden="true">
+            <div class="help-import-map-card">
+                <img src="{% static 'dashboard/images/import.png' %}" alt="" loading="lazy">
+                <div class="help-import-pin help-import-pin--one"><i class="material-symbols-outlined">place</i></div>
+                <div class="help-import-pin help-import-pin--two"><i class="material-symbols-outlined">explore</i></div>
+                <div class="help-import-pin help-import-pin--three"><i class="material-symbols-outlined">flag</i></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="ul-card help-import-quickstart" id="quick-start">
+        <div class="ul-card-header">
+            <i class="material-symbols-outlined">rocket_launch</i>
+            <h2>Quick start</h2>
+        </div>
+        <div class="help-import-steps">
+            <div><span>1</span><strong>Export</strong><p>Download KML, KMZ, GeoJSON, GPX, CSV, ZIP, Shapefile, WKT/WKB, or OSM XML from your current tool.</p></div>
+            <div><span>2</span><strong>Upload</strong><p>Open the UrbanLens import tool, choose your file, and preview detected pins before saving.</p></div>
+            <div><span>3</span><strong>Review</strong><p>Rename pins, add tags or statuses, and keep sensitive places private by default.</p></div>
+        </div>
+    </section>
+
+    <div class="help-import-layout">
+        <aside class="help-import-toc ul-card" aria-label="Table of contents">
+            <h2>Contents</h2>
+            <nav>
+                <a href="#google-takeout">Google Takeout / My Maps</a>
+                <a href="#multiplottr">Multiplottr</a>
+                <a href="#google-earth">Google Earth</a>
+                <a href="#gpx-apps">GPX apps and GPS devices</a>
+                <a href="#gis-portals">GIS portals and open data</a>
+                <a href="#openstreetmap">OpenStreetMap / Overpass</a>
+                <a href="#csv-spreadsheets">CSV spreadsheets</a>
+                <a href="#supported-formats">Supported formats</a>
+                <a href="#import-tips">Import tips</a>
+            </nav>
+        </aside>
+
+        <main class="help-import-content">
+            <section class="help-import-section ul-card" id="google-takeout">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">map</i></div>
+                <h2>Google Takeout / Google My Maps</h2>
+                <p>Best for saved Google Maps lists and custom Google My Maps layers. UrbanLens can read KML/KMZ and GeoJSON-style point exports.</p>
+                <ol>
+                    <li>Go to <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a> and select the Maps data you want to export.</li>
+                    <li>For Google My Maps, open the map, use the menu beside the map title, and choose the export option for KML/KMZ.</li>
+                    <li>Download the archive, then upload the KML/KMZ file or the full ZIP if it contains supported files.</li>
+                </ol>
+                <div class="help-import-callout"><strong>Tip:</strong> If Takeout gives you multiple files, import one layer at a time so names, descriptions, and categories are easier to verify.</div>
+            </section>
+
+            <section class="help-import-section ul-card" id="multiplottr">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">pin_drop</i></div>
+                <h2>Multiplottr</h2>
+                <p>Use Multiplottr exports when you have a simple list of plotted points or map batches you want to preserve in UrbanLens.</p>
+                <ol>
+                    <li>Open your Multiplottr map and look for export, download, or share options.</li>
+                    <li>Choose KML if available. If KML is not available, export a CSV with latitude and longitude columns.</li>
+                    <li>Upload the exported file and confirm that each row has a name plus valid coordinates.</li>
+                </ol>
+                <a class="help-import-link" href="https://www.multiplottr.com/" target="_blank" rel="noopener noreferrer">Open Multiplottr</a>
+            </section>
+
+            <section class="help-import-section ul-card" id="google-earth">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">public</i></div>
+                <h2>Google Earth</h2>
+                <p>Google Earth projects are usually a good fit for KML/KMZ import, especially if you grouped places into folders.</p>
+                <ol>
+                    <li>Open the project or folder in Google Earth.</li>
+                    <li>Export or save it as KML/KMZ.</li>
+                    <li>Upload the file to UrbanLens. Folder names may help you decide which tags to apply after import.</li>
+                </ol>
+                <a class="help-import-link" href="https://earth.google.com/" target="_blank" rel="noopener noreferrer">Open Google Earth</a>
+            </section>
+
+            <section class="help-import-section ul-card" id="gpx-apps">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">route</i></div>
+                <h2>GPX apps and GPS devices</h2>
+                <p>Gaia GPS, CalTopo, Garmin, AllTrails, Wikiloc, Geocaching.com, and similar tools commonly export GPX. UrbanLens imports GPX waypoints as pins.</p>
+                <ol>
+                    <li>Export your saved waypoints or map items as GPX. KML also works when the app offers it.</li>
+                    <li>If your app exports tracks and routes, add waypoints for the places you actually want as pins.</li>
+                    <li>Upload the GPX file and review waypoint names and notes in the preview step.</li>
+                </ol>
+                <div class="help-import-service-grid">
+                    <a href="https://www.gaiagps.com/" target="_blank" rel="noopener noreferrer">Gaia GPS</a>
+                    <a href="https://caltopo.com/" target="_blank" rel="noopener noreferrer">CalTopo</a>
+                    <a href="https://www.geocaching.com/" target="_blank" rel="noopener noreferrer">Geocaching.com</a>
+                    <a href="https://www.alltrails.com/" target="_blank" rel="noopener noreferrer">AllTrails</a>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="gis-portals">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">dataset</i></div>
+                <h2>GIS portals and open data</h2>
+                <p>City, county, state, federal, university, and preservation datasets often export Shapefile, GeoJSON, CSV, or ZIP archives.</p>
+                <ol>
+                    <li>Find the dataset's download or export panel.</li>
+                    <li>Prefer GeoJSON for point datasets. Use Shapefile or ZIP when GeoJSON is not offered.</li>
+                    <li>For CSV exports, make sure latitude and longitude columns are included.</li>
+                </ol>
+                <div class="help-import-service-grid">
+                    <a href="https://data.gov/" target="_blank" rel="noopener noreferrer">Data.gov</a>
+                    <a href="https://www.nps.gov/subjects/nationalregister/data-downloads.htm" target="_blank" rel="noopener noreferrer">NRHP data</a>
+                    <a href="https://www.epa.gov/enviro" target="_blank" rel="noopener noreferrer">EPA Envirofacts</a>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="openstreetmap">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">travel_explore</i></div>
+                <h2>OpenStreetMap / Overpass Turbo</h2>
+                <p>Use OSM and Overpass exports when you are importing candidate places from map data, such as historic, industrial, abandoned, or infrastructure features.</p>
+                <ol>
+                    <li>Build a query in <a href="https://overpass-turbo.eu/" target="_blank" rel="noopener noreferrer">Overpass Turbo</a>.</li>
+                    <li>Export the results as GeoJSON for the cleanest import, or OSM XML if you need original OSM tags.</li>
+                    <li>Review imported pins carefully. Public map tags can be incomplete or inaccurate.</li>
+                </ol>
+            </section>
+
+            <section class="help-import-section ul-card" id="csv-spreadsheets">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">table_chart</i></div>
+                <h2>CSV spreadsheets</h2>
+                <p>CSV is the easiest path for Airtable, Google Sheets, Excel, personal notes, scraped lists, or manually curated research.</p>
+                <ol>
+                    <li>Create columns for name, latitude, longitude, and optionally description, category, tags, or source URL.</li>
+                    <li>Export or download the sheet as CSV.</li>
+                    <li>Upload the CSV and verify that coordinates are in decimal degrees.</li>
+                </ol>
+                <div class="help-import-callout"><strong>Coordinate format:</strong> Use separate latitude and longitude columns like <code>42.3601</code> and <code>-71.0589</code>.</div>
+            </section>
+
+            <section class="help-import-section ul-card" id="supported-formats">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">fact_check</i></div>
+                <h2>Supported import formats</h2>
+                <div class="help-import-format-grid">
+                    <span>KML / KMZ</span><span>GeoJSON</span><span>GPX waypoints</span><span>CSV</span><span>Shapefile ZIP</span><span>WKT / WKB</span><span>OSM XML</span><span>ZIP archives</span>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="import-tips">
+                <div class="help-import-section-icon"><i class="material-symbols-outlined">tips_and_updates</i></div>
+                <h2>Import tips</h2>
+                <ul>
+                    <li>Start with a small export first if you are testing a new service.</li>
+                    <li>Use tags after import to record the source, such as <code>google-takeout</code> or <code>caltopo</code>.</li>
+                    <li>Keep vulnerable places private and only share with trusted people.</li>
+                    <li>If an import fails, try exporting as KML or GeoJSON, which usually preserve names and descriptions well.</li>
+                </ul>
+            </section>
+        </main>
+    </div>
+</div>
+{% endblock %}
