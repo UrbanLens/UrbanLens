@@ -86,6 +86,21 @@ class SiteSettings(abstract.Model):
         help_text="Allow AI to suggest categories for pins and locations based on their metadata.",
         verbose_name="Category suggestions",
     )
+    ai_document_import_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to extract pins from uploaded plain-text and Word documents during pin import.",
+        verbose_name="Document pin import",
+    )
+    ai_document_import_max_chars = IntegerField(
+        default=20_000,
+        help_text=(
+            "Maximum number of characters read from an uploaded .txt/.docx file before AI import "
+            "rejects it outright, to bound token usage per document. Uploads longer than this are "
+            "not truncated - the user is asked to shorten the file instead."
+        ),
+        verbose_name="Document import max length (characters)",
+        validators=[MinValueValidator(500), MaxValueValidator(200_000)],
+    )
 
     # --- Search provider ---
 

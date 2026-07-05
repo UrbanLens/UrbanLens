@@ -76,7 +76,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "AI - Feature Toggles",
             {
-                "fields": ["ai_category_suggestions_enabled"],
+                "fields": ["ai_category_suggestions_enabled", "ai_document_import_enabled", "ai_document_import_max_chars"],
                 "description": "Individual feature toggles. The global <em>AI enabled</em> switch overrides all of these.",
             },
         ),

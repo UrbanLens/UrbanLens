@@ -492,7 +492,16 @@
     <!-- -- Step 1: Upload ------------------------------------------ -->
     <div id="iw-step-1">
         <div class="iw-body">
-            <p class="iw-hint">KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. Multiple files accepted.</p>
+            <p class="iw-hint">
+                Many apps are supported, not just Google Takeout - see the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for exact steps by app.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV{% if can_use_ai_features and profile.ai_enabled %}, plain text (.txt), Word documents (.docx){% endif %} - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. Multiple files accepted.
+            </p>
+            {% if can_use_ai_features and profile.ai_enabled %}
+            <div class="iw-takeout-help" style="margin-bottom:18px;">
+                <i class="material-symbols-outlined" style="vertical-align:middle;font-size:1.1rem;color:var(--ul-primary-color)">auto_awesome</i>
+                <strong>AI document import:</strong> upload a plain-text or Word file (trip notes, a forwarded list, research writeup) and AI will pull out only the locations it explicitly mentions for you to review before anything is imported. It will not add locations that aren't actually in your file, even if the file's wording tries to tell it to.
+            </div>
+            {% endif %}
             <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
                 <i class="material-symbols-outlined">help_outline</i>
                 <span>How do I get a Google Takeout file?</span>
@@ -512,7 +521,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.zip,.tgz,.tar.gz">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
         </div>
@@ -526,7 +535,7 @@
         <div class="iw-body">
             <div class="iw-parsing">
                 <div class="iw-spinner"></div>
-                <span>Reading files...</span>
+                <span id="iw-parsing-label">Reading files...</span>
             </div>
         </div>
     </div>
@@ -717,6 +726,13 @@ $('iw-btn-upload').addEventListener('click', async function () {
     showStep('parsing', 0);
     $('closeImportDialog').disabled = true;
 
+    var hasDocument = selectedFiles.some(function (f) {
+        return /\.(txt|docx)$/i.test(f.name);
+    });
+    $('iw-parsing-label').textContent = hasDocument
+        ? 'Reading files... AI is analyzing your document, this may take a moment.'
+        : 'Reading files...';
+
     var formData = new FormData();
     formData.append('csrfmiddlewaretoken', getCsrfToken());
     selectedFiles.forEach(function (f) { formData.append('upload_files', f); });
@@ -732,6 +748,9 @@ $('iw-btn-upload').addEventListener('click', async function () {
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
         showStep('preview', 1);
+        (parsedData.warnings || []).forEach(function (w) {
+            toastr.warning(w, 'Could not import a file');
+        });
     } catch (err) {
         $('closeImportDialog').disabled = false;
         showStep('upload', 0);
