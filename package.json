@@ -18,7 +18,7 @@
         "test": "python -m coverage run --source='src' src/urbanlens/manage.py test",
         "coverage": "python -m coverage report",
         "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
-        "pre-commit": "pre-commit run --all-files && act pull_request"
+        "pre-commit": "pre-commit run --all-files"
     },
     "author": "Jess Mann",
     "license": "N/A",

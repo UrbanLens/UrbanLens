@@ -78,7 +78,7 @@ WORKDIR /app
 
 # Install Python dependencies (including the `dev` group) from pyproject.toml/uv.lock.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen
+RUN uv sync --frozen --no-install-project
 
 RUN mkdir -p \
         /app/src/urbanlens/downloads/downloads \
