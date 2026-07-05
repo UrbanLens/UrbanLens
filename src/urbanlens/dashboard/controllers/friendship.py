@@ -5,7 +5,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
@@ -31,18 +31,25 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     friend_profiles = get_connections(profile)
 
     incoming_requests: list[Friendship] = []
+    outgoing_requests: list[Friendship] = []
     viewer_friendship: Friendship | None = None
     viewer_can_request = False
     mutual_friends: list[Profile] = []
 
     if viewer:
-        # Incoming requests only shown to the profile owner
+        # Incoming/outgoing requests only shown to the profile owner
         if viewer.pk == profile.pk:
             incoming_requests = list(
                 Friendship.objects.filter(
                     to_profile=profile,
                     status=FriendshipStatus.REQUESTED,
                 ).select_related("from_profile__user"),
+            )
+            outgoing_requests = list(
+                Friendship.objects.filter(
+                    from_profile=profile,
+                    status=FriendshipStatus.REQUESTED,
+                ).select_related("to_profile__user"),
             )
 
         # Determine viewer's relationship with this profile
@@ -68,6 +75,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
         "friends": friend_profiles,
         "mutual_friends": mutual_friends,
         "incoming_requests": incoming_requests,
+        "outgoing_requests": outgoing_requests,
         "viewer_friendship": viewer_friendship,
         "viewer_can_request": viewer_can_request,
         "is_own_profile": viewer is not None and viewer.pk == profile.pk,
@@ -143,6 +151,30 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     if friendship:
         notify_friend_request(from_profile, to_profile)
     return friendship
+
+
+def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
+    """Re-render whichever own-profile friend widget triggered this HTMX request.
+
+    Accept/reject/ignore/remove actions always mutate the current user's own
+    friendships, so the refreshed context is always built for `request.user.profile`
+    - never for the other profile named in the URL. The compact widget on the
+    profile page and the full friends page share this data but use different
+    markup, so dispatch on HX-Target (the id of the element htmx is swapping).
+    """
+    viewer_profile = request.user.profile
+    ctx = _friend_list_ctx(viewer_profile, viewer_profile)
+    if request.headers.get("HX-Target") == "friends_page_list":
+        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
+    return render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+
+
+def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
+    """Redirect back to a profile page after a plain (non-HTMX) form submission."""
+    other_profile = Profile.objects.filter(pk=profile_id).first()
+    if other_profile:
+        return redirect("profile.view_user", profile_slug=other_profile.slug or str(other_profile.uuid))
+    return redirect(fallback_view_name)
 
 
 class FriendController(LoginRequiredMixin, GenericViewSet):
@@ -235,8 +267,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         # Notify the original requester that their request was accepted.
         requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile
-        from django.urls import reverse
-
         NotificationLog.objects.create(
             profile=requester,
             status=Status.UNREAD,
@@ -247,12 +277,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             url=reverse("profile.view_user", kwargs={"profile_slug": request.user.profile.slug or str(request.user.profile.uuid)}),
         )
 
-        to_profile = Profile.objects.filter(pk=profile_id).first()
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(request.user.profile, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return _redirect_to_profile(profile_id)
 
     def reject_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -265,12 +292,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.decline()
-        to_profile = Profile.objects.filter(pk=profile_id).first()
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(request.user.profile, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return _redirect_to_profile(profile_id)
 
     def ignore_friend(self, request: HttpRequest, profile_id: int):
         """Ignore a friend request - no notification sent, button stays unavailable."""
@@ -284,12 +308,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.ignore()
-        to_profile = Profile.objects.filter(pk=profile_id).first()
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(request.user.profile, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return _redirect_to_profile(profile_id)
 
     def block_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -311,7 +332,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 to_profile=other,
                 status=FriendshipStatus.BLOCKED,
             )
-        return HttpResponse("Profile blocked.")
+        if request.headers.get("HX-Request"):
+            return HttpResponse("Profile blocked.")
+        return _redirect_to_profile(profile_id)
 
     def mute_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -325,7 +348,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         friendship.status = FriendshipStatus.MUTED
         friendship.save()
-        return HttpResponse("Muted.")
+        if request.headers.get("HX-Request"):
+            return HttpResponse("Muted.")
+        return _redirect_to_profile(profile_id)
 
     def remove_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -338,12 +363,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.remove()
-        to_profile = Profile.objects.filter(pk=profile_id).first()
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(request.user.profile, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return _redirect_to_profile(profile_id)
 
     def friend_list(self, request: HttpRequest, profile_id: int):
         """HTMX partial: friend list shown on the profile page."""
@@ -360,7 +382,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
     def friends_page(self, request: HttpRequest, profile_id: int):
         """Full friends list page - only accessible to the profile owner."""
         from django.http import Http404
-        from django.shortcuts import redirect
 
         profile = Profile.objects.filter(pk=profile_id).first()
         if not profile:
@@ -398,8 +419,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             friendship.accept()
             from_profile = Profile.objects.filter(pk=from_profile_id).first()
             if from_profile:
-                from django.urls import reverse
-
                 NotificationLog.objects.create(
                     profile=from_profile,
                     status=Status.UNREAD,

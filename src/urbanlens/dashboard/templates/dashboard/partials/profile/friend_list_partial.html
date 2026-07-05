@@ -20,6 +20,42 @@
         </div>
     </div>
 
+    {# -- Outgoing friend requests (own profile only) ------------------------ #}
+    {% if is_own_profile and outgoing_requests %}
+    <div class="friend-requests-section friend-requests-section--outgoing">
+        <p class="friend-requests-label">
+            <i class="material-symbols-outlined">hourglass_top</i>
+            {{ outgoing_requests|length }} pending sent request{{ outgoing_requests|length|pluralize }}
+        </p>
+        <ul class="friend-request-list">
+            {% for req in outgoing_requests %}
+            <li class="friend-request-item">
+                {% if req.to_profile.avatar %}
+                <img class="friend-avatar-sm" src="{{ req.to_profile.avatar.url }}" alt="">
+                {% else %}
+                <div class="friend-avatar-sm friend-avatar-placeholder">{{ req.to_profile.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-request-info">
+                    <a href="{% url 'profile.view_user' req.to_profile.slug %}" class="friend-request-name">
+                        {{ req.to_profile.full_name|default:req.to_profile.username }}
+                    </a>
+                    <span class="friend-request-sub">@{{ req.to_profile.username }}</span>
+                </div>
+                <div class="friend-request-actions">
+                    <button type="button" class="btn btn-friend btn-friend--reject"
+                            hx-post="{% url 'friend.remove' req.to_profile.id %}"
+                            hx-target="#friend_list"
+                            hx-swap="outerHTML"
+                            title="Cancel request">
+                        <i class="material-symbols-outlined">cancel</i> Cancel
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     {# -- Incoming friend requests (own profile only) ------------------------ #}
     {% if is_own_profile and incoming_requests %}
     <div class="friend-requests-section">
