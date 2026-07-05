@@ -148,7 +148,7 @@ class VisitSuggestion(abstract.Model):
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_visit_suggestions"
         indexes = [
-            Index(fields=["suggested_to", "status"], name="dashboard_vs_suggested_to_status_idx"),
+            Index(fields=["suggested_to", "status"], name="dashboard_visit_st_status_idx"),
         ]
         constraints = [
             CheckConstraint(

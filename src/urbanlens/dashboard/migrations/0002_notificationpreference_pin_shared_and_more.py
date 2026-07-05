@@ -195,7 +195,7 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["suggested_to", "status"],
-                        name="dashboard_vs_suggested_to_status_idx",
+                        name="dashboard_visit_st_status_idx",
                     )
                 ],
                 "constraints": [
