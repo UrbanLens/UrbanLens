@@ -1,6 +1,3 @@
-{# Shared Accept/Decline button pair for actionable notifications.
-   Context vars: respond_url_name (required), respond_arg (required),
-   accept_action, reject_action, reject_label (all optional). #}
 <div class="notif-friend-actions">
   <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()"
           hx-post="{% url respond_url_name respond_arg %}" hx-vals='{"action": "{{ accept_action|default:"accept" }}"}'

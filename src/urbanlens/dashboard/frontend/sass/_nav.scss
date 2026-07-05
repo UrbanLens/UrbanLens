@@ -604,6 +604,8 @@ nav .brand-logo img {
         .material-symbols-outlined,
         .material-icons {
             font-size: 1.05rem;
+            line-height: 1em;
+            height: 1em;
             color: var(--ul-grey-6);
         }
     }
@@ -794,6 +796,8 @@ nav .brand-logo img {
     .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
+        line-height: 1em;
+        height: 1em;
     }
 
     &--accept {

@@ -346,11 +346,6 @@
         color: var(--ul-grey-6);
     }
 
-    .friend-requests-section {
-        background: $dk-warning-amber-bg;
-        border-color: $dk-warning-amber-bd;
-    }
-
     .friend-requests-label {
         color: $dk-warning-amber-txt;
     }
@@ -365,31 +360,6 @@
 
     .friend-request-item {
         border-bottom-color: rgba(255, 255, 255, .06);
-    }
-
-    .btn-friend-accept {
-        background: $dk-success-bg;
-        border-color: $dk-accept-border;
-        color: $color-green-300;
-
-        &:hover {
-            background: $dk-accept-hover;
-        }
-    }
-
-    .btn-friend-reject {
-        background: $dk-reject-bg;
-        border-color: $dk-reject-border;
-        color: $color-red-300;
-
-        &:hover {
-            background: $dk-reject-hover;
-        }
-    }
-
-    .btn-friend-ignore {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
     }
 
     .btn-friend-remove:hover {
@@ -441,42 +411,6 @@
 
         p {
             color: var(--ul-grey-6);
-        }
-    }
-
-    .btn-friend--accept {
-        background: $dk-success-bg;
-        border-color: $dk-accept-border;
-        color: $color-green-300;
-
-        &:hover {
-            background: $dk-accept-hover;
-        }
-    }
-
-    .btn-friend--reject {
-        background: $dk-reject-bg;
-        border-color: $dk-reject-border;
-        color: $color-red-300;
-
-        &:hover {
-            background: $dk-reject-hover;
-        }
-    }
-
-    .btn-friend--ignore {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
-    }
-
-    .btn-friend--remove {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
-
-        &:hover {
-            background: $dk-friend-remove-hover;
-            border-color: $dk-reject-border;
-            color: $color-red-300;
         }
     }
 

@@ -1750,35 +1750,6 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     gap: 0.75rem;
 }
 
-.btn-friend--invite {
-    @include btn-primary;
-    margin-left: auto;
-    padding: 8px 14px;
-    font-size: .85rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    white-space: nowrap;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.1rem;
-    }
-
-    &.btn-friend--compact {
-        margin-left: 0;
-        padding: 5px 11px;
-        font-size: .78rem;
-        font-weight: 600;
-
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: 1rem;
-        }
-    }
-}
-
 .invite-dialog {
     @include dialog-base(460px);
 
@@ -2491,22 +2462,26 @@ a.profile-stat--link {
 
 .btn-friend {
     &--accept {
-        background: var(--ul-grey-0);
-        border-color: $color-green-300;
-        color: $color-green-800;
+        background: var(--ul-button-yes-bg);
+        border-color: var(--ul-button-yes-border);
+        color: var(--ul-button-yes-text);
 
         &:hover {
-            background: $color-green-200;
+            background: var(--ul-button-yes-hover-bg);
+            border-color: var(--ul-button-yes-hover-border);
+            color: var(--ul-button-yes-hover-text);
         }
     }
 
     &--reject {
-        background: var(--ul-grey-0);
-        border-color: $color-red-300;
-        color: $color-red-800;
+        background: var(--ul-button-no-bg);
+        border-color: var(--ul-button-no-border);
+        color: var(--ul-button-no-text);
 
         &:hover {
-            background: var(--ul-grey-0a);
+            background: var(--ul-button-no-hover-bg);
+            border-color: var(--ul-button-no-hover-border);
+            color: var(--ul-button-no-hover-text);
         }
     }
 
@@ -2527,54 +2502,39 @@ a.profile-stat--link {
         padding: .25rem .5rem;
 
         &:hover {
-            background: var(--ul-grey-0a);
-            border-color: $color-red-300;
-            color: $color-red-800;
+            background: var(--ul-button-no-hover-bg);
+            border-color: var(--ul-button-no-hover-border);
+            color: var(--ul-button-no-hover-text);
         }
     }
-}
+    
+    &--invite {
+        @include btn-primary;
+        margin-left: auto;
+        padding: 8px 14px;
+        font-size: .85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        white-space: nowrap;
 
-.btn-friend-accept,
-.btn-friend-reject,
-.btn-friend-ignore {
-    @include icon-btn(30px);
-    border: 1px solid;
-    border-radius: 6px;
-    outline: none;
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.1rem;
+        }
 
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-}
+        &.btn-friend--compact {
+            margin-left: 0;
+            padding: 5px 11px;
+            font-size: .78rem;
+            font-weight: 600;
 
-.btn-friend-accept {
-    background: var(--ul-grey-0);
-    border-color: $color-green-300;
-    color: $color-green-800;
-
-    &:hover {
-        background: $color-green-200;
-    }
-}
-
-.btn-friend-reject {
-    background: var(--ul-grey-0);
-    border-color: $color-red-300;
-    color: $color-red-800;
-
-    &:hover {
-        background: var(--ul-grey-0a);
-    }
-}
-
-.btn-friend-ignore {
-    background: var(--ul-grey-0);
-    border-color: var(--ul-grey-2);
-    color: var(--ul-grey-5);
-
-    &:hover {
-        background: var(--ul-grey-0);
+            .material-symbols-outlined,
+            .material-icons {
+                font-size: 1rem;
+            }
+        }
     }
 }
 
