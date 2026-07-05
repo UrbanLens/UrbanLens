@@ -1327,7 +1327,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     padding: 1.1rem 1.25rem;
 }
 
-.profile-annotation-inner {
+#profile-annotation-inner {
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -1580,7 +1580,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 
 // -- Multi-note annotation system ----------------------------------------------
 
-.profile-annotation-notes {
+body div.container .profile-annotation-notes {
     display: flex;
     flex-direction: column;
     gap: .65rem;
