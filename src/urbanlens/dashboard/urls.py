@@ -85,6 +85,14 @@ urlpatterns = [
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
+        "help/import-pins/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/help/import_pins.html",
+            extra_context={"page_name": "help_import_pins"},
+        ),
+        name="help.import_pins",
+    ),
+    path(
         "map/",
         include(
             [
