@@ -64,16 +64,28 @@ class PinVisitStrTests(TestCase):
 
 
 class VisitSourceEnumTests(TestCase):
-    """VisitSource has exactly two expected members."""
+    """VisitSource has the expected members and values."""
 
     def test_manual_value(self) -> None:
         self.assertEqual(VisitSource.MANUAL.value, "manual")
 
-    def test_google_takeout_value(self) -> None:
-        self.assertEqual(VisitSource.GOOGLE_TAKEOUT.value, "google_takeout")
+    def test_history_value(self) -> None:
+        self.assertEqual(VisitSource.HISTORY.value, "history")
 
-    def test_only_two_members(self) -> None:
-        self.assertEqual(len(VisitSource.values), 2)
+    def test_trip_value(self) -> None:
+        self.assertEqual(VisitSource.TRIP.value, "trip")
+
+    def test_user_value(self) -> None:
+        self.assertEqual(VisitSource.USER.value, "user")
+
+    def test_photo_value(self) -> None:
+        self.assertEqual(VisitSource.PHOTO.value, "photo")
+
+    def test_geolocation_value(self) -> None:
+        self.assertEqual(VisitSource.GEOLOCATION.value, "geolocation")
+
+    def test_exactly_six_members(self) -> None:
+        self.assertEqual(len(VisitSource.values), 6)
 
 
 # -- PinMarkup -----------------------------------------------------------------

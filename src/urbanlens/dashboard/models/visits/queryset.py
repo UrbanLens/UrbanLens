@@ -30,12 +30,12 @@ class VisitQuerySet(abstract.QuerySet):
         return self.filter(source="manual")
 
     def from_takeout(self) -> Self:
-        """Filter to visits imported from Google Takeout.
+        """Filter to visits imported from the user's location history (e.g. Google Takeout).
 
         Returns:
             Filtered queryset.
         """
-        return self.filter(source="google_takeout")
+        return self.filter(source="history")
 
 
 class VisitManager(abstract.Manager.from_queryset(VisitQuerySet)):

@@ -136,7 +136,7 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
             locality="Springfield",
             administrative_area_level_1="IL",
         )
-        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "in Springfield, IL")
+        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name, city=pin.city, state=pin.state), "in Springfield, IL")
 
     def test_never_falls_back_to_pins_private_name(self) -> None:
         """Pin.name is the user's private custom label and must never appear in the message."""
@@ -145,8 +145,11 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
 
     def test_location_takes_priority_over_origin_pin_fallback(self) -> None:
         location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Location Wins")
-        pin = baker.make(Pin, profile=self.profile, location=location, official_name="Pin Name Ignored")
-        self.assertEqual(build_visit_suggestion_message(location=location, official_name=pin.official_name), "at Location Wins")
+        pin = baker.make(Pin, profile=self.profile, location=location, official_name="Pin Name Ignored", locality="Ignored City", administrative_area_level_1="ZZ")
+        self.assertEqual(
+            build_visit_suggestion_message(location=location, official_name=pin.official_name, city=pin.city, state=pin.state),
+            "at Location Wins",
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
     import datetime
+    from decimal import Decimal
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_visit_suggestion_message(*, location: Location | None = None, official_name: str | None = None, city: str | None = None, state: str | None = None) -> str:
+def build_visit_suggestion_message(*, location: Location | None = None, **kwargs: str | None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
 
     Prefers the shared Location. When there is no Location - e.g. the origin pin is
@@ -34,21 +35,18 @@ def build_visit_suggestion_message(*, location: Location | None = None, official
     in this module, so this function is structurally incapable of leaking them.
 
     Args:
-        location: Shared Location identifying the place, if one exists.
-        origin_pin: The suggester's own pin, used only as a fallback when there is
-            no Location (never read for its private name/description).
+        location: Shared Location identifying the place, if one exists. Wins over
+            official_name/city/state below whenever present.
+        **kwargs: Additional keyword arguments for fallback values.
 
     Returns:
         A short phrase like "at Old Mill" or "in Springfield, IL", or a generic
         fallback when no usable name or city/state is available from either source.
     """
-    if not official_name:
-        official_name = location.official_name if location else None
-    canonical_name = location.name if location else None
-    if not city:
-        city = location.city if location else None
-    if not state:
-        state = location.state if location else None
+    official_name = location.official_name if location else kwargs.get("official_name")
+    canonical_name = location.name if location else kwargs.get("canonical_name")
+    city = location.city if location else kwargs.get("city")
+    state = location.state if location else kwargs.get("state")
 
     if is_meaningful_name(official_name):
         return f"at {official_name}"
@@ -61,7 +59,7 @@ def build_visit_suggestion_message(*, location: Location | None = None, official
     return "at a location"
 
 
-def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: float | None = None, longitude: float | None = None) -> Pin | None:
+def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> Pin | None:
     """Return a profile's own (non-detail) pin at a place, if one exists.
 
     Args:
@@ -83,7 +81,7 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
     return None
 
 
-def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | None = None, longitude: float | None = None) -> bool:
+def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
     """Return whether a profile already has a (non-detail) pin at a place.
 
     Args:
@@ -98,7 +96,7 @@ def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude:
     return find_pin_at(profile, location_id=location_id, latitude=latitude, longitude=longitude) is not None
 
 
-def find_existing_visit_on_date(profile: Profile, *, location: Location | None, latitude: float, longitude: float, visited_at: datetime.datetime) -> PinVisit | None:
+def find_existing_visit_on_date(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime) -> PinVisit | None:
     """Return a profile's own visit already logged for this place on this calendar date, if any.
 
     Args:
@@ -118,7 +116,7 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
     return pin.visit_history.filter(visited_at__date=visited_at.date()).order_by("-visited_at").first()
 
 
-def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float, longitude: float) -> Pin:
+def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Create a bare pin for a profile at a place, deliberately copying nothing private.
 
     Unlike ``pin_sharing._create_pin_from_share`` (which copies a source pin's
@@ -137,7 +135,7 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
     return Pin.objects.create(profile=profile, location=location, latitude=latitude, longitude=longitude)
 
 
-def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitude: float, longitude: float) -> Pin:
+def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Return a profile's existing pin at a place, creating a minimal one if needed.
 
     Args:
@@ -175,10 +173,10 @@ def create_visit_suggestion(
     *,
     suggested_to: Profile,
     suggested_by: Profile | None,
-    visited_at: datetime.datetime | None = None,
+    visited_at: datetime.datetime,
     location: Location | None,
-    latitude: float,
-    longitude: float,
+    latitude: float | Decimal,
+    longitude: float | Decimal,
     candidate_profiles: list[Profile],
     origin_visit: PinVisit | None = None,
     trip_activity: TripActivity | None = None,
@@ -317,8 +315,15 @@ def merge_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profi
 
     Returns:
         The existing PinVisit, with new mutually-connected participants added.
+
+    Raises:
+        ValueError: If suggestion.existing_visit is not set - callers must check
+            suggestion.offers_merge before calling this.
     """
     visit = suggestion.existing_visit
+    if visit is None:
+        raise ValueError("merge_visit_suggestion requires suggestion.existing_visit to be set")
+
     mutual = _mutual_candidates(accepting_profile, suggestion.suggested_by, list(suggestion.candidate_profiles.all()))
     existing_participant_ids = set(visit.participants.values_list("pk", flat=True))
     new_participants = [p for pk, p in mutual.items() if pk not in existing_participant_ids]

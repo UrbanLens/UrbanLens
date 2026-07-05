@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.models import AnonymousUser, User
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
 
@@ -37,18 +37,19 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
         Returns:
             Rendered notification dropdown partial, with the badge-refresh trigger set.
         """
-        suggestion = get_object_or_404(VisitSuggestion, pk=suggestion_id, suggested_to=request.user.profile)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        suggestion = get_object_or_404(VisitSuggestion, pk=suggestion_id, suggested_to=profile)
         action = request.POST.get("action")
         if suggestion.status == VisitSuggestionStatus.PENDING:
             if suggestion.offers_merge:
                 if action == "add_participants":
-                    merge_visit_suggestion(suggestion, request.user.profile)
+                    merge_visit_suggestion(suggestion, profile)
                 elif action == "new_entry":
-                    accept_visit_suggestion(suggestion, request.user.profile)
+                    accept_visit_suggestion(suggestion, profile)
                 elif action == "reject":
                     reject_visit_suggestion(suggestion)
             elif action == "accept":
-                accept_visit_suggestion(suggestion, request.user.profile)
+                accept_visit_suggestion(suggestion, profile)
             elif action == "reject":
                 reject_visit_suggestion(suggestion)
 
@@ -57,10 +58,10 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
 
-        notifications = NotificationLog.objects.for_profile(request.user.profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
         response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
-            {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()},
+            {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(profile).unread().count()},
         )
         return _trigger_badge_refresh(response)

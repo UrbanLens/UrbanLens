@@ -6,6 +6,7 @@ import pytest
 from requests import HTTPError
 
 from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway
+from urbanlens.dashboard.services.redact import redact_secret
 
 
 def test_search_masks_forbidden_key_from_exception_and_logs(caplog) -> None:
@@ -23,7 +24,7 @@ def test_search_masks_forbidden_key_from_exception_and_logs(caplog) -> None:
 
     assert "SECRETKEY1234" not in str(excinfo.value)  # nosec B101
     assert "SECRETKEY1234" not in caplog.text  # nosec B101
-    assert "SECR...1234" in caplog.text  # nosec B101
+    assert redact_secret("SECRETKEY1234") in caplog.text  # nosec B101
 
 
 def test_search_rejects_missing_configuration_before_request() -> None:

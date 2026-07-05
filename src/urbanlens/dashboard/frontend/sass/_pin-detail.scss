@@ -1263,10 +1263,6 @@
 
 // -- Pin details card theming (pin overview / location details page) --------
 body.page-location-details {
-    .location-details.card {
-        border: 1px solid var(--ul-grey-1a);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
-    }
 
     .details-grid {
         .detail-row {
@@ -1279,7 +1275,11 @@ body.page-location-details {
         }
 
         .field-label {
-            color: $text-secondary;
+            text-align: left;
+            color: var(--ul-grey-6);
+        }
+        .field-value {
+            text-align: left;
         }
     }
 

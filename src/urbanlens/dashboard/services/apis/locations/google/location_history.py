@@ -196,14 +196,14 @@ def import_location_history_streaming(
             already_exists = PinVisit.objects.filter(
                 pin=pin,
                 visited_at=visit["visited_at"],
-                source=VisitSource.GOOGLE_TAKEOUT,
+                source=VisitSource.HISTORY,
             ).exists()
             if not already_exists:
                 try:
                     PinVisit.objects.create(
                         pin=pin,
                         visited_at=visit["visited_at"],
-                        source=VisitSource.GOOGLE_TAKEOUT,
+                        source=VisitSource.HISTORY,
                     )
                     if not pin.last_visited or visit["visited_at"] > pin.last_visited:
                         pin.last_visited = visit["visited_at"]
