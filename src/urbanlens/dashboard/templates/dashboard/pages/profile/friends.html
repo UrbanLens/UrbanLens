@@ -45,19 +45,19 @@
                     <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
                 </div>
                 <div class="friend-request-actions">
-                    <button type="button" class="btn btn--primary btn-friend--accept"
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--accept"
                             hx-post="{% url 'friend.accept' req.from_profile.id %}"
                             hx-target="#freq-{{ req.from_profile.id }}"
                             hx-swap="outerHTML">
                         <i class="material-symbols-outlined">check</i> Accept
                     </button>
-                    <button type="button" class="btn btn--primary btn-friend--reject"
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
                             hx-post="{% url 'friend.reject' req.from_profile.id %}"
                             hx-target="#freq-{{ req.from_profile.id }}"
                             hx-swap="outerHTML">
                         <i class="material-symbols-outlined">close</i> Decline
                     </button>
-                    <button type="button" class="btn btn--primary btn-friend--ignore"
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--ignore"
                             hx-post="{% url 'friend.ignore' req.from_profile.id %}"
                             hx-target="#freq-{{ req.from_profile.id }}"
                             hx-swap="outerHTML">
@@ -97,7 +97,7 @@
                     </div>
                 </a>
                 {% if is_own_profile %}
-                <button type="button" class="btn btn--primary btn-friend--remove"
+                <button type="button" class="btn btn--primary btn-friend btn-friend--remove"
                         hx-post="{% url 'friend.remove' friend.id %}"
                         hx-confirm="Remove {{ friend.username }} from your friends?"
                         hx-target="closest li"

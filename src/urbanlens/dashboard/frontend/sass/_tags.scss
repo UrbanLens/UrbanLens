@@ -625,6 +625,13 @@ dialog.tag-create-card.ul-dialog {
     &:hover {
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #6366f1) 40%, transparent);
     }
+
+    // Already selected as a parent/child elsewhere in the picker - permanently excluded
+    // from the suggestion pool (as opposed to the transient tab/search filtering below,
+    // which toggles inline `display` and must not be able to override this).
+    &.badge-rel-suggestion--hidden {
+        display: none;
+    }
 }
 
 // Only the "All" tab shows each suggestion's badge-kind chip; narrowing to a specific

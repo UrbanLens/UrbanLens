@@ -10,7 +10,7 @@
         </h3>
         <div class="profile-section-actions">
             {% if is_own_profile %}
-            {% include "dashboard/partials/profile/_invite_friend_button.html" with button_class="btn btn--primary btn-friend--invite btn-friend--compact" dialog_id="invite-friend-dialog-profile" %}
+            {% include "dashboard/partials/profile/_invite_friend_button.html" with button_class="btn btn--primary btn-friend btn-friend--invite btn-friend--compact" dialog_id="invite-friend-dialog-profile" %}
             {% endif %}
             {% if is_own_profile and friends|length > 8 %}
             <a href="{% url 'friend.page' viewer.id %}" class="profile-section-link">
