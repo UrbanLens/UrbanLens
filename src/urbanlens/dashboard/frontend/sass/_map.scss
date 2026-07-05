@@ -2012,7 +2012,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     gap: 4px;
     z-index: 1000;
     box-shadow: 0 1px 6px rgba(0, 0, 0, .16), 0 0 0 0 transparent;
-    transition: box-shadow .15s, opacity .15s;
+    transition: box-shadow .15s, opacity .15s, left .22s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: text;
 
     @include up($breakpoint-sm) {
@@ -2834,7 +2834,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             left: calc(300px + 54px);
             width: min(360px, calc(100% - 300px - 230px - 54px));
         }
-        .leaflet-top.leaflet-left { left: calc(300px + 10px); }
+        .leaflet-top.leaflet-left { left: 300px; }
     }
 }
 
@@ -3434,12 +3434,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         }
     }
 
-    &:hover, &.active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
+    &:hover, &.active, &:focus, &:active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
     &.active {
-        color: $color-blue-700;
-        border-color: rgba($color-blue-500, .35);
-        background: rgba($color-blue-500, .1);
-
         .map-layers-toggle-icon { color: $color-blue-500; }
         .map-layer-thumb img { opacity: 1; }
     }
@@ -3554,6 +3550,13 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     @include up($breakpoint-xs) {
         width: 54px;
         height: 54px;
+        border-radius: 7px;
+    }
+
+    
+    @include up($breakpoint-md) {
+        width: 5rem;
+        height: 5rem;
         border-radius: 7px;
     }
 
