@@ -63,14 +63,13 @@
             {% endif %}
             {% endfor %}
 
-            {% with has_unassigned=False %}
-            {% for badge in user_badges %}{% if badge.id not in assigned_badge_ids %}{% if forloop.first %}
+            {% if unassigned_badges %}
             <details class="pab-add-picker">
                 <summary class="pab-add-btn" title="Add a label">
                     <i class="material-symbols-outlined">add</i> Add label
                 </summary>
                 <div class="pab-add-list">
-            {% endif %}
+                    {% for badge in unassigned_badges %}
                     <button type="button"
                             class="profile-badge-chip"
                             style="--badge-color: {{ badge.color|default:'#6b7280' }}"
@@ -81,12 +80,10 @@
                         {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
                         {{ badge.name }}
                     </button>
-            {% if forloop.last %}
+                    {% endfor %}
                 </div>
             </details>
             {% endif %}
-            {% endif %}{% endfor %}
-            {% endwith %}
 
             {% if not user_badges %}
             <span class="profile-annotation-empty">No labels yet - create some in Organize → People</span>

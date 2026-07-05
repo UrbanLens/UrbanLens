@@ -94,6 +94,12 @@
                                     <i class="material-symbols-outlined">close</i> Decline
                                 </button>
                             </form>
+                            <form method="post" action="{% url 'friend.ignore' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn friendship-btn friendship-btn btn--ghost" title="Ignore - they won't be able to request again">
+                                    <i class="material-symbols-outlined">block</i> Ignore
+                                </button>
+                            </form>
                         </div>
                     {% elif friendship_status == 'muted' %}
                         <div class="friendship-chip friendship-chip--muted">

@@ -239,6 +239,11 @@
                 p.hidden = true;
             });
         }
+        if (!e.target.closest('.pab-add-picker')) {
+            document.querySelectorAll('.pab-add-picker[open]').forEach(function (d) {
+                d.open = false;
+            });
+        }
     });
 
     // -- @mention autocomplete -------------------------------------------------

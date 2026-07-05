@@ -1509,6 +1509,19 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     display: flex;
     align-items: center;
     gap: 2px;
+
+    // Fill all stars up to the hovered one (preview the new rating).
+    @for $i from 1 through 5 {
+        &:has(.pat-star:nth-child(#{$i}):hover) {
+            .pat-star:nth-child(-n+#{$i}) {
+                color: $ui-star-gold;
+            }
+
+            .pat-star:not(:nth-child(-n+#{$i})) {
+                color: var(--ul-grey-1a);
+            }
+        }
+    }
 }
 
 .pat-star {

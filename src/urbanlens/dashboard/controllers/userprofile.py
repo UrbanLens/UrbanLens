@@ -194,7 +194,9 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         friendship = Friendship.objects.all().between(my_profile, profile)
         context["friendship"] = friendship
-        context["friendship_status"] = friendship.status if friendship else None
+        # Template compares this against lowercase literals ('accepted', 'requested', ...) -
+        # FriendshipStatus values are capitalized ("Accepted", "Requested"), so normalize here.
+        context["friendship_status"] = friendship.status.lower() if friendship else None
         context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
 
         # Trips in common
@@ -219,13 +221,16 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
         context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
-        context["user_badges"] = Badge.objects.user_badges().visible_to(my_profile).ordered()
-        context["assigned_badge_ids"] = set(
+        user_badges = Badge.objects.user_badges().visible_to(my_profile).ordered()
+        assigned_badge_ids = set(
             ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
                 "badge_id",
                 flat=True,
             ),
         )
+        context["user_badges"] = user_badges
+        context["assigned_badge_ids"] = assigned_badge_ids
+        context["unassigned_badges"] = [badge for badge in user_badges if badge.id not in assigned_badge_ids]
         trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
         context["trust_rating"] = trust.rating if trust else 0
         context["my_profile"] = my_profile
@@ -788,6 +793,7 @@ def _render_profile_annotation_partial(
             "viewer_notes": viewer_notes,
             "user_badges": user_badges,
             "assigned_badge_ids": assigned_ids,
+            "unassigned_badges": [badge for badge in user_badges if badge.id not in assigned_ids],
             "trust_rating": trust.rating if trust else 0,
         },
     )
