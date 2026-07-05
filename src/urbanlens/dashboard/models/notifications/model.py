@@ -57,6 +57,23 @@ class NotificationLog(abstract.Model):
         """True when this notification has not been read yet."""
         return self.status == Status.UNREAD
 
+    @property
+    def is_friend_request_pending(self) -> bool:
+        """True when this is a friend_request notification still awaiting a response.
+
+        Deliberately independent of read status: opening the notification dropdown
+        marks notifications read, but the Accept/Decline buttons must stay visible
+        until the recipient actually accepts or declines the request.
+        """
+        if self.notification_type != NotificationType.FRIEND_REQUEST or not self.source_profile_id or not self.profile_id:
+            return False
+
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        friendship = Friendship.objects.between(self.source_profile_id, self.profile_id)
+        return friendship is not None and friendship.status == FriendshipStatus.REQUESTED
+
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"

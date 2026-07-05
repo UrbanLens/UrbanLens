@@ -103,6 +103,48 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
     )
 
 
+def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> Friendship | None:
+    """Send a friend request, auto-accepting instead if one is already pending in reverse.
+
+    If `to_profile` already sent `from_profile` a pending request, the two profiles
+    clearly want to be friends - accept that request instead of creating a redundant
+    crossed request and a duplicate "new friend request" notification.
+
+    Args:
+        from_profile: Profile initiating this request.
+        to_profile: Profile being requested.
+
+    Returns:
+        The resulting Friendship (pending or newly accepted), or None if the request
+        could not be created.
+    """
+    existing = Friendship.objects.all().between(from_profile, to_profile)
+    if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
+        existing.accept()
+        NotificationLog.objects.create(
+            profile=to_profile,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.FRIEND_ACCEPTED,
+            title="Friend request accepted",
+            message=f"{from_profile.username} accepted your friend request.",
+            url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
+            source_profile=from_profile,
+        )
+        # Mark from_profile's own pending friend_request notification (from to_profile) as read
+        NotificationLog.objects.filter(
+            profile=from_profile,
+            notification_type=NotificationType.FRIEND_REQUEST,
+            source_profile_id=to_profile.pk,
+        ).update(status=Status.READ)
+        return existing
+
+    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk)
+    if friendship:
+        notify_friend_request(from_profile, to_profile)
+    return friendship
+
+
 class FriendController(LoginRequiredMixin, GenericViewSet):
     def request_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -169,11 +211,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             if not req_trips & their_trips:
                 return HttpResponse("This user only accepts requests from people on a shared trip.", status=403)
 
-        friendship = Friendship.request(from_profile=requesting, to_profile=profile_id)
+        friendship = request_or_accept_friendship(requesting, to_profile)
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
-
-        notify_friend_request(requesting, to_profile)
 
         return render(
             request,
@@ -444,21 +484,21 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                     status=403,
                 )
 
-            friendship = Friendship.request(from_profile=inviter, to_profile=to_profile.pk)
+            friendship = request_or_accept_friendship(inviter, to_profile)
             if not friendship:
                 return HttpResponse("Could not send friend request.", status=400)
 
-            notify_friend_request(inviter, to_profile)
             if subscription_role is not None:
                 from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
                 from urbanlens.dashboard.models.subscriptions import grant_subscription
 
                 grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
 
+            result = "friend_added" if friendship.status == FriendshipStatus.ACCEPTED else "request_sent"
             return render(
                 request,
                 "dashboard/partials/profile/invite_result.html",
-                {"result": "request_sent", "username": to_profile.username},
+                {"result": result, "username": to_profile.username},
             )
 
         # No registered user - create an invitation token and send email

@@ -4,7 +4,10 @@
     <div class="profile-annotation-header">
         <i class="material-icons">lock</i>
         <span class="profile-annotation-title">My Private Notes</span>
-        <span class="profile-annotation-badge">Only visible to you</span>
+        <span class="profile-annotation-badge chip">
+            <i class="material-icons">visibility_off</i>
+            Only visible to you
+        </span>
     </div>
 
     {# ── Trust rating ────────────────────────────────────────────────────────── #}
@@ -142,7 +145,7 @@
                       placeholder="Add a private note…"
                       rows="2"></textarea>
             <div class="pan-compose-actions">
-                <button type="submit" class="pan-compose-submit">
+                <button type="submit" class="btn btn--primary pan-compose-submit">
                     <i class="material-icons">add</i> Add Note
                 </button>
             </div>
