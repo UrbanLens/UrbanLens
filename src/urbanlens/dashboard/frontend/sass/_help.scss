@@ -1,0 +1,204 @@
+.help-import-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.help-import-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+  gap: 2rem;
+  align-items: center;
+  padding: 2rem;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(31, 111, 235, .16), rgba(23, 185, 120, .12));
+  border: 1px solid var(--ul-border-color, rgba(148, 163, 184, .24));
+}
+
+.help-import-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-weight: 800;
+  color: var(--ul-color-primary, #2563eb);
+  margin: 0 0 .75rem;
+}
+
+.help-import-hero h1 {
+  font-size: clamp(2.4rem, 5vw, 4.5rem);
+  line-height: .95;
+  margin: 0 0 1rem;
+}
+
+.help-import-lede {
+  max-width: 720px;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: var(--ul-text-muted, #64748b);
+}
+
+.help-import-actions,
+.help-import-service-grid {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.help-import-map-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 280px;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
+  background: #0f172a;
+}
+
+.help-import-map-card img {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: cover;
+  opacity: .82;
+}
+
+.help-import-pin {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: #fff;
+  color: #dc2626;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, .26);
+}
+
+.help-import-pin--one { top: 22%; left: 22%; }
+.help-import-pin--two { top: 48%; right: 18%; color: #2563eb; }
+.help-import-pin--three { bottom: 16%; left: 42%; color: #16a34a; }
+
+.help-import-quickstart,
+.help-import-layout { margin-top: 1.5rem; }
+
+.help-import-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.help-import-steps div,
+.help-import-section {
+  position: relative;
+}
+
+.help-import-steps span {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: .75rem;
+  border-radius: 999px;
+  background: var(--ul-color-primary, #2563eb);
+  color: #fff;
+  font-weight: 800;
+}
+
+.help-import-steps strong { display: block; font-size: 1.1rem; }
+.help-import-steps p { color: var(--ul-text-muted, #64748b); line-height: 1.55; }
+
+.help-import-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.help-import-toc {
+  position: sticky;
+  top: 1rem;
+}
+
+.help-import-toc h2,
+.help-import-section h2 { margin-top: 0; }
+
+.help-import-toc nav {
+  display: grid;
+  gap: .45rem;
+}
+
+.help-import-toc a,
+.help-import-link,
+.help-import-service-grid a {
+  color: var(--ul-color-primary, #2563eb);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.help-import-toc a {
+  padding: .45rem .6rem;
+  border-radius: 10px;
+}
+
+.help-import-toc a:hover { background: rgba(37, 99, 235, .08); }
+
+.help-import-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.help-import-section {
+  scroll-margin-top: 1.5rem;
+  padding-left: 5.25rem;
+}
+
+.help-import-section p,
+.help-import-section li {
+  line-height: 1.65;
+}
+
+.help-import-section-icon {
+  position: absolute;
+  left: 1.5rem;
+  top: 1.5rem;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 18px;
+  background: rgba(37, 99, 235, .1);
+  color: var(--ul-color-primary, #2563eb);
+}
+
+.help-import-callout {
+  margin-top: 1rem;
+  padding: .9rem 1rem;
+  border-left: 4px solid var(--ul-color-primary, #2563eb);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, .08);
+}
+
+.help-import-format-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .75rem;
+}
+
+.help-import-format-grid span,
+.help-import-service-grid a {
+  padding: .75rem .9rem;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, .12);
+}
+
+@media (max-width: 900px) {
+  .help-import-hero,
+  .help-import-layout,
+  .help-import-steps { grid-template-columns: 1fr; }
+  .help-import-toc { position: static; }
+}
+
+@media (max-width: 600px) {
+  .help-import-page { padding-inline: .5rem; }
+  .help-import-hero { padding: 1.25rem; }
+  .help-import-section { padding-left: 1rem; padding-top: 5.25rem; }
+}
