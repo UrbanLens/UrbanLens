@@ -516,21 +516,84 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Parent / child relationship selector
-.badge-rel-header {
+// Parent / child relationship picker (reusable across create/edit/bulk-edit badge dialogs)
+.badge-rel-picker {
+    margin-top: .4rem;
+}
+
+.badge-rel-selected-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: .6rem;
+}
+
+.badge-rel-selected-group {
+    flex: 1 1 220px;
+    min-width: 220px;
+}
+
+.badge-rel-selected-label {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: .5rem;
-    margin-bottom: .35rem;
+    gap: .3rem;
+    margin: 0 0 .35rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    text-transform: uppercase;
+    letter-spacing: .02em;
 
-    .form-label {
-        margin-bottom: 0;
+    i {
+        font-size: 1rem;
+    }
+}
+
+.badge-rel-selected-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    min-height: 1.8rem;
+}
+
+.badge-rel-empty-hint {
+    margin: 0;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    font-style: italic;
+}
+
+.badge-rel-add-row {
+    margin-bottom: .5rem;
+}
+
+.badge-rel-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-bottom: .4rem;
+}
+
+.badge-rel-tab {
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    font-size: .78rem;
+    font-weight: 500;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+
+    &:hover {
+        background: var(--ul-grey-8a);
     }
 
-    .badge-rel-toggle {
-        margin-top: 0;
+    &.active {
+        background: $color-blue-100;
+        border-color: $color-blue-300;
+        color: $color-blue-700;
+        font-weight: 600;
     }
 }
 
@@ -553,38 +616,24 @@ dialog.tag-create-card.ul-dialog {
     font-size: .83rem;
 }
 
-.tag-parent-option {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.85rem;
+// Suggestion chips reuse `.tag-chip` styling but are clickable buttons, not removable pills.
+.tag-chip.badge-rel-suggestion {
+    border: none;
     cursor: pointer;
-    padding: 3px 8px;
-    border-radius: 20px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
-    transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+    transition: transform .1s, box-shadow .12s;
 
     &:hover {
-        background: var(--ul-grey-0);
-    }
-
-    &:has(input:checked) {
-        background: $color-blue-100;
-        border-color: $color-blue-300;
-        color: $color-blue-700;
-        font-weight: 600;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, .15);
-    }
-
-    input {
-        margin: 0;
-        cursor: pointer;
-        accent-color: $color-blue-700;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #6366f1) 40%, transparent);
     }
 }
 
-// -- Badge kind chip (shown in parent selectors to distinguish tag / category / status) --
+// Only the "All" tab shows each suggestion's badge-kind chip; narrowing to a specific
+// kind tab makes it redundant, so hide it there.
+.badge-rel-suggestions[data-active-tab]:not([data-active-tab=""]) .badge-kind-chip {
+    display: none;
+}
+
+// -- Badge kind chip (shown on the "All" tab to distinguish tag / category / status) --
 .badge-kind-chip {
     display: inline-block;
     margin-left: auto;

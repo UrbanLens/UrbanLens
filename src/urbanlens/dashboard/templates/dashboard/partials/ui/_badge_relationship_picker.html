@@ -1,0 +1,74 @@
+{% load dashboard_tags %}
+{# Reusable Parent/Child badge picker used by the create, edit, and bulk-edit badge dialogs.
+   mode='replace': selections fully replace the badge's parents/children on save (create/edit forms).
+   mode='additive': selections are added to whatever's already related, never removed (bulk-edit). #}
+<div class="badge-rel-picker" data-picker-id="{{ instance_id }}" data-mode="{{ mode }}">
+    <div class="badge-rel-selected-section">
+        <div class="badge-rel-selected-group">
+            <h4 class="badge-rel-selected-label"><i class="material-symbols-outlined">arrow_upward</i> Parents</h4>
+            <div class="badge-rel-selected-chips" id="{{ instance_id }}-sel-parent">
+                {% for b in initial_parents %}
+                <span class="tag-chip badge-rel-chip" data-id="{{ b.id }}" {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}>
+                    {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=False %}
+                    {% if mode == 'replace' %}<input type="hidden" name="parent_ids" value="{{ b.id }}">{% endif %}
+                    <button type="button" class="tag-chip-remove" title="Remove parent" onclick="BadgeRelPicker.remove('{{ instance_id }}', this.closest('.badge-rel-chip'))">&times;</button>
+                </span>
+                {% endfor %}
+            </div>
+            <p class="badge-rel-empty-hint" {% if initial_parents %}hidden{% endif %}>No parents selected.</p>
+        </div>
+        <div class="badge-rel-selected-group">
+            <h4 class="badge-rel-selected-label"><i class="material-symbols-outlined">arrow_downward</i> Children</h4>
+            <div class="badge-rel-selected-chips" id="{{ instance_id }}-sel-child">
+                {% for b in initial_children %}
+                <span class="tag-chip badge-rel-chip" data-id="{{ b.id }}" {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}>
+                    {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=False %}
+                    {% if mode == 'replace' %}<input type="hidden" name="child_ids" value="{{ b.id }}">{% endif %}
+                    <button type="button" class="tag-chip-remove" title="Remove child" onclick="BadgeRelPicker.remove('{{ instance_id }}', this.closest('.badge-rel-chip'))">&times;</button>
+                </span>
+                {% endfor %}
+            </div>
+            <p class="badge-rel-empty-hint" {% if initial_children %}hidden{% endif %}>No children selected.</p>
+        </div>
+    </div>
+
+    <div class="badge-rel-add-row">
+        <div class="kind-toggle badge-rel-add-mode" role="group" aria-label="Add selection as">
+            <label class="kind-toggle-option">
+                <input type="radio" name="{{ instance_id }}_add_mode" value="parent" checked>
+                <span><i class="material-symbols-outlined">arrow_upward</i> Add as parent</span>
+            </label>
+            <label class="kind-toggle-option">
+                <input type="radio" name="{{ instance_id }}_add_mode" value="child">
+                <span><i class="material-symbols-outlined">arrow_downward</i> Add as child</span>
+            </label>
+        </div>
+    </div>
+
+    {% if ns != 'people' %}
+    <div class="badge-rel-tabs" role="tablist">
+        <button type="button" class="badge-rel-tab" data-kind="tag" onclick="BadgeRelPicker.setTab('{{ instance_id }}','tag',this)">Tags</button>
+        <button type="button" class="badge-rel-tab" data-kind="category" onclick="BadgeRelPicker.setTab('{{ instance_id }}','category',this)">Categories</button>
+        <button type="button" class="badge-rel-tab" data-kind="status" onclick="BadgeRelPicker.setTab('{{ instance_id }}','status',this)">Statuses</button>
+        <button type="button" class="badge-rel-tab active" data-kind="" onclick="BadgeRelPicker.setTab('{{ instance_id }}','',this)">All</button>
+    </div>
+    {% endif %}
+
+    <input type="text" class="form-input badge-rel-search" placeholder="Search badges..."
+           oninput="BadgeRelPicker.filter('{{ instance_id }}', this.value)" autocomplete="off">
+
+    <div class="tag-parent-select badge-rel-suggestions" id="{{ instance_id }}-suggestions" data-active-tab="">
+        {% for b in candidates %}
+        <button type="button" class="tag-chip badge-rel-suggestion{% if selected_ids and b.id in selected_ids %} badge-rel-suggestion--hidden{% endif %}"
+                data-id="{{ b.id }}" data-kind="{{ b.kind }}" data-name="{{ b.name|lower }}"
+                {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}
+                onclick="BadgeRelPicker.select('{{ instance_id }}', this)">
+            {% if ns != 'people' %}
+            {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=True %}
+            {% else %}
+            {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=False %}
+            {% endif %}
+        </button>
+        {% endfor %}
+    </div>
+</div>
