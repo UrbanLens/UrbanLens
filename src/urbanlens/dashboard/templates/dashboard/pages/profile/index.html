@@ -97,7 +97,7 @@
                             <form method="post" action="{% url 'friend.ignore' profile.id %}">
                                 {% csrf_token %}
                                 <button type="submit" class="btn friendship-btn friendship-btn btn--ghost" title="Decline and they won't be able to request again">
-                                    <i class="material-symbols-outlined">block</i> Decline and Mute
+                                    <i class="material-symbols-outlined">block</i> Decline and Ignore
                                 </button>
                             </form>
                         </div>

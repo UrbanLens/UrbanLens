@@ -93,12 +93,26 @@
     }
 
     .badge-rel-tab {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-7b);
+        color: var(--ul-grey-5a);
 
         &:hover {
-            background: var(--ul-grey-8a);
+            color: var(--ul-grey-2);
         }
+    }
+
+    .badge-rel-popup {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .badge-rel-add-btn {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .badge-rel-trash.is-active {
+        border-color: var(--ul-grey-6b);
+        background: var(--ul-grey-0);
     }
 
     .icon-option {
@@ -318,23 +332,6 @@
     .shared-visited-item {
         border-color: var(--ul-grey-8b);
         color: var(--ul-grey-2);
-    }
-
-    .friend-card {
-        border-color: var(--ul-grey-8b);
-
-        &:hover {
-            border-color: var(--ul-grey-6b);
-        }
-    }
-
-    .friend-card-name {
-        color: var(--ul-grey-1);
-    }
-
-    .friend-card-username,
-    .friend-card-area {
-        color: var(--ul-grey-6);
     }
 
     .friend-requests-label {

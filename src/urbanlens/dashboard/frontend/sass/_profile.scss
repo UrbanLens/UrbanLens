@@ -2202,6 +2202,7 @@ a.profile-stat--link {
     &:hover {
         border-color: var(--ul-grey-3b);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+        background-color: var(--ul-grey-0b);
     }
 
     .friend-card-link {
@@ -2278,13 +2279,13 @@ a.profile-stat--link {
 .friend-card-name {
     font-weight: 600;
     font-size: .88rem;
-    color: $text-primary;
+    color: var(--ul-grey-8);
     @include truncate;
 }
 
 .friend-card-username {
     font-size: .75rem;
-    color: $text-muted;
+    color: var(--ul-grey-6);
 }
 
 .friend-card-area {
@@ -2292,7 +2293,7 @@ a.profile-stat--link {
     align-items: center;
     gap: 2px;
     font-size: .72rem;
-    color: $text-muted;
+    color: var(--ul-grey-6);
     margin-top: 2px;
 
     .material-symbols-outlined,

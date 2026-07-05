@@ -337,32 +337,44 @@ function renderOrganizeTree(rows, ns) {
 
 // -- Badge Parent/Child relationship picker (reusable across create/edit/bulk-edit dialogs) --
 var BadgeRelPicker = {
-    select: function(instanceId, btn) {
+    toggle: function(instanceId, relType, triggerBtn) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (!popup) return;
+        var wasHidden = popup.hidden;
+        document.querySelectorAll('.badge-rel-popup').forEach(function(p) { p.hidden = true; });
+        if (!wasHidden) return;
+        popup.hidden = false;
+        var search = popup.querySelector('.badge-rel-search');
+        if (search) { search.value = ''; search.focus(); }
+    },
+    select: function(instanceId, relType, btn) {
         if (btn.classList.contains('badge-rel-suggestion--hidden')) return;
-        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
-        if (!picker) return;
-        var modeRadio = picker.querySelector('input[name="' + instanceId + '_add_mode"]:checked');
-        var relType = modeRadio ? modeRadio.value : 'parent';
         var group = document.getElementById(instanceId + '-sel-' + relType);
         if (!group) return;
         var id = btn.dataset.id;
         if (group.querySelector('.badge-rel-chip[data-id="' + id + '"]')) return;
 
-        var chip = document.createElement('span');
-        chip.className = 'tag-chip badge-rel-chip';
-        chip.dataset.id = id;
+        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
+        var pill = document.createElement('span');
+        pill.className = 'tag-chip';
         var color = btn.style.getPropertyValue('--tag-color');
-        if (color) chip.style.setProperty('--tag-color', color);
-        chip.innerHTML = btn.innerHTML;
-        var kindEl = chip.querySelector('.badge-kind-chip');
+        if (color) pill.style.setProperty('--tag-color', color);
+        pill.innerHTML = btn.innerHTML;
+        var kindEl = pill.querySelector('.badge-kind-chip');
         if (kindEl) kindEl.remove();
-        if (picker.dataset.mode === 'replace') {
+        if (picker && picker.dataset.mode === 'replace') {
             var hidden = document.createElement('input');
             hidden.type = 'hidden';
             hidden.name = relType + '_ids';
             hidden.value = id;
-            chip.appendChild(hidden);
+            pill.appendChild(hidden);
         }
+
+        var chip = document.createElement('span');
+        chip.className = 'badge-rel-chip';
+        chip.dataset.id = id;
+        chip.appendChild(pill);
+
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.className = 'tag-chip-remove';
@@ -370,43 +382,53 @@ var BadgeRelPicker = {
         removeBtn.innerHTML = '&times;';
         removeBtn.onclick = function() { BadgeRelPicker.remove(instanceId, chip); };
         chip.appendChild(removeBtn);
-        group.appendChild(chip);
 
-        btn.classList.add('badge-rel-suggestion--hidden');
-        BadgeRelPicker._applyFilters(instanceId);
+        group.appendChild(chip);
+        BadgeRelPicker._hideSuggestion(instanceId, id);
         BadgeRelPicker._updateEmptyHints(instanceId);
     },
     remove: function(instanceId, chipEl) {
         if (!chipEl) return;
         var id = chipEl.dataset.id;
         chipEl.remove();
-        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
-        if (picker) {
-            var suggestion = picker.querySelector('.badge-rel-suggestion[data-id="' + id + '"]');
-            if (suggestion) suggestion.classList.remove('badge-rel-suggestion--hidden');
-        }
-        BadgeRelPicker._applyFilters(instanceId);
+        BadgeRelPicker._showSuggestion(instanceId, id);
         BadgeRelPicker._updateEmptyHints(instanceId);
     },
-    setTab: function(instanceId, kind, btn) {
-        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
-        if (!picker) return;
-        picker.querySelectorAll('.badge-rel-tab').forEach(function(b) { b.classList.remove('active'); });
+    _hideSuggestion: function(instanceId, id) {
+        ['parent', 'child'].forEach(function(relType) {
+            var container = document.getElementById(instanceId + '-suggestions-' + relType);
+            if (!container) return;
+            var btn = container.querySelector('.badge-rel-suggestion[data-id="' + id + '"]');
+            if (btn) btn.classList.add('badge-rel-suggestion--hidden');
+        });
+    },
+    _showSuggestion: function(instanceId, id) {
+        ['parent', 'child'].forEach(function(relType) {
+            var container = document.getElementById(instanceId + '-suggestions-' + relType);
+            if (!container) return;
+            var btn = container.querySelector('.badge-rel-suggestion[data-id="' + id + '"]');
+            if (btn) { btn.classList.remove('badge-rel-suggestion--hidden'); BadgeRelPicker._applyFilters(instanceId, relType); }
+        });
+    },
+    setTab: function(instanceId, relType, kind, btn) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (!popup) return;
+        popup.querySelectorAll('.badge-rel-tab').forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
-        var container = document.getElementById(instanceId + '-suggestions');
+        var container = document.getElementById(instanceId + '-suggestions-' + relType);
         if (container) container.dataset.activeTab = kind;
-        BadgeRelPicker._applyFilters(instanceId);
+        BadgeRelPicker._applyFilters(instanceId, relType);
     },
-    filter: function(instanceId, query) {
-        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
-        if (picker) picker.dataset.searchQuery = query.toLowerCase().trim();
-        BadgeRelPicker._applyFilters(instanceId);
+    filter: function(instanceId, relType, query) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (popup) popup.dataset.searchQuery = query.toLowerCase().trim();
+        BadgeRelPicker._applyFilters(instanceId, relType);
     },
-    _applyFilters: function(instanceId) {
-        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
-        var container = document.getElementById(instanceId + '-suggestions');
-        if (!picker || !container) return;
-        var q = picker.dataset.searchQuery || '';
+    _applyFilters: function(instanceId, relType) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        var container = document.getElementById(instanceId + '-suggestions-' + relType);
+        if (!popup || !container) return;
+        var q = popup.dataset.searchQuery || '';
         var tab = container.dataset.activeTab || '';
         container.querySelectorAll('.badge-rel-suggestion').forEach(function(btn) {
             var matchesTab = !tab || btn.dataset.kind === tab;
@@ -434,7 +456,55 @@ var BadgeRelPicker = {
             Array.from(group.querySelectorAll('.badge-rel-chip')).forEach(function(chip) { BadgeRelPicker.remove(instanceId, chip); });
         });
     },
+    _makeSortable: function(instanceId) {
+        if (!window.Sortable) return;
+        var groupName = instanceId + '-rel';
+        var parentList = document.getElementById(instanceId + '-sel-parent');
+        var childList = document.getElementById(instanceId + '-sel-child');
+        var trash = document.getElementById(instanceId + '-trash');
+        if (!parentList || !childList) return;
+
+        function showTrash() { if (trash) trash.classList.add('is-active'); }
+        function hideTrash() { if (trash) trash.classList.remove('is-active'); }
+        function onEnd() { hideTrash(); BadgeRelPicker._updateEmptyHints(instanceId); }
+        function makeOnAdd(relType) {
+            return function(evt) {
+                var hidden = evt.item.querySelector('input[type="hidden"]');
+                if (hidden) hidden.name = relType + '_ids';
+            };
+        }
+
+        new Sortable(parentList, {
+            group: groupName, animation: 150, filter: '.tag-chip-remove', preventOnFilter: false,
+            onStart: showTrash, onEnd: onEnd, onAdd: makeOnAdd('parent'),
+        });
+        new Sortable(childList, {
+            group: groupName, animation: 150, filter: '.tag-chip-remove', preventOnFilter: false,
+            onStart: showTrash, onEnd: onEnd, onAdd: makeOnAdd('child'),
+        });
+        if (trash) {
+            new Sortable(trash, {
+                group: { name: groupName, put: true, pull: false },
+                animation: 150,
+                onAdd: function(evt) { BadgeRelPicker.remove(instanceId, evt.item); },
+            });
+        }
+    },
+    _initAll: function(root) {
+        (root || document).querySelectorAll('.badge-rel-picker').forEach(function(picker) {
+            if (picker.dataset.relInit === '1') return;
+            picker.dataset.relInit = '1';
+            BadgeRelPicker._makeSortable(picker.dataset.pickerId);
+        });
+    },
 };
+BadgeRelPicker._initAll();
+document.body.addEventListener('htmx:afterSettle', function() { BadgeRelPicker._initAll(); });
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.badge-rel-add-dropdown')) {
+        document.querySelectorAll('.badge-rel-popup').forEach(function(p) { p.hidden = true; });
+    }
+});
 
 var IconPicker = {
     toggle: function(id) {
@@ -1635,8 +1705,6 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('tag-bulk-description-nochange').checked=true;
         if(tagBulkDesc){tagBulkDesc.value=''; tagBulkDesc.dataset.bulkOriginal='';}
         BadgeRelPicker.reset('tag-bulk');
-        var tagBulkAddModeRadio = document.querySelector('input[name="tag-bulk_add_mode"][value="parent"]');
-        if (tagBulkAddModeRadio) tagBulkAddModeRadio.checked = true;
         _tagBulkConvertTarget = null;
         document.querySelectorAll('#tag-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
@@ -2052,8 +2120,6 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('cat-bulk-description-nochange').checked=true;
         if(catBulkDesc){catBulkDesc.value=''; catBulkDesc.dataset.bulkOriginal='';}
         BadgeRelPicker.reset('cat-bulk');
-        var catBulkAddModeRadio = document.querySelector('input[name="cat-bulk_add_mode"][value="parent"]');
-        if (catBulkAddModeRadio) catBulkAddModeRadio.checked = true;
         _catBulkConvertTarget = null;
         document.querySelectorAll('#cat-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
@@ -2266,8 +2332,6 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('status-bulk-description-nochange').checked = true;
         if (statusBulkDesc) { statusBulkDesc.value = ''; statusBulkDesc.dataset.bulkOriginal = ''; }
         BadgeRelPicker.reset('status-bulk');
-        var statusBulkAddModeRadio = document.querySelector('input[name="status-bulk_add_mode"][value="parent"]');
-        if (statusBulkAddModeRadio) statusBulkAddModeRadio.checked = true;
         _statusBulkConvertTarget = null;
         document.querySelectorAll('#status-bulk-edit-dialog .kind-toggle-option').forEach(function(b) { b.classList.remove('is-active'); });
         document.getElementById('status-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Status' : 'Statuses');
@@ -2935,8 +2999,6 @@ window._orgBulkSync = function(n, opts) {
         document.getElementById('people-bulk-description-nochange').checked = true;
         if (peopleBulkDesc) { peopleBulkDesc.value = ''; peopleBulkDesc.dataset.bulkOriginal = ''; }
         BadgeRelPicker.reset('people-bulk');
-        var peopleBulkAddModeRadio = document.querySelector('input[name="people-bulk_add_mode"][value="parent"]');
-        if (peopleBulkAddModeRadio) peopleBulkAddModeRadio.checked = true;
         document.getElementById('people-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Label' : 'Labels');
         var cbtn = document.getElementById('people-bulk-edit-confirm');
         cbtn.disabled = false;

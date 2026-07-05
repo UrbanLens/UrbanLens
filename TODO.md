@@ -232,6 +232,7 @@ Features planned for future releases.
 * Create visit entry by geolocation. [UL-312]
 * Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env) [UL-313]
 * "Memories" page, showing location history and location visits over time. [UL-314]
+* In the pin import dialog, allow unselect all / select all for each section, and "make all private" type functionality. Also allow applying badges to every section at once (maybe).
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

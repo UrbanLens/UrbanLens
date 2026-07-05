@@ -84,15 +84,14 @@
     </div>
 
     <div class="form-field">
-        <label class="form-label">Relationships (optional)</label>
         {% with badge_id_str=badge.id|stringformat:"d" %}
-        {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id='edit-'|add:badge_id_str mode='replace' ns=badge_url_kind candidates=available_parents selected_ids=selected_ids initial_parents=selected_parents initial_children=selected_children %}
+        {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id='edit-'|add:badge_id_str explainer_id='edit-'|add:badge_url_kind mode='replace' ns=badge_url_kind candidates=available_parents selected_ids=selected_ids initial_parents=selected_parents initial_children=selected_children %}
         {% endwith %}
     </div>
 
     {% if badge.kind != 'people' %}
     <div class="form-field">
-        <label class="form-label">Keywords (optional)</label>
+        <label class="form-label">Keywords</label>
         <textarea name="keywords" class="form-input" rows="2"
                   placeholder="e.g. power station, electrical substation"
         >{{ badge.keywords|default:'' }}</textarea>

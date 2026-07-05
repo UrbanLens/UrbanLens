@@ -33,7 +33,6 @@
             </div>
         </div>
         <div class="form-field">
-            <label class="form-label">Relationships (optional)</label>
             {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id='new-'|add:ns mode='replace' ns=ns candidates=parent_items %}
         </div>
         <div class="tag-form-actions"><button type="submit" class="btn btn--primary">Create</button><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button></div>

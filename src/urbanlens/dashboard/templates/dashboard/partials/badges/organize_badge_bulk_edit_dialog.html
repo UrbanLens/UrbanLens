@@ -52,8 +52,6 @@
                 </div>
             </div>
             <div class="form-field">
-                <label class="form-label">Add relationships</label>
-                <p class="form-hint">Selected badges are <strong>added</strong> as parents/children. Existing relationships are not removed.</p>
                 {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
             </div>
         </div>

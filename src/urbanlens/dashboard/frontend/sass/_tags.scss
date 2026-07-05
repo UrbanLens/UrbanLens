@@ -521,6 +521,16 @@ dialog.tag-create-card.ul-dialog {
     margin-top: .4rem;
 }
 
+.badge-rel-top-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: .3rem;
+
+    .form-label {
+        margin-bottom: 0;
+    }
+}
+
 .badge-rel-selected-section {
     display: flex;
     flex-wrap: wrap;
@@ -533,11 +543,19 @@ dialog.tag-create-card.ul-dialog {
     min-width: 220px;
 }
 
+.badge-rel-selected-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .35rem;
+}
+
 .badge-rel-selected-label {
     display: flex;
     align-items: center;
     gap: .3rem;
-    margin: 0 0 .35rem;
+    margin: 0;
     font-size: .78rem;
     font-weight: 600;
     color: var(--ul-grey-6);
@@ -549,11 +567,75 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.badge-rel-add-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.badge-rel-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    padding: 2px 8px 2px 5px;
+    border-radius: 20px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    font-size: .76rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: border-color .12s, color .12s, background .12s;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+}
+
+.badge-rel-popup {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 500;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    box-shadow: $shadow-dialog;
+    width: 22em;
+    max-width: calc(100vw - 24px);
+    padding: 8px;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
 .badge-rel-selected-chips {
     display: flex;
     flex-wrap: wrap;
     gap: .4rem;
     min-height: 1.8rem;
+}
+
+// Outer draggable wrapper: an inner `.tag-chip` pill (consistent everywhere it's used)
+// plus a remove button that sits outside the pill rather than styled as part of it.
+.badge-rel-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    .tag-chip-remove {
+        margin-left: 0;
+    }
 }
 
 .badge-rel-empty-hint {
@@ -563,38 +645,82 @@ dialog.tag-create-card.ul-dialog {
     font-style: italic;
 }
 
-.badge-rel-add-row {
-    margin-bottom: .5rem;
+.badge-rel-trash {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    border: 2px dashed transparent;
+    border-radius: $radius-sm;
+    color: var(--ul-grey-6);
+    font-size: .78rem;
+    font-weight: 600;
+    transition: height .15s ease, opacity .15s ease, border-color .15s ease, background .15s ease, color .15s ease;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
+
+    &.is-active {
+        height: 2.4rem;
+        opacity: 1;
+        margin-top: .5rem;
+        border-color: var(--ul-grey-3a);
+        background: var(--ul-grey-0a);
+    }
+
+    &.is-active:hover {
+        border-color: $color-red-400;
+        background: rgba($color-red-500, .08);
+        color: $color-red-600;
+    }
 }
 
+// Tabs inside the add-badges popup - underline style, not pill buttons.
 .badge-rel-tabs {
     display: flex;
-    flex-wrap: wrap;
-    gap: .35rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    overflow-x: auto;
     margin-bottom: .4rem;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 .badge-rel-tab {
-    padding: 3px 10px;
-    border-radius: 20px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    flex-shrink: 0;
+    padding: 5px 10px;
     font-size: .78rem;
     font-weight: 500;
     color: var(--ul-grey-6);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
     cursor: pointer;
-    transition: background .12s, border-color .12s, color .12s;
+    white-space: nowrap;
+    transition: color .12s, border-color .12s;
 
     &:hover {
-        background: var(--ul-grey-8a);
+        color: var(--ul-grey-9);
     }
 
     &.active {
-        background: $color-blue-100;
-        border-color: $color-blue-300;
-        color: $color-blue-700;
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
         font-weight: 600;
     }
+}
+
+.badge-rel-search {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: .4rem;
+    font-size: .83rem;
 }
 
 .tag-parent-select {
