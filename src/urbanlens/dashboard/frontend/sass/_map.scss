@@ -1998,7 +1998,10 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 /* -- Floating address search bar (mobile-first) --------------------- */
-#addr-search-bar {
+/* Shared "jump to" search bar component - see window.LocationSearchEngine.
+   Used floating over the main map by default; pages that embed it inline
+   (e.g. the safety check-in destination picker) add .addr-search-bar--inline. */
+.addr-search-bar {
     position: absolute;
     top: 10px;
     left: 10px;
@@ -2026,9 +2029,25 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-#addr-search-bar:focus-within {
+.addr-search-bar:focus-within {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .24), 0 0 0 2px rgba(var(--ul-primary-rgb, 79, 70, 229), .18);
     border-color: var(--ul-grey-3b);
+}
+
+/* Inline variant: a normal in-flow form field rather than a floating overlay */
+.addr-search-bar--inline {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    opacity: 1;
+    margin-bottom: .5rem;
+
+    @include up($breakpoint-sm) {
+        top: auto;
+        left: auto;
+        width: 100%;
+    }
 }
 
 .addr-search-icon {
@@ -2041,7 +2060,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-#address-search-input {
+.addr-search-input {
     flex: 1;
     min-width: 0;
     background: transparent;
@@ -2108,8 +2127,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-// Suggestions are now a child of #addr-search-bar
-#addr-search-suggestions {
+// Suggestions are now a child of .addr-search-bar
+.addr-search-suggestions {
     position: absolute;
     top: calc(100% + 4px);
     left: -1px;

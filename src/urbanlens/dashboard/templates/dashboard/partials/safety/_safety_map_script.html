@@ -8,10 +8,17 @@ Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
 and the destination marker becomes non-draggable).
 {% endcomment %}
 {% if not readonly %}
-<div class="safety-map-search-row">
-    <input type="text" id="safety-map-search" class="safety-map-search-input"
-           placeholder="Search an address, or enter coordinates like 40.7128, -74.0060" autocomplete="off">
-    <button type="button" class="btn btn--sm btn--ghost" id="safety-map-search-btn">Search</button>
+<div id="safety-map-search-bar" class="addr-search-bar addr-search-bar--inline">
+    <i class="material-icons addr-search-icon">place</i>
+    <input type="text" id="safety-map-search" class="addr-search-input"
+           placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
+    <button type="button" class="addr-search-history" id="safety-map-search-history" aria-label="Previous searches">
+        <i class="material-symbols-outlined">arrow_upward</i>
+    </button>
+    <button type="button" class="addr-search-clear" id="safety-map-search-clear" aria-label="Clear search">
+        <i class="material-symbols-outlined">close</i>
+    </button>
+    <div id="safety-map-search-suggestions" class="addr-search-suggestions" hidden></div>
 </div>
 {% endif %}
 <div id="safety-map" style="height:360px;border-radius:12px;overflow:hidden"></div>
@@ -65,47 +72,28 @@ and the destination marker becomes non-draggable).
         map.on('click', function (e) { setDestination(e.latlng.lat, e.latlng.lng); });
     }
 
-    // -- Address / coordinate search -------------------------------------------
+    // -- Address / coordinate search (shared window.LocationSearchEngine) ------
     if (!readonly) {
-        var searchInput = document.getElementById('safety-map-search');
-        var searchBtn = document.getElementById('safety-map-search-btn');
-        var COORD_RE = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
-
         function jumpTo(lat, lng, zoom) {
             map.setView([lat, lng], zoom || 15);
             setDestination(lat, lng);
         }
 
-        function runSearch() {
-            var query = (searchInput.value || '').trim();
-            if (!query) return;
-            var coordMatch = COORD_RE.exec(query);
-            if (coordMatch) {
-                jumpTo(parseFloat(coordMatch[1]), parseFloat(coordMatch[2]));
-                return;
-            }
-            searchBtn.disabled = true;
-            fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query))
-                .then(function (r) { return r.json(); })
-                .then(function (results) {
-                    if (!results || !results.length) {
-                        if (window.toastr) toastr.warning('Location not found.');
-                        return;
-                    }
-                    jumpTo(parseFloat(results[0].lat), parseFloat(results[0].lon));
-                })
-                .catch(function () {
-                    if (window.toastr) toastr.error('Search failed. Please try again.');
-                })
-                .finally(function () { searchBtn.disabled = false; });
-        }
-
-        if (searchInput && searchBtn) {
-            searchBtn.addEventListener('click', runSearch);
-            searchInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
-            });
-        }
+        window.LocationSearchEngine.create({
+            input: document.getElementById('safety-map-search'),
+            suggestions: document.getElementById('safety-map-search-suggestions'),
+            bar: document.getElementById('safety-map-search-bar'),
+            clearBtn: document.getElementById('safety-map-search-clear'),
+            historyBtn: document.getElementById('safety-map-search-history'),
+            historyKey: 'ul_safety_dest_history_v1',
+            sources: {
+                localPins: { url: '{% url "map.autocomplete.local" %}' },
+                osmNominatim: true,
+            },
+            enableMyLocation: true,
+            defaultZoom: 15,
+            onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },
+        });
     }
 
     {% if markup_json_url %}
