@@ -64,7 +64,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gdal-bin libgdal-dev postgresql-client
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           python-version: ${{ env.PYTHON_VERSION }}
