@@ -2,12 +2,14 @@
 {% load static %}
 
 {% block header %}
+{% if has_memory_data %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="" />
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+{% endif %}
 {% endblock %}
 
 {% block title %}Memories{% endblock %}
@@ -20,6 +22,19 @@
      data-map-lat="{{ map_center_lat|default:'null' }}"
      data-map-lng="{{ map_center_lng|default:'null' }}">
 
+    {% if not has_memory_data %}
+    <div class="page-inner">
+        <div class="memories-empty-state">
+            <div class="memories-empty-state-icon"><i class="material-symbols-outlined">auto_awesome_motion</i></div>
+            <h2>No memory data yet</h2>
+            <p>Import routes, location history, visits, trips, or photos to start building your Memories timeline.</p>
+            <button type="button" class="btn btn--primary"
+                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-symbols-outlined">upload</i> Import routes &amp; history
+            </button>
+        </div>
+    </div>
+    {% else %}
     <div class="memories-header">
         <div>
             <h1 class="memories-title"><i class="material-symbols-outlined">auto_awesome_motion</i> Memories</h1>
@@ -73,10 +88,12 @@
 
         <div id="memories-timeline"></div>
     </div>
+    {% endif %}
 </div>
 
 <div id="importPinsModal"></div>
 
+{% if has_memory_data %}
 <script>
 (function () {
     var root = document.getElementById('memories-page');
@@ -293,4 +310,5 @@
     setRange(initialStart.toISOString().slice(0, 10), initialEnd.toISOString().slice(0, 10));
 }());
 </script>
+{% endif %}
 {% endblock %}

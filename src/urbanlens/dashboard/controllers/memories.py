@@ -87,10 +87,13 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        total_distance_m = Route.objects.for_profile(profile).aggregate(total=Sum("distance_meters"))["total"] or 0.0
+        routes = Route.objects.for_profile(profile)
+        total_distance_m = routes.aggregate(total=Sum("distance_meters"))["total"] or 0.0
+        route_count = routes.count()
         places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
         photo_count = Image.objects.filter(profile=profile).count()
         trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
+        has_memory_data = any((route_count, places_visited, photo_count, trip_count))
 
         today = timezone.now().date()
         earliest = _earliest_memory_date(profile)
@@ -101,6 +104,7 @@ class MemoriesView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "memories",
+                "has_memory_data": has_memory_data,
                 "hero_stats": {
                     "total_distance_km": round(total_distance_m / 1000, 1),
                     "places_visited": places_visited,
