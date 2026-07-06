@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -63,11 +63,19 @@ class PinVisit(abstract.Model):
         on_delete=CASCADE,
         related_name="visit_history",
     )
+    route = ForeignKey(
+        "dashboard.Route",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="visits",
+    )
 
     objects = VisitManager()
 
     if TYPE_CHECKING:
         pin_id: int
+        route_id: int | None
 
     def __str__(self) -> str:
         """Return a human-readable description of this visit.

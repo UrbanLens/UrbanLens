@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, ImageField, Index, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
@@ -39,6 +39,11 @@ class Image(abstract.Model):
     caption = CharField(max_length=500, null=True, blank=True)
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # EXIF DateTimeOriginal (capture time), when present - distinct from
+    # `created`/`updated`, which only track upload time. Null for photos with
+    # no EXIF data or that predate this field; consumers should fall back to
+    # `created` when absent.
+    taken_at = DateTimeField(null=True, blank=True)
 
     objects = ImageManager()
 

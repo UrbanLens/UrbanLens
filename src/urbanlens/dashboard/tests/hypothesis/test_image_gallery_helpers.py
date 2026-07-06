@@ -3,20 +3,23 @@
 Covers:
 - _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
 - extract_gps_coords() - EXIF GPS extraction with mock PIL
+- extract_taken_at() - EXIF DateTimeOriginal extraction with mock PIL
 - _image_to_json() - dict serialisation of Image instances
 """
 from __future__ import annotations
 
+from datetime import datetime
 import io
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from django.utils import timezone
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.image_gallery import _image_to_json
-from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords
+from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -183,6 +186,80 @@ class ExtractGpsCoordsMockTests(TestCase):
             extract_gps_coords(mock_file)
         # seek(0) called in the finally block
         mock_file.seek.assert_called_with(0)
+
+
+# ---------------------------------------------------------------------------
+# extract_taken_at - via mocked PIL
+# ---------------------------------------------------------------------------
+
+class ExtractTakenAtMockTests(TestCase):
+    """extract_taken_at extracts EXIF DateTimeOriginal via mocked PIL objects."""
+
+    def _make_file_with_exif_ifd(self, exif_ifd: dict):
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = lambda self: True
+        mock_exif.get_ifd.return_value = exif_ifd
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = mock_exif
+        mock_file = io.BytesIO(b"fake_image_data")
+        return mock_file, mock_img
+
+    def test_returns_datetime_for_valid_exif(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: "2020:06:15 08:30:00"})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNotNone(result)
+        self.assertEqual((result.year, result.month, result.day), (2020, 6, 15))
+        self.assertEqual((result.hour, result.minute, result.second), (8, 30, 0))
+
+    def test_returns_none_when_no_exif(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = io.BytesIO(b"fake")
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_datetime_original_tag(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_for_unparseable_value(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: "not-a-date"})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_on_exception(self):
+        mock_file = io.BytesIO(b"not a real image")
+        with patch(
+            "urbanlens.dashboard.services.images.PILImage.open",
+            side_effect=Exception("cannot identify image file"),
+        ):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_file_seeked_back_after_extraction(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = MagicMock()
+        mock_file.seek.return_value = None
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            extract_taken_at(mock_file)
+        mock_file.seek.assert_called_with(0)
+
+    @given(dt=st.datetimes(min_value=datetime(1990, 1, 1), max_value=datetime(2099, 12, 31)))
+    @hyp_settings(max_examples=40, deadline=None)
+    def test_round_trips_arbitrary_datetime(self, dt: datetime):
+        exif_value = dt.strftime("%Y:%m:%d %H:%M:%S")
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: exif_value})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNotNone(result)
+        expected = timezone.make_aware(dt) if timezone.is_naive(dt) else dt
+        self.assertEqual(result.replace(tzinfo=None), expected.replace(tzinfo=None))
 
 
 # ---------------------------------------------------------------------------

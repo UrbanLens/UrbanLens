@@ -40,6 +40,31 @@ from urbanlens.UrbanLens.settings.app import settings
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
 
+def _notify_pin_import_parse_failure(fmt: str) -> None:
+    """Alert the site admin that a pin-import file failed to parse.
+
+    Only the file's detected format and the current time are included - never the
+    filename, contents, or the underlying parse error, since those may reflect
+    user-supplied data. Admins can consult the app logs for full details.
+
+    Args:
+        fmt: The detected file format (e.g. "csv", "kml"), or "shapefile" for a
+            shapefile bundle.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.services.notifications import NotificationEvent, notify
+
+    notify(
+        NotificationEvent.PIN_IMPORT_ERROR,
+        subject="Pin import failed to process a file",
+        message=(
+            f"A pin import attempt failed to process an uploaded {fmt} file at "
+            f"{timezone.now().isoformat()}. Check the app logs for details."
+        ),
+    )
+
+
 def _filename_stem(filename: str) -> str:
     """Return the filename without its extension or directory path.
 
@@ -348,10 +373,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         """
 
         from urbanlens.dashboard.services.apis.locations.google.location_history import (
+            detect_location_history_format,
             import_location_history_streaming,
+            semantic_history_to_routes,
         )
+        from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute, gpx_tracks_to_routes
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
         from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
@@ -362,6 +391,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         # Separate files into pin-data files and location-history files so each
         # category can be reported with an accurate total.
         location_history_files: list[tuple[str, bytes]] = []
+        # GPX tracks/routes and Google Takeout activitySegments both produce
+        # Route candidates, saved in a separate pass after pins (see below).
+        parsed_routes: list[ParsedRoute] = []
 
         # Shapefiles ship as a set of same-stem sidecar files (.shp/.dbf/.shx/...)
         # rather than one file, so they must be grouped before the per-file loop
@@ -382,6 +414,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 grand_total += len(data_list)
             except (OSError, ValueError, ShapefileDataSourceError) as exc:
                 logger.warning("Failed to parse shapefile bundle '%s', skipping: %s", bundle.stem, exc)
+                _notify_pin_import_parse_failure("shapefile")
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
@@ -411,6 +444,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     data_list = gpx_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
+                    parsed_routes.extend(gpx_tracks_to_routes(raw_bytes, user_profile, filename))
                 elif fmt == "wkt":
                     data_list = wkt_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
@@ -425,6 +459,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     grand_total += len(data_list)
             except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
+                _notify_pin_import_parse_failure(fmt)
 
         if not parsed:
             yield sse({"type": "error", "message": "No valid location files found in the upload."})
@@ -549,6 +584,19 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         if location_history_files:
             yield from import_location_history_streaming(location_history_files, user_profile)
 
+            for filename, raw_bytes in location_history_files:
+                try:
+                    data = json.loads(raw_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, ValueError):
+                    continue
+                if detect_location_history_format(data) == "semantic":
+                    parsed_routes.extend(semantic_history_to_routes(data, user_profile, filename))
+
+        # Save any Route candidates gathered above (GPX tracks/routes, Google
+        # Takeout activitySegments) as a third pass, subtype="route".
+        if parsed_routes:
+            yield from import_routes_streaming(parsed_routes, user_profile)
+
     def parse_for_preview(
         self,
         files: list[tuple[str, bytes]],
@@ -582,6 +630,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 raw_pins = shapefile_to_dict(bundle, user_profile)
             except (OSError, ValueError, ShapefileDataSourceError) as exc:
                 logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
+                _notify_pin_import_parse_failure("shapefile")
                 continue
             pins = self._preview_pins(raw_pins)
             if pins:
@@ -613,6 +662,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     continue
             except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
                 logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
+                _notify_pin_import_parse_failure(fmt)
                 continue
 
             pins = self._preview_pins(raw_pins)

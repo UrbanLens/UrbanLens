@@ -1,0 +1,308 @@
+@use 'variables' as *;
+
+// -- Memories page ----------------------------------------------------------
+
+.memories-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.memories-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 .25rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--ul-grey-8);
+
+    .material-symbols-outlined {
+        font-size: 1.7rem;
+        color: $color-deep-purple-500;
+    }
+}
+
+.memories-subtitle {
+    margin: 0;
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+}
+
+// -- Hero stats -------------------------------------------------------------
+
+.memories-hero-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.memories-stat-tile {
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .75rem;
+    padding: 1rem 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+
+    .memories-stat-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: rgba(156, 39, 176, .12);
+
+        .material-symbols-outlined {
+            font-size: 1.4rem;
+            color: $color-deep-purple-500;
+        }
+    }
+
+    .memories-stat-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--ul-grey-8);
+    }
+
+    .memories-stat-label {
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+// -- On this day --------------------------------------------------------
+
+.memories-on-this-day {
+    background: linear-gradient(135deg, rgba(255, 152, 0, .10), rgba(255, 152, 0, .02));
+    border: 1px solid rgba(255, 152, 0, .25);
+    border-radius: .75rem;
+    padding: .9rem 1.1rem;
+    margin-bottom: 1.5rem;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.memories-on-this-day-title {
+    font-weight: 700;
+    font-size: .95rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0 0 .5rem;
+    color: var(--ul-grey-8);
+
+    .material-symbols-outlined {
+        color: $color-orange-500;
+        font-size: 1.2rem;
+    }
+}
+
+.memories-on-this-day-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.memories-on-this-day-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 999px;
+    padding: .3rem .7rem;
+    font-size: .8rem;
+    color: var(--ul-grey-7);
+    text-decoration: none;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+// -- Controls -----------------------------------------------------------
+
+.memories-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+
+.memories-date-range {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+
+    input[type="date"] {
+        padding: .35rem .5rem;
+        border-radius: .4rem;
+        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+}
+
+.memories-quick-range {
+    display: flex;
+    gap: .4rem;
+}
+
+.memories-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-left: auto;
+}
+
+.memories-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .8rem;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    user-select: none;
+
+    .memories-legend-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    &.is-off {
+        opacity: .4;
+    }
+}
+
+// -- Map ------------------------------------------------------------------
+
+.memories-map-wrap {
+    position: relative;
+    border-radius: .75rem;
+    overflow: hidden;
+    border: 1px solid var(--ul-grey-1a);
+    margin-bottom: 1.5rem;
+}
+
+#memories-map {
+    height: 420px;
+    width: 100%;
+}
+
+.memories-marker-icon {
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .material-symbols-outlined {
+        color: #fff;
+        font-size: 14px;
+    }
+}
+
+// -- Timeline ---------------------------------------------------------------
+
+.memories-timeline-group-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    margin: 1.5rem 0 .75rem;
+
+    &:first-child {
+        margin-top: 0;
+    }
+}
+
+.memories-timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: .9rem;
+}
+
+.memories-card {
+    display: flex;
+    gap: .75rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .65rem;
+    padding: .75rem;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow .15s ease, transform .15s ease;
+
+    &:hover {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+        transform: translateY(-1px);
+    }
+}
+
+.memories-card-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .material-symbols-outlined {
+        color: #fff;
+        font-size: 1.1rem;
+    }
+}
+
+.memories-card-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.memories-card-body {
+    min-width: 0;
+}
+
+.memories-card-title {
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--ul-grey-8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.memories-card-subtitle {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.memories-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 2.2rem;
+        color: var(--ul-grey-4);
+        display: block;
+        margin: 0 auto .5rem;
+    }
+}

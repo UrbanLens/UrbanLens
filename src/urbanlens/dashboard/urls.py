@@ -21,6 +21,7 @@ from urbanlens.dashboard.controllers import (
     location_wiki,
     maps,
     markup,
+    memories,
     notifications,
     organize,
     pin,
@@ -778,6 +779,16 @@ urlpatterns = [
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),
+            ],
+        ),
+    ),
+    path(
+        "memories/",
+        include(
+            [
+                path("", memories.MemoriesView.as_view(), name="memories.view"),
+                path("data/", memories.MemoriesFeedDataView.as_view(), name="memories.data"),
+                path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
             ],
         ),
     ),

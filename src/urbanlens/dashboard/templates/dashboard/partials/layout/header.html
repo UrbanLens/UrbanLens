@@ -13,6 +13,7 @@
             <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
             <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
             <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+            <li><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
             {% else %}
             <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
             {% endif %}
@@ -133,6 +134,7 @@
         {% if user.is_authenticated %}
         <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
         <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+        <li><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
         {% endif %}
         <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
     </ul>

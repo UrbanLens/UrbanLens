@@ -153,6 +153,46 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1440)],
     )
 
+    # --- Admin notifications ---
+
+    notify_admin_email = CharField(
+        max_length=254,
+        blank=True,
+        default=os.getenv("UL_ADMIN_NOTIFICATION_EMAIL", ""),
+        help_text="Email address that receives critical site notifications (e.g. pin import failures). Defaults to the UL_ADMIN_NOTIFICATION_EMAIL environment variable.",
+        verbose_name="Admin notification email",
+    )
+    notify_gotify_url = CharField(
+        max_length=500,
+        blank=True,
+        default=os.getenv("UL_GOTIFY_URL", ""),
+        help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
+        verbose_name="Gotify server URL",
+    )
+    notify_gotify_token = CharField(
+        max_length=200,
+        blank=True,
+        default=os.getenv("UL_GOTIFY_TOKEN", ""),
+        help_text="Gotify application token used to authenticate pushes to the server above. Defaults to the UL_GOTIFY_TOKEN environment variable.",
+        verbose_name="Gotify app token",
+    )
+
+    # --- Notification routing ---
+    # Each critical-issue notification type has its own per-channel toggle so the
+    # admin can route different events to different channels (e.g. email only for
+    # low-urgency events, email + Gotify push for anything needing prompt attention).
+
+    notify_pin_import_errors_email = BooleanField(
+        default=True,
+        help_text="Email the admin notification address when a pin import fails to process an uploaded file.",
+        verbose_name="Pin import errors (email)",
+    )
+    notify_pin_import_errors_gotify = BooleanField(
+        default=False,
+        help_text="Send a Gotify push notification when a pin import fails to process an uploaded file.",
+        verbose_name="Pin import errors (Gotify)",
+    )
+
     # --- Google Places layer ---
 
     google_places_cache_days = IntegerField(
