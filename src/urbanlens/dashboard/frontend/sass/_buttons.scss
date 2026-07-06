@@ -76,7 +76,6 @@
 		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
-		text-transform: uppercase;
 
 		&:focus,
 		&:hover {
@@ -93,7 +92,6 @@
 		background: $danger-color;
 		border-color: color.scale($danger-color, $lightness: -10%);
 		color: var(--ul-grey-9);
-		text-transform: uppercase;
 
 		&:focus,
 		&:hover {

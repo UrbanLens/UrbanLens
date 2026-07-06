@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import TextChoices
-
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 

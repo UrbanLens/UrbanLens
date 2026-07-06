@@ -240,21 +240,36 @@ def process_image_upload(self, image_id: int) -> bool:
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.images import extract_gps_coords
+    from urbanlens.dashboard.services.images import extract_gps_coords, extract_taken_at
+    from urbanlens.dashboard.services.memories.visits import maybe_create_photo_visit
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
-    image = Image.objects.filter(pk=image_id).first()
+    image = Image.objects.filter(pk=image_id).select_related("pin").first()
     if image is None or not image.image:
         return False
     try:
         with image.image.open("rb") as image_file:
             coords = extract_gps_coords(image_file)
+            taken_at = extract_taken_at(image_file)
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
+
+    update_fields: dict[str, object] = {}
     if coords:
         lat, lng = coords
-        Image.objects.filter(pk=image_id).update(latitude=Decimal(str(lat)), longitude=Decimal(str(lng)))
+        image.latitude = Decimal(str(lat))
+        image.longitude = Decimal(str(lng))
+        update_fields["latitude"] = image.latitude
+        update_fields["longitude"] = image.longitude
+    if taken_at:
+        image.taken_at = taken_at
+        update_fields["taken_at"] = taken_at
+    if update_fields:
+        Image.objects.filter(pk=image_id).update(**update_fields)
+
+    maybe_create_photo_visit(image)
+
     update_task_progress(self, current=1, total=1, message="Image metadata processed")
     return True
 
@@ -323,3 +338,33 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_due_checkin_reminders() -> int:
+    """Send the check-in-due reminder for every safety check-in whose time has arrived."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import send_checkin_reminder
+
+    count = 0
+    for checkin in SafetyCheckin.objects.due_for_reminder():
+        send_checkin_reminder(checkin)
+        count += 1
+    if count:
+        logger.info("Sent %s safety check-in reminder(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def escalate_overdue_checkins() -> int:
+    """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import escalate_checkin
+
+    count = 0
+    for checkin in SafetyCheckin.objects.overdue():
+        escalate_checkin(checkin)
+        count += 1
+    if count:
+        logger.info("Escalated %s overdue safety check-in(s)", count)
+    return count

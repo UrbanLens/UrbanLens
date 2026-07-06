@@ -41,10 +41,10 @@ class PinAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_pin_aliases"
         indexes = [
-            Index(fields=["pin"], name="dashboard_pin_alias_pin_idx"),
+            Index(fields=["pin"], name="idxdb_pin_alias_pin"),
         ]
         constraints = [
-            UniqueConstraint(fields=["pin", "name"], name="dashboard_pin_alias_unique"),
+            UniqueConstraint(fields=["pin", "name"], name="db_pin_alias_unique"),
         ]
 
 
@@ -74,8 +74,8 @@ class LocationAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_location_aliases"
         indexes = [
-            Index(fields=["location"], name="dashboard_loc_alias_loc_idx"),
+            Index(fields=["location"], name="idxdb_loc_alias_loc"),
         ]
         constraints = [
-            UniqueConstraint(fields=["location", "name"], name="dashboard_loc_alias_unique"),
+            UniqueConstraint(fields=["location", "name"], name="db_loc_alias_unique"),
         ]

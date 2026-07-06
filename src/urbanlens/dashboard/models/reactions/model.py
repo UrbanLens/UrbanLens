@@ -51,5 +51,5 @@ class Reaction(abstract.Model):
         ]
         indexes = [
             models.Index(fields=["comment"], name="reaction_comment_idx"),
-            models.Index(fields=["trip_comment"], name="reaction_trip_comment_idx"),
+            models.Index(fields=["trip_comment"], name="idxdb_react_trcomment"),
         ]

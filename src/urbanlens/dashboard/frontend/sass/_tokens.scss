@@ -437,16 +437,11 @@ $z-nav: 1100;
     --ul-black-a: #{$color-grey-10a};
     --ul-black-b: #{$color-grey-10b};
 
-    // Semantic surface and control tokens keep nested UI from sharing one flat color.
-    --ul-surface-bg: var(--ul-grey-0);
-    --ul-surface-bg-elevated: var(--ul-grey-0a);
-    --ul-surface-bg-subtle: var(--ul-grey-1);
-    --ul-surface-header-bg: var(--ul-grey-1);
     --ul-control-bg: var(--ul-grey-0a);
     --ul-control-bg-hover: var(--ul-grey-0);
     --ul-control-border: var(--ul-grey-1b);
 
-    // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-surface...b instead.
+    // Standard borders without specifying lightness. We'll probably replace references to these over time, using --ul-grey...b instead.
     --ul-border: var(--ul-grey-0b);
     --ul-border-strong: var(--ul-grey-1b);
 
@@ -490,7 +485,19 @@ $z-nav: 1100;
     --ul-button-text: var(--ul-grey-9);
     --ul-button-hover-bg: #{$accent-1};
     --ul-button-hover-border: #{$accent-1-dark};
-    --ul-button-hover-text: var(--ul-grey-0);
+    --ul-button-hover-text: var(--ul-grey-9);
+    --ul-button-yes-bg: #{$color-green-300};
+    --ul-button-yes-border: #{$color-green-700};
+    --ul-button-yes-text: #{$color-green-800};
+    --ul-button-yes-hover-bg: #{$color-green-200};
+    --ul-button-yes-hover-border: #{$color-green-700};
+    --ul-button-yes-hover-text: #{$color-green-800};
+    --ul-button-no-bg: #{$color-red-300};
+    --ul-button-no-border: #{$color-red-700};
+    --ul-button-no-text: #{$color-red-800};
+    --ul-button-no-hover-bg: #{$color-red-200};
+    --ul-button-no-hover-border: #{$color-red-700};
+    --ul-button-no-hover-text: #{$color-red-800};
 
     // Tooltips - intentionally dark in both themes for legibility
     --ul-tooltip-bg: rgba(14, 17, 26, 0.94);

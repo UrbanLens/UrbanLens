@@ -14,12 +14,14 @@
 
 .icon-picker-trigger {
     min-width: 130px;
-    border-color: var(--ul-grey-7b);
+    background-color: var(--ul-grey-0);
+    border-color: var(--ul-grey-1b);
 
+    &:focus,
     &:active,
     &:hover {
-        background-color: var(--ul-grey-1a);
-        border-color: var(--ul-grey-8b);
+        background-color: var(--ul-grey-1b);
+        border-color: var(--ul-grey-3b);
     }
 }
 

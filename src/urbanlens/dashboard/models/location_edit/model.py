@@ -58,6 +58,6 @@ class LocationEdit(abstract.Model):
         ordering = ["-created"]
         get_latest_by = "created"
         indexes = [
-            Index(fields=["location"], name="dashboard_le_location_idx"),
-            Index(fields=["location", "created"], name="dashboard_le_created_idx"),
+            Index(fields=["location"], name="idxdb_le_location"),
+            Index(fields=["location", "created"], name="idxdb_le_created"),
         ]

@@ -23,6 +23,6 @@ class GeocodedLocation(abstract.Model):
         db_table = "dashboard_geocoded_locations"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["place_name"]),
+            Index(fields=["latitude", "longitude"], name="idxdb_geoloc_lat_lng"),
+            Index(fields=["place_name"], name="idxdb_geoloc_placename"),
         ]

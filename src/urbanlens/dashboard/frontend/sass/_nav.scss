@@ -604,6 +604,8 @@ nav .brand-logo img {
         .material-symbols-outlined,
         .material-icons {
             font-size: 1.05rem;
+            line-height: 1em;
+            height: 1em;
             color: var(--ul-grey-6);
         }
     }
@@ -767,6 +769,10 @@ nav .brand-logo img {
     display: flex;
     gap: .4rem;
     margin-top: .45rem;
+
+    &--triple {
+        flex-wrap: wrap;
+    }
 }
 
 .btn-notif-friend {
@@ -780,10 +786,18 @@ nav .brand-logo img {
     border-radius: 6px;
     cursor: pointer;
     transition: background .15s, color .15s;
+    background: var(--ul-grey-2, #e2e8f0);
+    color: var(--ul-grey-8, #334155);
+
+    &:hover {
+        background: var(--ul-grey-3, #cbd5e1);
+    }
 
     .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
+        line-height: 1em;
+        height: 1em;
     }
 
     &--accept {

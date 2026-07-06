@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from django.db.models import Index, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-
-
-class PinShareStatus(abstract.TextChoices):
-    PENDING = "pending", "Pending"
-    ACCEPTED = "accepted", "Accepted"
-    REJECTED = "rejected", "Rejected"
-    ALREADY_PINNED = "already_pinned", "Already pinned"
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 
 
 class PinShare(abstract.Model):
     """A one-to-one share of a single pin from one profile to another."""
+
+    status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
 
     pin = models.ForeignKey("dashboard.Pin", on_delete=models.CASCADE, related_name="shares")
     from_profile = models.ForeignKey("dashboard.Profile", on_delete=models.CASCADE, related_name="sent_pin_shares")
@@ -28,7 +26,12 @@ class PinShare(abstract.Model):
         null=True,
         blank=True,
     )
-    status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
+
+    if TYPE_CHECKING:
+        pin_id: int
+        from_profile_id: int
+        to_profile_id: int
+        notification_id: int | None
 
     @property
     def is_actionable(self) -> bool:
@@ -37,13 +40,13 @@ class PinShare(abstract.Model):
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_pin_shares"
         indexes = [
-            Index(fields=["to_profile", "status"]),
-            Index(fields=["from_profile", "created"]),
+            Index(fields=["to_profile", "status"], name="idxdb_pinshr_to_pfl_stat"),
+            Index(fields=["from_profile", "created"], name="idxdb_pinshr_f_pfl_cdt"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["pin", "to_profile"],
                 condition=Q(status="pending"),
-                name="dashboard_pin_share_one_pending_per_pin_user",
+                name="db_pinshare_one_pending_per_pin_user",
             ),
         ]

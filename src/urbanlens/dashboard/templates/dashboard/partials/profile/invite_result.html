@@ -3,6 +3,11 @@
     <i class="material-symbols-outlined">check_circle</i>
     <span>Friend request sent to <strong>{{ username }}</strong>.</span>
 </div>
+{% elif result == "friend_added" %}
+<div class="invite-result invite-result--success">
+    <i class="material-symbols-outlined">check_circle</i>
+    <span><strong>{{ username }}</strong> had already sent you a friend request, so you're friends now.</span>
+</div>
 {% elif result == "invite_sent" %}
 <div class="invite-result invite-result--success">
     <i class="material-symbols-outlined">mail</i>

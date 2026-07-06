@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -20,7 +21,16 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.profile.queryset import Manager
+from urbanlens.dashboard.models.profile.meta import GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.queryset import ProfileManager
+
+if TYPE_CHECKING:
+    from django.db.models import Manager as DjangoManager
+
+    from urbanlens.dashboard.models.badges.queryset import BadgeManager
+    from urbanlens.dashboard.models.markup.model import PinMarkup
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.trips import Trip, TripActivity, TripMembership
 
 # Pins within this distance are considered part of the same cluster.
 # 1 000 km groups intra-continental pins together while keeping intercontinental
@@ -35,45 +45,6 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     dlat, dlng = lat2 - lat1, lng2 - lng1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
     return 6_371.0 * 2 * math.asin(math.sqrt(a))
-
-
-class VisibilityChoice(TextChoices):
-    """Who can see a particular piece of profile data, or who can perform an action."""
-
-    ANYONE = "anyone", "Anyone (Logged In)"
-    FRIENDS = "friends", "Friends Only"
-    COMMON_PIN = "common_pin", "Users with a pin in common"
-    COMMON_FRIEND = "common_friend", "Users with a friend in common"
-    COMMON_TRIP = "common_trip", "Users with a trip in common"
-    NO_ONE = "no_one", "No one"
-
-
-class MapViewChoice(TextChoices):
-    STREET = "street", "Street"
-    SATELLITE = "satellite", "Satellite"
-    TOPOGRAPHIC = "topographic", "Topographic"
-    REMEMBER = "remember", "Remember"
-
-
-class MapCenterMode(TextChoices):
-    AUTO = "auto", "Center on my pins"
-    GPS = "gps", "Use my current location"
-    CUSTOM = "custom", "Custom location"
-    REMEMBER = "remember", "Remember last position"
-
-
-class ThemeChoice(TextChoices):
-    SYSTEM = "system", "System (follows your OS)"
-    LIGHT = "light", "Light"
-    DARK = "dark", "Dark"
-
-
-class GuidanceLevel(TextChoices):
-    """How in-app help is shown: walkthrough cards and/or hover hints."""
-
-    ALL = "all", "Guides & hints"
-    TOOLTIPS = "tooltips", "Hints only"
-    NONE = "none", "Off"
 
 
 class Profile(abstract.HasSlug):
@@ -209,7 +180,18 @@ class Profile(abstract.HasSlug):
         on_delete=CASCADE,
     )
 
-    objects = Manager()
+    objects = ProfileManager()
+
+    if TYPE_CHECKING:
+        user_id: int
+        trip_activities_added: DjangoManager[TripActivity]
+        created_trips: DjangoManager[Trip]
+        trips: DjangoManager[Trip]
+        custom_tags: BadgeManager
+        trip_memberships: DjangoManager[TripMembership]
+        notifications: DjangoManager[NotificationLog]
+        triggered_notifications: DjangoManager[NotificationLog]
+        markup_items: DjangoManager[PinMarkup]
 
     @property
     def show_onboarding_tips(self) -> bool:
@@ -481,9 +463,9 @@ class Profile(abstract.HasSlug):
     def __str__(self):
         return self.username
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.HasSlug.Meta):
         db_table = "dashboard_profiles"
 
         indexes = [
-            Index(fields=["user"]),
+            Index(fields=["user"], name="idxdb_profile_user"),
         ]

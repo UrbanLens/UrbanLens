@@ -23,15 +23,20 @@ ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
+
+
 # Test clients issue HTTP requests. Django's DiscoverRunner disables HTTPS
 # redirects in setup_test_environment(), but pytest-django imports settings
 # directly and does not run that project test runner hook.
-TESTING = os.getenv("DJANGO_TESTING", "False").lower() in {"true", "1", "yes"} or any(
+TESTING = _env_bool("DJANGO_TESTING", False) or any(
     arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "True" if _is_dev else "False").lower() in {"true", "1", "yes"}
+DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 
 # ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
 # a comma-separated list). Local environment defaults to wildcard-friendly hosts so
@@ -42,6 +47,13 @@ ALLOWED_HOSTS = _app_settings.allowed_hosts
 
 # Application definition
 INSTALLED_APPS = [
+    # "daphne" must come before "django.contrib.staticfiles" - Channels patches
+    # the `runserver` management command to be ASGI/WebSocket-aware only when
+    # daphne is registered ahead of it, which is what gives local dev working
+    # WebSockets with no extra process (production instead runs a dedicated
+    # daphne container - see docker-compose.yml's `app-ws` service).
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -49,10 +61,16 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.postgres",
+    "django.contrib.humanize",
     "corsheaders",
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
 ]
+
+# Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
+# WSGI_APPLICATION in production (gunicorn) - only the dedicated `app-ws`
+# daphne container and local `runserver` actually serve ASGI traffic.
+ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -135,11 +153,28 @@ if VALKEY_URL:
     SESSION_CACHE_ALIAS = "default"
 
     # Django Channels layer backed by Valkey for cross-process group messaging.
+    #
+    # socket_timeout MUST be comfortably larger than RedisChannelLayer.brpop_timeout
+    # (5s, hardcoded upstream). redis-py's default socket_timeout is also 5s, so
+    # with no override here every long-poll BRPOP raced its own read timeout -
+    # any latency jitter (GC pause, a busy Valkey tick) pushed the read past
+    # 5.000s and raised redis.exceptions.TimeoutError, even with a healthy
+    # server. Because channels_redis serializes all receive() calls in a
+    # process behind one asyncio.Lock, that single race repeating tore down
+    # every websocket in this process, not just the one that timed out.
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [VALKEY_URL],
+                "hosts": [
+                    {
+                        "address": VALKEY_URL,
+                        "socket_connect_timeout": 5,
+                        "socket_timeout": 20,
+                        "retry_on_timeout": True,
+                        "health_check_interval": 30,
+                    },
+                ],
                 "capacity": 1500,
                 "expiry": 60,
             },
@@ -177,6 +212,14 @@ CELERY_BEAT_SCHEDULE = {
     "scheduled-vestigial-asset-cleanup": {
         "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
         "schedule": 60 * 60,
+    },
+    "safety-checkin-due-reminders": {
+        "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
+        "schedule": 5 * 60,
+    },
+    "safety-checkin-escalation": {
+        "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
+        "schedule": 5 * 60,
     },
 }
 
@@ -241,8 +284,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # by default so developers can access the site without TLS configuration.
 # Override via UL_UNSAFE_ALLOW_HTTP in .env (or set to False to enforce HTTPS locally).
 _http_default = "True" if _is_dev else "False"
-UNSAFE_ALLOW_HTTP = os.getenv("UL_UNSAFE_ALLOW_HTTP", _http_default).lower() in {"true", "1", "yes"}
+UNSAFE_ALLOW_HTTP = _env_bool("UL_UNSAFE_ALLOW_HTTP", _http_default == "True")
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
@@ -335,6 +380,9 @@ EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
 EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
+# Canonical base URL used to build absolute links in emails/notifications sent
+# from contexts with no HttpRequest to build them from (e.g. Celery tasks).
+SITE_URL = os.getenv("UL_SITE_URL", "http://localhost:21080")
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
 GOOGLE_DOMAIN_RESTRICTED_API_KEY = os.getenv("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY", "")

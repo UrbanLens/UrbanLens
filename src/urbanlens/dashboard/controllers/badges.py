@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
-from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -36,6 +35,7 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
+    from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -210,17 +210,6 @@ def _badge_id_from_kwargs(kwargs: dict[str, Any]) -> int:
             return int(kwargs[key])
     msg = "No badge id in URL kwargs"
     raise KeyError(msg)
-
-
-def _selected_parents_first(queryset: QuerySet[Badge], parent_ids: set[int]) -> QuerySet[Badge]:
-    """Order parent candidates with currently selected parents first."""
-    return queryset.annotate(
-        _selected_parent=Case(
-            When(id__in=parent_ids, then=Value(0)),
-            default=Value(1),
-            output_field=IntegerField(),
-        ),
-    ).order_by("_selected_parent", "-order", "name", "id")
 
 
 def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
@@ -507,16 +496,15 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
             custom_icon=custom_icon,
             order=order,
         )
-        rel_type = request.POST.get("rel_type", "parent")
-        if rel_type == "child":
-            child_ids = request.POST.getlist("child_ids")
-            if child_ids:
-                valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge.id)
-                for child in valid_children:
-                    child.parents.add(badge)
-        elif parent_ids:
+        if parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=badge.id)
             badge.parents.set(valid_parents)
+
+        child_ids = request.POST.getlist("child_ids")
+        if child_ids:
+            valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge.id)
+            for child in valid_children:
+                child.parents.add(badge)
 
         extra = {cfg.new_id_key: badge.id} if cfg.new_id_key else None
         if request.headers.get("Accept") == "application/json":
@@ -543,12 +531,10 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
             return badge
 
         profile = _request_profile(request)
-        parent_ids = set(badge.parents.values_list("id", flat=True))
-        child_ids = set(badge.children.values_list("id", flat=True))
-        available_parents = _selected_parents_first(
-            _parent_candidates(profile, self.kind, badge_id),
-            parent_ids | child_ids,
-        )
+        selected_parents = badge.parents.all()
+        selected_children = badge.children.all()
+        selected_ids = {b.id for b in selected_parents} | {b.id for b in selected_children}
+        available_parents = _parent_candidates(profile, self.kind, badge_id)
 
         return render(
             request,
@@ -560,8 +546,9 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
                 "rows_target": cfg.rows_target,
                 "singular_title": cfg.singular_title,
                 "available_parents": available_parents,
-                "parent_ids": parent_ids,
-                "child_ids": child_ids,
+                "selected_parents": selected_parents,
+                "selected_children": selected_children,
+                "selected_ids": selected_ids,
                 "is_global": badge.kind == KIND_TAG and badge.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
                 "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
@@ -608,15 +595,13 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         if kind_changed:
             badge.parents.clear()
         else:
-            rel_type = request.POST.get("rel_type", "parent")
-            if rel_type == "child":
-                child_ids = request.POST.getlist("child_ids")
-                valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge_id)
-                badge.children.set(valid_children)
-            else:
-                parent_ids = request.POST.getlist("parent_ids")
-                valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=badge_id)
-                badge.parents.set(valid_parents)
+            parent_ids = request.POST.getlist("parent_ids")
+            valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=badge_id)
+            badge.parents.set(valid_parents)
+
+            child_ids = request.POST.getlist("child_ids")
+            valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=badge_id)
+            badge.children.set(valid_children)
 
         response = _render_rows(request, self.kind, profile)
         if kind_changed:

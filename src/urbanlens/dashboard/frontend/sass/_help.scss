@@ -1,0 +1,282 @@
+@use 'variables' as *;
+
+.page-help_import_pins {
+    .container {
+        max-width: 100%;
+        margin: 0;
+    }
+    .page-inner {
+        padding: $space-md;
+        max-width: 98vw;
+        margin: 0 auto;
+    }
+
+    img {
+        max-width: 100%;
+    }
+}
+
+// -- Hero ------------------------------------------------------------------
+
+.help-import-hero {
+    display: grid;
+    gap: $space-lg;
+    align-items: center;
+    padding: $space-lg;
+    background: linear-gradient(135deg, var(--ul-color-accent-bg), var(--ul-color-success-bg));
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
+        padding: $space-xl;
+    }
+}
+
+.help-import-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-weight: 800;
+    color: var(--primary-color);
+    margin: 0 0 $space-sm;
+}
+
+.help-import-hero h1 {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    line-height: 1.05;
+    margin: 0 0 $space-md;
+}
+
+.help-import-lede {
+    max-width: 720px;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--ul-grey-6);
+}
+
+.help-import-actions {
+    display: flex;
+    gap: $space-sm;
+    flex-wrap: wrap;
+    margin-top: $space-md;
+}
+
+.help-import-map-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 200px;
+    border-radius: $radius-md;
+    box-shadow: var(--ul-shadow-md);
+    background: var(--ul-grey-9);
+}
+
+.help-import-map-card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    object-fit: cover;
+}
+
+.help-import-visual {
+    .help-import-map-card {
+        background: transparent;
+    }
+}
+
+// -- Quick start -----------------------------------------------------------
+
+.help-import-quickstart,
+.help-import-layout {
+    margin-top: $space-lg;
+}
+
+.help-import-steps {
+    display: grid;
+    gap: $space-md;
+    padding: $space-md $bar-padding-x;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @include up($breakpoint-md) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.help-import-steps span {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    margin-bottom: $space-sm;
+    border-radius: $radius-full;
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 800;
+}
+
+.help-import-steps strong {
+    display: block;
+    margin-bottom: $space-xs;
+    font-size: 1.05rem;
+}
+
+.help-import-steps p {
+    margin: 0;
+    color: var(--ul-grey-6);
+    line-height: 1.55;
+}
+
+// -- Layout: table of contents + article content ----------------------------
+
+.help-import-layout {
+    display: grid;
+    gap: $space-lg;
+    align-items: start;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: 260px minmax(0, 1fr);
+    }
+}
+
+.help-import-toc {
+    padding: $space-md;
+
+    @include up($breakpoint-sm) {
+        position: sticky;
+        top: $space-md;
+    }
+}
+
+.help-import-toc h2 {
+    margin-top: 0;
+}
+
+// A plain <nav> would otherwise pick up Materialize's global top-navbar
+// styling (pink background, fixed 56px height/line-height) - that clips this
+// link list down to a single visible row. The class gives us enough
+// specificity to reset it without !important.
+.help-import-toc-nav {
+    display: grid;
+    gap: $space-xs;
+    width: auto;
+    height: auto;
+    background: none;
+    line-height: normal;
+    color: inherit;
+    box-shadow: none;
+}
+
+.help-import-toc-nav a,
+.help-import-link,
+.help-import-service-grid a {
+    color: var(--primary-color);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.help-import-toc-nav a {
+    display: block;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
+}
+
+.help-import-toc-nav a:hover {
+    background: var(--ul-hover-bg-primary);
+}
+
+.help-import-content {
+    display: grid;
+    gap: $space-md;
+}
+
+// -- Article sections --------------------------------------------------------
+
+.help-import-section {
+    display: grid;
+    gap: $space-md;
+    padding: $space-lg;
+    scroll-margin-top: $space-md;
+}
+
+.help-import-section p,
+.help-import-section li {
+    line-height: 1.65;
+}
+
+.help-import-section-header {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+}
+
+.help-import-section-header h2 {
+    margin: 0;
+}
+
+.help-import-section-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: $radius-md;
+    background: var(--ul-color-accent-bg);
+    color: var(--primary-color);
+}
+
+// Image + instructions side-by-side on wider screens to save vertical space;
+// a section with no image (a single child here) just uses the full width.
+.help-import-section-body {
+    display: grid;
+    gap: $space-md;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+        align-items: start;
+    }
+}
+
+.help-import-section-body > :only-child {
+    grid-column: 1 / -1;
+}
+
+.help-import-section-body img {
+    width: 100%;
+    border-radius: $radius-md;
+}
+
+.help-import-callout {
+    padding: $space-sm $space-md;
+    border-left: 4px solid var(--primary-color);
+    border-radius: $radius-sm;
+    background: var(--ul-color-accent-bg);
+
+    + .help-import-callout {
+        margin-top: 0.5rem;
+    }
+}
+
+// Technical/implementation-detail callouts are visually distinct from the
+// user-facing tips above - monospace + neutral grey signals "you probably
+// don't need to read this unless something isn't importing as expected."
+.help-import-callout--tech {
+    border-left-color: var(--ul-grey-4);
+    background: var(--ul-grey-1a);
+    font-family: monospace;
+    font-size: .85rem;
+}
+
+.help-import-format-grid,
+.help-import-service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: $space-sm;
+}
+
+.help-import-format-grid span,
+.help-import-service-grid a {
+    padding: $space-sm $space-md;
+    border-radius: $radius-md;
+    background: var(--ul-grey-1a);
+}

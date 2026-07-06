@@ -507,6 +507,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {
                 "form": UploadDataFile(),
                 "tags": tags,
+                "profile": profile,
             },
         )
 
@@ -547,7 +548,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 try:
                     extracted = extract_archive(data)
                 except ValueError as exc:
-                    return JsonResponse({"error": str(exc)}, status=400)
+                    logger.warning("Could not extract archive: %s", exc)
+                    return JsonResponse({"error": "Invalid archive."}, status=400)
 
                 for entry in extracted:
                     # Handle KMZ files (nested ZIPs) found inside an outer archive.
@@ -600,20 +602,34 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not form.is_valid():
             return JsonResponse({"error": "Invalid form."}, status=400)
 
+        from urbanlens.dashboard.services.ai.document_import import (
+            DocumentTooLargeError,
+            extract_pins_from_document,
+            is_supported_document_filename,
+        )
+
         uploaded_files = form.cleaned_data["upload_files"]
 
         all_files: list[tuple[str, bytes]] = []
+        document_files: list[tuple[str, bytes]] = []
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
             except OSError as exc:
-                return JsonResponse({"error": f"Failed to read {uploaded_file.name}: {exc}"}, status=400)
+                logger.warning("Failed to read uploaded file %s -> %s", uploaded_file.name, exc)
+                return JsonResponse({"error": f"Failed to read {uploaded_file.name}."}, status=400)
 
-            if is_archive(data):
+            # .txt/.docx are routed to the AI extraction pipeline below rather than the
+            # geo-format dispatch - a .docx in particular starts with ZIP magic bytes and
+            # would otherwise be misidentified as a location-data archive.
+            if is_supported_document_filename(uploaded_file.name or ""):
+                document_files.append((uploaded_file.name, data))
+            elif is_archive(data):
                 try:
                     extracted = extract_archive(data)
                 except ValueError as exc:
-                    return JsonResponse({"error": str(exc)}, status=400)
+                    logger.warning("Could not extract archive: %s", exc)
+                    return JsonResponse({"error": "Invalid archive."}, status=400)
                 for entry in extracted:
                     if is_archive(entry.data):
                         try:
@@ -630,8 +646,22 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         gateway = GoogleMapsGateway()
 
         lists = gateway.parse_for_preview(all_files, profile)
+
+        document_warnings: list[str] = []
+        for doc_name, doc_data in document_files:
+            try:
+                doc_list = extract_pins_from_document(doc_name, doc_data, profile)
+            except DocumentTooLargeError:
+                document_warnings.append(f"Document too large: {doc_name}")
+                continue
+            if doc_list:
+                lists.append(doc_list)
+
         if not lists:
-            return JsonResponse({"error": "No valid location files found in the upload."}, status=400)
+            return JsonResponse(
+                {"error": document_warnings[0] if document_warnings else "No valid location files found in the upload."},
+                status=400,
+            )
 
         badges = Badge.objects.visible_to(profile).ordered()
 
@@ -649,6 +679,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     }
                     for b in badges
                 ],
+                "warnings": document_warnings,
             },
         )
 

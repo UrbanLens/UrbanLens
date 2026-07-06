@@ -1,0 +1,138 @@
+{% load dashboard_tags %}
+<div id="friends_page_list">
+
+    {# -- Outgoing friend requests (own profile only) ---------------------------- #}
+    {% if is_own_profile and outgoing_requests %}
+    <section class="friends-section friends-section--requests card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">hourglass_top</i>
+            <span>Sent Requests</span>
+            <span class="badge">{{ outgoing_requests|length }}</span>
+        </div>
+        <ul class="friend-request-list friend-request-list--page">
+            {% for req in outgoing_requests %}
+            <li class="friend-request-item">
+                {% if req.to_profile.avatar %}
+                <img class="friend-avatar" src="{{ req.to_profile.avatar.url }}" alt="">
+                {% else %}
+                <div class="friend-avatar friend-avatar-placeholder">{{ req.to_profile.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-request-info">
+                    <a href="{% url 'profile.view_user' req.to_profile.slug %}" class="friend-request-name">
+                        {{ req.to_profile.full_name|default:req.to_profile.username }}
+                    </a>
+                    <span class="friend-request-sub">@{{ req.to_profile.username }}</span>
+                </div>
+                <div class="friend-request-actions">
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
+                            hx-post="{% url 'friend.remove' req.to_profile.id %}"
+                            hx-target="#friends_page_list"
+                            hx-swap="outerHTML">
+                        <i class="material-symbols-outlined">cancel</i> Cancel
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {# -- Incoming requests (own profile only) ---------------------------------- #}
+    {% if is_own_profile and incoming_requests %}
+    <section class="friends-section friends-section--requests card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">person_add</i>
+            <span>Friend Requests</span>
+            <span class="badge">{{ incoming_requests|length }}</span>
+        </div>
+        <ul class="friend-request-list friend-request-list--page">
+            {% for req in incoming_requests %}
+            <li class="friend-request-item" id="freq-{{ req.from_profile.id }}">
+                {% if req.from_profile.avatar %}
+                <img class="friend-avatar" src="{{ req.from_profile.avatar.url }}" alt="">
+                {% else %}
+                <div class="friend-avatar friend-avatar-placeholder">{{ req.from_profile.username|first|upper }}</div>
+                {% endif %}
+                <div class="friend-request-info">
+                    <a href="{% url 'profile.view_user' req.from_profile.slug %}" class="friend-request-name">
+                        {{ req.from_profile.full_name|default:req.from_profile.username }}
+                    </a>
+                    <span class="friend-request-sub">@{{ req.from_profile.username }}</span>
+                </div>
+                <div class="friend-request-actions">
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--accept"
+                            hx-post="{% url 'friend.accept' req.from_profile.id %}"
+                            hx-target="#friends_page_list"
+                            hx-swap="outerHTML">
+                        <i class="material-symbols-outlined">check</i> Accept
+                    </button>
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
+                            hx-post="{% url 'friend.reject' req.from_profile.id %}"
+                            hx-target="#friends_page_list"
+                            hx-swap="outerHTML">
+                        <i class="material-symbols-outlined">close</i> Decline
+                    </button>
+                    <button type="button" class="btn btn--primary btn-friend btn-friend--ignore"
+                            hx-post="{% url 'friend.ignore' req.from_profile.id %}"
+                            hx-target="#friends_page_list"
+                            hx-swap="outerHTML">
+                        <i class="material-symbols-outlined">block</i> Decline and Ignore
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {# -- Friends grid ----------------------------------------------------------- #}
+    {% if friends %}
+    <section class="friends-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">people</i>
+            <span>{% if is_own_profile %}Your Friends{% else %}Friends{% endif %}</span>
+        </div>
+        <ul class="friend-grid friend-grid--page">
+            {% for friend in friends %}
+            <li class="friend-card friend-card--page">
+                <a href="{% url 'profile.view_user' friend.slug %}" class="friend-card-link">
+                    {% if friend.avatar %}
+                    <img class="friend-avatar" src="{{ friend.avatar.url }}" alt="{{ friend.username }}">
+                    {% else %}
+                    <div class="friend-avatar friend-avatar-placeholder">{{ friend.username|first|upper }}</div>
+                    {% endif %}
+                    <div class="friend-card-info">
+                        <span class="friend-card-name">{{ friend.full_name|default:friend.username }}</span>
+                        <span class="friend-card-username">@{{ friend.username }}</span>
+                        {% if friend.area %}
+                        <span class="friend-card-area">
+                            <i class="material-symbols-outlined">place</i>{{ friend.area }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% if is_own_profile %}
+                <button type="button" class="btn btn--primary btn-friend btn-friend--remove"
+                        hx-post="{% url 'friend.remove' friend.id %}"
+                        hx-confirm="Remove {{ friend.username }} from your friends?"
+                        hx-target="#friends_page_list"
+                        hx-swap="outerHTML"
+                        title="Remove friend">
+                    <i class="material-symbols-outlined">person_remove</i>
+                </button>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% else %}
+    <div class="friends-empty card">
+        <i class="material-symbols-outlined">people_outline</i>
+        <p>{% if is_own_profile %}You haven't added any friends yet.{% else %}No friends to show.{% endif %}</p>
+        {% if is_own_profile %}
+        <p class="friends-empty-hint">Visit someone's profile and click "Add Friend" to get started.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>

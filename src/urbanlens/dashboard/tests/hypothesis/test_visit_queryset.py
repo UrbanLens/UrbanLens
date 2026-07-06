@@ -79,7 +79,7 @@ class VisitQuerySetManualTests(TestCase):
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
         self.manual_visit = _make_visit(self.pin, source=VisitSource.MANUAL)
-        self.takeout_visit = _make_visit(self.pin, source=VisitSource.GOOGLE_TAKEOUT)
+        self.takeout_visit = _make_visit(self.pin, source=VisitSource.HISTORY)
 
     def test_manual_visit_is_included(self):
         qs = PinVisit.objects.for_pin(self.pin.pk).manual()
@@ -104,7 +104,7 @@ class VisitQuerySetManualTests(TestCase):
 # ---------------------------------------------------------------------------
 
 class VisitQuerySetFromTakeoutTests(TestCase):
-    """from_takeout() returns only visits with source='google_takeout'."""
+    """from_takeout() returns only visits with source='history'."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
@@ -112,7 +112,7 @@ class VisitQuerySetFromTakeoutTests(TestCase):
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
         self.manual_visit = _make_visit(self.pin, source=VisitSource.MANUAL)
-        self.takeout_visit = _make_visit(self.pin, source=VisitSource.GOOGLE_TAKEOUT)
+        self.takeout_visit = _make_visit(self.pin, source=VisitSource.HISTORY)
 
     def test_takeout_visit_is_included(self):
         qs = PinVisit.objects.for_pin(self.pin.pk).from_takeout()
@@ -125,7 +125,7 @@ class VisitQuerySetFromTakeoutTests(TestCase):
     def test_from_takeout_on_all_objects_returns_only_takeout(self):
         qs = PinVisit.objects.from_takeout()
         for visit in qs:
-            self.assertEqual(visit.source, VisitSource.GOOGLE_TAKEOUT)
+            self.assertEqual(visit.source, VisitSource.HISTORY)
 
     def test_from_takeout_returns_correct_count(self):
         qs = PinVisit.objects.for_pin(self.pin.pk).from_takeout()

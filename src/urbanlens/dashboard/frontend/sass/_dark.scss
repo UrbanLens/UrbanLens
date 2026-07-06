@@ -55,14 +55,6 @@
         color: var(--ul-grey-4a);
     }
 
-    .settings-select,
-    .settings-input,
-    .form-input,
-    textarea.form-input {
-        color: var(--ul-grey-9);
-        border-color: var(--ul-grey-7b);
-    }
-
     .ul-radio-button {
         border-color: var(--ul-grey-0b);
         background: var(--ul-grey-0);
@@ -95,14 +87,32 @@
         color: var(--ul-grey-3b);
     }
 
-    .tag-parent-select,
-    .tag-parent-option {
+    .tag-parent-select {
         background: var(--ul-grey-0);
         border-color: var(--ul-grey-7b);
     }
 
-    .tag-parent-option:hover {
-        background: var(--ul-grey-8a);
+    .badge-rel-tab {
+        color: var(--ul-grey-5a);
+
+        &:hover {
+            color: var(--ul-grey-2);
+        }
+    }
+
+    .badge-rel-popup {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .badge-rel-add-btn {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-7b);
+    }
+
+    .badge-rel-trash.is-active {
+        border-color: var(--ul-grey-6b);
+        background: var(--ul-grey-0);
     }
 
     .icon-option {
@@ -121,11 +131,6 @@
 
     .tag-order-badge {
         color: var(--ul-grey-3b);
-    }
-
-    .icon-picker-trigger {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-1);
     }
 
     .icon-picker-search-input {
@@ -163,13 +168,6 @@
 
     .dialog-overlay {
         background: rgba(0, 0, 0, .7);
-    }
-
-    .edit-input,
-    input.edit-input,
-    textarea.edit-textarea {
-        color: var(--ul-grey-1);
-        border-color: var(--ul-grey-7b);
     }
 
     .edit-avatar-placeholder {
@@ -299,73 +297,15 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
     }
 
-    .notif-prefs__header {
-        background: var(--ul-grey-0);
-        border-bottom-color: var(--ul-grey-7b);
-    }
-
-    .notif-prefs__hdr {
-        color: var(--ul-grey-5a);
-    }
-
-    .notif-prefs__row {
-        border-bottom-color: var(--ul-grey-9a);
-
-        &:hover {
-            background: var(--ul-grey-0);
-        }
-    }
-
-    .notif-prefs__label {
-        color: var(--ul-grey-2);
-    }
-
-    .notif-prefs__saved {
-        background: $dk-success-bg;
-        color: $color-green-300;
-    }
-
     .profile-stat,
     .profile-section,
     .profile-hero {
         @include standard-section;
     }
 
-    .social-link {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-3b);
-
-        &:hover {
-            border-color: var(--primary-color);
-            color: var(--primary-color);
-        }
-    }
-
     .shared-visited-item {
         border-color: var(--ul-grey-8b);
         color: var(--ul-grey-2);
-    }
-
-    .friend-card {
-        border-color: var(--ul-grey-8b);
-
-        &:hover {
-            border-color: var(--ul-grey-6b);
-        }
-    }
-
-    .friend-card-name {
-        color: var(--ul-grey-1);
-    }
-
-    .friend-card-username,
-    .friend-card-area {
-        color: var(--ul-grey-6);
-    }
-
-    .friend-requests-section {
-        background: $dk-warning-amber-bg;
-        border-color: $dk-warning-amber-bd;
     }
 
     .friend-requests-label {
@@ -382,31 +322,6 @@
 
     .friend-request-item {
         border-bottom-color: rgba(255, 255, 255, .06);
-    }
-
-    .btn-friend-accept {
-        background: $dk-success-bg;
-        border-color: $dk-accept-border;
-        color: $color-green-300;
-
-        &:hover {
-            background: $dk-accept-hover;
-        }
-    }
-
-    .btn-friend-reject {
-        background: $dk-reject-bg;
-        border-color: $dk-reject-border;
-        color: $color-red-300;
-
-        &:hover {
-            background: $dk-reject-hover;
-        }
-    }
-
-    .btn-friend-ignore {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
     }
 
     .btn-friend-remove:hover {
@@ -458,42 +373,6 @@
 
         p {
             color: var(--ul-grey-6);
-        }
-    }
-
-    .btn-friend--accept {
-        background: $dk-success-bg;
-        border-color: $dk-accept-border;
-        color: $color-green-300;
-
-        &:hover {
-            background: $dk-accept-hover;
-        }
-    }
-
-    .btn-friend--reject {
-        background: $dk-reject-bg;
-        border-color: $dk-reject-border;
-        color: $color-red-300;
-
-        &:hover {
-            background: $dk-reject-hover;
-        }
-    }
-
-    .btn-friend--ignore {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
-    }
-
-    .btn-friend--remove {
-        border-color: var(--ul-grey-7b);
-        color: var(--ul-grey-5a);
-
-        &:hover {
-            background: $dk-friend-remove-hover;
-            border-color: $dk-reject-border;
-            color: $color-red-300;
         }
     }
 
@@ -1144,11 +1023,6 @@
         color: var(--ul-grey-7);
     }
 
-    .organize-tab.active {
-        color: color.adjust($primary-color, $lightness: 15%);
-        border-bottom-color: color.adjust($primary-color, $lightness: 15%);
-    }
-
     .cat-sel-bar.cat-sel-bar--active {
         background: rgba($color-blue-500, .1);
         border-color: rgba($color-blue-500, .35);
@@ -1187,7 +1061,7 @@
         }
     }
 
-    .tag-card--selected {
+    .tag-card--selected .tag-card-view {
         border-color: color.adjust($primary-color, $lightness: 10%) !important;
         background: rgba($color-blue-500, .1) !important;
     }

@@ -49,19 +49,19 @@
                         <div class="friendship-btn-group">
                             <form method="post" action="{% url 'friend.remove' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Remove friend">
+                                <button type="submit" class="btn friendship-btn btn--ghost" title="Remove friend">
                                     <i class="material-symbols-outlined">person_remove</i> Remove
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.mute' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Mute this user">
+                                <button type="submit" class="btn friendship-btn btn--ghost" title="Mute this user">
                                     <i class="material-symbols-outlined">volume_off</i> Mute
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.block' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn--danger" title="Block this user"
+                                <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
                                         onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
                                     <i class="material-symbols-outlined">block</i> Block
                                 </button>
@@ -73,7 +73,7 @@
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                            <button type="submit" class="btn friendship-btn btn--ghost">
                                 <i class="material-symbols-outlined">cancel</i> Cancel request
                             </button>
                         </form>
@@ -84,14 +84,20 @@
                         <div class="friendship-btn-group">
                             <form method="post" action="{% url 'friend.accept' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn btn--primary">
+                                <button type="submit" class="btn friendship-btn btn--primary">
                                     <i class="material-symbols-outlined">check</i> Accept
                                 </button>
                             </form>
                             <form method="post" action="{% url 'friend.reject' profile.id %}">
                                 {% csrf_token %}
-                                <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                                <button type="submit" class="btn friendship-btn btn--ghost">
                                     <i class="material-symbols-outlined">close</i> Decline
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'friend.ignore' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn friendship-btn btn--ghost" title="Decline and they won't be able to request again">
+                                    <i class="material-symbols-outlined">block</i> Decline and Ignore
                                 </button>
                             </form>
                         </div>
@@ -101,7 +107,7 @@
                         </div>
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                            <button type="submit" class="btn friendship-btn btn--ghost">
                                 <i class="material-symbols-outlined">volume_up</i> Unmute
                             </button>
                         </form>
@@ -111,20 +117,20 @@
                         </div>
                         <form method="post" action="{% url 'friend.remove' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn btn--ghost">
+                            <button type="submit" class="btn friendship-btn btn--ghost">
                                 <i class="material-symbols-outlined">lock_open</i> Unblock
                             </button>
                         </form>
                     {% else %}
                         <form method="post" action="{% url 'friend.request' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn btn--primary">
+                            <button type="submit" class="btn friendship-btn btn--primary">
                                 <i class="material-symbols-outlined">person_add</i> Add Friend
                             </button>
                         </form>
                         <form method="post" action="{% url 'friend.block' profile.id %}">
                             {% csrf_token %}
-                            <button type="submit" class="friendship-btn friendship-btn btn--ghost" title="Block this user">
+                            <button type="submit" class="btn friendship-btn btn--ghost" title="Block this user">
                                 <i class="material-symbols-outlined">block</i> Block
                             </button>
                         </form>
@@ -161,25 +167,22 @@
                     <i class="material-symbols-outlined">email</i>{{ profile.email }}
                 </span>
                 {% endif %}
+                {% if profile.user == request.user %}
+                {# Own profile - show exploring year #}
+                {% if profile.started_exploring %}
+                <div class="profile-stat ul-section">
+                    <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
+                    <span class="stat-label">Exploring Since</span>
+                </div>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
     </div>
 
     {# -- Stats row ----------------------------------------------------------- #}
+    {% if profile.user != request.user %}
     <div class="profile-stats-row">
-        {% if profile.user == request.user %}
-        {# Own profile - show their own pin count and exploring year #}
-        <div class="profile-stat ul-section">
-            <span class="stat-value">{{ profile.pins.count }}</span>
-            <span class="stat-label">Pins</span>
-        </div>
-        {% if profile.started_exploring %}
-        <div class="profile-stat ul-section">
-            <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
-            <span class="stat-label">Exploring Since</span>
-        </div>
-        {% endif %}
-        {% else %}
         {# Viewing another user - show only mutual/shared stats #}
         {% if common_pin_count %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Locations you've both pinned">
@@ -205,8 +208,8 @@
             <span class="stat-label">Nothing in Common Yet</span>
         </div>
         {% endif %}
-        {% endif %}
     </div>
+    {% endif %}
 
     {# -- Social links -------------------------------------------------------- #}
     {% if social_links %}

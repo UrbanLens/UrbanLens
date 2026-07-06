@@ -9,12 +9,13 @@ from django import template
 from django.utils.html import format_html, format_html_join
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Iterable
     import datetime
 
     from django.utils.safestring import SafeString
 
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.profile.model import Profile
 
 register = template.Library()
 
@@ -106,6 +107,23 @@ def icon_keywords(value: str | None) -> str:
     from urbanlens.dashboard.models.badges.meta import ICON_KEYWORDS
 
     return ICON_KEYWORDS.get(str(value), "")
+
+
+@register.filter
+def contact_picker_options(connections: Iterable[Profile]) -> list[dict[str, Any]]:
+    """Return friend connections as JSON-serializable dicts for the contact picker's autocomplete/avatar data.
+
+    Usage: {{ connections|contact_picker_options|json_script:"safety-contact-friends-data" }}
+    """
+    return [
+        {
+            "id": friend.pk,
+            "username": friend.username,
+            "full_name": friend.full_name or "",
+            "avatar_url": friend.avatar.url if friend.avatar else "",
+        }
+        for friend in connections
+    ]
 
 
 @register.simple_tag

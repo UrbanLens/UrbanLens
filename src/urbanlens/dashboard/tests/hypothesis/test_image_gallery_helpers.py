@@ -1,22 +1,23 @@
-"""Tests for image_gallery helper functions.
+"""Tests for image_gallery/services.images helper functions.
 
 Covers:
 - _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
 - extract_gps_coords() - EXIF GPS extraction with mock PIL
-- _image_to_json() - dict serialisation of Image instances
+- extract_taken_at() - EXIF DateTimeOriginal extraction with mock PIL
+- image_to_gallery_json() - dict serialisation of Image instances
 """
 from __future__ import annotations
 
-import io
+from datetime import datetime
 from decimal import Decimal
+import io
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from django.utils import timezone
+from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.image_gallery import _image_to_json
-from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords
+from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at, image_to_gallery_json
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -186,11 +187,85 @@ class ExtractGpsCoordsMockTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _image_to_json
+# extract_taken_at - via mocked PIL
 # ---------------------------------------------------------------------------
 
-class ImageToJsonTests(TestCase):
-    """_image_to_json serialises Image model instances to map-layer dicts."""
+class ExtractTakenAtMockTests(TestCase):
+    """extract_taken_at extracts EXIF DateTimeOriginal via mocked PIL objects."""
+
+    def _make_file_with_exif_ifd(self, exif_ifd: dict):
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = lambda self: True
+        mock_exif.get_ifd.return_value = exif_ifd
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = mock_exif
+        mock_file = io.BytesIO(b"fake_image_data")
+        return mock_file, mock_img
+
+    def test_returns_datetime_for_valid_exif(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: "2020:06:15 08:30:00"})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNotNone(result)
+        self.assertEqual((result.year, result.month, result.day), (2020, 6, 15))
+        self.assertEqual((result.hour, result.minute, result.second), (8, 30, 0))
+
+    def test_returns_none_when_no_exif(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = io.BytesIO(b"fake")
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_datetime_original_tag(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_for_unparseable_value(self):
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: "not-a-date"})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_on_exception(self):
+        mock_file = io.BytesIO(b"not a real image")
+        with patch(
+            "urbanlens.dashboard.services.images.PILImage.open",
+            side_effect=Exception("cannot identify image file"),
+        ):
+            result = extract_taken_at(mock_file)
+        self.assertIsNone(result)
+
+    def test_file_seeked_back_after_extraction(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = MagicMock()
+        mock_file.seek.return_value = None
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            extract_taken_at(mock_file)
+        mock_file.seek.assert_called_with(0)
+
+    @given(dt=st.datetimes(min_value=datetime(1990, 1, 1), max_value=datetime(2099, 12, 31)))
+    @hyp_settings(max_examples=40, deadline=None)
+    def test_round_trips_arbitrary_datetime(self, dt: datetime):
+        exif_value = dt.strftime("%Y:%m:%d %H:%M:%S")
+        mock_file, mock_img = self._make_file_with_exif_ifd({0x9003: exif_value})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_taken_at(mock_file)
+        self.assertIsNotNone(result)
+        expected = timezone.make_aware(dt) if timezone.is_naive(dt) else dt
+        self.assertEqual(result.replace(tzinfo=None), expected.replace(tzinfo=None, microsecond=0))
+
+
+# ---------------------------------------------------------------------------
+# image_to_gallery_json
+# ---------------------------------------------------------------------------
+
+class ImageToGalleryJsonTests(TestCase):
+    """image_to_gallery_json serialises Image model instances to map-layer dicts."""
 
     def _make_image(self, lat=None, lng=None, caption=None, profile=None):
         img = MagicMock()
@@ -216,33 +291,33 @@ class ImageToJsonTests(TestCase):
 
     def test_id_included(self):
         img = self._make_image(lat=10.0, lng=20.0)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["id"], 42)
 
     def test_url_built_from_absolute_uri(self):
         img = self._make_image()
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertIn("http://testserver", result["url"])
 
     def test_caption_none_becomes_empty_string(self):
         img = self._make_image(caption=None)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["caption"], "")
 
     def test_caption_preserved(self):
         img = self._make_image(caption="A great photo")
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["caption"], "A great photo")
 
     def test_coords_none_when_not_set(self):
         img = self._make_image(lat=None, lng=None)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertIsNone(result["latitude"])
         self.assertIsNone(result["longitude"])
 
     def test_coords_float_when_set(self):
         img = self._make_image(lat=51.5, lng=-0.12)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertAlmostEqual(result["latitude"], 51.5)
         self.assertAlmostEqual(result["longitude"], -0.12)
 
@@ -250,31 +325,31 @@ class ImageToJsonTests(TestCase):
         profile = self._make_profile(username="alice")
         img = self._make_image()
         img.profile = profile
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["uploader"], "alice")
 
     def test_uploader_empty_when_no_profile(self):
         img = self._make_image()
         img.profile = None
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["uploader"], "")
 
     def test_is_mine_true_for_owner(self):
         profile = self._make_profile(pk=7)
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=profile)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=profile)
         self.assertTrue(result["is_mine"])
 
     def test_is_mine_false_for_other_user(self):
         viewer = self._make_profile(pk=99)
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=viewer)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=viewer)
         self.assertFalse(result["is_mine"])
 
     def test_is_mine_false_when_no_viewer(self):
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=None)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=None)
         self.assertFalse(result["is_mine"])

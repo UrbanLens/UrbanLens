@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
 
 logger = logging.getLogger(__name__)
 
@@ -196,14 +197,14 @@ def import_location_history_streaming(
             already_exists = PinVisit.objects.filter(
                 pin=pin,
                 visited_at=visit["visited_at"],
-                source=VisitSource.GOOGLE_TAKEOUT,
+                source=VisitSource.HISTORY,
             ).exists()
             if not already_exists:
                 try:
                     PinVisit.objects.create(
                         pin=pin,
                         visited_at=visit["visited_at"],
-                        source=VisitSource.GOOGLE_TAKEOUT,
+                        source=VisitSource.HISTORY,
                     )
                     if not pin.last_visited or visit["visited_at"] > pin.last_visited:
                         pin.last_visited = visit["visited_at"]
@@ -238,3 +239,106 @@ def import_location_history_streaming(
             "subtype": "location_history",
         },
     )
+
+
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    """Parse an ISO-8601 timestamp string, returning None if absent/unparseable."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        logger.debug("Unparseable activitySegment timestamp: %s", value)
+        return None
+
+
+def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
+    """Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
+
+    ``simplifiedRawPath.points`` carries a per-point timestamp when Google
+    recorded one; ``waypointPath.waypoints`` is a coarser fallback with only
+    coordinates, so points from it carry no timestamp.
+    """
+    from urbanlens.dashboard.services.import_formats.gpx_tracks import RawTrackPoint
+
+    simplified_points = (segment.get("simplifiedRawPath") or {}).get("points") or []
+    if simplified_points:
+        for point in simplified_points:
+            lat_e7 = point.get("latE7")
+            lng_e7 = point.get("lngE7")
+            if lat_e7 is None or lng_e7 is None:
+                continue
+            yield RawTrackPoint(lat_e7 / 1e7, lng_e7 / 1e7, _parse_iso_timestamp(point.get("timestamp")))
+        return
+
+    for waypoint in (segment.get("waypointPath") or {}).get("waypoints") or []:
+        lat_e7 = waypoint.get("latE7")
+        lng_e7 = waypoint.get("lngE7")
+        if lat_e7 is None or lng_e7 is None:
+            continue
+        yield RawTrackPoint(lat_e7 / 1e7, lng_e7 / 1e7, None)
+
+
+def _parse_activity_segments(json_data: dict) -> Generator[dict[str, Any], None, None]:
+    """Yield one route dict per activitySegment that has a usable path.
+
+    Args:
+        json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
+
+    Yields:
+        Dict with keys: ``points`` (list[RawTrackPoint]), ``started_at``,
+        ``ended_at`` (tz-aware datetime | None), ``distance_meters`` (float | None,
+        Google's own estimate - preferred over recomputing from sparse waypoints).
+    """
+    for obj in json_data.get("timelineObjects", []):
+        segment = obj.get("activitySegment")
+        if not segment:
+            continue
+        points = list(_activity_segment_points(segment))
+        if len(points) < 2:
+            continue
+        duration = segment.get("duration") or {}
+        yield {
+            "points": points,
+            "started_at": _parse_iso_timestamp(duration.get("startTimestamp")),
+            "ended_at": _parse_iso_timestamp(duration.get("endTimestamp")),
+            "distance_meters": segment.get("distance"),
+        }
+
+
+def semantic_history_to_routes(json_data: dict, profile: Profile, source_filename: str) -> list[ParsedRoute]:
+    """Build unsaved Route candidates from a Semantic Location History file's activitySegments.
+
+    Existing placeVisit -> PinVisit(source=HISTORY) handling is untouched; this
+    is an additive read of the same files for their activitySegment entries.
+
+    Args:
+        json_data: Parsed Semantic Location History dict.
+        profile: Owning profile for the created Route rows.
+        source_filename: Original uploaded filename, stored as Route.source_filename.
+
+    Returns:
+        List of ParsedRoute - one per qualifying activitySegment.
+    """
+    from urbanlens.dashboard.models.routes.model import Route, RouteSource
+    from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
+    from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
+
+    routes: list[ParsedRoute] = []
+    for segment_data in _parse_activity_segments(json_data):
+        points = segment_data["points"]
+        geometry = simplify_and_measure([(p.latitude, p.longitude) for p in points])
+        google_distance = segment_data["distance_meters"]
+        route = Route(
+            profile=profile,
+            source=RouteSource.GOOGLE_TAKEOUT_SEMANTIC,
+            source_filename=source_filename,
+            path=geometry.path,
+            raw_point_count=geometry.raw_point_count,
+            simplified_point_count=geometry.simplified_point_count,
+            distance_meters=float(google_distance) if google_distance is not None else geometry.distance_meters,
+            started_at=segment_data["started_at"],
+            ended_at=segment_data["ended_at"],
+        )
+        routes.append(ParsedRoute(route=route, raw_points=points))
+    return routes

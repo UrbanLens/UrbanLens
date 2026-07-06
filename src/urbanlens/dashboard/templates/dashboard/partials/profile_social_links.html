@@ -58,26 +58,6 @@
         {% endif %}
     </form>
 
-    <details class="edit-discord-details">
-        <summary class="edit-discord-summary">
-            <i class="fa-brands fa-discord"></i> Set Discord username
-        </summary>
-        <form class="edit-discord-form"
-              hx-post="{% url 'profile.edit' %}"
-              hx-target="#social-links-content"
-              hx-swap="outerHTML">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="save_discord">
-            <div class="edit-add-link-row">
-                {{ discord_form.discord }}
-                <button type="submit" class="edit-add-link-btn">Save</button>
-            </div>
-            {% if discord_form.discord.errors %}
-            <p class="edit-error">{{ discord_form.discord.errors|join:", " }}</p>
-            {% endif %}
-        </form>
-    </details>
-
     <p class="edit-supported-platforms">
         Supported: {% for label in supported_platforms %}{{ label }}{% if not forloop.last %} · {% endif %}{% endfor %}
     </p>

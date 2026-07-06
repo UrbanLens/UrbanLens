@@ -1150,6 +1150,67 @@
     }
 }
 
+.trip-invite-friend-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 12rem;
+    overflow-y: auto;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+}
+
+.trip-invite-friend-item {
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.trip-invite-friend-label {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .75rem;
+    cursor: pointer;
+    font-weight: normal;
+
+    &:hover {
+        background: var(--ul-grey-0);
+    }
+
+    input[type="checkbox"] {
+        flex-shrink: 0;
+    }
+}
+
+.trip-invite-friend-avatar {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+
+    &--placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: $color-blue-300;
+        color: #fff;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+}
+
+.trip-invite-friend-name {
+    font-size: .875rem;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 // -- Location search autocomplete ------------------------------------------
 
 .activity-location-search-wrap {

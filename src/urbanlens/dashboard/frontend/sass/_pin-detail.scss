@@ -420,6 +420,14 @@
         padding: 0 1rem .35rem;
     }
 
+    .visit-participants {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+        font-style: italic;
+        margin-top: .2rem;
+        padding: 0 1rem .35rem;
+    }
+
     .visit-delete-btn {
         @include icon-btn-danger(24px);
         margin-left: auto;
@@ -452,6 +460,22 @@
         display: flex;
         gap: .5rem;
         padding-top: .25rem;
+    }
+
+    .visit-participant-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem .9rem;
+        max-height: 8rem;
+        overflow-y: auto;
+    }
+
+    .visit-participant-option {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .85rem;
+        font-weight: 400;
     }
 }
 
@@ -516,7 +540,7 @@
         height: 30px;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
@@ -638,7 +662,7 @@
         height: 30px;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-surface-1);
+        background: var(--ul-grey-1);
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
@@ -1239,10 +1263,6 @@
 
 // -- Pin details card theming (pin overview / location details page) --------
 body.page-location-details {
-    .location-details.card {
-        border: 1px solid var(--ul-grey-1a);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, .07);
-    }
 
     .details-grid {
         .detail-row {
@@ -1255,7 +1275,11 @@ body.page-location-details {
         }
 
         .field-label {
-            color: $text-secondary;
+            text-align: left;
+            color: var(--ul-grey-6);
+        }
+        .field-value {
+            text-align: left;
         }
     }
 
@@ -1893,7 +1917,7 @@ body.page-location-details .pin-detail-grid {
         .details-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: .35rem .75rem;
+            gap: .75rem;
             padding: .75rem 1rem;
 
             @include up($breakpoint-sm) {
@@ -1914,12 +1938,38 @@ body.page-location-details .pin-detail-grid {
                 }
             }
 
+            .detail-items {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem .6rem;
+                justify-content: center;
+            }
+
+            .detail-item {
+                display: flex;
+                flex-direction: column;
+                gap: .15rem;
+                flex: 0 1 auto;
+                padding: .4rem .8rem;
+                border-left: 1px solid var(--ul-grey-1);
+
+                &:first-child {
+                    border-left: none;
+                }
+
+                .field-label {
+                    border-bottom: 1px solid var(--ul-grey-1b);
+                    color: var(--ul-grey-4);
+                }
+            }
+
             .pin-stats {
                 grid-column: 1 / -1;
                 display: flex;
                 flex-wrap: wrap;
                 gap: .75rem 1.25rem;
-                padding: .25rem 0;
+                padding: .25rem 0 1rem;
             }
 
             .pin-stat-item {

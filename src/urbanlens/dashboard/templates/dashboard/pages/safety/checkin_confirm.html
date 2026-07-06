@@ -1,0 +1,16 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="safety-page page-content safety-checkin-confirm">
+    <h1 class="safety-title">
+        <i class="material-symbols-outlined">check_circle</i>
+        Check in for "{{ checkin.title }}"
+    </h1>
+    <p>Confirm you're safe and this check-in is complete.</p>
+    <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primary btn--lg">I'm safe - check in now</button>
+    </form>
+    <a href="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="btn btn--ghost">View check-in details</a>
+</div>
+{% endblock %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.db.models import (
@@ -29,17 +30,20 @@ class PinMarkup(abstract.Model):
     Markup items let users annotate a map view with lines, arrows, text
     labels, and geometric shapes (squares, circles, free polygons).
 
-    Exactly one of ``parent_pin`` / ``parent_location`` is set, mirroring how
-    ``Pin`` itself distinguishes a personal detail pin (``parent_pin`` set)
-    from a community detail pin (``parent_location`` set). Pin-scoped markup
-    is personal (only the owning profile can see/edit it, rendered on the
-    "Markup" layer in the pin detail map); Location-scoped markup is shared
-    community data, editable by any signed-in user, rendered on the wiki map.
+    Exactly one of ``parent_pin`` / ``parent_location`` / ``parent_safety_checkin``
+    is set, mirroring how ``Pin`` itself distinguishes a personal detail pin
+    (``parent_pin`` set) from a community detail pin (``parent_location`` set).
+    Pin-scoped markup is personal (only the owning profile can see/edit it,
+    rendered on the "Markup" layer in the pin detail map); Location-scoped
+    markup is shared community data, editable by any signed-in user, rendered
+    on the wiki map; safety-checkin-scoped markup is the personal route/plan
+    drawing shown on that check-in's detail page and contact portal.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
         parent_pin: The Pin whose detail map shows this annotation, if personal.
         parent_location: The Location whose wiki map shows this annotation, if shared.
+        parent_safety_checkin: The SafetyCheckin whose plan map shows this annotation, if a check-in route.
         profile: The user who created this annotation.
         markup_type: One of line / arrow / text / square / circle / polygon.
         geometry: GeoJSON-style geometry dict.
@@ -59,25 +63,6 @@ class PinMarkup(abstract.Model):
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
-    parent_pin = ForeignKey(
-        "dashboard.Pin",
-        on_delete=CASCADE,
-        null=True,
-        blank=True,
-        related_name="markup_items",
-    )
-    parent_location = ForeignKey(
-        "dashboard.Location",
-        on_delete=CASCADE,
-        null=True,
-        blank=True,
-        related_name="markup_items",
-    )
-    profile = ForeignKey(
-        "dashboard.Profile",
-        on_delete=CASCADE,
-        related_name="markup_items",
-    )
     markup_type = CharField(max_length=20, choices=MarkupType.choices)
     geometry = JSONField()
     label = TextField(blank=True, default="")
@@ -92,6 +77,39 @@ class PinMarkup(abstract.Model):
         default="",
         choices=SecurityIndicatorType.choices,
     )
+
+    parent_pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="markup_items",
+    )
+    parent_location = ForeignKey(
+        "dashboard.Location",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="markup_items",
+    )
+    parent_safety_checkin = ForeignKey(
+        "dashboard.SafetyCheckin",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="markup_items",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="markup_items",
+    )
+
+    if TYPE_CHECKING:
+        parent_pin_id: int | None
+        parent_location_id: int | None
+        parent_safety_checkin_id: int | None
+        profile_id: int
 
     objects = PinMarkupManager()
 
@@ -116,14 +134,19 @@ class PinMarkup(abstract.Model):
         }
 
     def __str__(self) -> str:
-        owner = f"pin={self.parent_pin_id}" if self.parent_pin_id else f"location={self.parent_location_id}"
+        if self.parent_pin_id:
+            owner = f"pin={self.parent_pin_id}"
+        elif self.parent_location_id:
+            owner = f"location={self.parent_location_id}"
+        else:
+            owner = f"safety_checkin={self.parent_safety_checkin_id}"
         return f"{self.markup_type}: {self.label or '(unlabelled)'} [{owner}]"
 
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
         indexes = [
-            Index(fields=["parent_pin"], name="dashboard_pm_pin_idx"),
-            Index(fields=["parent_location"], name="dashboard_pm_location_idx"),
-            Index(fields=["profile"], name="dashboard_pm_profile_idx"),
+            Index(fields=["parent_pin"], name="idxdb_pm_pin"),
+            Index(fields=["parent_location"], name="idxdb_pm_location"),
+            Index(fields=["profile"], name="idxdb_pm_profile"),
         ]

@@ -9,10 +9,17 @@ import math
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
+# Only used to catch exceptions
+from xml.etree.ElementTree import ParseError as XMLParseError  # nosec B405
+
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
+from gpxpy.gpx import GPXException
+from pyogrio.errors import DataSourceError as ShapefileDataSourceError
 import requests
+from shapely.errors import ShapelyError
+from shapely.geometry import shape as shapely_shape
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.badges.meta import KIND_TAG
@@ -23,10 +30,38 @@ from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, Sat
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
+from urbanlens.dashboard.services.import_formats.heuristics import (
+    DEFAULT_LATITUDE_KEYS,
+    DEFAULT_LONGITUDE_KEYS,
+    pick_latlon,
+    pick_name_and_description,
+)
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
+
+
+def _notify_pin_import_parse_failure(fmt: str) -> None:
+    """Alert the site admin that a pin-import file failed to parse.
+
+    Only the file's detected format and the current time are included - never the
+    filename, contents, or the underlying parse error, since those may reflect
+    user-supplied data. Admins can consult the app logs for full details.
+
+    Args:
+        fmt: The detected file format (e.g. "csv", "kml"), or "shapefile" for a
+            shapefile bundle.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.services.notifications import NotificationEvent, notify
+
+    notify(
+        NotificationEvent.PIN_IMPORT_ERROR,
+        subject="Pin import failed to process a file",
+        message=(f"A pin import attempt failed to process an uploaded {fmt} file at {timezone.now().isoformat()}. Check the app logs for details."),
+    )
 
 
 def _filename_stem(filename: str) -> str:
@@ -43,7 +78,7 @@ def _filename_stem(filename: str) -> str:
 
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterable, Iterator
 
     from urbanlens.dashboard.models.profile import Profile
 
@@ -227,48 +262,78 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return (heading + 360) % 360
 
     def _csv_row_iter(self, file_contents: str, user_profile: Profile) -> Generator[dict[str, Any] | None, None, None]:
-        """Generator yielding one pin_data dict per CSV row, geocoding on demand. Yields None for rows that fail.
+        """Generator yielding one pin_data dict per CSV row. Yields None for rows that fail.
+
+        Supports two CSV shapes:
+
+        - Google Takeout exports, identified by a ``URL`` column: coordinates and
+          the Google CID are extracted from the Maps URL, with ``Title``/``Note``/
+          ``Comment`` columns used for the name and description.
+        - Generic spreadsheet exports (Airtable, Google Sheets, Excel, etc.) that
+          have their own latitude/longitude columns: see
+          ``import_formats.heuristics.pick_latlon`` and ``pick_name_and_description``
+          for the recognised column names.
 
         Args:
             file_contents: Raw CSV text.
             user_profile: The profile to associate with each pin.
 
         Yields:
-            dict with pin fields, or None when geocoding fails.
+            dict with pin fields, or None when a row cannot be resolved to coordinates.
         """
         gateway = GoogleGeocodingGateway()
         reader = csv.DictReader(file_contents.splitlines())
         for row in reader:
             url = row.get("URL", "")
-            if not url:
-                if any(v.strip() for v in row.values()):
-                    logger.warning("Skipping CSV row with no URL: %s", row)
+            if url:
+                try:
+                    latitude, longitude = gateway.extract_coordinates_from_url(url)
+                except ValueError as exc:
+                    logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
+                    yield None
+                    continue
+
+                if latitude is None or longitude is None:
+                    logger.warning("Could not resolve coordinates for URL: %s", url)
+                    yield None
+                    continue
+
+                cid_match = _CID_RE.search(url)
+                cid = int(cid_match.group(1), 16) if cid_match else None
+
+                yield {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "profile": user_profile,
+                    "name": row.get("Title", "")[:255],
+                    "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
+                    "cid": cid,
+                }
+                continue
+
+            coords = pick_latlon(row)
+            if coords is None:
+                if any(v.strip() for v in row.values() if v):
+                    logger.warning("Skipping CSV row with no URL or latitude/longitude columns: %s", row)
                     yield None
                 else:
                     logger.debug("Skipping blank CSV row")
                 continue
-            try:
-                latitude, longitude = gateway.extract_coordinates_from_url(url)
-            except ValueError as exc:
-                logger.warning("Failed to extract coordinates from URL %s: %s", url, exc)
-                yield None
-                continue
 
-            if latitude is None or longitude is None:
-                logger.warning("Could not resolve coordinates for URL: %s", url)
-                yield None
-                continue
-
-            cid_match = _CID_RE.search(url)
-            cid = int(cid_match.group(1), 16) if cid_match else None
-
+            latitude, longitude = coords
+            # Exclude the matched coordinate columns so they don't also get
+            # serialised into the description by the "no description column
+            # found" fallback in pick_name_and_description.
+            latlon_keys = {*DEFAULT_LATITUDE_KEYS, *DEFAULT_LONGITUDE_KEYS}
+            remaining = {k: v for k, v in row.items() if k is not None and k.strip().lower() not in latlon_keys}
+            name, description = pick_name_and_description(remaining)
             yield {
                 "latitude": latitude,
                 "longitude": longitude,
                 "profile": user_profile,
-                "name": row.get("Title", "")[:255],
-                "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
-                "cid": cid,
+                "name": name[:255],
+                "description": description,
+                "cid": None,
             }
 
     def import_pins_streaming(
@@ -307,9 +372,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         """
 
         from urbanlens.dashboard.services.apis.locations.google.location_history import (
+            detect_location_history_format,
             import_location_history_streaming,
+            semantic_history_to_routes,
         )
+        from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute, gpx_tracks_to_routes
+        from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
+        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
+        from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
@@ -317,13 +390,30 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         # Separate files into pin-data files and location-history files so each
         # category can be reported with an accurate total.
         location_history_files: list[tuple[str, bytes]] = []
+        # GPX tracks/routes and Google Takeout activitySegments both produce
+        # Route candidates, saved in a separate pass after pins (see below).
+        parsed_routes: list[ParsedRoute] = []
+
+        # Shapefiles ship as a set of same-stem sidecar files (.shp/.dbf/.shx/...)
+        # rather than one file, so they must be grouped before the per-file loop
+        # below (which assumes one format per file).
+        shapefile_bundles, files = extract_shapefile_bundles(files)
 
         # First pass: validate and parse every file so we can report an accurate
-        # grand total upfront.  CSV rows are counted by line (cheap); JSON and KML
-        # are parsed fully and the results cached for the second pass.
+        # grand total upfront.  CSV rows are counted by line (cheap); every other
+        # format is parsed fully and the results cached for the second pass.
         # Files that fail validation or parsing are skipped with a warning.
         parsed: list[tuple[str, str, Any, int]] = []  # (filename, fmt, data_or_text, file_total)
         grand_total = 0
+
+        for bundle in shapefile_bundles:
+            try:
+                data_list = shapefile_to_dict(bundle, user_profile)
+                parsed.append((f"{bundle.stem}.shp", "shapefile", data_list, len(data_list)))
+                grand_total += len(data_list)
+            except (OSError, ValueError, ShapefileDataSourceError) as exc:
+                logger.warning("Failed to parse shapefile bundle '%s', skipping: %s", bundle.stem, exc)
+                _notify_pin_import_parse_failure("shapefile")
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
@@ -336,23 +426,41 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 continue
 
             try:
-                text = raw_bytes.decode("utf-8")
                 if fmt == "json":
-                    data_list = self.takeout_json_to_dict(text, user_profile)
+                    data_list = self.geojson_to_dict(raw_bytes.decode("utf-8"), user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "kml":
-                    data_list = self.takeout_kml_to_dict(text, user_profile)
+                    data_list = self.takeout_kml_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "csv":
+                    text = raw_bytes.decode("utf-8")
                     file_total = max(0, len(text.splitlines()) - 1)
                     parsed.append((filename, fmt, text, file_total))
                     grand_total += file_total
-            except (UnicodeDecodeError, ValueError, KeyError, AttributeError) as exc:
+                elif fmt == "gpx":
+                    data_list = gpx_to_dict(raw_bytes, user_profile)
+                    parsed.append((filename, fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+                    parsed_routes.extend(gpx_tracks_to_routes(raw_bytes, user_profile, filename))
+                elif fmt == "wkt":
+                    data_list = wkt_to_dict(raw_bytes, user_profile)
+                    parsed.append((filename, fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+                elif fmt == "wkb":
+                    data_list = wkb_to_dict(raw_bytes, user_profile)
+                    parsed.append((filename, fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+                elif fmt == "osm_xml":
+                    data_list = osm_xml_to_dict(raw_bytes, user_profile)
+                    parsed.append((filename, fmt, data_list, len(data_list)))
+                    grand_total += len(data_list)
+            except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
+                _notify_pin_import_parse_failure(fmt)
 
-        if not parsed:
+        if not parsed and not location_history_files:
             yield sse({"type": "error", "message": "No valid location files found in the upload."})
             return
 
@@ -475,6 +583,19 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         if location_history_files:
             yield from import_location_history_streaming(location_history_files, user_profile)
 
+            for filename, raw_bytes in location_history_files:
+                try:
+                    data = json.loads(raw_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, ValueError):
+                    continue
+                if detect_location_history_format(data) == "semantic":
+                    parsed_routes.extend(semantic_history_to_routes(data, user_profile, filename))
+
+        # Save any Route candidates gathered above (GPX tracks/routes, Google
+        # Takeout activitySegments) as a third pass, subtype="route".
+        if parsed_routes:
+            yield from import_routes_streaming(parsed_routes, user_profile)
+
     def parse_for_preview(
         self,
         files: list[tuple[str, bytes]],
@@ -493,8 +614,27 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                   ``name``, ``lat``, ``lng``, ``description``, ``cid``.
         """
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
+        from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
+        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
+        from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         result: list[dict[str, Any]] = []
+
+        # Shapefiles ship as a set of same-stem sidecar files rather than one file,
+        # so they must be grouped before the per-file loop below.
+        shapefile_bundles, files = extract_shapefile_bundles(files)
+        for bundle in shapefile_bundles:
+            try:
+                raw_pins = shapefile_to_dict(bundle, user_profile)
+            except (OSError, ValueError, ShapefileDataSourceError) as exc:
+                logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
+                _notify_pin_import_parse_failure("shapefile")
+                continue
+            pins = self._preview_pins(raw_pins)
+            if pins:
+                result.append({"stem": bundle.stem, "pins": pins})
+
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
             if fmt is None or fmt == "location_history":
@@ -502,41 +642,63 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
             stem = _filename_stem(filename)
             try:
-                text = raw_bytes.decode("utf-8")
                 if fmt == "json":
-                    raw_pins: list[dict[str, Any]] = self.takeout_json_to_dict(text, user_profile)
+                    raw_pins = self.geojson_to_dict(raw_bytes.decode("utf-8"), user_profile)
                 elif fmt == "kml":
-                    raw_pins = self.takeout_kml_to_dict(text, user_profile)
+                    raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
                 elif fmt == "csv":
+                    text = raw_bytes.decode("utf-8")
                     raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
+                elif fmt == "gpx":
+                    raw_pins = gpx_to_dict(raw_bytes, user_profile)
+                elif fmt == "wkt":
+                    raw_pins = wkt_to_dict(raw_bytes, user_profile)
+                elif fmt == "wkb":
+                    raw_pins = wkb_to_dict(raw_bytes, user_profile)
+                elif fmt == "osm_xml":
+                    raw_pins = osm_xml_to_dict(raw_bytes, user_profile)
                 else:
                     continue
-            except (UnicodeDecodeError, ValueError, KeyError, AttributeError) as exc:
+            except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
                 logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
+                _notify_pin_import_parse_failure(fmt)
                 continue
 
-            pins: list[dict[str, Any]] = []
-            for p in raw_pins:
-                if p is None:
-                    continue
-                lat = p.get("latitude")
-                lng = p.get("longitude")
-                if lat is None or lng is None:
-                    continue
-                pins.append(
-                    {
-                        "name": (p.get("name") or p.get("name") or "")[:255],
-                        "lat": float(lat),
-                        "lng": float(lng),
-                        "description": (p.get("description") or "")[:500],
-                        "cid": p.get("cid"),
-                    },
-                )
-
+            pins = self._preview_pins(raw_pins)
             if pins:
                 result.append({"stem": stem, "pins": pins})
 
         return result
+
+    @staticmethod
+    def _preview_pins(raw_pins: Iterable[dict[str, Any] | None]) -> list[dict[str, Any]]:
+        """Convert internal pin dicts into the serialisable preview shape.
+
+        Args:
+            raw_pins: Pin dicts as returned by any of the format parsers (``None``
+                entries, e.g. from a failed CSV row, are skipped).
+
+        Returns:
+            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``.
+        """
+        pins: list[dict[str, Any]] = []
+        for p in raw_pins:
+            if p is None:
+                continue
+            lat = p.get("latitude")
+            lng = p.get("longitude")
+            if lat is None or lng is None:
+                continue
+            pins.append(
+                {
+                    "name": (p.get("name") or "")[:255],
+                    "lat": float(lat),
+                    "lng": float(lng),
+                    "description": (p.get("description") or "")[:500],
+                    "cid": p.get("cid"),
+                },
+            )
+        return pins
 
     def import_preview_streaming(
         self,
@@ -690,25 +852,52 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             },
         )
 
-    def takeout_kml_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
+    @staticmethod
+    def _iter_kml_placemarks(features: Iterable[Any]) -> Iterator[Any]:
+        """Recursively yield every Placemark nested within KML Document/Folder containers.
+
+        KML files nest Placemarks at varying depths depending on the exporting
+        tool (e.g. Google MyMaps wraps every layer in a Folder, other tools may
+        put Placemarks directly under the Document), so the tree must be walked
+        rather than assuming a fixed depth.
+
+        Args:
+            features: An iterable of KML feature objects (Document, Folder, Placemark, etc).
+
+        Yields:
+            Placemark: Each Placemark found at any depth within *features*.
+        """
+        for feature in features:
+            if isinstance(feature, kml.Placemark):
+                yield feature
+            else:
+                children = getattr(feature, "features", None)
+                if children:
+                    yield from GoogleMapsGateway._iter_kml_placemarks(children)
+
+    def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
         try:
-            k = kml.KML()
-            k.from_string(file_contents)
+            # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`
+            # declaration (which every Google Takeout KML/KMZ has), so the raw
+            # bytes must be passed through undecoded and let lxml sniff the encoding.
+            k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
 
             pins: list[dict[str, Any]] = []
-            for feature in k.features():  # type: ignore[operator]
-                for placemark in feature.features():
-                    coords = placemark.geometry.coords[0]
+            for placemark in self._iter_kml_placemarks(k.features):
+                geometry = placemark.geometry
+                if geometry is None or not hasattr(geometry, "coords"):
+                    continue
+                coords = next(iter(geometry.coords))
 
-                    pins.append(
-                        {
-                            "latitude": coords[1],
-                            "longitude": coords[0],
-                            "profile": user_profile,
-                            "name": placemark.name,
-                            "description": placemark.description,
-                        },
-                    )
+                pins.append(
+                    {
+                        "latitude": coords[1],
+                        "longitude": coords[0],
+                        "profile": user_profile,
+                        "name": placemark.name,
+                        "description": placemark.description,
+                    },
+                )
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except (ValueError, AttributeError, UnicodeDecodeError) as e:
@@ -717,40 +906,84 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         return pins
 
-    def takeout_json_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
+    @staticmethod
+    def _geojson_feature_point(geometry: dict[str, Any]) -> tuple[float, float] | None:
+        """Return a representative ``(longitude, latitude)`` for any GeoJSON geometry type.
+
+        ``Point`` coordinates are used directly; every other geometry type (as
+        produced by Overpass/OSM exports, for example a building footprint
+        ``Polygon``) is reduced to its centroid via shapely.
+        """
+        geom_type = geometry.get("type")
+        if geom_type == "Point":
+            coordinates = geometry.get("coordinates") or []
+            if len(coordinates) < 2:
+                return None
+            return coordinates[0], coordinates[1]
+        if geom_type in {"MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection"}:
+            try:
+                shape = shapely_shape(geometry)
+            except (ValueError, TypeError, AttributeError):
+                return None
+            if shape.is_empty:
+                return None
+            centroid = shape.centroid
+            return centroid.x, centroid.y
+        return None
+
+    @staticmethod
+    def _geojson_name_and_description(properties: dict[str, Any]) -> tuple[str, str]:
+        """Guess a pin name/description from a GeoJSON feature's properties.
+
+        Google Takeout's "Saved Places" export uses a fixed ``name``/``description``/
+        ``address`` property shape, which is tried first so existing Takeout imports
+        are unaffected. Anything else (Overpass exports, custom scripts, arbitrary
+        property names) falls back to the generic heuristic in ``import_formats.heuristics``.
+        """
+        takeout_bits = [str(properties[key]).strip() for key in ("description", "address") if properties.get(key)]
+        if "name" in properties or takeout_bits or not properties:
+            name = str(properties.get("name") or "Unknown Location").strip()
+            return name, " ".join(takeout_bits)
+        return pick_name_and_description(properties)
+
+    def geojson_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
+        """Convert a GeoJSON ``FeatureCollection`` into pin dicts.
+
+        Handles Google Takeout's "Saved Places" export (``Point`` geometry,
+        ``name``/``description``/``address`` properties) as well as generic
+        GeoJSON produced by Overpass Turbo, OSM exports, or custom scripts
+        (arbitrary geometry types and property names).
+        """
         try:
             json_data = json.loads(file_contents)
             features = json_data.get("features", [])
             pins: list[dict[str, Any]] = []
 
             for feature in features:
-                geometry = feature.get("geometry", {})
-                properties = feature.get("properties", {})
+                geometry = feature.get("geometry") or {}
+                properties = feature.get("properties") or {}
 
-                if geometry.get("type") != "Point":
+                point = self._geojson_feature_point(geometry)
+                if point is None:
+                    logger.warning("Skipping feature with unresolvable geometry: %s", geometry)
                     continue
+                longitude, latitude = point
 
-                coordinates = geometry.get("coordinates", [])
-                if len(coordinates) != 2:
-                    logger.warning("Skipping feature with unexpected coordinates: %s", coordinates)
-                    continue
-
-                # Coordinates are in [longitude, latitude] format
-                longitude, latitude = coordinates
+                name, description = self._geojson_name_and_description(properties)
                 pins.append(
                     {
                         "latitude": latitude,
                         "longitude": longitude,
                         "profile": user_profile,
-                        "name": properties.get("name", "Unknown Location"),
-                        "description": f"{properties.get('description', '')} {properties.get('address', '')}",
+                        "name": name,
+                        "description": description,
                     },
                 )
 
-            logger.info("Converted %s pins from JSON file to dicts.", len(pins))
+            logger.info("Converted %s pins from GeoJSON file to dicts.", len(pins))
 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.exception("Failed to import pins from JSON: %s", e)
+            logger.exception("Failed to import pins from GeoJSON: %s", e)
             raise
 
         return pins

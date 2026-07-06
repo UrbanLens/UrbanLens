@@ -250,6 +250,13 @@ window.MarkupEngine = (function () {
 
         function getCurrentTool() { return _tool; }
 
+        // -- Public: is a tool armed, or are we in the brief window after a
+        // drag-commit where the trailing synthetic click is still being
+        // swallowed? Hosts with their own map-click handlers (e.g. the safety
+        // check-in destination marker) should skip their own logic while this
+        // is true, so a click/drag used to draw doesn't also fire their handler.
+        function isBusy() { return !!_tool || Date.now() < _suppressClickUntil; }
+
         // -- Public: would finishCurrent() actually commit a shape right now? -----
         // Lets the UI show a single context-sensitive "Close" action instead of
         // separate Finish/Cancel buttons - closing finishes a valid in-progress
@@ -489,6 +496,7 @@ window.MarkupEngine = (function () {
             deactivate:      deactivate,
             cancelShape:     cancelShape,
             getCurrentTool:  getCurrentTool,
+            isBusy:          isBusy,
             canFinish:       canFinish,
             finishCurrent:   finishCurrent,
             destroy:         destroy,

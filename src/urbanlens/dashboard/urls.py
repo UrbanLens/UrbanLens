@@ -21,11 +21,13 @@ from urbanlens.dashboard.controllers import (
     location_wiki,
     maps,
     markup,
+    memories,
     notifications,
     organize,
     pin,
     pin_edit,
     pin_sharing,
+    safety,
     settings,
     setup,
     site_admin,
@@ -33,6 +35,7 @@ from urbanlens.dashboard.controllers import (
     tools,
     trip,
     userprofile,
+    visit_suggestions,
     visits,
 )
 from urbanlens.dashboard.controllers.index import IndexController
@@ -84,6 +87,14 @@ urlpatterns = [
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
+        "help/import-pins/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/help/import_pins.html",
+            extra_context={"page_name": "help_import_pins"},
+        ),
+        name="help.import_pins",
+    ),
+    path(
         "map/",
         include(
             [
@@ -91,6 +102,7 @@ urlpatterns = [
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
+                path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
@@ -712,6 +724,35 @@ urlpatterns = [
         ),
     ),
     path(
+        "safety/",
+        include(
+            [
+                path("", safety.SafetyHomeView.as_view(), name="safety.home"),
+                path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
+                path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
+                path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
+                path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
+                path("contact/<uuid:token>/markup/json/", markup.SafetyContactMarkupJsonView.as_view(), name="safety.contact.markup.json"),
+                path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
+                path("<uuid:checkin_uuid>/cancel/", safety.SafetyCheckinCancelView.as_view(), name="safety.checkin.cancel"),
+                path("<slug:checkin_slug>/checkin/", safety.SafetyCheckinCheckInView.as_view(), name="safety.checkin.checkin"),
+                path("<uuid:checkin_uuid>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.checkin.messages"),
+                path("<slug:checkin_slug>/gallery/", safety.SafetyGalleryView.as_view(), name="safety.checkin.gallery"),
+                path("<slug:checkin_slug>/gallery/<int:image_id>/", safety.SafetyImageView.as_view(), name="safety.checkin.gallery.image"),
+                # No-trailing-slash variant so DELETE/POST fetch calls work even
+                # when APPEND_SLASH would otherwise downgrade the method to GET.
+                path("<slug:checkin_slug>/gallery/<int:image_id>", safety.SafetyImageView.as_view()),
+                path("<uuid:safety_checkin_uuid>/markup/json/", markup.MarkupJsonView.as_view(), name="safety.checkin.markup.json"),
+                path("<uuid:safety_checkin_uuid>/markup/", markup.MarkupView.as_view(), name="safety.checkin.markup"),
+                path(
+                    "<uuid:safety_checkin_uuid>/markup/<uuid:markup_uuid>/",
+                    markup.MarkupEditView.as_view(),
+                    name="safety.checkin.markup.edit",
+                ),
+            ],
+        ),
+    ),
+    path(
         "organize/",
         include(
             [
@@ -732,6 +773,7 @@ urlpatterns = [
     ),
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
+    path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path(
         "notifications/",
         include(
@@ -768,6 +810,16 @@ urlpatterns = [
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),
+            ],
+        ),
+    ),
+    path(
+        "memories/",
+        include(
+            [
+                path("", memories.MemoriesView.as_view(), name="memories.view"),
+                path("data/", memories.MemoriesFeedDataView.as_view(), name="memories.data"),
+                path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
             ],
         ),
     ),

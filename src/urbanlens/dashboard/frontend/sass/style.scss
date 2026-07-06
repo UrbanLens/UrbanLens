@@ -32,6 +32,7 @@
 @use 'homepage';
 @use 'about';
 @use 'thanks';
+@use 'help';
 @use 'comments';
 @use 'gallery';
 @use 'markup';
@@ -40,3 +41,5 @@
 @use 'env_indicator';
 @use 'admin';
 @use 'collapsible';
+@use 'memories';
+@use 'safety';

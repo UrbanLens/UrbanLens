@@ -1,0 +1,214 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="help-import-hero">
+    <div>
+        <p class="help-import-eyebrow">Help center</p>
+        <h1>Import pins into UrbanLens</h1>
+        <p class="help-import-lede">
+            Bring your saved places, field notes, GPS waypoints, and research datasets into UrbanLens.
+            Use this guide to export from common services, choose the right file, and upload it from the map import tool.
+        </p>
+        <div class="help-import-actions">
+            <a class="btn btn--primary" href="{% url 'map.view' %}?import=1">
+                <i class="material-symbols-outlined">upload_file</i> Open import tool
+            </a>
+            <a class="btn btn--ghost" href="#supported-formats">Supported formats</a>
+        </div>
+    </div>
+    <div class="help-import-visual" aria-hidden="true">
+        <div class="help-import-map-card">
+            <img src="{% static 'dashboard/images/help/urbanlens/import-dialog__options--raw.png' %}" alt="" loading="lazy">
+        </div>
+    </div>
+</section>
+
+<div class="page-inner">
+    <section class="ul-card help-import-quickstart" id="quick-start">
+        <div class="ul-card-header">
+            <i class="material-symbols-outlined">rocket_launch</i>
+            <h2>Quick start</h2>
+        </div>
+        <div class="help-import-steps">
+            <div><span>1</span><strong>Export</strong><p>Download <a href="#supported-formats">any format</a> from your current tool.</p></div>
+            <div><span>2</span><strong>Upload</strong><p>Open the <a href="{% url 'map.view' %}?import=1">UrbanLens import tool</a>, and preview your pins before saving.</p></div>
+            <div><span>3</span><strong>Review</strong><p>Deselect any pins you don't want to import.</p></div>
+            <div><span>4</span><strong>Customize</strong><p>Customize pins with names, tags, categories, and statuses that you created on the <a href="{% url 'organize.index' %}">Organize page</a>.</p></div>
+        </div>
+    </section>
+
+    <div class="help-import-layout">
+        <aside class="help-import-toc ul-card" aria-label="Table of contents">
+            <h2>Contents</h2>
+            <nav class="help-import-toc-nav">
+                <a href="#google-takeout">Google</a>
+                <a href="#multiplottr">Multiplottr</a>
+                <a href="#gpx-apps">GPX apps and GPS devices</a>
+                <a href="#gis-portals">GIS portals and open data</a>
+                <a href="#openstreetmap">OpenStreetMap / Overpass</a>
+                <a href="#csv-spreadsheets">CSV spreadsheets</a>
+                {% if can_use_ai_features %}<a href="#ai-document-import">AI document import</a>{% endif %}
+                <a href="#supported-formats">Supported formats</a>
+            </nav>
+        </aside>
+
+        <main class="help-import-content">
+            <section class="help-import-section ul-card" id="google-takeout">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">map</i></div>
+                    <h2>Google</h2>
+                </div>
+                <p>We support Google Maps lists, Google My Maps, and Google Earth.</p>
+                <div class="help-import-section-body">
+                    <img src="{% static 'dashboard/images/help/google/takeout_screenshot-1-deselect--markup.jpg' %}" alt="Google Takeout Screenshot, showing the 'Deselect All' button" loading="lazy">
+                    <div>
+                        <ol>
+                            <li>Go to <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a>.</li>
+                            <li>Click "Deselect All"</li>
+                            <li>Check any of the following sections you want to import:
+                                <ol>
+                                    <li>Google Earth</li>
+                                    <li>Maps</li>
+                                    <li>Maps (your places)</li>
+                                    <li>My Maps</li>
+                                    <li>Saved</li>
+                                    <li>Street View</li>
+                                    <li>Timeline</li>
+                                </ol>
+                            </li>
+                            <li>Click "Next Step"</li>
+                            <li>Google will email you when the download is ready.</li>
+                            <li>Upload the exported file to UrbanLens.</li>
+                        </ol>
+                        <div class="help-import-callout"><strong>Tip:</strong> You will have a chance to choose which pins to import.</div>
+                        <div class="help-import-callout help-import-callout--tech"><strong>Note:</strong> Google only supports exporting data via Google Takeout; there's nothing we can do to make this process easier.</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="multiplottr">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">pin_drop</i></div>
+                    <h2>Multiplottr</h2>
+                </div>
+                <div class="help-import-section-body">
+                    <img src="{% static 'dashboard/images/help/multiplottr/export_kml_screenshot--markup.jpg' %}" alt="Multiplottr" loading="lazy">
+                    <div>
+                        <ol>
+                            <li>Login to <a href="https://www.multiplottr.com/" target="_blank" rel="noopener noreferrer">Multiplottr</a>.</li>
+                            <li>Click "Map Settings"</li>
+                            <li>Click "Download KML File"</li>
+                            <li>Upload the exported file to UrbanLens.</li>
+                        </ol>
+                        <div class="help-import-callout"><strong>Tip:</strong> You will have a chance to choose which pins to import.</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="gpx-apps">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">route</i></div>
+                    <h2>GPX apps and GPS devices</h2>
+                </div>
+                <p>Gaia GPS, CalTopo, Garmin, AllTrails, Wikiloc, Geocaching.com, and similar tools commonly export GPX.</p>
+                <ol>
+                    <li>Open the trip, route, or waypoint list you want to bring over.</li>
+                    <li>Look for an "Export," "Share," or "Download" option and choose the GPX format (sometimes listed as "GPS Exchange Format").</li>
+                    <li>Some apps only let you export one waypoint or track at a time - check for a "Export all" or "Export folder" option first.</li>
+                    <li>Upload the GPX file to UrbanLens.</li>
+                </ol>
+                <div class="help-import-callout help-import-callout--tech"><strong>Tip:</strong> Only waypoints (saved points of interest) become pins. Tracks and routes - the recorded breadcrumb trail of a hike or drive - are ignored, so importing a recording won't flood your map with hundreds of points.</div>
+                <div class="help-import-service-grid">
+                    <a href="https://www.gaiagps.com/" target="_blank" rel="noopener noreferrer">Gaia GPS</a>
+                    <a href="https://caltopo.com/" target="_blank" rel="noopener noreferrer">CalTopo</a>
+                    <a href="https://www.geocaching.com/" target="_blank" rel="noopener noreferrer">Geocaching.com</a>
+                    <a href="https://www.alltrails.com/" target="_blank" rel="noopener noreferrer">AllTrails</a>
+                    <a href="https://www.wikiloc.com/" target="_blank" rel="noopener noreferrer">Wikiloc</a>
+                    <a href="https://connect.garmin.com/" target="_blank" rel="noopener noreferrer">Garmin Connect</a>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="gis-portals">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">dataset</i></div>
+                    <h2>GIS portals and open data</h2>
+                </div>
+                <p>City, county, state, federal, university, and preservation datasets often export Shapefile, GeoJSON, CSV, or ZIP archives.</p>
+                <ol>
+                    <li>Find the dataset's download or export panel.</li>
+                    <li>Prefer GeoJSON for point datasets. Use Shapefile or ZIP when GeoJSON is not offered.</li>
+                    <li>For CSV exports, make sure it has latitude and longitude columns - see the <a href="#csv-spreadsheets">CSV spreadsheets</a> section below for the exact column names we recognize.</li>
+                </ol>
+                <div class="help-import-service-grid">
+                    <a href="https://data.gov/" target="_blank" rel="noopener noreferrer">Data.gov</a>
+                    <a href="https://www.nps.gov/subjects/nationalregister/data-downloads.htm" target="_blank" rel="noopener noreferrer">NRHP data</a>
+                    <a href="https://www.epa.gov/enviro" target="_blank" rel="noopener noreferrer">EPA Envirofacts</a>
+                    <a href="https://hub.arcgis.com/" target="_blank" rel="noopener noreferrer">ArcGIS Hub</a>
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="openstreetmap">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">travel_explore</i></div>
+                    <h2>OpenStreetMap / Overpass Turbo</h2>
+                </div>
+                <ol>
+                    <li>Build a query in <a href="https://overpass-turbo.eu/" target="_blank" rel="noopener noreferrer">Overpass Turbo</a>.</li>
+                    <li>Export the results as GeoJSON for the cleanest import, or OSM XML if you need original OSM tags.</li>
+                </ol>
+                <div class="help-import-callout help-import-callout--tech">
+                    <strong>Technical details:</strong> For OSM XML, only nodes and ways that carry at least one <code>&lt;tag&gt;</code> become pins - untagged geometry vertices are skipped. Ways are placed at the centroid of their member nodes. Relations (multipolygons, administrative boundaries) aren't imported.
+                </div>
+            </section>
+
+            <section class="help-import-section ul-card" id="csv-spreadsheets">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">table_chart</i></div>
+                    <h2>CSV spreadsheets</h2>
+                </div>
+                <p>CSV is the easiest path for Airtable, Google Sheets, Excel, personal notes, scraped lists, or manually curated research.</p>
+                <ol>
+                    <li>Make sure your spreadsheet has a latitude column and a longitude column - see the required column names below.</li>
+                    <li>Add a name column so pins aren't imported as "Unnamed."</li>
+                    <li>A description-style column (see below) is optional but carries over as the pin's notes.</li>
+                    <li>Export the sheet as CSV and upload it to UrbanLens.</li>
+                </ol>
+                <div class="help-import-callout">
+                    <strong>Required columns:</strong> One latitude column (<code>latitude</code> or <code>lat</code>) and one longitude column (<code>longitude</code>, <code>lng</code>, <code>lon</code>, or <code>long</code>), with plain decimal values like <code>42.3601</code> and <code>-71.0589</code>. A CSV without both is skipped as unrecognized.
+                </div>
+                <div class="help-import-callout help-import-callout--tech">
+                    <strong>Technical details:</strong> Column names are matched case-insensitively. Name is read from the first match of <code>name</code>, <code>place</code>, <code>title</code>, <code>label</code>, <code>site_name</code>, or <code>namealt</code> (falls back to "Unnamed"). Description is read from the first match of <code>description</code>, <code>desc</code>, <code>comment</code>, <code>notes</code>, <code>note</code>, or <code>address</code>. Exporting from Google Takeout instead? See the <a href="#google-takeout">Google</a> section above - Takeout's CSV format works too, using its own <code>URL</code>/<code>Title</code>/<code>Note</code> columns.
+                </div>
+            </section>
+
+            {% if can_use_ai_features %}
+            <section class="help-import-section ul-card" id="ai-document-import">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">auto_awesome</i></div>
+                    <h2>AI document import</h2>
+                </div>
+                <p>If you have trip notes, a forwarded list of locations, or a research writeup instead of a proper export file, upload it as a plain text (.txt) or Word (.docx) file and let AI pull the locations out for you.</p>
+                <ol>
+                    <li>Upload your .txt or .docx file like any other import file.</li>
+                    <li>AI reads the document and extracts a CSV of locations it explicitly finds mentioned - name, notes, and address where available.</li>
+                    <li>Each extracted location is geocoded and shown in the same review step as every other import format, so you can deselect anything before it's saved.</li>
+                </ol>
+                <div class="help-import-callout"><strong>Tip:</strong> Only pins your document actually mentions are extracted. Nothing is invented, and text in the document cannot instruct the AI to add unrelated locations.</div>
+                <div class="help-import-callout help-import-callout--tech"><strong>Note:</strong> This option only appears when AI features are enabled for your account (see Settings) and only supports modern <code>.docx</code> Word files, not the legacy <code>.doc</code> format. Very long documents are rejected with a message rather than silently cut off - split the document into smaller files and re-upload if you hit this limit.</div>
+            </section>
+            {% endif %}
+
+            <section class="help-import-section ul-card" id="supported-formats">
+                <div class="help-import-section-header">
+                    <div class="help-import-section-icon"><i class="material-symbols-outlined">fact_check</i></div>
+                    <h2>Supported import formats</h2>
+                </div>
+                <div class="help-import-format-grid">
+                    <span>KML / KMZ</span><span>GeoJSON</span><span>GPX waypoints</span><span>CSV</span><span>Shapefile ZIP</span><span>WKT / WKB</span><span>OSM XML</span><span>ZIP archives</span>{% if can_use_ai_features %}<span>Text (.txt, AI)</span><span>Word (.docx, AI)</span>{% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+{% endblock %}

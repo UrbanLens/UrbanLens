@@ -17,7 +17,11 @@ from urbanlens.dashboard.models.location.queryset import LocationManager
 from urbanlens.dashboard.services.locations.boundaries import default_bbox
 
 if TYPE_CHECKING:
+    from django.db.models import Manager as DjangoManager
+
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.markup.model import PinMarkup
+    from urbanlens.dashboard.models.trips.model import TripActivity
 
 
 logger = logging.getLogger(__name__)
@@ -65,6 +69,10 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         blank=True,
         related_name="locations",
     )
+
+    if TYPE_CHECKING:
+        activities: DjangoManager[TripActivity]
+        markup_items: DjangoManager[PinMarkup]
 
     objects = LocationManager()
 
@@ -167,11 +175,11 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"]),
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["name"]),
-            Index(fields=["official_name"]),
-            Index(fields=["google_place"]),
+            Index(fields=["uuid"], name="idxdb_loc_uuid"),
+            Index(fields=["latitude", "longitude"], name="idxdb_loc_lat_long"),
+            Index(fields=["name"], name="idxdb_loc_name"),
+            Index(fields=["official_name"], name="idxdb_loc_offname"),
+            Index(fields=["google_place"], name="idxdb_loc_gplace"),
         ]
         unique_together = [
             ["latitude", "longitude"],

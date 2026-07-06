@@ -328,8 +328,8 @@
 
 /* Indeterminate - show a dash via Material Icons */
 #export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox {
-    background: var(--ul-primary, #1976D2);
-    border-color: var(--ul-primary, #1976D2);
+    background: var(--ul-accent-purple-bg);
+    border-color: var(--ul-accent-purple-bg);
 }
 
 #export-card input[type="checkbox"]:indeterminate ~ .ul-checkbox::after {
@@ -395,6 +395,10 @@
     font-size: .875rem;
     color: var(--ul-grey-8);
     user-select: none;
+
+    .ul-checkbox-wrap {
+        margin-right: 0.75rem;
+    }
 }
 
 .export-checkbox-item:hover {

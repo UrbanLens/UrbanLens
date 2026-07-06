@@ -1,12 +1,13 @@
 {% comment %}
-Photo gallery panel - used on pin detail and location wiki pages.
+Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.
 
 Context:
   images       - filtered Image queryset visible to the current viewer
   profile      - current viewer's Profile
-  context_type - "pin" or "wiki"
+  context_type - "pin", "wiki", or "safety"
   pin          - Pin instance (when context_type == "pin")
   location     - Location instance (when context_type == "wiki")
+  checkin      - SafetyCheckin instance (when context_type == "safety")
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery">
@@ -102,8 +103,8 @@ Context:
 <script>
 (function () {
   // -- State ------------------------------------------------------------------
-  var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
-  var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
+  var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
+  var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
 
   // Build an ordered list of image ids for lightbox navigation.

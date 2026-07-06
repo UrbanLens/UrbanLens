@@ -1,0 +1,274 @@
+{% load dashboard_tags %}
+{% comment %}
+Chip-based emergency contact picker. Friends are added as chips by clicking their
+avatar or by typing their name into the text input (autocompleted); email addresses
+are added as chips by typing them and pressing Enter. Reused for both check-in
+defaults and individual check-ins. Context: `contacts` (existing (contact_profile,
+email, name) tuples to prefill) and `connections` (the profile's friends).
+{% endcomment %}
+<div class="form-row safety-contact-picker" data-role="contact-picker">
+    <label>Emergency contacts</label>
+
+    <div class="safety-contact-chips" data-role="chips">
+        {% for contact_profile, email, name in contacts %}
+        {% if contact_profile %}
+        <span class="safety-contact-chip" data-type="profile" data-id="{{ contact_profile.id }}">
+            {% if contact_profile.avatar %}
+            <img class="safety-contact-chip-avatar" src="{{ contact_profile.avatar.url }}" alt="">
+            {% else %}
+            <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">{{ contact_profile.username|first|upper }}</span>
+            {% endif %}
+            <span class="safety-contact-chip-label">{{ contact_profile.username }}</span>
+            <input type="hidden" name="contact_profile_ids" value="{{ contact_profile.id }}">
+            <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ contact_profile.username }}">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </span>
+        {% elif email %}
+        <span class="safety-contact-chip" data-type="email" data-email="{{ email }}">
+            <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">
+                <i class="material-symbols-outlined">mail</i>
+            </span>
+            <span class="safety-contact-chip-label">{{ email }}</span>
+            <input type="hidden" name="contact_emails" value="{{ email }}">
+            <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ email }}">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </span>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    {% if connections %}
+    <div class="safety-contact-avatar-picker" data-role="avatar-picker">
+        {% for friend in connections %}
+        <button type="button" class="safety-contact-avatar-btn" data-role="avatar-btn"
+                data-id="{{ friend.id }}" data-username="{{ friend.username }}"
+                title="Add {{ friend.username }}">
+            {% if friend.avatar %}
+            <img class="safety-contact-avatar-img" src="{{ friend.avatar.url }}" alt="">
+            {% else %}
+            <span class="safety-contact-avatar-img safety-contact-avatar-img--placeholder">{{ friend.username|first|upper }}</span>
+            {% endif %}
+            <span class="safety-contact-avatar-name">{{ friend.username }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {{ connections|contact_picker_options|json_script:"safety-contact-friends-data" }}
+    {% endif %}
+
+    <div class="safety-contact-input-wrap" data-role="input-wrap">
+        <input type="text" class="safety-contact-input" data-role="input"
+               placeholder="Type a friend's name or an email address" autocomplete="off">
+        <div class="safety-contact-suggestions" data-role="suggestions" hidden></div>
+    </div>
+    <p class="form-hint">Click a friend above, type their name, or enter an email address and press Enter.</p>
+</div>
+
+<script>
+(function () {
+    document.querySelectorAll('.safety-contact-picker[data-role="contact-picker"]').forEach(function (root) {
+        if (root.dataset.contactPickerInit) return;
+        root.dataset.contactPickerInit = '1';
+
+        var chips = root.querySelector('[data-role="chips"]');
+        var input = root.querySelector('[data-role="input"]');
+        var suggestions = root.querySelector('[data-role="suggestions"]');
+        var avatarPicker = root.querySelector('[data-role="avatar-picker"]');
+        var friendsDataEl = root.querySelector('script[type="application/json"]') || document.getElementById('safety-contact-friends-data');
+        var friends = [];
+        try { friends = friendsDataEl ? JSON.parse(friendsDataEl.textContent) : []; } catch (e) { friends = []; }
+
+        var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        function addedProfileIds() {
+            return Array.prototype.map.call(chips.querySelectorAll('[data-type="profile"]'), function (chip) {
+                return parseInt(chip.dataset.id, 10);
+            });
+        }
+        function addedEmails() {
+            return Array.prototype.map.call(chips.querySelectorAll('[data-type="email"]'), function (chip) {
+                return chip.dataset.email.toLowerCase();
+            });
+        }
+        function fireChanged() {
+            root.dispatchEvent(new CustomEvent('contactschange', { bubbles: true }));
+        }
+        function syncAvatarVisibility() {
+            if (!avatarPicker) return;
+            var ids = addedProfileIds();
+            avatarPicker.querySelectorAll('[data-role="avatar-btn"]').forEach(function (btn) {
+                btn.hidden = ids.indexOf(parseInt(btn.dataset.id, 10)) !== -1;
+            });
+        }
+        function wireRemove(chip) {
+            chip.querySelector('[data-role="remove"]').addEventListener('click', function () {
+                chip.remove();
+                syncAvatarVisibility();
+                fireChanged();
+            });
+        }
+
+        function makeAvatar(avatarUrl, initialLetter) {
+            if (avatarUrl) {
+                var img = document.createElement('img');
+                img.className = 'safety-contact-chip-avatar';
+                img.src = avatarUrl;
+                img.alt = '';
+                return img;
+            }
+            var placeholder = document.createElement('span');
+            placeholder.className = 'safety-contact-chip-avatar safety-contact-chip-avatar--placeholder';
+            placeholder.textContent = initialLetter;
+            return placeholder;
+        }
+
+        function makeRemoveButton() {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'safety-contact-chip-remove';
+            button.dataset.role = 'remove';
+            button.setAttribute('aria-label', 'Remove');
+            var icon = document.createElement('i');
+            icon.className = 'material-symbols-outlined';
+            icon.textContent = 'close';
+            button.appendChild(icon);
+            return button;
+        }
+
+        function makeChip(type, avatarEl, labelText, hiddenInputName, hiddenInputValue) {
+            var span = document.createElement('span');
+            span.className = 'safety-contact-chip';
+            span.dataset.type = type;
+            span.appendChild(avatarEl);
+            var label = document.createElement('span');
+            label.className = 'safety-contact-chip-label';
+            label.textContent = labelText;
+            span.appendChild(label);
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = hiddenInputName;
+            hidden.value = hiddenInputValue;
+            span.appendChild(hidden);
+            span.appendChild(makeRemoveButton());
+            return span;
+        }
+
+        function addProfileChip(friend) {
+            if (addedProfileIds().indexOf(friend.id) !== -1) return;
+            var avatar = makeAvatar(friend.avatar_url, friend.username.charAt(0).toUpperCase());
+            var span = makeChip('profile', avatar, friend.username, 'contact_profile_ids', friend.id);
+            span.dataset.id = friend.id;
+            chips.appendChild(span);
+            wireRemove(span);
+            syncAvatarVisibility();
+            fireChanged();
+        }
+
+        function addEmailChip(rawEmail) {
+            var email = rawEmail.trim().toLowerCase();
+            if (!email || addedEmails().indexOf(email) !== -1) return;
+            var avatar = document.createElement('span');
+            avatar.className = 'safety-contact-chip-avatar safety-contact-chip-avatar--placeholder';
+            var icon = document.createElement('i');
+            icon.className = 'material-symbols-outlined';
+            icon.textContent = 'mail';
+            avatar.appendChild(icon);
+            var span = makeChip('email', avatar, email, 'contact_emails', email);
+            span.dataset.email = email;
+            chips.appendChild(span);
+            wireRemove(span);
+            fireChanged();
+        }
+
+        chips.querySelectorAll('.safety-contact-chip').forEach(wireRemove);
+        syncAvatarVisibility();
+
+        if (avatarPicker) {
+            avatarPicker.querySelectorAll('[data-role="avatar-btn"]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var img = btn.querySelector('img');
+                    addProfileChip({ id: parseInt(btn.dataset.id, 10), username: btn.dataset.username, avatar_url: img ? img.getAttribute('src') : '' });
+                });
+            });
+        }
+
+        function renderSuggestions(query) {
+            var q = query.trim().toLowerCase();
+            suggestions.innerHTML = '';
+            if (!q) { suggestions.hidden = true; return; }
+            var addedIds = addedProfileIds();
+            var matches = friends.filter(function (f) {
+                return addedIds.indexOf(f.id) === -1 &&
+                    (f.username.toLowerCase().indexOf(q) !== -1 || (f.full_name && f.full_name.toLowerCase().indexOf(q) !== -1));
+            }).slice(0, 6);
+            if (!matches.length) { suggestions.hidden = true; return; }
+            matches.forEach(function (f) {
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'safety-contact-suggestion';
+                var avatar;
+                if (f.avatar_url) {
+                    avatar = document.createElement('img');
+                    avatar.className = 'safety-contact-suggestion-avatar';
+                    avatar.src = f.avatar_url;
+                    avatar.alt = '';
+                } else {
+                    avatar = document.createElement('span');
+                    avatar.className = 'safety-contact-suggestion-avatar safety-contact-suggestion-avatar--placeholder';
+                    avatar.textContent = f.username.charAt(0).toUpperCase();
+                }
+                item.appendChild(avatar);
+                var label = document.createElement('span');
+                label.className = 'safety-contact-suggestion-label';
+                label.textContent = f.full_name ? f.username + ' (' + f.full_name + ')' : f.username;
+                item.appendChild(label);
+                item.addEventListener('mousedown', function (evt) { evt.preventDefault(); });
+                item.addEventListener('click', function () {
+                    addProfileChip(f);
+                    input.value = '';
+                    suggestions.hidden = true;
+                    input.focus();
+                });
+                suggestions.appendChild(item);
+            });
+            suggestions.hidden = false;
+        }
+
+        input.addEventListener('input', function () { renderSuggestions(input.value); });
+        input.addEventListener('keydown', function (evt) {
+            if (evt.key === 'Enter' || evt.key === ',') {
+                evt.preventDefault();
+                var value = input.value.trim().replace(/,$/, '');
+                if (!value) return;
+                var exact = friends.filter(function (f) { return f.username.toLowerCase() === value.toLowerCase(); })[0];
+                if (exact && addedProfileIds().indexOf(exact.id) === -1) {
+                    addProfileChip(exact);
+                } else if (EMAIL_RE.test(value)) {
+                    addEmailChip(value);
+                } else {
+                    return;
+                }
+                input.value = '';
+                suggestions.hidden = true;
+            } else if (evt.key === ' ') {
+                // A space right after a fully-qualified email acts like a comma,
+                // so users can just type "jane@example.com " and keep going -
+                // but don't swallow spaces while typing a friend's name.
+                var typed = input.value.trim();
+                if (EMAIL_RE.test(typed)) {
+                    evt.preventDefault();
+                    addEmailChip(typed);
+                    input.value = '';
+                    suggestions.hidden = true;
+                }
+            } else if (evt.key === 'Escape') {
+                suggestions.hidden = true;
+            }
+        });
+        input.addEventListener('blur', function () {
+            setTimeout(function () { suggestions.hidden = true; }, 150);
+        });
+    });
+}());
+</script>

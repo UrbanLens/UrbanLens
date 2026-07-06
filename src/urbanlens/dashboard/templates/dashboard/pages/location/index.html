@@ -472,7 +472,7 @@
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
                 body: 'Add Detail lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
                 button: 'Add a detail', watchSelector: '#add-detail-btn',
-                action: function () { document.getElementById('add-detail-btn')?.click(); },
+                action: function () { document.getElementById('add-detail-btn')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('add-detail-btn')?.click(), 100 ); },
                 ready: function () { return !!document.getElementById('add-detail-btn'); },
             },
             {
@@ -722,6 +722,14 @@
             var el = evt.detail && evt.detail.elt;
             if (!el || !_extSections.has(el.id)) return;
             evt.stopImmediatePropagation();
+            // web-search-section renders a real partial (e.g. the VIP upsell message) even
+            // on its 403 "not subscribed" response, so swap that content in instead of
+            // masking it with the generic fallback used for actual provider failures.
+            var xhr = evt.detail.xhr;
+            if (el.id === 'web-search-section' && xhr && xhr.status === 403 && xhr.responseText) {
+                el.outerHTML = xhr.responseText;
+                return;
+            }
             el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
         }, true);
 

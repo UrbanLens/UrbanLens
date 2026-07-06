@@ -1,0 +1,155 @@
+{% comment %}
+Compact map for safety check-in pages: a draggable destination marker, the
+same floating "jump to" search bar as the main map (window.LocationSearchEngine),
+and - when markup_json_url is set and the map isn't readonly - the exact same
+"Add Detail" markup toolbar/side-panel as the pin detail and Location wiki
+maps (window.MarkupEngine via _markup_toolbar_panel.html/_markup_toolbar_script.html).
+
+A readonly map (the contact portal) only ever needs to *view* any existing
+markup, never draw/edit it, so it keeps its own minimal read-only renderer
+instead of pulling in the shared toolbar.
+
+Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
+(either may be blank), markup_json_url/markup_create_url/markup_edit_url_template
+(omit all three to skip markup entirely), markup_fill_color/markup_border_color/
+markup_fill_opacity/markup_border_opacity (optional, profile defaults), readonly
+(true hides all editing controls and the destination marker becomes non-draggable).
+
+Leaflet itself is loaded by each including page's own {% templatetag openblock %} header {% templatetag closeblock %},
+so it's always available by the time this script runs - no typeof guard needed.
+{% endcomment %}
+<div class="safety-map-wrapper">
+    {% if not readonly %}
+    <div id="safety-map-search-bar" class="addr-search-bar">
+        <i class="material-icons addr-search-icon">place</i>
+        <input type="text" id="safety-map-search" class="addr-search-input"
+               placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
+        <button type="button" class="addr-search-history" id="safety-map-search-history" aria-label="Previous searches">
+            <i class="material-symbols-outlined">arrow_upward</i>
+        </button>
+        <button type="button" class="addr-search-clear" id="safety-map-search-clear" aria-label="Clear search">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+        <div id="safety-map-search-suggestions" class="addr-search-suggestions" hidden></div>
+    </div>
+    {% endif %}
+    <div id="safety-map"></div>
+    {% if markup_json_url and not readonly %}
+    <div class="map-bottom-controls">
+        {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
+    </div>
+    {% endif %}
+</div>
+{% if not readonly %}
+<input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
+<input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
+<p class="form-hint">Click the map, drag the marker, or search above to set your destination.</p>
+{% endif %}
+<script>
+    var centerLat = {{ map_center_lat|default:"39.8283" }};
+    var centerLng = {{ map_center_lng|default:"-98.5795" }};
+    // attributionControl: false - attribution renders as static text in the
+    // page footer instead (see partials/layout/footer.html's map_attribution).
+    var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    setTimeout(function () { map.invalidateSize(); }, 300);
+
+    var readonly = {{ readonly|yesno:"true,false" }};
+    var destLat = {{ destination_lat|default:"null" }};
+    var destLng = {{ destination_lng|default:"null" }};
+    var marker = null;
+    if (destLat !== null && destLng !== null) {
+        marker = L.marker([destLat, destLng], { draggable: !readonly }).addTo(map);
+    }
+
+    function setDestination(lat, lng) {
+        var latInput = document.getElementById('safety-destination-lat');
+        var lngInput = document.getElementById('safety-destination-lng');
+        if (latInput) latInput.value = lat.toFixed(6);
+        if (lngInput) lngInput.value = lng.toFixed(6);
+        if (marker) {
+            marker.setLatLng([lat, lng]);
+        } else {
+            marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+            marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
+        }
+    }
+    if (marker && !readonly) {
+        marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
+    }
+    if (!readonly) {
+        map.on('click', function (e) {
+            // Skip while the markup toolbar (loaded further below, if present) is
+            // actively drawing - otherwise every point placed while adding an
+            // annotation (or the trailing click after a drag-to-draw gesture)
+            // would also relocate the destination marker to that spot.
+            if (typeof _drawSession !== 'undefined' && _drawSession && _drawSession.isBusy()) return;
+            setDestination(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    // -- Address / coordinate search (shared window.LocationSearchEngine) ------
+    if (!readonly) {
+        (function () {
+            function jumpTo(lat, lng, zoom) {
+                map.setView([lat, lng], zoom || 15);
+                setDestination(lat, lng);
+            }
+
+            window.LocationSearchEngine.create({
+                input: document.getElementById('safety-map-search'),
+                suggestions: document.getElementById('safety-map-search-suggestions'),
+                bar: document.getElementById('safety-map-search-bar'),
+                clearBtn: document.getElementById('safety-map-search-clear'),
+                historyBtn: document.getElementById('safety-map-search-history'),
+                historyKey: 'ul_safety_dest_history_v1',
+                sources: {
+                    localPins: { url: '{% url "map.autocomplete.local" %}' },
+                    osmNominatim: true,
+                },
+                enableMyLocation: true,
+                defaultZoom: 15,
+                onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },
+            });
+        })();
+    }
+</script>
+{% if markup_json_url %}
+{% if not readonly %}
+<script>
+    // Shared with the pin detail / Location wiki maps - see that file's own doc comment.
+    const _markupLayer = L.layerGroup().addTo(map);
+    {% include "dashboard/partials/layout/_markup_toolbar_script.html" %}
+</script>
+{% else %}
+{# Readonly (contact portal): view existing markup only, no editing UI. #}
+<script>
+    var markupLayer = L.layerGroup().addTo(map);
+    function loadMarkup() {
+        fetch('{{ markup_json_url }}').then(function (r) { return r.json(); }).then(function (data) {
+            markupLayer.clearLayers();
+            (data.markup_items || []).forEach(function (item) {
+                var geom = item.geometry;
+                var shape = { type: item.markup_type, label: item.label, color: item.color,
+                    stroke_width: item.stroke_width, border_color: item.border_color,
+                    fill_opacity: item.fill_opacity, border_opacity: item.border_opacity };
+                if (geom.type === 'Circle') {
+                    shape.latlngs = [[geom.coordinates[1], geom.coordinates[0]], null];
+                    var center = L.latLng(geom.coordinates[1], geom.coordinates[0]);
+                    shape.type = 'circle';
+                    L.circle(center, { radius: geom.radius, color: shape.color, weight: shape.stroke_width }).addTo(markupLayer);
+                    return;
+                }
+                if (geom.type === 'Point') {
+                    shape.latlngs = [[geom.coordinates[1], geom.coordinates[0]]];
+                } else {
+                    shape.latlngs = geom.coordinates.map(function (c) { return [c[1], c[0]]; });
+                }
+                window.MarkupEngine.renderShape(shape, markupLayer, map.getZoom());
+            });
+        }).catch(function () {});
+    }
+    loadMarkup();
+</script>
+{% endif %}
+{% endif %}

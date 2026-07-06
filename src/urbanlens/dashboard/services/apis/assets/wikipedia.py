@@ -7,7 +7,9 @@ import logging
 from typing import Any, ClassVar
 
 from django.utils.html import escape
-import lxml.html as lxml_html  # nosec B410 - only ever parses markup already run through nh3.clean() (or html.escape()), which strips doctypes/entities/attributes before lxml sees it
+
+# only ever parses markup already run through nh3.clean() (or html.escape()), which strips doctypes/entities/attributes before lxml sees it
+import lxml.html as lxml_html  # nosec B410
 import nh3
 
 from urbanlens.dashboard.services.gateway import Gateway

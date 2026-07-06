@@ -20,6 +20,7 @@ x-app-env: &app-env
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
@@ -81,7 +82,52 @@ services:
       <<: *app-env
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
+  # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
+  # unchanged - nginx routes just /ws/ to this service (see config/nginx/django.conf).
+  app-ws:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app_ws
+    build:
+      <<: *app-build
+
+    restart: unless-stopped
+
+    entrypoint: ["/docker-entrypoint.sh", "daphne"]
+    command: ["-b", "0.0.0.0", "-p", "8001", "urbanlens.UrbanLens.asgi:application"]
+
+    # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
+    # its healthcheck can pass - waiting on `app` being healthy, not just
+    # db/valkey, is what actually guarantees the schema and static manifest
+    # this container's WebSocket consumers depend on exist before it serves
+    # any traffic. app-ws never runs migrate/collectstatic itself.
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
+    volumes:
+      - logs:/var/log
+      - static_volume:/app/src/urbanlens/frontend/static
+
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_app_ws
+
+    environment:
+      <<: *app-env
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -100,6 +146,7 @@ services:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
       - app
+      - app-ws
     networks:
       app_network:
         aliases:
@@ -198,7 +245,14 @@ services:
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    # volatile-lru (not allkeys-lru): this instance is shared by the Django cache,
+    # the Channels layer, and the Celery broker/result backend. allkeys-lru can
+    # evict *any* key under memory pressure, including un-expiring Celery queue
+    # lists and channel-layer group membership - silent data loss. volatile-lru
+    # only evicts keys with a TTL (the cache's, and the channel layer's own
+    # expiring keys), so queued Celery tasks are never silently dropped; if
+    # memory is genuinely exhausted, writes fail loudly (OOM) instead.
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
     networks:
       app_network:
         aliases:

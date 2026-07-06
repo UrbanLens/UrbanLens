@@ -243,6 +243,30 @@ def _add_pin_aliases(pin: Pin, names: list[tuple[str, str]]) -> bool:
     return changed
 
 
+def sync_pin_aliases_after_rename(pin: Pin, previous_name: str) -> None:
+    """After a pin's ``name`` has been changed and saved, keep aliases in sync.
+
+    Adds the previous user-given name as a searchable alias (unless it was blank
+    or unchanged), and drops any existing alias that now matches the new name so
+    the aliases list never contains a redundant near-duplicate of the current name.
+    """
+    from urbanlens.dashboard.models.aliases.model import PinAlias
+
+    next_name = (pin.name or "").strip()
+    previous_name = previous_name.strip()
+    if previous_name and previous_name != next_name:
+        try:
+            PinAlias.objects.get_or_create(pin=pin, name=previous_name)
+        except IntegrityError:
+            logger.debug("Pin alias already exists for pin %s and name %s", pin.pk, previous_name)
+
+    if next_name:
+        normalized_next = normalize_name_for_comparison(next_name)
+        for alias in pin.aliases.all():
+            if normalize_name_for_comparison(alias.name) == normalized_next:
+                alias.delete()
+
+
 def update_location_name_from_external_sources(
     location: Location,
     *,

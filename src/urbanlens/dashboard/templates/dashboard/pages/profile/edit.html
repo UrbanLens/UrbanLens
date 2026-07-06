@@ -59,7 +59,7 @@
                        autocomplete="username" spellcheck="false">
                 <span class="edit-username-hint" id="username-hint"></span>
             </div>
-            <p class="edit-field-hint">3-30 characters: letters, numbers, and underscores only.</p>
+            <p class="edit-field-hint" id="username-requirements-hint" style="display:none">3-30 characters: letters, numbers, and underscores only.</p>
         </div>
 
         {# Avatar #}
@@ -380,8 +380,15 @@ function closeDateErrorDialog() {
     // -- username field: debounced availability check + save on blur -----------
     var usernameInput = document.getElementById('username-input');
     var usernameHint  = document.getElementById('username-hint');
+    var usernameRequirementsHint = document.getElementById('username-requirements-hint');
     var _unameCheckTimer;
     var _lastChecked = '';
+
+    function toggleUsernameRequirementsHint(username) {
+        if (!usernameRequirementsHint) return;
+        var valid = /^[a-zA-Z0-9_]{3,30}$/.test(username);
+        usernameRequirementsHint.style.display = valid ? 'none' : '';
+    }
 
     function checkUsername(username) {
         if (!username || username === _lastChecked) return;
@@ -407,9 +414,12 @@ function closeDateErrorDialog() {
     }
 
     if (usernameInput) {
+        toggleUsernameRequirementsHint(usernameInput.value.trim());
+
         usernameInput.addEventListener('input', function () {
-            clearTimeout(_unameCheckTimer);
             var v = usernameInput.value.trim();
+            toggleUsernameRequirementsHint(v);
+            clearTimeout(_unameCheckTimer);
             _unameCheckTimer = setTimeout(function () { checkUsername(v); }, 400);
         });
 

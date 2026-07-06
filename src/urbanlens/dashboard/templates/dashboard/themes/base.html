@@ -20,6 +20,8 @@
     {% load static %}
     {# -- Shared markup engine - must load before {% block content %} scripts -- #}
     {% include 'dashboard/partials/layout/_markup_engine.html' %}
+    {# -- Shared "jump to" location search engine - same reason -- #}
+    {% include 'dashboard/partials/layout/_location_search_engine.html' %}
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
@@ -237,6 +239,11 @@
         if (!e.target.closest('.trip-member-rsvp-wrap')) {
             document.querySelectorAll('.rsvp-popup:not([hidden])').forEach(function (p) {
                 p.hidden = true;
+            });
+        }
+        if (!e.target.closest('.pab-add-picker')) {
+            document.querySelectorAll('.pab-add-picker[open]').forEach(function (d) {
+                d.open = false;
             });
         }
     });

@@ -1,0 +1,29 @@
+{% if visits or routes or photos %}
+<div class="memories-on-this-day">
+    <p class="memories-on-this-day-title">
+        <i class="material-symbols-outlined">history_toggle_off</i>
+        On this day
+    </p>
+    <div class="memories-on-this-day-items">
+        {% for visit in visits %}
+        <a class="memories-on-this-day-chip" href="{% url 'pin.details' visit.pin.slug %}">
+            <i class="material-symbols-outlined">pin_drop</i>
+            {{ visit.pin.effective_name }} &middot; {{ visit.visited_at.year }}
+        </a>
+        {% endfor %}
+        {% for route in routes %}
+        <span class="memories-on-this-day-chip">
+            <i class="material-symbols-outlined">route</i>
+            {{ route.name|default:route.get_source_display }} &middot; {{ route.started_at.year }}
+        </span>
+        {% endfor %}
+        {% for photo in photos %}
+        <a class="memories-on-this-day-chip"
+           href="{% if photo.pin %}{% url 'pin.gallery' photo.pin.slug %}{% elif photo.location.slug %}{% url 'location.wiki.gallery' photo.location.slug %}{% else %}#{% endif %}">
+            <i class="material-symbols-outlined">photo_camera</i>
+            {{ photo.caption|default:"Photo" }} &middot; {{ photo.taken_at.year }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

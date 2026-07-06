@@ -97,21 +97,9 @@
                     {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
                 </h2>
             </div>
-            <div class="priority-panel-tools">
-                <span id="priority-sel-info" class="priority-sel-info" hidden></span>
-                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-clear" hidden
-                        onclick="window._clearPrioritySelection&&_clearPrioritySelection()">
-                    <i class="material-symbols-outlined">close</i> Clear
-                </button>
-                <button type="button" class="btn btn--ghost btn--sm" id="priority-sel-toggle"
-                        title="Select multiple items then drag any one to move them all together"
-                        onclick="window._togglePrioritySelectMode&&_togglePrioritySelectMode()">
-                    <i class="material-symbols-outlined">checklist</i> Select
-                </button>
-            </div>
         </div>
 
-        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent crowded or multi-labeled pins first." visual_template="dashboard/partials/ui/_priority_visual.html" %}
+        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
 
         <div id="priority-list" class="priority-list">
             {% for item in priority_items %}
@@ -119,13 +107,6 @@
                 <div class="priority-drag-handle" title="Drag to reorder">
                     <i class="material-symbols-outlined">drag_indicator</i>
                 </div>
-                <label class="priority-sel-cb-wrap" title="Select for multi-drag">
-                    <input type="checkbox" class="priority-sel-cb" data-id="{{ item.id }}">
-                </label>
-                <label class="ul-checkbox-wrap" title="Select">
-                    <input type="checkbox" class="priority-sel-cb" data-{{ select_data_name }}-id="{{ badge.id }}" data-id="{{ badge.id }}" data-name="{{ badge.name }}">
-                    <span class="ul-checkbox"></span>
-                </label>
                 <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
                     {% if item.custom_icon %}
                         <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
@@ -196,7 +177,7 @@
             onclick="window._orgBulk&&window._orgBulk.edit&&window._orgBulk.edit()">
         <i class="material-symbols-outlined">edit</i> Edit
     </button>
-    <button type="button" class="org-bulk-btn org-bulk-btn--merge" id="org-bulk-merge-btn"
+    <button type="button" class="btn org-bulk-btn org-bulk-btn--merge" id="org-bulk-merge-btn"
             onclick="window._orgBulk&&window._orgBulk.merge&&window._orgBulk.merge()">
         <i class="material-symbols-outlined">merge</i> Merge
     </button>
@@ -335,41 +316,176 @@ function renderOrganizeTree(rows, ns) {
     rows.appendChild(treeRoot); if (window.htmx) htmx.process(treeRoot);
 }
 
-function filterParentOptions(input, containerId) {
-    var q = input.value.toLowerCase().trim();
-    var container = document.getElementById(containerId);
-    if (!container) return;
-    container.querySelectorAll('.tag-parent-option').forEach(function(opt) {
-        opt.style.display = (!q || opt.textContent.toLowerCase().includes(q)) ? '' : 'none';
-    });
-}
+// -- Badge Parent/Child relationship picker (reusable across create/edit/bulk-edit dialogs) --
+var BadgeRelPicker = {
+    toggle: function(instanceId, relType, triggerBtn) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (!popup) return;
+        var wasHidden = popup.hidden;
+        document.querySelectorAll('.badge-rel-popup').forEach(function(p) { p.hidden = true; });
+        if (!wasHidden) return;
+        popup.hidden = false;
+        var search = popup.querySelector('.badge-rel-search');
+        if (search) { search.value = ''; search.focus(); }
+    },
+    select: function(instanceId, relType, btn) {
+        if (btn.classList.contains('badge-rel-suggestion--hidden')) return;
+        var group = document.getElementById(instanceId + '-sel-' + relType);
+        if (!group) return;
+        var id = btn.dataset.id;
+        if (group.querySelector('.badge-rel-chip[data-id="' + id + '"]')) return;
 
-function switchBadgeRelType(radioInput) {
-    var wrapper = radioInput.closest('[data-badge-rel]');
-    if (!wrapper) return;
-    var newType = radioInput.value;
-    var oldType = newType === 'parent' ? 'child' : 'parent';
-    var cbs = wrapper.querySelectorAll('.badge-rel-cb');
-    cbs.forEach(function(cb) {
-        cb.dataset[oldType + 'Sel'] = cb.checked ? '1' : '0';
-        cb.name = newType + '_ids';
-        cb.checked = cb.dataset[newType + 'Sel'] === '1';
-    });
-    var relInput = wrapper.querySelector('.badge-rel-type-input');
-    if (relInput) relInput.value = newType;
-    wrapper.querySelectorAll('.badge-rel-hint').forEach(function(h) {
-        h.hidden = !h.classList.contains('badge-rel-hint--' + newType);
-    });
-}
+        var picker = document.querySelector('[data-picker-id="' + instanceId + '"]');
+        var pill = document.createElement('span');
+        pill.className = 'tag-chip';
+        var color = btn.style.getPropertyValue('--tag-color');
+        if (color) pill.style.setProperty('--tag-color', color);
+        pill.innerHTML = btn.innerHTML;
+        var kindEl = pill.querySelector('.badge-kind-chip');
+        if (kindEl) kindEl.remove();
+        if (picker && picker.dataset.mode === 'replace') {
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = relType + '_ids';
+            hidden.value = id;
+            pill.appendChild(hidden);
+        }
 
-function _setBulkRelType(ns, newType) {
-    var relInput = document.getElementById(ns + '-bulk-rel-type');
-    if (relInput) relInput.value = newType;
-    var hintParent = document.getElementById(ns + '-bulk-rel-hint-parent');
-    var hintChild = document.getElementById(ns + '-bulk-rel-hint-child');
-    if (hintParent) hintParent.hidden = (newType !== 'parent');
-    if (hintChild) hintChild.hidden = (newType !== 'child');
-}
+        var chip = document.createElement('span');
+        chip.className = 'badge-rel-chip';
+        chip.dataset.id = id;
+        chip.appendChild(pill);
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'tag-chip-remove';
+        removeBtn.title = 'Remove';
+        removeBtn.innerHTML = '&times;';
+        removeBtn.onclick = function() { BadgeRelPicker.remove(instanceId, chip); };
+        chip.appendChild(removeBtn);
+
+        group.appendChild(chip);
+        BadgeRelPicker._hideSuggestion(instanceId, id);
+        BadgeRelPicker._updateEmptyHints(instanceId);
+    },
+    remove: function(instanceId, chipEl) {
+        if (!chipEl) return;
+        var id = chipEl.dataset.id;
+        chipEl.remove();
+        BadgeRelPicker._showSuggestion(instanceId, id);
+        BadgeRelPicker._updateEmptyHints(instanceId);
+    },
+    _hideSuggestion: function(instanceId, id) {
+        ['parent', 'child'].forEach(function(relType) {
+            var container = document.getElementById(instanceId + '-suggestions-' + relType);
+            if (!container) return;
+            var btn = container.querySelector('.badge-rel-suggestion[data-id="' + id + '"]');
+            if (btn) btn.classList.add('badge-rel-suggestion--hidden');
+        });
+    },
+    _showSuggestion: function(instanceId, id) {
+        ['parent', 'child'].forEach(function(relType) {
+            var container = document.getElementById(instanceId + '-suggestions-' + relType);
+            if (!container) return;
+            var btn = container.querySelector('.badge-rel-suggestion[data-id="' + id + '"]');
+            if (btn) { btn.classList.remove('badge-rel-suggestion--hidden'); BadgeRelPicker._applyFilters(instanceId, relType); }
+        });
+    },
+    setTab: function(instanceId, relType, kind, btn) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (!popup) return;
+        popup.querySelectorAll('.badge-rel-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var container = document.getElementById(instanceId + '-suggestions-' + relType);
+        if (container) container.dataset.activeTab = kind;
+        BadgeRelPicker._applyFilters(instanceId, relType);
+    },
+    filter: function(instanceId, relType, query) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        if (popup) popup.dataset.searchQuery = query.toLowerCase().trim();
+        BadgeRelPicker._applyFilters(instanceId, relType);
+    },
+    _applyFilters: function(instanceId, relType) {
+        var popup = document.getElementById(instanceId + '-popup-' + relType);
+        var container = document.getElementById(instanceId + '-suggestions-' + relType);
+        if (!popup || !container) return;
+        var q = popup.dataset.searchQuery || '';
+        var tab = container.dataset.activeTab || '';
+        container.querySelectorAll('.badge-rel-suggestion').forEach(function(btn) {
+            var matchesTab = !tab || btn.dataset.kind === tab;
+            var matchesSearch = !q || btn.dataset.name.indexOf(q) !== -1;
+            btn.style.display = (matchesTab && matchesSearch) ? '' : 'none';
+        });
+    },
+    _updateEmptyHints: function(instanceId) {
+        ['parent', 'child'].forEach(function(relType) {
+            var group = document.getElementById(instanceId + '-sel-' + relType);
+            if (!group) return;
+            var hint = group.parentElement.querySelector('.badge-rel-empty-hint');
+            if (hint) hint.hidden = group.children.length > 0;
+        });
+    },
+    getSelectedIds: function(instanceId, relType) {
+        var group = document.getElementById(instanceId + '-sel-' + relType);
+        if (!group) return [];
+        return Array.from(group.querySelectorAll('.badge-rel-chip')).map(function(c) { return parseInt(c.dataset.id, 10); });
+    },
+    reset: function(instanceId) {
+        ['parent', 'child'].forEach(function(relType) {
+            var group = document.getElementById(instanceId + '-sel-' + relType);
+            if (!group) return;
+            Array.from(group.querySelectorAll('.badge-rel-chip')).forEach(function(chip) { BadgeRelPicker.remove(instanceId, chip); });
+        });
+    },
+    _makeSortable: function(instanceId) {
+        if (!window.Sortable) return;
+        var groupName = instanceId + '-rel';
+        var parentList = document.getElementById(instanceId + '-sel-parent');
+        var childList = document.getElementById(instanceId + '-sel-child');
+        var trash = document.getElementById(instanceId + '-trash');
+        if (!parentList || !childList) return;
+
+        function showTrash() { if (trash) trash.classList.add('is-active'); }
+        function hideTrash() { if (trash) trash.classList.remove('is-active'); }
+        function onEnd() { hideTrash(); BadgeRelPicker._updateEmptyHints(instanceId); }
+        function makeOnAdd(relType) {
+            return function(evt) {
+                var hidden = evt.item.querySelector('input[type="hidden"]');
+                if (hidden) hidden.name = relType + '_ids';
+            };
+        }
+
+        new Sortable(parentList, {
+            group: groupName, animation: 150, filter: '.tag-chip-remove', preventOnFilter: false,
+            onStart: showTrash, onEnd: onEnd, onAdd: makeOnAdd('parent'),
+        });
+        new Sortable(childList, {
+            group: groupName, animation: 150, filter: '.tag-chip-remove', preventOnFilter: false,
+            onStart: showTrash, onEnd: onEnd, onAdd: makeOnAdd('child'),
+        });
+        if (trash) {
+            new Sortable(trash, {
+                group: { name: groupName, put: true, pull: false },
+                animation: 150,
+                onAdd: function(evt) { BadgeRelPicker.remove(instanceId, evt.item); },
+            });
+        }
+    },
+    _initAll: function(root) {
+        (root || document).querySelectorAll('.badge-rel-picker').forEach(function(picker) {
+            if (picker.dataset.relInit === '1') return;
+            picker.dataset.relInit = '1';
+            BadgeRelPicker._makeSortable(picker.dataset.pickerId);
+        });
+    },
+};
+BadgeRelPicker._initAll();
+document.body.addEventListener('htmx:afterSettle', function() { BadgeRelPicker._initAll(); });
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.badge-rel-add-dropdown')) {
+        document.querySelectorAll('.badge-rel-popup').forEach(function(p) { p.hidden = true; });
+    }
+});
 
 var IconPicker = {
     toggle: function(id) {
@@ -1379,35 +1495,25 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Selection -------------------------------------------------------------
     document.getElementById('tag-rows').addEventListener('click', function(e) {
-        if (!e.shiftKey) return;
-        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
-        e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
-        var idx = allWraps.indexOf(wrap);
-        var cb = wrap.querySelector('.tag-select-cb'); if (!cb) return;
-        var newChecked = !cb.checked;
-        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
-        var lastWrap = _lastTagClickIdx >= 0 ? allWraps[_lastTagClickIdx] : null;
-        var visIdx = visWraps.indexOf(wrap);
-        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
-        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
-        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
-        visWraps.slice(lo, hi + 1).forEach(function(w) {
-            var c = w.querySelector('.tag-select-cb'); if (!c) return;
-            c.checked = newChecked;
-            if (newChecked) _tagSelected.add(c.dataset.tagId); else _tagSelected.delete(c.dataset.tagId);
-        });
-        _lastTagClickIdx = idx;
-        _syncTagCheckboxes(); _updateTagBar();
-    });
-    document.getElementById('tag-rows').addEventListener('change', function(e) {
-        var cb = e.target; if (!cb.classList.contains('tag-select-cb')) return;
-        var id = cb.dataset.tagId;
-        if (cb.checked) _tagSelected.add(id); else _tagSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#tag-rows .ul-checkbox-wrap'));
-        var wrap = cb.closest('.ul-checkbox-wrap');
-        var idx = wrap ? allWraps.indexOf(wrap) : -1;
-        if (idx >= 0) _lastTagClickIdx = idx;
+        var card = e.target.closest('.tag-card[data-tag-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(document.getElementById('tag-rows'), '.tag-card[data-tag-id]');
+        var idx = cards.indexOf(card);
+        var id = card.dataset.tagId;
+        if (e.shiftKey && _lastTagClickIdx >= 0) {
+            var lastCard = cards[_lastTagClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_tagSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = cards[i].dataset.tagId;
+                if (targetState) _tagSelected.add(cid); else _tagSelected.delete(cid);
+            }
+        } else {
+            if (_tagSelected.has(id)) _tagSelected.delete(id); else _tagSelected.add(id);
+            _lastTagClickIdx = idx;
+        }
         _syncTagCheckboxes(); _updateTagBar();
     });
 
@@ -1569,10 +1675,7 @@ window._orgBulkSync = function(n, opts) {
         if(tagBulkOrder){tagBulkOrder.value='0'; tagBulkOrder.dataset.bulkOriginal='0';}
         document.getElementById('tag-bulk-description-nochange').checked=true;
         if(tagBulkDesc){tagBulkDesc.value=''; tagBulkDesc.dataset.bulkOriginal='';}
-        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
-        _setBulkRelType('tag', 'parent');
-        var tagBulkRelRadio = document.querySelector('input[name="tag_bulk_rel_type"][value="parent"]');
-        if (tagBulkRelRadio) tagBulkRelRadio.checked = true;
+        BadgeRelPicker.reset('tag-bulk');
         _tagBulkConvertTarget = null;
         document.querySelectorAll('#tag-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('tag-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Tag':'Tags');
@@ -1581,6 +1684,13 @@ window._orgBulkSync = function(n, opts) {
         _updateTagBulkState();
         document.getElementById('tag-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.tag = function(ids) {
+        _tagSelected = new Set(ids.map(String));
+        _syncTagCheckboxes();
+        _openTagBulkEditDialog();
+    };
 
     document.getElementById('tag-bulk-icon-nochange').addEventListener('change', function() {
         if (this.checked) {
@@ -1615,9 +1725,8 @@ window._orgBulkSync = function(n, opts) {
         if (!document.getElementById('tag-bulk-description-nochange').checked) { var dv=document.getElementById('tag-bulk-description-value'); body.description=dv?dv.value:''; }
         if (!document.getElementById('tag-bulk-icon-nochange').checked) { var iv=document.getElementById('icon-value-tag-bulk-edit'); body.icon=iv?iv.value:''; }
         if (!document.getElementById('tag-bulk-color-nochange').checked) { var cv=document.getElementById('tag-bulk-color-value'); body.color=cv?cv.value:''; }
-        var _tagBulkRelType = (document.getElementById('tag-bulk-rel-type') || {}).value || 'parent';
-        body.add_parent_ids = []; body.add_child_ids = [];
-        document.querySelectorAll('#tag-bulk-parent-select .tag-bulk-parent-cb:checked').forEach(function(cb) { (_tagBulkRelType === 'child' ? body.add_child_ids : body.add_parent_ids).push(parseInt(cb.value, 10)); });
+        body.add_parent_ids = BadgeRelPicker.getSelectedIds('tag-bulk', 'parent');
+        body.add_child_ids = BadgeRelPicker.getSelectedIds('tag-bulk', 'child');
         if (converting) {
             var convertUrl = _tagBulkConvertTarget === 'status' ? '{% url "badge.bulk_convert_status" badge_kind="tag" %}' : '{% url "badge.bulk_convert" badge_kind="tag" %}';
             fetch(convertUrl, {
@@ -1811,35 +1920,25 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Selection -------------------------------------------------------------
     document.getElementById('category-rows').addEventListener('click', function(e) {
-        if (!e.shiftKey) return;
-        var wrap = e.target.closest('.ul-checkbox-wrap'); if (!wrap) return;
-        e.preventDefault();
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
-        var idx = allWraps.indexOf(wrap);
-        var cb = wrap.querySelector('.cat-select-cb'); if (!cb) return;
-        var newChecked = !cb.checked;
-        var visWraps = allWraps.filter(function(w) { var c = w.closest('.tag-card'); return !c || c.style.display !== 'none'; });
-        var lastWrap = _lastCatClickIdx >= 0 ? allWraps[_lastCatClickIdx] : null;
-        var visIdx = visWraps.indexOf(wrap);
-        var lastVisIdx = lastWrap ? visWraps.indexOf(lastWrap) : -1;
-        var lo = lastVisIdx >= 0 ? Math.min(visIdx, lastVisIdx) : visIdx;
-        var hi = lastVisIdx >= 0 ? Math.max(visIdx, lastVisIdx) : visIdx;
-        visWraps.slice(lo, hi + 1).forEach(function(w) {
-            var c = w.querySelector('.cat-select-cb'); if (!c) return;
-            c.checked = newChecked;
-            if (newChecked) _catSelected.add(c.dataset.catId); else _catSelected.delete(c.dataset.catId);
-        });
-        _lastCatClickIdx = idx;
-        _syncCatCheckboxes(); _updateCatBar();
-    });
-    document.getElementById('category-rows').addEventListener('change', function(e) {
-        var cb = e.target; if (!cb.classList.contains('cat-select-cb')) return;
-        var id = cb.dataset.catId;
-        if (cb.checked) _catSelected.add(id); else _catSelected.delete(id);
-        var allWraps = Array.from(document.querySelectorAll('#category-rows .ul-checkbox-wrap'));
-        var wrap = cb.closest('.ul-checkbox-wrap');
-        var idx = wrap ? allWraps.indexOf(wrap) : -1;
-        if (idx >= 0) _lastCatClickIdx = idx;
+        var card = e.target.closest('.tag-card[data-category-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(document.getElementById('category-rows'), '.tag-card[data-category-id]');
+        var idx = cards.indexOf(card);
+        var id = card.dataset.categoryId;
+        if (e.shiftKey && _lastCatClickIdx >= 0) {
+            var lastCard = cards[_lastCatClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_catSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = cards[i].dataset.categoryId;
+                if (targetState) _catSelected.add(cid); else _catSelected.delete(cid);
+            }
+        } else {
+            if (_catSelected.has(id)) _catSelected.delete(id); else _catSelected.add(id);
+            _lastCatClickIdx = idx;
+        }
         _syncCatCheckboxes(); _updateCatBar();
     });
 
@@ -1988,10 +2087,7 @@ window._orgBulkSync = function(n, opts) {
         if(catBulkOrder){catBulkOrder.value='0'; catBulkOrder.dataset.bulkOriginal='0';}
         document.getElementById('cat-bulk-description-nochange').checked=true;
         if(catBulkDesc){catBulkDesc.value=''; catBulkDesc.dataset.bulkOriginal='';}
-        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb').forEach(function(cb){cb.checked=false;});
-        _setBulkRelType('cat', 'parent');
-        var catBulkRelRadio = document.querySelector('input[name="cat_bulk_rel_type"][value="parent"]');
-        if (catBulkRelRadio) catBulkRelRadio.checked = true;
+        BadgeRelPicker.reset('cat-bulk');
         _catBulkConvertTarget = null;
         document.querySelectorAll('#cat-bulk-edit-dialog .kind-toggle-option').forEach(function(b){b.classList.remove('is-active');});
         document.getElementById('cat-bulk-edit-title').textContent='Edit '+ids.length+' '+(ids.length===1?'Category':'Categories');
@@ -2000,6 +2096,14 @@ window._orgBulkSync = function(n, opts) {
         _updateCatBulkState();
         document.getElementById('cat-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.category = function(ids) {
+        _catSelected = new Set(ids.map(String));
+        _syncCatCheckboxes();
+        _openCatBulkEditDialog();
+    };
+
     document.getElementById('cat-bulk-icon-nochange').addEventListener('change', function(){
         if(this.checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); var ic=document.getElementById('icon-current-cat-bulk-edit'); var ig=document.getElementById('icon-grid-cat-bulk-edit'); if(iv)iv.value=''; if(ic)ic.innerHTML='<span class="icon-picker-none-label">No icon</span>'; if(ig){ig.querySelectorAll('.icon-picker-item').forEach(function(b){b.classList.remove('selected');}); var nb=ig.querySelector('.icon-picker-none'); if(nb)nb.classList.add('selected');}}
         _updateCatBulkState();
@@ -2027,9 +2131,8 @@ window._orgBulkSync = function(n, opts) {
         if(!document.getElementById('cat-bulk-description-nochange').checked){var dv=document.getElementById('cat-bulk-description-value'); body.description=dv?dv.value:'';}
         if(!document.getElementById('cat-bulk-icon-nochange').checked){var iv=document.getElementById('icon-value-cat-bulk-edit'); body.icon=iv?iv.value:'';}
         if(!document.getElementById('cat-bulk-color-nochange').checked){var cv=document.getElementById('cat-bulk-color-value'); body.color=cv?cv.value:'';}
-        var _catBulkRelType = (document.getElementById('cat-bulk-rel-type') || {}).value || 'parent';
-        body.add_parent_ids = []; body.add_child_ids = [];
-        document.querySelectorAll('#cat-bulk-parent-select .cat-bulk-parent-cb:checked').forEach(function(cb) { (_catBulkRelType === 'child' ? body.add_child_ids : body.add_parent_ids).push(parseInt(cb.value, 10)); });
+        body.add_parent_ids = BadgeRelPicker.getSelectedIds('cat-bulk', 'parent');
+        body.add_child_ids = BadgeRelPicker.getSelectedIds('cat-bulk', 'child');
         if(converting){
             var convertUrl = _catBulkConvertTarget === 'status' ? '{% url "badge.bulk_convert_status" badge_kind="category" %}' : '{% url "badge.bulk_convert" badge_kind="category" %}';
             fetch(convertUrl, {
@@ -2204,10 +2307,7 @@ window._orgBulkSync = function(n, opts) {
         if (statusBulkOrder) { statusBulkOrder.value = '0'; statusBulkOrder.dataset.bulkOriginal = '0'; }
         document.getElementById('status-bulk-description-nochange').checked = true;
         if (statusBulkDesc) { statusBulkDesc.value = ''; statusBulkDesc.dataset.bulkOriginal = ''; }
-        document.querySelectorAll('#status-bulk-parent-select .status-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
-        _setBulkRelType('status', 'parent');
-        var statusBulkRelRadio = document.querySelector('input[name="status_bulk_rel_type"][value="parent"]');
-        if (statusBulkRelRadio) statusBulkRelRadio.checked = true;
+        BadgeRelPicker.reset('status-bulk');
         _statusBulkConvertTarget = null;
         document.querySelectorAll('#status-bulk-edit-dialog .kind-toggle-option').forEach(function(b) { b.classList.remove('is-active'); });
         document.getElementById('status-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Status' : 'Statuses');
@@ -2216,6 +2316,14 @@ window._orgBulkSync = function(n, opts) {
         _updateStatusBulkState();
         document.getElementById('status-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.status = function(ids) {
+        _statusSelected = new Set(ids.map(function(id) { return parseInt(id, 10); }));
+        _lastStatusClickIdx = -1;
+        _syncStatusSelBar();
+        _openStatusBulkEditDialog();
+    };
 
     document.getElementById('status-bulk-icon-nochange').addEventListener('change', function() {
         if (this.checked) {
@@ -2259,9 +2367,8 @@ window._orgBulkSync = function(n, opts) {
         if (!document.getElementById('status-bulk-description-nochange').checked) { var dv = document.getElementById('status-bulk-description-value'); body.description = dv ? dv.value : ''; }
         if (!document.getElementById('status-bulk-icon-nochange').checked) { var iv = document.getElementById('icon-value-status-bulk-edit'); body.icon = iv ? iv.value : ''; }
         if (!document.getElementById('status-bulk-color-nochange').checked) { var cv = document.getElementById('status-bulk-color-value'); body.color = cv ? cv.value : ''; }
-        var _statusBulkRelType = (document.getElementById('status-bulk-rel-type') || {}).value || 'parent';
-        body.add_parent_ids = []; body.add_child_ids = [];
-        document.querySelectorAll('#status-bulk-parent-select .status-bulk-parent-cb:checked').forEach(function(cb) { (_statusBulkRelType === 'child' ? body.add_child_ids : body.add_parent_ids).push(parseInt(cb.value, 10)); });
+        body.add_parent_ids = BadgeRelPicker.getSelectedIds('status-bulk', 'parent');
+        body.add_child_ids = BadgeRelPicker.getSelectedIds('status-bulk', 'child');
         if (converting) {
             var convertUrl = _statusBulkConvertTarget === 'tag'
                 ? '{% url "badge.bulk_convert_tag" badge_kind="status" %}'
@@ -2539,7 +2646,7 @@ window._orgBulkSync = function(n, opts) {
 (function() {
     var _prioritySortable = null;
     var _priorityOrderEditing = null;
-    var _prioritySelectMode = false;
+    var _lastPriorityClickIdx = -1;
 
     // Mount MultiDrag plugin (ships with Sortable.min.js standard build)
     if (window.Sortable && Sortable.MultiDrag) {
@@ -2683,39 +2790,45 @@ window._orgBulkSync = function(n, opts) {
 
     // -- Multi-select helpers ---------------------------------------------------
 
-    function _updatePrioritySelBar() {
+    function _priorityItems() {
         var list = document.getElementById('priority-list');
-        if (!list) return;
-        var n = list.querySelectorAll('.priority-item--selected').length;
-        var infoEl = document.getElementById('priority-sel-info');
-        var clearBtn = document.getElementById('priority-sel-clear');
-        if (infoEl) { infoEl.textContent = n ? n + ' selected' : ''; infoEl.hidden = !n; }
-        if (clearBtn) clearBtn.hidden = !n;
+        return list ? Array.from(list.querySelectorAll('.priority-item[data-id]')) : [];
     }
 
-    window._clearPrioritySelection = function() {
-        var list = document.getElementById('priority-list');
-        if (!list) return;
-        list.querySelectorAll('.priority-item--selected').forEach(function(item) {
-            if (_prioritySortable && Sortable.utils) {
-                try { Sortable.utils.deselect(item); } catch (_) { item.classList.remove('priority-item--selected'); }
-            } else {
-                item.classList.remove('priority-item--selected');
-            }
-        });
-        list.querySelectorAll('.priority-sel-cb').forEach(function(cb) { cb.checked = false; });
-        _updatePrioritySelBar();
-    };
+    function _setPrioritySelected(item, selected) {
+        if (_prioritySortable && window.Sortable && Sortable.utils) {
+            try { selected ? Sortable.utils.select(item) : Sortable.utils.deselect(item); return; } catch (_) { /* fall through */ }
+        }
+        item.classList.toggle('priority-item--selected', selected);
+    }
 
-    window._togglePrioritySelectMode = function() {
-        var list = document.getElementById('priority-list');
-        var btn = document.getElementById('priority-sel-toggle');
-        if (!list || !btn) return;
-        _prioritySelectMode = !_prioritySelectMode;
-        list.classList.toggle('priority-select-mode', _prioritySelectMode);
-        btn.classList.toggle('active', _prioritySelectMode);
-        if (!_prioritySelectMode) window._clearPrioritySelection();
-    };
+    function _updatePrioritySelBar() {
+        window._orgBulk.deselect = _clearPrioritySelection;
+        window._orgBulk.edit = function() {
+            var items = document.querySelectorAll('#priority-list .priority-item--selected');
+            if (!items.length) return;
+            var kinds = new Set();
+            var ids = [];
+            items.forEach(function(item) { kinds.add(item.dataset.kind); ids.push(item.dataset.id); });
+            if (kinds.size > 1) {
+                toastr.warning('Select only tags, only categories, or only statuses to bulk edit them together.');
+                return;
+            }
+            var kind = Array.from(kinds)[0];
+            var opener = window._orgBulkEditByIds && window._orgBulkEditByIds[kind];
+            if (opener) opener(ids); else toastr.error('Bulk edit is not available for this type.');
+        };
+        var n = document.querySelectorAll('#priority-list .priority-item--selected').length;
+        _orgBulkSync(n, { hasEdit: true, hasMerge: false, hasDel: false });
+    }
+
+    function _clearPrioritySelection() {
+        _priorityItems().forEach(function(item) { _setPrioritySelected(item, false); });
+        _lastPriorityClickIdx = -1;
+        _updatePrioritySelBar();
+    }
+
+    window._orgRegisterSelectionClearer(_clearPrioritySelection);
 
     // -- Sortable initialization ------------------------------------------------
 
@@ -2736,47 +2849,45 @@ window._orgBulkSync = function(n, opts) {
         if (window.Sortable && Sortable.MultiDrag) {
             opts.multiDrag = true;
             opts.selectedClass = 'priority-item--selected';
-            opts.onSelect = function(evt) {
-                var cb = evt.item.querySelector('.priority-sel-cb');
-                if (cb) cb.checked = true;
-                _updatePrioritySelBar();
-            };
-            opts.onDeselect = function(evt) {
-                var cb = evt.item.querySelector('.priority-sel-cb');
-                if (cb) cb.checked = false;
-                _updatePrioritySelBar();
-            };
+            opts.onSelect = function() { _updatePrioritySelBar(); };
+            opts.onDeselect = function() { _updatePrioritySelBar(); };
         }
 
         _prioritySortable = new Sortable(list, opts);
     }
 
-    // Checkbox → SortableJS selection sync
-    document.addEventListener('change', function(e) {
-        var cb = e.target.closest('.priority-sel-cb');
-        if (!cb) return;
-        var item = cb.closest('.priority-item');
-        if (!item || !_prioritySortable) return;
-        try {
-            if (cb.checked) Sortable.utils.select(item);
-            else Sortable.utils.deselect(item);
-        } catch (_) {
-            item.classList.toggle('priority-item--selected', cb.checked);
-        }
-        _updatePrioritySelBar();
-    });
-
     document.getElementById('priority-list').addEventListener('click', function(e) {
         var badge = e.target.closest('.priority-order-badge');
         if (badge) { e.preventDefault(); _beginPriorityOrderEdit(badge); return; }
-        var btn = e.target.closest('[data-priority-jump]');
-        if (!btn) return;
-        var item = btn.closest('.priority-item');
-        var list = document.getElementById('priority-list');
-        if (!item || !list) return;
-        if (btn.dataset.priorityJump === 'top') list.insertBefore(item, list.firstElementChild);
-        else list.appendChild(item);
-        _savePriorityOrder(list, item);
+        var jumpBtn = e.target.closest('[data-priority-jump]');
+        if (jumpBtn) {
+            var jumpItem = jumpBtn.closest('.priority-item');
+            var list = document.getElementById('priority-list');
+            if (!jumpItem || !list) return;
+            if (jumpBtn.dataset.priorityJump === 'top') list.insertBefore(jumpItem, list.firstElementChild);
+            else list.appendChild(jumpItem);
+            _savePriorityOrder(list, jumpItem);
+            return;
+        }
+
+        var item = e.target.closest('.priority-item');
+        if (!item) return;
+        if (e.target.closest('.priority-drag-handle,.priority-order-editor,a,button,input,select,textarea')) return;
+
+        var items = _priorityItems();
+        var idx = items.indexOf(item);
+        var isSelected = item.classList.contains('priority-item--selected');
+
+        if (e.shiftKey && _lastPriorityClickIdx >= 0) {
+            var lastIdx = _lastPriorityClickIdx;
+            var lo = Math.min(idx, lastIdx), hi = Math.max(idx, lastIdx);
+            var targetState = !isSelected;
+            for (var i = lo; i <= hi; i++) _setPrioritySelected(items[i], targetState);
+        } else {
+            _setPrioritySelected(item, !isSelected);
+            _lastPriorityClickIdx = idx;
+        }
+        _updatePrioritySelBar();
     });
 
     window._initPrioritySortable = _initPrioritySortable;
@@ -2792,6 +2903,7 @@ window._orgBulkSync = function(n, opts) {
 (function () {
     var _peopleSelected = new Set();
     var _peopleMergeTargetId = null;
+    var _lastPeopleClickIdx = -1;
     var _mergeUrl = '{% url "badge.multi_merge" badge_kind="people" %}';
 
     function _getCsrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
@@ -2875,10 +2987,7 @@ window._orgBulkSync = function(n, opts) {
         var peopleBulkDesc = document.getElementById('people-bulk-description-value');
         document.getElementById('people-bulk-description-nochange').checked = true;
         if (peopleBulkDesc) { peopleBulkDesc.value = ''; peopleBulkDesc.dataset.bulkOriginal = ''; }
-        document.querySelectorAll('#people-bulk-parent-select .people-bulk-parent-cb').forEach(function(cb) { cb.checked = false; });
-        _setBulkRelType('people', 'parent');
-        var peopleBulkRelRadio = document.querySelector('input[name="people_bulk_rel_type"][value="parent"]');
-        if (peopleBulkRelRadio) peopleBulkRelRadio.checked = true;
+        BadgeRelPicker.reset('people-bulk');
         document.getElementById('people-bulk-edit-title').textContent = 'Edit ' + ids.length + ' ' + (ids.length === 1 ? 'Label' : 'Labels');
         var cbtn = document.getElementById('people-bulk-edit-confirm');
         cbtn.disabled = false;
@@ -2886,6 +2995,13 @@ window._orgBulkSync = function(n, opts) {
         _updatePeopleBulkState();
         document.getElementById('people-bulk-edit-dialog').showModal();
     }
+
+    window._orgBulkEditByIds = window._orgBulkEditByIds || {};
+    window._orgBulkEditByIds.people = function(ids) {
+        _peopleSelected = new Set(ids.map(function(id) { return parseInt(id, 10); }));
+        _applyPeopleCheck();
+        _openPeopleBulkEditDialog();
+    };
 
     var peopleBulkIconNochange = document.getElementById('people-bulk-icon-nochange');
     if (peopleBulkIconNochange) peopleBulkIconNochange.addEventListener('change', function() {
@@ -2947,9 +3063,8 @@ window._orgBulkSync = function(n, opts) {
             var cv = document.getElementById('people-bulk-color-value');
             body.color = cv ? cv.value : '';
         }
-        var _peopleBulkRelType = (document.getElementById('people-bulk-rel-type') || {}).value || 'parent';
-        body.add_parent_ids = []; body.add_child_ids = [];
-        document.querySelectorAll('#people-bulk-parent-select .people-bulk-parent-cb:checked').forEach(function(cb) { (_peopleBulkRelType === 'child' ? body.add_child_ids : body.add_parent_ids).push(parseInt(cb.value, 10)); });
+        body.add_parent_ids = BadgeRelPicker.getSelectedIds('people-bulk', 'parent');
+        body.add_child_ids = BadgeRelPicker.getSelectedIds('people-bulk', 'child');
         fetch('{% url "badge.bulk_edit" badge_kind="people" %}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrf() },
@@ -2985,11 +3100,26 @@ window._orgBulkSync = function(n, opts) {
     }
 
     var peopleRows = document.getElementById('people-badge-rows');
-    if (peopleRows) peopleRows.addEventListener('change', function (e) {
-        var cb = e.target.closest('.people-sel-cb');
-        if (!cb) return;
-        var id = parseInt(cb.dataset.peopleId || cb.dataset.id, 10);
-        if (cb.checked) _peopleSelected.add(id); else _peopleSelected.delete(id);
+    if (peopleRows) peopleRows.addEventListener('click', function (e) {
+        var card = e.target.closest('.tag-card[data-people-id]'); if (!card) return;
+        if (e.target.closest('a,button,input,select,textarea')) return;
+        var cards = _orgVisibleCards(peopleRows, '.tag-card[data-people-id]');
+        var idx = cards.indexOf(card);
+        var id = parseInt(card.dataset.peopleId, 10);
+        if (e.shiftKey && _lastPeopleClickIdx >= 0) {
+            var lastCard = cards[_lastPeopleClickIdx];
+            var lastIdx = lastCard ? cards.indexOf(lastCard) : -1;
+            var lo = lastIdx >= 0 ? Math.min(idx, lastIdx) : idx;
+            var hi = lastIdx >= 0 ? Math.max(idx, lastIdx) : idx;
+            var targetState = !_peopleSelected.has(id);
+            for (var i = lo; i <= hi; i++) {
+                var cid = parseInt(cards[i].dataset.peopleId, 10);
+                if (targetState) _peopleSelected.add(cid); else _peopleSelected.delete(cid);
+            }
+        } else {
+            if (_peopleSelected.has(id)) _peopleSelected.delete(id); else _peopleSelected.add(id);
+            _lastPeopleClickIdx = idx;
+        }
         _syncPeopleSelBar();
     });
 

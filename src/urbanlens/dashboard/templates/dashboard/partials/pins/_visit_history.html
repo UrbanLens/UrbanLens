@@ -12,6 +12,45 @@
         </button>
     </div>
 
+    {% if pending_suggestions %}
+    <ul class="visit-list visit-list--pending">
+        {% for suggestion in pending_suggestions %}
+        <li class="visit-item visit-item--pending">
+            <div class="visit-item-main">
+                <span class="visit-date">{{ suggestion.visited_at|date:"N j, Y" }}</span>
+                <span class="visit-source visit-source--pending" title="Awaiting confirmation">
+                    <i class="material-icons" style="font-size:14px">hourglass_empty</i>
+                    Pending
+                </span>
+            </div>
+            <div class="visit-pending-message">
+                {% if suggestion.offers_merge %}
+                {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} says you were also there - add them to your existing visit on {{ suggestion.existing_visit.visited_at|date:"N j" }}, or log it separately?
+                {% else %}
+                {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} suggested you also visited here on {{ suggestion.visited_at|date:"N j, Y" }}.
+                {% endif %}
+            </div>
+            <form class="visit-pending-actions"
+                  hx-post="{% url 'visit_suggestion.respond' suggestion.id %}"
+                  hx-target="#visit-history-panel"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="context" value="pin">
+                <input type="hidden" name="pin_slug" value="{{ pin.slug }}">
+                {% if suggestion.offers_merge %}
+                <button type="submit" name="action" value="add_participants" class="btn btn--sm btn--primary">Add to existing visit</button>
+                <button type="submit" name="action" value="new_entry" class="btn btn--sm btn--ghost">Log separately</button>
+                <button type="submit" name="action" value="reject" class="btn btn--sm btn--ghost">Reject</button>
+                {% else %}
+                <button type="submit" name="action" value="accept" class="btn btn--sm btn--primary">Confirm</button>
+                <button type="submit" name="action" value="reject" class="btn btn--sm btn--ghost">Reject</button>
+                {% endif %}
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
     {% if visits %}
     <ul class="visit-list">
         {% for visit in visits %}
@@ -33,6 +72,11 @@
             {% if visit.notes %}
             <div class="visit-notes">{{ visit.notes }}</div>
             {% endif %}
+            {% with visit_participants=visit.participants.all %}
+            {% if visit_participants %}
+            <div class="visit-participants">with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+            {% endif %}
+            {% endwith %}
             <button type="button"
                     hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
                     hx-target="#visit-history-panel"
@@ -70,6 +114,19 @@
                 <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
                 <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
             </div>
+            {% if connections %}
+            <div class="form-row">
+                <label>Who else was there? <small>(optional)</small></label>
+                <div class="visit-participant-picker">
+                    {% for friend in connections %}
+                    <label class="visit-participant-option">
+                        <input type="checkbox" name="participant_ids" value="{{ friend.id }}">
+                        {{ friend.username }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Visit</button>
                 <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>

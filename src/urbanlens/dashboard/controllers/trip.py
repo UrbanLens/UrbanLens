@@ -23,6 +23,8 @@ from urbanlens.dashboard.models.trips.model import (
     TripComment,
     TripMembership,
 )
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -210,6 +212,43 @@ def _activity_coords(act: TripActivity) -> tuple[float, float] | None:
     return None
 
 
+def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
+    """Log the completer's own visit and suggest visits to other rsvp=yes trip members.
+
+    The completer's visit is logged immediately since completing the activity IS
+    their confirmation. Every other member who RSVP'd yes gets a suggestion to
+    accept or reject instead, since the system can't be sure they actually went.
+
+    Args:
+        trip: The trip the activity belongs to.
+        activity: The activity that was just marked completed.
+        completer: The profile who marked the activity completed.
+    """
+    coords = _activity_coords(activity)
+    if coords is None:
+        return
+    lat, lng = coords
+
+    pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
+    PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
+    sync_last_visited(pin)
+    add_visited_status(pin)
+
+    if activity.scheduled_at is not None:
+        other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
+        for membership in other_yes:
+            create_visit_suggestion(
+                suggested_to=membership.profile,
+                suggested_by=completer,
+                visited_at=activity.scheduled_at,
+                location=activity.location,
+                latitude=lat,
+                longitude=lng,
+                candidate_profiles=[m.profile for m in other_yes if m.profile_id != membership.profile_id],
+                trip_activity=activity,
+            )
+
+
 def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:
     """Return {activity_id: map_index} for activities visible on the map (excludes completed/hidden)."""
     index_map: dict[int, int] = {}
@@ -379,12 +418,15 @@ class TripListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
+        from urbanlens.dashboard.services.connections import get_connections
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         trips = _trips_for_list(profile)
+        friends = get_connections(profile)
         return render(
             request,
             "dashboard/pages/trips/index.html",
-            {"trips": trips, "profile": profile, "page_name": "trips"},
+            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends},
         )
 
 
@@ -395,12 +437,16 @@ class TripCreateView(LoginRequiredMixin, View):
     """
 
     def post(self, request):
+        from urbanlens.dashboard.services.connections import get_connections
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
             body = json.loads(request.body) if request.body else {}
+            invite_ids = body.get("invite_profile_ids") or []
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
+            invite_ids = request.POST.getlist("invite_profile_ids")
 
         name = (body.get("name") or "").strip()
         if not name:
@@ -414,6 +460,16 @@ class TripCreateView(LoginRequiredMixin, View):
             creator=profile,
         )
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
+
+        # Only invite accepted friends - never trust arbitrary submitted profile IDs.
+        if invite_ids:
+            friend_ids = {str(f.id) for f in get_connections(profile)}
+            selected_ids = {pid for pid in invite_ids if str(pid) in friend_ids}
+            if selected_ids:
+                max_members = SiteSettings.get_current().max_trip_members
+                remaining = max_members - trip.profiles.count()
+                for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
+                    TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
 
         trips = _trips_for_list(profile)
         return render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
@@ -643,6 +699,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         trip = result
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+        already_completed = activity.status == TripActivity.STATUS_COMPLETED
 
         today = datetime.date.today()
         completed_date_str = request.POST.get("completed_date", "")
@@ -661,6 +718,8 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
+        if not already_completed:
+            _create_visit_entries_for_completed_activity(trip, activity, profile)
 
         return _render_activities_panel(request, trip, profile)
 

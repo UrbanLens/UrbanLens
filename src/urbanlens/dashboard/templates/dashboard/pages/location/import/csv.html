@@ -277,7 +277,7 @@
     cursor: pointer;
     border: 1.5px solid transparent;
     transition: opacity .15s, box-shadow .15s;
-    background: #f0f0f0;
+    background: var(--ul-grey-1b);
     color: #333;
     user-select: none;
 }
@@ -286,6 +286,14 @@
     box-shadow: 0 0 0 2px rgba(33,150,243,.15);
 }
 .iw-badge-pill i { font-size: .85rem; }
+.iw-badge-pill-new {
+    background: none;
+    border-style: dashed;
+    border-color: #c8d0d8;
+    color: #5f6368;
+    cursor: default;
+}
+.iw-badge-pill-new i { color: #4caf50; font-size: 1rem; }
 .iw-badge-add {
     display: inline-flex;
     align-items: center;
@@ -484,7 +492,16 @@
     <!-- -- Step 1: Upload ------------------------------------------ -->
     <div id="iw-step-1">
         <div class="iw-body">
-            <p class="iw-hint">KML, KMZ, GeoJSON, CSV (Google Takeout) - or a ZIP / TGZ containing any of the above. Multiple files accepted.</p>
+            <p class="iw-hint">
+                Import data from another app. Many apps are supported.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+            </p>
+            {% if can_use_ai_features and profile.ai_enabled %}
+            <div class="iw-takeout-help" style="margin-bottom:18px;">
+                <i class="material-symbols-outlined" style="vertical-align:middle;font-size:1.1rem;color:var(--ul-primary-color)">auto_awesome</i>
+                <strong>AI document import:</strong> You may upload a plain-text or Word file containing a list of locations and our AI will identify locations in it. The file can include trip notes, research, or other details. It does not have to be structured or organized in any particular way. You will have a chance to review the results before anything is imported.
+            </div>
+            {% endif %}
             <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">
                 <i class="material-symbols-outlined">help_outline</i>
                 <span>How do I get a Google Takeout file?</span>
@@ -504,7 +521,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.csv,.zip,.tgz,.tar.gz">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
         </div>
@@ -518,7 +535,7 @@
         <div class="iw-body">
             <div class="iw-parsing">
                 <div class="iw-spinner"></div>
-                <span>Reading files...</span>
+                <span id="iw-parsing-label">Reading files...</span>
             </div>
         </div>
     </div>
@@ -709,6 +726,13 @@ $('iw-btn-upload').addEventListener('click', async function () {
     showStep('parsing', 0);
     $('closeImportDialog').disabled = true;
 
+    var hasDocument = selectedFiles.some(function (f) {
+        return /\.(txt|docx)$/i.test(f.name);
+    });
+    $('iw-parsing-label').textContent = hasDocument
+        ? 'Reading files... AI is analyzing your document, this may take a moment.'
+        : 'Reading files...';
+
     var formData = new FormData();
     formData.append('csrfmiddlewaretoken', getCsrfToken());
     selectedFiles.forEach(function (f) { formData.append('upload_files', f); });
@@ -724,6 +748,9 @@ $('iw-btn-upload').addEventListener('click', async function () {
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
         showStep('preview', 1);
+        (parsedData.warnings || []).forEach(function (w) {
+            toastr.warning(w, 'Could not import a file');
+        });
     } catch (err) {
         $('closeImportDialog').disabled = false;
         showStep('upload', 0);
@@ -772,16 +799,28 @@ function renderPreview(data) {
             'Create category <em>"' + escHtml(lst.stem) + '"</em>' +
             '</label>';
         meta.appendChild(catRow);
+        var catCheckbox = catRow.querySelector('input[type=checkbox]');
 
-        /* Badge picker row */
+        /* Badge picker row (always present so the new-category preview chip has somewhere to live) */
+        var badgeRow = document.createElement('div');
+        badgeRow.className = 'iw-meta-row';
+        var badgeInner = document.createElement('div');
+        badgeInner.className = 'iw-badge-row';
+        badgeInner.id = 'iw-badges-' + listIdx;
+        badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
+
+        /* Sample chip previewing the category badge that will be created on import */
+        var catPreview = document.createElement('span');
+        catPreview.className = 'iw-badge-pill iw-badge-pill-new';
+        catPreview.title = 'This category will be created when you import';
+        catPreview.innerHTML = '<i class="material-icons">fiber_new</i><span>' + escHtml(lst.stem) + '</span>';
+        catPreview.hidden = !catCheckbox.checked;
+        badgeInner.appendChild(catPreview);
+        catCheckbox.addEventListener('change', function () {
+            catPreview.hidden = !catCheckbox.checked;
+        });
+
         if (badges.length > 0) {
-            var badgeRow = document.createElement('div');
-            badgeRow.className = 'iw-meta-row';
-            var badgeInner = document.createElement('div');
-            badgeInner.className = 'iw-badge-row';
-            badgeInner.id = 'iw-badges-' + listIdx;
-            badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
-
             var addBtn = document.createElement('button');
             addBtn.className = 'iw-badge-add';
             addBtn.type = 'button';
@@ -789,17 +828,15 @@ function renderPreview(data) {
             addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add badge';
             badgeInner.appendChild(addBtn);
 
-            badgeRow.appendChild(badgeInner);
-            meta.appendChild(badgeRow);
-            lst._selectedBadgeIds = [];
-
             addBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 openBadgeDropdown(listIdx, badges, addBtn);
             });
-        } else {
-            lst._selectedBadgeIds = [];
         }
+
+        badgeRow.appendChild(badgeInner);
+        meta.appendChild(badgeRow);
+        lst._selectedBadgeIds = [];
 
         group.appendChild(meta);
 

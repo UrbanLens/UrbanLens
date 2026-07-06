@@ -216,7 +216,7 @@ class VisitQuerySetTests(TestCase):
         self.takeout_visit = baker.make(
             "dashboard.PinVisit",
             pin=self.pin,
-            source=VisitSource.GOOGLE_TAKEOUT,
+            source=VisitSource.HISTORY,
             visited_at=ts,
         )
         self.other_pin_visit = baker.make(

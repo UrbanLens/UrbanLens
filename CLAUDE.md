@@ -36,6 +36,8 @@ docker-compose up --build
 ```
 Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
+Do not attempt to run docker. Instead, if docker needs to be run, ask the user to run docker manually. Claude's environment is not setup to run docker properly. 
+
 ### Building & Compiling
 
 `bun`, `node`, and `npx` are **not installed on Windows** - these commands only work inside

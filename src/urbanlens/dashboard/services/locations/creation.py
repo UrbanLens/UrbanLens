@@ -77,7 +77,10 @@ class LocationCreationService:
         if pin.google_place_id is None:
             service.ensure_linked(pin)
 
-        pin_updates: dict[str, object] = {"location": location}
+        # This bypasses Pin.save() via .update(), so point (unchanged here since pin's
+        # own effective coordinates - the point it was created from - don't change by
+        # gaining a location) must still be carried explicitly to stay in sync.
+        pin_updates: dict[str, object] = {"location": location, "point": point}
         if normalize_coordinate(pin.latitude) == normalize_coordinate(location.latitude) and normalize_coordinate(pin.longitude) == normalize_coordinate(location.longitude) and pin.google_place_id != location.google_place_id:
             pin_updates["google_place"] = location.google_place
         Pin.objects.filter(pk=pin.pk, location__isnull=True).update(**pin_updates)

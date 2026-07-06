@@ -10,22 +10,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
-
-
-def _accepted_friend_profiles(profile: Profile):
-    friendships = Friendship.objects.profile(profile.pk).is_friend().select_related("from_profile__user", "to_profile__user")
-    return [f.to_profile if f.from_profile_id == profile.pk else f.from_profile for f in friendships]
-
-
-def _are_friends(a: Profile, b: Profile) -> bool:
-    friendship = Friendship.objects.all().between(a, b)
-    return bool(friendship and friendship.status == FriendshipStatus.ACCEPTED)
+from urbanlens.dashboard.services.connections import are_connections, get_connections
 
 
 def _recipient_has_pin(profile: Profile, source: Pin) -> bool:
@@ -71,7 +61,7 @@ def _create_pin_from_share(share: PinShare) -> Pin:
 class PinShareDialogView(LoginRequiredMixin, View):
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile=request.user.profile)
-        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": _accepted_friend_profiles(request.user.profile)})
+        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": get_connections(request.user.profile)})
 
 
 class PinShareCreateView(LoginRequiredMixin, View):
@@ -79,7 +69,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
         sender = request.user.profile
         pin = get_object_or_404(Pin, slug=pin_slug, profile=sender)
         recipient = get_object_or_404(Profile, pk=request.POST.get("profile_id"))
-        if recipient == sender or not _are_friends(sender, recipient):
+        if recipient == sender or not are_connections(sender, recipient):
             return HttpResponse("Pins can only be shared with connected friends.", status=403)
 
         already_pinned = _recipient_has_pin(recipient, pin)
@@ -101,7 +91,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
         )
         share.notification = notification
         share.save(update_fields=["notification", "updated"])
-        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": _accepted_friend_profiles(sender), "shared_to": recipient})
+        return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": get_connections(sender), "shared_to": recipient})
 
 
 class PinShareDetailView(LoginRequiredMixin, View):

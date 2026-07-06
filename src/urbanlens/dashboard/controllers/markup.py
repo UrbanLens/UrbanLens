@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -93,20 +94,24 @@ def _resolve_owner(
     request: HttpRequest,
     pin_slug: str | None,
     location_slug: str | None,
-) -> tuple[Pin | Location, QuerySet[PinMarkup]]:
-    """Resolve the markup owner (Pin or Location) from URL kwargs.
+    safety_checkin_uuid: str | None = None,
+) -> tuple[Pin | Location | SafetyCheckin, QuerySet[PinMarkup]]:
+    """Resolve the markup owner (Pin, Location, or SafetyCheckin) from URL kwargs.
 
-    Exactly one of *pin_slug* / *location_slug* is expected to be set,
-    matching the two URL patterns these views are mounted under - personal
-    markup under a pin's own map, or shared/community markup on a Location's
-    wiki map. Pin-scoped markup requires the caller to own the pin;
-    Location-scoped markup is shared data any signed-in user may edit,
-    matching the existing community detail-pin permission model.
+    Exactly one of *pin_slug* / *location_slug* / *safety_checkin_uuid* is
+    expected to be set, matching the three URL patterns these views are
+    mounted under - personal markup under a pin's own map, shared/community
+    markup on a Location's wiki map, or a personal route/plan drawing on a
+    safety check-in. Pin-scoped and check-in-scoped markup both require the
+    caller to own the parent; Location-scoped markup is shared data any
+    signed-in user may edit, matching the existing community detail-pin
+    permission model.
 
     Args:
-        request: The current HttpRequest (used for the pin-ownership check).
+        request: The current HttpRequest (used for the ownership checks).
         pin_slug: Slug of the parent pin, if this is a personal-markup route.
         location_slug: Slug of the parent location, if this is a community-markup route.
+        safety_checkin_uuid: UUID of the parent check-in, if this is a safety-checkin route.
 
     Returns:
         Tuple of (owner, markup queryset already filtered to that owner).
@@ -114,6 +119,9 @@ def _resolve_owner(
     if pin_slug is not None:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return pin, PinMarkup.objects.for_pin(pin)
+    if safety_checkin_uuid is not None:
+        checkin = get_object_or_404(SafetyCheckin, uuid=safety_checkin_uuid, profile__user=request.user)
+        return checkin, PinMarkup.objects.for_safety_checkin(checkin)
     location = get_object_or_404(Location, slug=location_slug)
     return location, PinMarkup.objects.for_location(location)
 
@@ -125,18 +133,46 @@ class MarkupJsonView(LoginRequiredMixin, View):
     GET /location/<location_slug>/wiki/markup/json/
     """
 
-    def get(self, request, pin_slug=None, location_slug=None):
+    def get(self, request, pin_slug=None, location_slug=None, safety_checkin_uuid=None):
         """Return markup items as a JSON list.
 
         Args:
             request: HttpRequest.
             pin_slug: UUID/slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
+            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
 
         Returns:
             JsonResponse with ``markup_items`` list.
         """
-        _owner, items = _resolve_owner(request, pin_slug, location_slug)
+        _owner, items = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
+        return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
+
+
+class SafetyContactMarkupJsonView(View):
+    """Read-only markup JSON for the public, token-gated safety contact portal.
+
+    Deliberately not ``LoginRequiredMixin`` - an emergency contact has no
+    account to log into, only the magic-link ``token`` mailed to them, so
+    this mirrors the token-based auth already used by
+    ``SafetyContactPortalView``/``SafetyContactMarkSafeView`` instead of the
+    owner-only ``MarkupJsonView``.
+
+    GET /safety/contact/<uuid:token>/markup/json/
+    """
+
+    def get(self, request: HttpRequest, token: str) -> HttpResponse:
+        """Return the linked check-in's markup items as a JSON list.
+
+        Args:
+            request: HttpRequest.
+            token: The contact's magic-link token.
+
+        Returns:
+            JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
+        """
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin"), token=token)
+        items = PinMarkup.objects.for_safety_checkin(contact.checkin)
         return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
 
 
@@ -147,18 +183,19 @@ class MarkupView(LoginRequiredMixin, View):
     POST /location/<location_slug>/wiki/markup/
     """
 
-    def post(self, request, pin_slug=None, location_slug=None):
+    def post(self, request, pin_slug=None, location_slug=None, safety_checkin_uuid=None):
         """Create a markup item.
 
         Args:
             request: HttpRequest with JSON body containing markup fields.
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
+            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
 
         Returns:
             JsonResponse with ``ok`` and ``uuid`` on success, error on failure.
         """
-        owner, _qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, _qs = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
 
@@ -187,7 +224,12 @@ class MarkupView(LoginRequiredMixin, View):
         fill_opacity = int(body.get("fill_opacity") or profile.markup_fill_opacity)
         border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
 
-        owner_kwargs = {"parent_pin": owner} if pin_slug is not None else {"parent_location": owner}
+        if pin_slug is not None:
+            owner_kwargs = {"parent_pin": owner}
+        elif safety_checkin_uuid is not None:
+            owner_kwargs = {"parent_safety_checkin": owner}
+        else:
+            owner_kwargs = {"parent_location": owner}
         item = PinMarkup.objects.create(
             profile=profile,
             markup_type=markup_type,
@@ -201,7 +243,7 @@ class MarkupView(LoginRequiredMixin, View):
             security_indicator=security_indicator,
             **owner_kwargs,
         )
-        if security_indicator:
+        if security_indicator and isinstance(owner, (Pin, Location)):
             _apply_security_indicator(owner, security_indicator)
 
         if location_slug is not None:
@@ -220,12 +262,12 @@ class MarkupEditView(LoginRequiredMixin, View):
     POST/DELETE /location/<location_slug>/wiki/markup/<markup_uuid>/
     """
 
-    def _get_item(self, request, pin_slug, location_slug, markup_uuid) -> tuple[Pin | Location, PinMarkup]:
+    def _get_item(self, request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid=None) -> tuple[Pin | Location | SafetyCheckin, PinMarkup]:
         """Resolve a markup item, ensuring the caller may access its owner."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        owner, qs = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
         return owner, get_object_or_404(qs, uuid=markup_uuid)
 
-    def post(self, request, pin_slug=None, location_slug=None, markup_uuid=None):
+    def post(self, request, pin_slug=None, location_slug=None, markup_uuid=None, safety_checkin_uuid=None):
         """Update mutable fields on a markup item.
 
         Args:
@@ -233,11 +275,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
             markup_uuid: UUID of the markup item to update.
+            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
 
         Returns:
             JsonResponse with ``ok`` on success.
         """
-        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid)
+        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid)
         body = _parse_body(request)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
@@ -261,11 +304,11 @@ class MarkupEditView(LoginRequiredMixin, View):
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
         item.save()
-        if item.security_indicator:
+        if item.security_indicator and isinstance(owner, (Pin, Location)):
             _apply_security_indicator(owner, item.security_indicator)
         return JsonResponse({"ok": True})
 
-    def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None):
+    def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None, safety_checkin_uuid=None):
         """Delete a markup item.
 
         Args:
@@ -273,11 +316,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
             markup_uuid: UUID of the markup item to delete.
+            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
 
         Returns:
             Empty 200 response on success.
         """
-        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid)
+        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid)
         label = item.label or item.markup_type
         item.delete()
         if location_slug is not None:

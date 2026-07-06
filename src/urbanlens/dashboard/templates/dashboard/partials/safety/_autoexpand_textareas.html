@@ -1,0 +1,22 @@
+{% comment %}
+Auto-expanding textareas: any <textarea class="safety-autoexpand"> grows to fit
+its content instead of scrolling internally. Include once per page.
+{% endcomment %}
+<script>
+(function () {
+    // Exposed so callers can resize a textarea that just became visible
+    // (scrollHeight reads 0 while display:none) without faking an 'input'
+    // event - a real one would also trip up anything else listening for
+    // actual user edits, e.g. the defaults form's autosave.
+    window.safetyAutoExpand = function (el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    };
+    document.querySelectorAll('textarea.safety-autoexpand').forEach(function (el) {
+        if (el.dataset.autoexpandInit) return;
+        el.dataset.autoexpandInit = '1';
+        window.safetyAutoExpand(el);
+        el.addEventListener('input', function () { window.safetyAutoExpand(el); });
+    });
+}());
+</script>

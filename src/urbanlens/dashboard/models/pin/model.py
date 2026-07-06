@@ -27,8 +27,13 @@ from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
+    from django.db.models import Manager as DjangoManager
+
     from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.markup.model import PinMarkup
+    from urbanlens.dashboard.models.pin.note import PinNote
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
+    from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +153,9 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         parent_location_id: int | None
         parent_pin_id: int | None
         reviews: ReviewManager
+        notes: DjangoManager[PinNote]
+        markup_items: DjangoManager[PinMarkup]
+        visit_history: DjangoManager[PinVisit]
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -454,33 +462,50 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         return qs
 
     def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug from the pin name/location if not already set."""
+        """Auto-generate a unique slug and keep ``point`` synced to the effective coordinates.
+
+        ``point`` (not latitude/longitude) is what distance-based queries filter on, so
+        it must always reflect ``effective_latitude``/``effective_longitude`` - the pin's
+        own override if set, otherwise the linked Location's coordinates. Forcing
+        ``point`` into ``update_fields`` (when given) guards against callers that save a
+        partial update after reassigning ``location`` without also refreshing ``point``.
+        """
         if not self.slug:
             self.slug = self._generate_slug()
+
+        latitude = self.effective_latitude
+        longitude = self.effective_longitude
+        if latitude is not None and longitude is not None:
+            self.point = Point(longitude, latitude, srid=4326)
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
+            kwargs["update_fields"] = {*update_fields, "point"}
+
         super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"]),
-            Index(fields=["profile"]),
-            Index(fields=["profile", "priority"]),
-            Index(fields=["profile", "last_visited"]),
-            Index(fields=["profile", "updated"], name="dashboard_profile_update_idx"),
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["parent_pin"]),
-            Index(fields=["parent_location"], name="dashboard_parent_loc_idx"),
+            Index(fields=["uuid"], name="idxdb_pin_uuid"),
+            Index(fields=["profile"], name="idxdb_pin_profile"),
+            Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
+            Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
+            Index(fields=["profile", "updated"], name="idxdb_profile_update"),
+            Index(fields=["latitude", "longitude"], name="idxdb_pin_lat_long"),
+            Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
+            Index(fields=["parent_location"], name="idxdb_pin_parent_loc"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude", "profile"],
                 condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
-                name="dashboard_pin_unique_location_per_profile",
+                name="db_pin_unique_location_per_profile",
             ),
             UniqueConstraint(
                 fields=["profile", "slug"],
                 condition=Q(slug__isnull=False),
-                name="dashboard_pin_unique_slug_per_profile",
+                name="db_pin_unique_slug_per_profile",
             ),
         ]

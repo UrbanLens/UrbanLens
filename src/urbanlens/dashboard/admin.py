@@ -76,7 +76,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "AI - Feature Toggles",
             {
-                "fields": ["ai_category_suggestions_enabled"],
+                "fields": ["ai_category_suggestions_enabled", "ai_document_import_enabled", "ai_document_import_max_chars"],
                 "description": "Individual feature toggles. The global <em>AI enabled</em> switch overrides all of these.",
             },
         ),
@@ -85,6 +85,20 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             {
                 "fields": ["google_places_cache_days"],
                 "description": ("Controls the Places layer available to VIP users. Historical landmarks change rarely, so a long cache avoids unnecessary API calls."),
+            },
+        ),
+        (
+            "Notifications - Channels",
+            {
+                "fields": ["notify_admin_email", "notify_gotify_url", "notify_gotify_token"],
+                "description": ("Where critical site notifications are sent. Email defaults to <code>UL_ADMIN_NOTIFICATION_EMAIL</code>; Gotify defaults to <code>UL_GOTIFY_URL</code> / <code>UL_GOTIFY_TOKEN</code>."),
+            },
+        ),
+        (
+            "Notifications - Routing",
+            {
+                "fields": ["notify_pin_import_errors_email", "notify_pin_import_errors_gotify"],
+                "description": "Which critical notification types are sent to which channels above.",
             },
         ),
     ]

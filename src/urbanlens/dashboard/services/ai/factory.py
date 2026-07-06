@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _FEATURE_FIELDS: dict[str, str] = {
     "category_suggestions": "ai_category_suggestions_enabled",
     "badge_style_suggestions": "ai_category_suggestions_enabled",
+    "document_pin_import": "ai_document_import_enabled",
 }
 
 

@@ -52,28 +52,7 @@
                 </div>
             </div>
             <div class="form-field">
-                <div class="badge-rel-header">
-                    <label class="form-label">Add relationships</label>
-                    <div class="kind-toggle badge-rel-toggle" role="group" aria-label="Relationship type">
-                        <label class="kind-toggle-option">
-                            <input type="radio" name="{{ ns }}_bulk_rel_type" value="parent" checked onchange="_setBulkRelType('{{ ns }}', 'parent')">
-                            <span><i class="material-symbols-outlined">arrow_upward</i> Add as parents</span>
-                        </label>
-                        <label class="kind-toggle-option">
-                            <input type="radio" name="{{ ns }}_bulk_rel_type" value="child" onchange="_setBulkRelType('{{ ns }}', 'child')">
-                            <span><i class="material-symbols-outlined">arrow_downward</i> Add as children</span>
-                        </label>
-                    </div>
-                </div>
-                <p class="form-hint badge-rel-hint badge-rel-hint--parent" id="{{ ns }}-bulk-rel-hint-parent">Checked badges will be <strong>added</strong> as parents of the selected badges. Existing parents are not removed.</p>
-                <p class="form-hint badge-rel-hint badge-rel-hint--child" id="{{ ns }}-bulk-rel-hint-child" hidden>The selected badges will be <strong>added</strong> as parents of the checked badges. Existing parents are not removed.</p>
-                <input type="hidden" id="{{ ns }}-bulk-rel-type" value="parent">
-                <input type="text" class="form-input tag-parent-search" placeholder="Search badges..." oninput="filterParentOptions(this,'{{ ns }}-bulk-parent-select')" autocomplete="off">
-                <div class="tag-parent-select" id="{{ ns }}-bulk-parent-select">
-                    {% for b in parent_items|default:priority_items %}
-                    <label class="tag-parent-option"><input type="checkbox" class="{{ ns }}-bulk-parent-cb" value="{{ b.id }}">{% if b.icon %}{% if b.icon|is_material_icon %}<i class="material-icons" {% if b.color %}style="color:{{ b.color }}"{% endif %}>{{ b.icon }}</i>{% else %}<span>{{ b.icon }}</span>{% endif %}{% endif %} {{ b.name }} <span class="badge-kind-chip badge-kind-chip--{{ b.kind }}">{{ b.kind }}</span></label>
-                    {% endfor %}
-                </div>
+                {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
             </div>
         </div>
         <div class="tag-form-actions">

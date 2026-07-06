@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.badges.queryset import BadgeManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -61,6 +62,7 @@ class Badge(abstract.Model):
     allow_auto_tag = BooleanField(default=True)
     # Comma-separated keywords/phrases used by the keyword auto-tagger in addition to the badge name.
     keywords = TextField(null=True, blank=True)
+
     # NULL = global tag visible to all users; non-null = owned by one user.
     profile = ForeignKey(
         "dashboard.Profile",
@@ -78,11 +80,12 @@ class Badge(abstract.Model):
         related_name="children",
     )
 
-    objects = BadgeManager()
-
     if TYPE_CHECKING:
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
+        locations: ManyToManyField[Location, Location]
+
+    objects = BadgeManager()
 
     def _get_customization(self) -> BadgeCustomization | None:
         """Return this user's customization, if the queryset was prefetched."""
@@ -182,7 +185,7 @@ class Badge(abstract.Model):
         get_latest_by = "updated"
         permissions = [("edit_global_badge", "Can edit global badges")]
         indexes = [
-            Index(fields=["uuid"], name="dashboard_badge_uuid_idx"),
-            Index(fields=["profile"]),
-            Index(fields=["profile", "order"]),
+            Index(fields=["uuid"], name="idxdb_badge_uuid"),
+            Index(fields=["profile"], name="idxdb_badge_profile"),
+            Index(fields=["profile", "order"], name="idxdb_badge_pfile_ord"),
         ]

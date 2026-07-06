@@ -7,14 +7,15 @@
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
     <div class="notif-friend-actions">
       <a class="btn-notif-friend" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
-      <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "accept"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-symbols-outlined">check</i> Accept</button>
-      <button type="button" class="btn-notif-friend btn-notif-friend--decline" onclick="event.stopPropagation()" hx-post="{% url 'pin.share.respond' n.pin_share.id %}" hx-vals='{"action": "reject"}' hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'><i class="material-symbols-outlined">close</i> Reject</button>
     </div>
+    {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="pin.share.respond" respond_arg=n.pin_share.id %}
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
 </li>
 {% elif n.notification_type == 'friend_request' %}
-{# Friend requests get inline Accept/Decline buttons instead of click-to-navigate #}
+{# Friend requests get inline Accept/Decline buttons instead of click-to-navigate. #}
+{# Buttons are gated on is_friend_request_pending (the underlying request), not on #}
+{# is_unread - clicking the row still marks it read, but that must not hide the buttons. #}
 <li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req"
     id="notif-{{ n.id }}"
     role="menuitem"
@@ -31,27 +32,63 @@
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
-    {% if n.source_profile_id and n.is_unread %}
+    {% if n.is_friend_request_pending %}
+    {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="friend.respond" respond_arg=n.source_profile_id reject_action="decline" reject_label="Decline" %}
+    {% endif %}
+  </div>
+  {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
+</li>
+{% elif n.notification_type == 'safety_ci_due' %}
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem"
+    {% if n.is_unread %}
+    hx-post="{% url 'notifications.read' n.id %}"
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    {% endif %}>
+  <div class="notif-item__icon-wrap notif-item__icon-wrap--safety_ci_due"><i class="material-symbols-outlined">emergency</i></div>
+  <div class="notif-item__body">
+    {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
+    {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
+    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
     <div class="notif-friend-actions">
-      <button type="button" class="btn-notif-friend btn-notif-friend--accept"
-              onclick="event.stopPropagation()"
-              hx-post="{% url 'friend.respond' n.source_profile_id %}"
-              hx-vals='{"action": "accept"}'
-              hx-target="#notif-dropdown-wrap"
-              hx-swap="innerHTML"
-              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <i class="material-symbols-outlined">check</i> Accept
+      <a class="btn-notif-friend btn-notif-friend--accept" href="{{ n.url }}" onclick="event.stopPropagation()">
+        <i class="material-symbols-outlined">check_circle</i> Check in
+      </a>
+      <a class="btn-notif-friend" href="{{ n.url|cut:'checkin/' }}" onclick="event.stopPropagation()">
+        <i class="material-symbols-outlined">visibility</i> View check-in
+      </a>
+    </div>
+  </div>
+  {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
+</li>
+{% elif n.notification_type == 'visit_suggested' and n.visit_suggestion.is_actionable %}
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem">
+  <div class="notif-item__icon-wrap notif-item__icon-wrap--visit_suggested"><i class="material-symbols-outlined">event_available</i></div>
+  <div class="notif-item__body">
+    {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
+    {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
+    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    {% if n.visit_suggestion.offers_merge %}
+    <div class="notif-friend-actions notif-friend-actions--triple">
+      <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()"
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "add_participants"}'
+              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        <i class="material-symbols-outlined">group_add</i> Add to my visit
       </button>
-      <button type="button" class="btn-notif-friend btn-notif-friend--decline"
-              onclick="event.stopPropagation()"
-              hx-post="{% url 'friend.respond' n.source_profile_id %}"
-              hx-vals='{"action": "decline"}'
-              hx-target="#notif-dropdown-wrap"
-              hx-swap="innerHTML"
-              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <i class="material-symbols-outlined">close</i> Decline
+      <button type="button" class="btn-notif-friend" onclick="event.stopPropagation()"
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "new_entry"}'
+              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        <i class="material-symbols-outlined">note_add</i> Log separately
+      </button>
+      <button type="button" class="btn-notif-friend btn-notif-friend--decline" onclick="event.stopPropagation()"
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "reject"}'
+              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        <i class="material-symbols-outlined">close</i> Reject
       </button>
     </div>
+    {% else %}
+    {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="visit_suggestion.respond" respond_arg=n.visit_suggestion.id %}
     {% endif %}
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
@@ -77,6 +114,7 @@
       {% elif n.notification_type == 'comment_liked' %}favorite
       {% elif n.notification_type == 'wiki_updated' %}article
       {% elif n.notification_type == 'pin_shared' %}ios_share
+      {% elif n.notification_type == 'visit_suggested' %}event_available
       {% elif n.notification_type == 'error' %}error
       {% elif n.notification_type == 'warning' %}warning
       {% else %}notifications{% endif %}

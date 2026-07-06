@@ -1,4 +1,4 @@
-from django.db.models import TextChoices
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class MarkupType(TextChoices):

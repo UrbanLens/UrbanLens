@@ -1088,6 +1088,15 @@ wheels = [
 ]
 
 [[package]]
+name = "gpxpy"
+version = "1.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/ad/6f1a34e702c72cb495bb258396f237ded76c00f9fe67054a44d778d24ed9/gpxpy-1.6.2.tar.gz", hash = "sha256:a72c484b97ec42b80834353b029cc8ee1b79f0ffca1179b2210bb3baf26c01ae", size = 111695, upload-time = "2023-11-29T17:25:38.391Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/44/9f/62df6c1e52462bdd04275b36cec49efa9e8af7e7b834499eb288f73dcfbc/gpxpy-1.6.2-py3-none-any.whl", hash = "sha256:289bc2d80f116c988d0a1e763fda22838f83005573ece2bbc6521817b26fb40a", size = 42649, upload-time = "2023-11-29T17:25:35.76Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2844,6 +2853,19 @@ wheels = [
 ]
 
 [[package]]
+name = "python-docx"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a9/f7/eddfe33871520adab45aaa1a71f0402a2252050c14c7e3009446c8f4701c/python_docx-1.2.0.tar.gz", hash = "sha256:7bc9d7b7d8a69c9c02ca09216118c86552704edc23bac179283f2e38f86220ce", size = 5723256, upload-time = "2025-06-16T20:46:27.921Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/00/1e03a4989fa5795da308cd774f05b704ace555a70f9bf9d3be057b680bcf/python_docx-1.2.0-py3-none-any.whl", hash = "sha256:3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7", size = 252987, upload-time = "2025-06-16T20:46:22.506Z" },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3933,12 +3955,13 @@ wheels = [
 
 [[package]]
 name = "urbanlens"
-version = "0.2.1"
+version = "0.3.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "celery" },
     { name = "channels" },
     { name = "channels-redis" },
+    { name = "daphne" },
     { name = "dateparser" },
     { name = "defusedxml" },
     { name = "django" },
@@ -3957,6 +3980,7 @@ dependencies = [
     { name = "geopandas" },
     { name = "geopy" },
     { name = "gevent" },
+    { name = "gpxpy" },
     { name = "gunicorn" },
     { name = "humanize" },
     { name = "jinja2" },
@@ -3972,6 +3996,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dateutil" },
     { name = "python-decouple" },
+    { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -3991,7 +4016,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
-    { name = "daphne" },
     { name = "django-debug-toolbar" },
     { name = "django-stubs" },
     { name = "django-stubs-ext" },
@@ -4019,6 +4043,7 @@ requires-dist = [
     { name = "celery", specifier = "~=5.6.3" },
     { name = "channels", specifier = "~=4.3.2" },
     { name = "channels-redis", specifier = "~=4.3.0" },
+    { name = "daphne", specifier = "~=4.2.2" },
     { name = "dateparser", specifier = "~=1.4.1" },
     { name = "defusedxml", specifier = "~=0.7.1" },
     { name = "django", specifier = "~=6.0.6" },
@@ -4037,6 +4062,7 @@ requires-dist = [
     { name = "geopandas", specifier = "~=1.1.3" },
     { name = "geopy", specifier = "~=2.4.1" },
     { name = "gevent", specifier = "~=26.5.0" },
+    { name = "gpxpy", specifier = "~=1.6.2" },
     { name = "gunicorn", specifier = "~=26.0.0" },
     { name = "humanize", specifier = ">=4.15,<4.17" },
     { name = "jinja2", specifier = "~=3.1.6" },
@@ -4052,6 +4078,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "~=2.14.1" },
     { name = "python-dateutil", specifier = "~=2.9.0" },
     { name = "python-decouple", specifier = "~=3.8" },
+    { name = "python-docx", specifier = "~=1.2.0" },
     { name = "python-dotenv", specifier = "~=1.2.2" },
     { name = "pyyaml", specifier = "~=6.0.3" },
     { name = "redis", specifier = "~=8.0.0" },
@@ -4071,7 +4098,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.14.1,<7.16.0" },
-    { name = "daphne", specifier = "~=4.2.2" },
     { name = "django-debug-toolbar", specifier = "~=7.0.0" },
     { name = "django-stubs", specifier = "~=6.0.5" },
     { name = "django-stubs-ext", specifier = "~=6.0.5" },
