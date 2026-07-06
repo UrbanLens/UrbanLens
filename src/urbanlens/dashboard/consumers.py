@@ -84,7 +84,10 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         """Leave the check-in's group, if we ever joined one."""
         if hasattr(self, "group_name"):
-            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Safety chat failed to leave group %s cleanly", self.group_name)
 
     async def receive(self, text_data):
         """Persist an incoming chat message and broadcast it to the check-in's group.
@@ -115,7 +118,16 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
             return
 
-        await self.channel_layer.group_send(self.group_name, {"type": "chat.message", "message": message})
+        try:
+            await self.channel_layer.group_send(self.group_name, {"type": "chat.message", "message": message})
+        except Exception:
+            # The message is already saved - only the live broadcast failed (e.g. a
+            # transient channel-layer/Valkey hiccup). Tell the sender so they don't
+            # think it vanished; other participants will still see it on next load.
+            logger.exception("Safety chat broadcast failed on checkin %s", self.checkin.pk)
+            await self.send(
+                text_data=json.dumps({"type": "error", "detail": "Your message was saved but couldn't be delivered live. It'll appear on refresh."})
+            )
 
     async def chat_message(self, event):
         """Deliver a broadcasted message to this connection.

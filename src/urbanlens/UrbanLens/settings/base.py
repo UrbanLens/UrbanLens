@@ -153,11 +153,28 @@ if VALKEY_URL:
     SESSION_CACHE_ALIAS = "default"
 
     # Django Channels layer backed by Valkey for cross-process group messaging.
+    #
+    # socket_timeout MUST be comfortably larger than RedisChannelLayer.brpop_timeout
+    # (5s, hardcoded upstream). redis-py's default socket_timeout is also 5s, so
+    # with no override here every long-poll BRPOP raced its own read timeout -
+    # any latency jitter (GC pause, a busy Valkey tick) pushed the read past
+    # 5.000s and raised redis.exceptions.TimeoutError, even with a healthy
+    # server. Because channels_redis serializes all receive() calls in a
+    # process behind one asyncio.Lock, that single race repeating tore down
+    # every websocket in this process, not just the one that timed out.
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [VALKEY_URL],
+                "hosts": [
+                    {
+                        "address": VALKEY_URL,
+                        "socket_connect_timeout": 5,
+                        "socket_timeout": 20,
+                        "retry_on_timeout": True,
+                        "health_check_interval": 30,
+                    },
+                ],
                 "capacity": 1500,
                 "expiry": 60,
             },

@@ -1683,6 +1683,17 @@
 
     // -- Initialization --------------------------------------------------------
     (async () => {
+        // Other pages (e.g. the bulk pin importer) can't reach this page's cache
+        // directly, so they flag it dirty instead. Honor that by invalidating the
+        // cache *before* reading it, so a completed import's new pins show up on
+        // this load rather than the ~2 minute background poll catching up later.
+        try {
+            if (localStorage.getItem('ul_pins_dirty') === '1') {
+                console.log('[UL] Pin cache flagged dirty (e.g. after an import) - forcing refresh');
+                window.invalidatePinCache();
+                localStorage.removeItem('ul_pins_dirty');
+            }
+        } catch {}
         const cache = _readCache();
         if (cache?.pins && Object.keys(cache.pins).length) {
             // Restore from cache immediately - no server round-trip, no loading indicator.
@@ -4897,7 +4908,16 @@
 
     function openEditPinDialog(pinUuid) {
         const pin = _pinStore.get(pinUuid);
-        if (!pin) { toastr.error('Pin not found.'); return; }
+        if (!pin) {
+            // Not in the local pin store yet - most likely the store's cache predates
+            // this pin (e.g. it just arrived via a bulk import). Fetch it fresh before
+            // giving up, instead of assuming the cache is authoritative.
+            _refreshPinInStore(pinUuid, () => {
+                if (_pinStore.get(pinUuid)) { openEditPinDialog(pinUuid); }
+                else { toastr.error('Pin not found.'); }
+            });
+            return;
+        }
 
         _resetAddPinDialog();
         _editPinUuid = pinUuid;

@@ -244,7 +244,14 @@ services:
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    # volatile-lru (not allkeys-lru): this instance is shared by the Django cache,
+    # the Channels layer, and the Celery broker/result backend. allkeys-lru can
+    # evict *any* key under memory pressure, including un-expiring Celery queue
+    # lists and channel-layer group membership - silent data loss. volatile-lru
+    # only evicts keys with a TTL (the cache's, and the channel layer's own
+    # expiring keys), so queued Celery tasks are never silently dropped; if
+    # memory is genuinely exhausted, writes fail loudly (OOM) instead.
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
     networks:
       app_network:
         aliases:
