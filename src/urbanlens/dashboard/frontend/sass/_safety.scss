@@ -98,6 +98,9 @@
 
 .safety-defaults-form {
     padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
 .safety-checkin-list {
@@ -159,21 +162,204 @@
     &--warning { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
 }
 
-.safety-contact-friends {
+// -- Defaults autosave ---------------------------------------------------------
+
+.safety-defaults-header-actions {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
     gap: .5rem;
-    margin-bottom: .5rem;
 }
 
-.safety-contact-friend-option {
+.safety-autosave-status {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+
+    &--error { color: $color-red-500; }
+}
+
+.safety-defaults-close-btn {
+    @include icon-btn(28px);
+}
+
+// -- Contact picker: chips, avatar picker, autocomplete -------------------------
+
+.safety-contact-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-bottom: .6rem;
+
+    &:empty { margin-bottom: 0; }
+}
+
+.safety-contact-chip {
     display: inline-flex;
     align-items: center;
-    gap: .3rem;
-    padding: .25rem .6rem;
+    gap: .35rem;
+    padding: .2rem .3rem .2rem .3rem;
     border-radius: 999px;
+    background: var(--ul-grey-0a);
     border: 1px solid var(--ul-grey-1a);
     font-size: .85rem;
+    color: var(--ul-grey-8);
+}
+
+.safety-contact-chip-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+
+    &--placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ul-color-accent-bg);
+        color: var(--ul-color-accent-fg);
+        font-size: .7rem;
+        font-weight: 700;
+
+        .material-symbols-outlined { font-size: .9rem; }
+    }
+}
+
+.safety-contact-chip-label {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.safety-contact-chip-remove {
+    @include icon-btn(18px);
+    color: var(--ul-grey-5);
+
+    .material-symbols-outlined { font-size: 1rem; }
+
+    &:hover { color: $color-red-500; }
+}
+
+.safety-contact-avatar-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: .6rem;
+}
+
+.safety-contact-avatar-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+    width: 4.25rem;
+    padding: .25rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: $radius-sm;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.safety-contact-avatar-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+
+    &--placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ul-color-accent-bg);
+        color: var(--ul-color-accent-fg);
+        font-weight: 700;
+    }
+}
+
+.safety-contact-avatar-name {
+    font-size: .72rem;
+    color: var(--ul-grey-7);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.safety-contact-input-wrap {
+    position: relative;
+}
+
+.safety-contact-input {
+    width: 100%;
+}
+
+.safety-contact-suggestions {
+    position: absolute;
+    z-index: $z-dropdown;
+    top: calc(100% + .25rem);
+    left: 0;
+    right: 0;
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    box-shadow: var(--ul-shadow-md);
+    overflow: hidden;
+}
+
+.safety-contact-suggestion {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .5rem .75rem;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: var(--ul-grey-8);
+    font-size: .88rem;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.safety-contact-suggestion-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+
+    &--placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--ul-color-accent-bg);
+        color: var(--ul-color-accent-fg);
+        font-size: .72rem;
+        font-weight: 700;
+    }
+}
+
+// -- Grace period slider ---------------------------------------------------------
+
+.safety-grace-slider {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.safety-grace-slider-range {
+    flex: 1;
+}
+
+.safety-grace-slider-output {
+    min-width: 5.5rem;
+    text-align: right;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
 }
 
 .safety-map-toolbar {

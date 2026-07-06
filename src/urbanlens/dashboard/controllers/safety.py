@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
@@ -34,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[ContactInput]:
-    """Parse a submitted contact list (friend checkboxes + free email lines) into ContactInput tuples.
+    """Parse a submitted contact list (friend chips + email chips) into ContactInput tuples.
 
     Args:
         request: Incoming HTTP request. Reads ``contact_profile_ids`` (repeated,
-            friend Profile ids) and ``contact_emails`` (one address per line,
-            optionally ``name <email>``).
+            friend Profile ids) and ``contact_emails`` (repeated, one address per
+            chip, optionally ``name <email>``).
         profile: The profile submitting the form (used to validate friend ids).
 
     Returns:
@@ -53,7 +53,7 @@ def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[Co
             contact_profile = connections_by_id[int(raw_id)]
             contacts.append((contact_profile, None, contact_profile.username))
 
-    for raw_line in request.POST.get("contact_emails", "").splitlines():
+    for raw_line in request.POST.getlist("contact_emails"):
         line = raw_line.strip()
         if not line:
             continue
@@ -66,6 +66,22 @@ def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[Co
             contacts.append((None, email.lower(), name))
 
     return contacts
+
+
+def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:
+    """Return the best display label for a saved contact, for the defaults summary.
+
+    Args:
+        contact_profile: The linked connection, if the contact is a friend.
+        email: The raw email address, if the contact isn't a linked friend.
+        label: A custom label saved alongside the contact, if any.
+
+    Returns:
+        The friend's username, else the custom label, else the raw email.
+    """
+    if contact_profile is not None:
+        return contact_profile.username
+    return label or email or ""
 
 
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
@@ -117,11 +133,16 @@ class SafetyHomeView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest) -> HttpResponse:
         """Update the profile's safety defaults.
 
+        Called both as a plain form submit and, from the defaults form's
+        autosave behavior, as an XHR request - distinguished by the
+        ``X-Requested-With`` header set by the autosave JS.
+
         Args:
             request: Incoming HTTP request.
 
         Returns:
-            Redirect back to the safety home page.
+            For an XHR autosave request, a JSON summary of the saved defaults.
+            Otherwise, a redirect back to the safety home page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         preference = get_or_create_preference(profile)
@@ -129,6 +150,15 @@ class SafetyHomeView(LoginRequiredMixin, View):
         preference.default_grace_period = _parse_grace_period(request)
         preference.save(update_fields=["default_message", "default_grace_period", "updated"])
         save_contact_defaults(profile, _parse_contacts_from_post(request, profile))
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse(
+                {
+                    "default_message": preference.default_message,
+                    "default_grace_period_hours": preference.default_grace_period_hours,
+                    "contact_labels": [_contact_display_label(*contact) for contact in default_contacts_as_input(profile)],
+                }
+            )
         return redirect("safety.home")
 
 
@@ -423,12 +453,18 @@ class SafetyCheckinMessageView(View):
             token: Contact's magic-link token (contact route).
 
         Returns:
-            Rendered message list partial.
+            Rendered message list partial, or a plain-text 400 if the message
+            was rejected (e.g. blank or too long) - the chat panel's JS reads
+            this body verbatim to tell the sender why it didn't send.
         """
         checkin, contact = self._resolve(request, checkin_uuid, token)
         body = request.POST.get("body", "").strip()
         if body:
-            create_chat_message(checkin, user=request.user, contact=contact, body=body)
+            try:
+                create_chat_message(checkin, user=request.user, contact=contact, body=body)
+            except ValueError as exc:
+                logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
+                return HttpResponseBadRequest(str(exc))
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",

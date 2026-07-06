@@ -1,7 +1,10 @@
 import json
+import logging
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+logger = logging.getLogger(__name__)
 
 
 class RequestStatusConsumer(AsyncWebsocketConsumer):
@@ -38,6 +41,18 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     Everyone connected for a given check-in - the owner and all of its
     contacts - joins the same channel group, so a message from any one of
     them is broadcast to all the others immediately.
+
+    Close codes used on ``connect()`` failure (the frontend branches on these
+    to decide whether to keep retrying):
+
+    - ``4404``: the check-in/contact/token doesn't resolve, or the owner
+      route was hit while unauthenticated - permanent, retrying won't help.
+    - ``4500``: an unexpected server-side error - transient, safe to retry.
+
+    Incoming frames that fail to save are answered with
+    ``{"type": "error", "detail": "..."}`` rather than silently dropped or
+    left to crash the socket, so a sender always learns their message didn't
+    go through - important for a feature people may rely on in an emergency.
     """
 
     async def connect(self):
@@ -48,12 +63,23 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         try:
             self.checkin, self.contact = await self._resolve(kwargs.get("checkin_uuid"), kwargs.get("token"))
         except (ObjectDoesNotExist, PermissionError):
+            logger.info("Safety chat connection rejected (not found/unauthorized): %s", kwargs)
             await self.close(code=4404)
+            return
+        except Exception:
+            logger.exception("Safety chat connect failed unexpectedly: %s", kwargs)
+            await self.close(code=4500)
             return
 
         self.group_name = f"safety_checkin_{self.checkin.pk}"
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
-        await self.accept()
+        try:
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+        except Exception:
+            logger.exception("Safety chat failed to join group for checkin %s", self.checkin.pk)
+            await self.close(code=4500)
+            return
+        logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
 
     async def disconnect(self, close_code):
         """Leave the check-in's group, if we ever joined one."""
@@ -64,19 +90,31 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         """Persist an incoming chat message and broadcast it to the check-in's group.
 
         Args:
-            text_data: JSON string with a ``body`` field. Silently ignored if
-                unparseable or blank - there's nothing useful to tell the
-                client via a plain WebSocket text frame.
+            text_data: JSON string with a ``body`` field. Unparseable or
+                blank frames are silently ignored - there's no message to
+                report failure for. A frame that fails validation or fails
+                to save gets an explicit ``{"type": "error", ...}`` reply
+                instead.
         """
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
+            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
             return
         body = str(data.get("body") or "").strip()
         if not body:
             return
 
-        message = await self._create_message(body)
+        try:
+            message = await self._create_message(body)
+        except ValueError as exc:
+            await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+            return
+        except Exception:
+            logger.exception("Safety chat message failed to save on checkin %s", self.checkin.pk)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+            return
+
         await self.channel_layer.group_send(self.group_name, {"type": "chat.message", "message": message})
 
     async def chat_message(self, event):
@@ -133,6 +171,7 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         user = self.scope.get("user") or AnonymousUser()
         message = create_chat_message(self.checkin, user=user, contact=self.contact, body=body)
         return {
+            "type": "message",
             "id": message.pk,
             "sender_name": message.sender_name,
             "body": message.body,

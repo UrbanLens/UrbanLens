@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 # (contact_profile, email, name) - contact_profile wins when both are given.
 ContactInput = tuple["Profile | None", "str | None", str]
 
+# Chat messages are TextField (unbounded at the DB layer) - this caps abuse/accidental
+# pastes at the application layer. The client mirrors this via maxlength on the input,
+# but that's trivially bypassed, so it's re-checked here.
+MAX_CHAT_MESSAGE_LENGTH = 4000
+
 
 def _find_profile_by_email(email: str) -> Profile | None:
     """Return the Profile for an existing active user with this email, if any.
@@ -428,10 +433,29 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         checkin: The check-in the message belongs to.
         user: The requesting Django user (see ``resolve_message_sender``).
         contact: The SafetyCheckinContact authorizing this request, or None on the owner route.
-        body: Message text - the caller must have already validated it's non-empty.
+        body: Message text.
 
     Returns:
         The newly created SafetyCheckinMessage.
+
+    Raises:
+        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
+            Both callers (the WebSocket consumer and the no-JS HTTP fallback)
+            catch this and surface it to the sender - a safety check-in chat
+            failing silently is worse than most other features failing silently.
     """
+    body = body.strip()
+    if not body:
+        raise ValueError("Message cannot be empty.")
+    if len(body) > MAX_CHAT_MESSAGE_LENGTH:
+        raise ValueError(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
+
     sender_profile, sender_contact = resolve_message_sender(user, contact)
-    return SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)
+    message = SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)
+    logger.info(
+        "Safety check-in %s: chat message %s from %s",
+        checkin.uuid,
+        message.pk,
+        sender_contact.display_name if sender_contact else (sender_profile.username if sender_profile else "unknown"),
+    )
+    return message

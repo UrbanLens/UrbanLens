@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 
+DEFAULT_CONTACT_MESSAGE = (
+    "Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, "
+    "I haven't checked in by my expected time - please try to reach me, and if you can't, take a look "
+    "at my trip plan and last known destination below to help figure out where I might be."
+)
+
 
 class EmergencyContactDefault(abstract.Model):
     """A reusable emergency contact saved to a profile's safety defaults.
@@ -89,7 +95,7 @@ class SafetyPreference(abstract.Model):
     """Per-profile defaults applied to new safety check-ins."""
 
     profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
-    default_message = TextField(blank=True, default="")
+    default_message = TextField(blank=True, default=DEFAULT_CONTACT_MESSAGE)
     default_grace_period = DurationField(default=DEFAULT_GRACE_PERIOD)
 
     if TYPE_CHECKING:

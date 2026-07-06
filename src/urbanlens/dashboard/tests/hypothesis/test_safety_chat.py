@@ -83,8 +83,9 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _invalid_token_is_rejected(self):
         comm = self._contact_communicator(uuid.uuid4())
-        connected, _ = await comm.connect()
+        connected, close_code = await comm.connect()
         self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
 
     def test_unauthenticated_owner_route_is_rejected(self):
         _run(self._unauthenticated_owner_route_is_rejected())
@@ -92,5 +93,34 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
     async def _unauthenticated_owner_route_is_rejected(self):
         comm = self._owner_communicator()
         comm.scope["user"] = AnonymousUser()
-        connected, _ = await comm.connect()
+        connected, close_code = await comm.connect()
         self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
+
+    def test_blank_message_is_silently_ignored(self):
+        _run(self._blank_message_is_silently_ignored())
+
+    async def _blank_message_is_silently_ignored(self):
+        comm = self._owner_communicator()
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps({"body": "   "}))
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
+
+        await comm.disconnect()
+
+    def test_oversized_message_gets_error_frame(self):
+        _run(self._oversized_message_gets_error_frame())
+
+    async def _oversized_message_gets_error_frame(self):
+        comm = self._owner_communicator()
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps({"body": "x" * 5000}))
+        reply = json.loads(await comm.receive_from())
+        self.assertEqual(reply["type"], "error")
+        self.assertIn("too long", reply["detail"])
+
+        await comm.disconnect()

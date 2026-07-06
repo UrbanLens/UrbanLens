@@ -239,6 +239,7 @@ Features planned for future releases.
 * Trip List > New Trip Dialog: Suggested title is "Detroit factory run". Generate a large number of other suggestions, so this doesn't get stale, and encourages trip planning. Also, trip name shouldn't be required.
 * Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
+* Audit for XSS risks related to badge names, and all other fields, etc
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

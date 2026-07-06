@@ -73,6 +73,13 @@ JavaScript is unavailable.
     var ws = null;
     var retryDelay = 1000;
     var maxDelay = 15000;
+    var retryCount = 0;
+    var permanentlyClosed = false;
+    var warnedSlowReconnect = false;
+
+    function toast(level, message) {
+        if (window.toastr) toastr[level](message);
+    }
 
     function setConnected(connected) {
         if (status) status.hidden = connected;
@@ -81,15 +88,41 @@ JavaScript is unavailable.
     function connect() {
         var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
         ws = new WebSocket(proto + location.host + wsPath);
-        ws.onopen = function () { retryDelay = 1000; setConnected(true); };
-        ws.onclose = function () {
+        ws.onopen = function () {
+            retryDelay = 1000;
+            retryCount = 0;
+            warnedSlowReconnect = false;
+            setConnected(true);
+        };
+        ws.onclose = function (ev) {
             setConnected(false);
+            if (ev.code === 4404) {
+                // Permanent: this connection is not (or no longer) authorized - e.g. a
+                // revoked/invalid contact token. Retrying would just loop forever while
+                // showing a misleading "Reconnecting..." message, so stop and say why.
+                permanentlyClosed = true;
+                if (status) { status.hidden = false; status.textContent = "You don't have access to this chat."; }
+                toast('error', "You don't have access to this chat.");
+                return;
+            }
+            if (permanentlyClosed) return;
+            retryCount += 1;
+            if (retryCount === 5 && !warnedSlowReconnect) {
+                warnedSlowReconnect = true;
+                toast('warning', 'Still trying to reconnect to chat - messages may be delayed.');
+            }
             setTimeout(connect, retryDelay);
             retryDelay = Math.min(retryDelay * 2, maxDelay);
         };
         ws.onerror = function () { ws.close(); };
         ws.onmessage = function (ev) {
-            try { appendMessage(JSON.parse(ev.data)); } catch (e) { /* ignore malformed frame */ }
+            var msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            if (msg.type === 'error') {
+                toast('error', msg.detail || "Your message couldn't be sent.");
+                return;
+            }
+            appendMessage(msg);
         };
     }
     setConnected(false);
@@ -104,11 +137,29 @@ JavaScript is unavailable.
             input.value = '';
             return;
         }
-        // Socket momentarily down - fall back to a plain POST so the message still
-        // sends; it'll show up in this tab once the socket reconnects and someone
-        // (possibly this same profile, from the broadcast) triggers a re-render.
-        fetch(form.action, { method: 'POST', body: new FormData(form) });
+        // Socket momentarily down (or permanently closed) - fall back to a plain
+        // POST so the message still has a chance to send. Unlike a bare
+        // fire-and-forget fetch, this checks the result: on failure the input is
+        // restored (so the message isn't lost) and the sender is told explicitly,
+        // since a safety check-in message silently vanishing is far worse than most
+        // other features failing quietly.
         input.value = '';
+        fetch(form.action, { method: 'POST', body: new FormData(form) })
+            .then(function (resp) {
+                if (resp.ok) {
+                    // This client isn't in the broadcast group while the socket is down,
+                    // so it would never see its own message otherwise - append it locally.
+                    appendMessage({ sender_name: 'You', body: body, created: new Date().toISOString() });
+                    return;
+                }
+                return resp.text().then(function (text) {
+                    throw new Error(text || 'Message failed to send.');
+                });
+            })
+            .catch(function (err) {
+                input.value = body;
+                toast('error', err.message || 'Message failed to send. Please try again.');
+            });
     });
 }());
 </script>

@@ -10,7 +10,6 @@
                 Safety
                 {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
             </h1>
-            <p class="safety-subtitle">Set an expected check-in time for a trip - if you don't check in, your emergency contacts are notified.</p>
         </div>
         <div class="safety-header-right">
             <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
@@ -48,23 +47,29 @@
         <div class="card-header">
             <i class="material-symbols-outlined">settings</i>
             <h3>Defaults for new check-ins</h3>
-            <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-edit-btn">
-                <i class="material-symbols-outlined">edit</i> Edit
-            </button>
+            <div class="safety-defaults-header-actions">
+                <span class="safety-autosave-status" id="safety-autosave-status" aria-live="polite"></span>
+                <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-edit-btn">
+                    <i class="material-symbols-outlined">edit</i> Edit
+                </button>
+                <button type="button" class="safety-defaults-close-btn" id="safety-defaults-close-btn" hidden title="Close">
+                    <i class="material-symbols-outlined">expand_less</i>
+                </button>
+            </div>
         </div>
 
         <div class="safety-defaults-summary" id="safety-defaults-summary">
             <div class="safety-defaults-summary-row">
                 <span class="safety-defaults-summary-label">Message to contacts</span>
-                <span class="safety-defaults-summary-value">{{ preference.default_message|default:"Not set" }}</span>
+                <span class="safety-defaults-summary-value" id="safety-defaults-summary-message">{{ preference.default_message|default:"Not set" }}</span>
             </div>
             <div class="safety-defaults-summary-row">
                 <span class="safety-defaults-summary-label">Grace period</span>
-                <span class="safety-defaults-summary-value">{{ preference.default_grace_period_hours|floatformat:"-2" }} hour{{ preference.default_grace_period_hours|pluralize }}</span>
+                <span class="safety-defaults-summary-value" id="safety-defaults-summary-grace">{{ preference.default_grace_period_hours|floatformat:"-2" }} hour{{ preference.default_grace_period_hours|pluralize }}</span>
             </div>
             <div class="safety-defaults-summary-row">
                 <span class="safety-defaults-summary-label">Emergency contacts</span>
-                <span class="safety-defaults-summary-value">
+                <span class="safety-defaults-summary-value" id="safety-defaults-summary-contacts">
                     {% if default_contacts %}{% for contact_profile, email, name in default_contacts %}{{ contact_profile.username|default:name|default:email }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Not set{% endif %}
                 </span>
             </div>
@@ -77,15 +82,10 @@
                 <textarea name="default_message" id="default_message" rows="3">{{ preference.default_message }}</textarea>
             </div>
             <div class="form-row">
-                <label for="grace_period_hours">Default grace period (hours)</label>
-                <input type="number" step="0.25" min="0.25" name="grace_period_hours" id="grace_period_hours"
-                       value="{{ preference.default_grace_period_hours|default:'1' }}">
+                <label for="grace_period_hours">Default grace period</label>
+                {% include "dashboard/partials/safety/_grace_period_slider.html" with value=preference.default_grace_period_hours %}
             </div>
             {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary">Save defaults</button>
-                <button type="button" class="btn btn--ghost" id="safety-defaults-cancel-btn">Cancel</button>
-            </div>
         </form>
     </div>
 
@@ -94,15 +94,17 @@
 <script>
 (function () {
     var editBtn = document.getElementById('safety-defaults-edit-btn');
-    var cancelBtn = document.getElementById('safety-defaults-cancel-btn');
+    var closeBtn = document.getElementById('safety-defaults-close-btn');
     var summary = document.getElementById('safety-defaults-summary');
     var form = document.getElementById('safety-defaults-form');
+    var status = document.getElementById('safety-autosave-status');
     if (!editBtn || !form || !summary) return;
 
     function showForm() {
         summary.hidden = true;
         form.hidden = false;
         editBtn.hidden = true;
+        closeBtn.hidden = false;
         var firstField = form.querySelector('textarea, input');
         if (firstField) firstField.focus();
     }
@@ -110,10 +112,62 @@
         summary.hidden = false;
         form.hidden = true;
         editBtn.hidden = false;
+        closeBtn.hidden = true;
     }
 
     editBtn.addEventListener('click', showForm);
-    if (cancelBtn) cancelBtn.addEventListener('click', showSummary);
+    closeBtn.addEventListener('click', showSummary);
+
+    // -- Autosave -------------------------------------------------------------
+    // Text fields debounce briefly after typing stops; everything else (the
+    // grace slider, contact chips) saves right away since those are discrete
+    // actions rather than continuous typing.
+    var saveTimer = null;
+    var csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    function setStatus(text, isError) {
+        status.textContent = text;
+        status.classList.toggle('safety-autosave-status--error', !!isError);
+    }
+
+    function save() {
+        setStatus('Saving…', false);
+        fetch(form.action, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+            body: new FormData(form),
+        }).then(function (response) {
+            if (!response.ok) throw new Error('Save failed');
+            return response.json();
+        }).then(function (data) {
+            document.getElementById('safety-defaults-summary-message').textContent = data.default_message || 'Not set';
+            document.getElementById('safety-defaults-summary-grace').textContent =
+                data.default_grace_period_hours + ' hour' + (data.default_grace_period_hours === 1 ? '' : 's');
+            document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
+            setStatus('Saved', false);
+            if (window.toastr) toastr.success('Defaults saved.');
+        }).catch(function () {
+            setStatus('Could not save', true);
+            if (window.toastr) toastr.error('Could not save your safety defaults. Please try again.');
+        });
+    }
+
+    function scheduleSave(immediate) {
+        window.clearTimeout(saveTimer);
+        if (immediate) { save(); return; }
+        saveTimer = window.setTimeout(save, 800);
+    }
+
+    form.addEventListener('input', function (evt) {
+        // Range input fires continuously while dragging - its debounced save
+        // is handled by the 'change' listener below (fires once, on release).
+        if (evt.target.type === 'range') return;
+        scheduleSave(false);
+    });
+    form.addEventListener('change', function (evt) {
+        if (evt.target.type === 'range') scheduleSave(true);
+    });
+    form.addEventListener('contactschange', function () { scheduleSave(true); });
 }());
 </script>
 {% endblock %}
