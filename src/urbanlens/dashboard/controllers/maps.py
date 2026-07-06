@@ -102,6 +102,24 @@ def _expand_state_codes(states_str: str) -> str:
 
 
 class MapController(LoginRequiredMixin, GenericViewSet):
+    def record_geolocation_visit(self, request, *args, **kwargs):
+        """Record same-day PinVisit rows for pins containing a device geolocation."""
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+            latitude = float(body.get("latitude"))
+            longitude = float(body.get("longitude"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return JsonResponse({"ok": False, "error": "Valid latitude and longitude are required."}, status=400)
+
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            return JsonResponse({"ok": False, "error": "Latitude or longitude is out of range."}, status=400)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        from urbanlens.dashboard.services.visits import record_geolocation_pin_visits
+
+        visits = record_geolocation_pin_visits(profile, latitude=latitude, longitude=longitude)
+        return JsonResponse({"ok": True, "created": len(visits), "pin_ids": [visit.pin_id for visit in visits]})
+
     def view_map(self, request, *args, **kwargs):
         import json as _json
 

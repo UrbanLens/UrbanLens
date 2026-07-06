@@ -367,3 +367,58 @@ def sync_last_visited(pin: Pin) -> None:
     latest = pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True).first()
     pin.last_visited = latest
     pin.save(update_fields=["last_visited"])
+
+
+def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
+    """Record geolocation-based visits for the profile's pins containing a point.
+
+    A visit is created for each of the user's top-level pins whose pin-specific
+    campus boundary, location-default campus boundary, or 50 m coordinate
+    fallback contains the supplied latitude/longitude. Existing visits on the
+    same calendar day prevent another row from being created for that pin.
+
+    Args:
+        profile: Profile whose personal pins should be checked.
+        latitude: Device-provided WGS-84 latitude.
+        longitude: Device-provided WGS-84 longitude.
+        visited_at: Timestamp to store; defaults to ``timezone.now()``.
+
+    Returns:
+        List of newly-created ``PinVisit`` rows.
+    """
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import D
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.campus.model import Campus
+
+    timestamp = visited_at or timezone.now()
+    point = Point(float(longitude), float(latitude), srid=4326)
+    pins = (
+        Pin.objects.filter(profile=profile)
+        .root_pins()
+        .select_related("location")
+        .prefetch_related("campus")
+    )
+    created_visits: list[PinVisit] = []
+
+    for pin in pins:
+        if pin.visit_history.filter(visited_at__date=timestamp.date()).exists():
+            continue
+
+        campus = Campus.objects.effective_for_pin(pin)
+        contains_point = False
+        if campus is not None:
+            contains_point = campus.effective_polygon.contains(point)
+        else:
+            contains_point = Pin.objects.filter(pk=pin.pk, point__distance_lte=(point, D(m=50))).exists()
+
+        if not contains_point:
+            continue
+
+        visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)
+        sync_last_visited(pin)
+        add_visited_status(pin)
+        created_visits.append(visit)
+
+    return created_visits
