@@ -1,8 +1,10 @@
 {% comment %}
 Chat panel for a safety check-in, shared by the owner's detail page and the
 token-gated contact portal. Context: `checkin`, `contact` (None on the owner
-route), `messages`. Polls every 5s via HTMX - there's no live WebSocket
-infrastructure wired up in this project, so polling is the pragmatic choice.
+route), `messages`. Real-time delivery is a WebSocket to
+SafetyCheckinChatConsumer (dashboard/consumers.py); the plain form POST to
+SafetyCheckinMessageView only runs when the socket is momentarily down or
+JavaScript is unavailable.
 {% endcomment %}
 {% if contact %}
 {% url 'safety.contact.messages' contact.token as chat_url %}
@@ -10,26 +12,103 @@ infrastructure wired up in this project, so polling is the pragmatic choice.
 {% url 'safety.checkin.messages' checkin.uuid as chat_url %}
 {% endif %}
 <div class="safety-chat-panel card" id="safety-chat-panel"
-     hx-get="{{ chat_url }}" hx-trigger="load, every 5s" hx-swap="outerHTML">
+     data-ws-path="{% if contact %}/ws/safety/contact/{{ contact.token }}/chat/{% else %}/ws/safety/checkin/{{ checkin.uuid }}/chat/{% endif %}">
     <div class="card-header">
         <i class="material-symbols-outlined">forum</i>
         <h3>Chat</h3>
+        <span class="safety-chat-status" id="safety-chat-status" hidden>Reconnecting...</span>
     </div>
-    <ul class="safety-chat-messages">
+    <ul class="safety-chat-messages" id="safety-chat-messages">
         {% for message in messages %}
         <li class="safety-chat-message">
             <span class="safety-chat-sender">{{ message.sender_name }}</span>
             <span class="safety-chat-body">{{ message.body }}</span>
             <span class="safety-chat-time">{{ message.created|date:"g:i A" }}</span>
         </li>
-        {% empty %}
-        <li class="safety-chat-empty">No messages yet.</li>
         {% endfor %}
     </ul>
-    <form class="safety-chat-form" hx-post="{{ chat_url }}" hx-target="#safety-chat-panel" hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful) this.reset()">
+    <p class="safety-chat-empty" id="safety-chat-empty" {% if messages %}hidden{% endif %}>No messages yet.</p>
+    <form class="safety-chat-form" id="safety-chat-form" action="{{ chat_url }}" method="post">
         {% csrf_token %}
-        <input type="text" name="body" placeholder="Message the other emergency contacts..." maxlength="2000" required>
+        <input type="text" name="body" id="safety-chat-input" placeholder="Message the other emergency contacts..." maxlength="2000" required>
         <button type="submit" class="btn btn--sm btn--primary">Send</button>
     </form>
 </div>
+<script>
+(function () {
+    var panel = document.getElementById('safety-chat-panel');
+    if (!panel) return;
+    var wsPath = panel.dataset.wsPath;
+    var list = document.getElementById('safety-chat-messages');
+    var empty = document.getElementById('safety-chat-empty');
+    var status = document.getElementById('safety-chat-status');
+    var form = document.getElementById('safety-chat-form');
+    var input = document.getElementById('safety-chat-input');
+
+    function appendMessage(msg) {
+        if (empty) empty.hidden = true;
+        var li = document.createElement('li');
+        li.className = 'safety-chat-message';
+
+        var sender = document.createElement('span');
+        sender.className = 'safety-chat-sender';
+        sender.textContent = msg.sender_name;
+
+        var body = document.createElement('span');
+        body.className = 'safety-chat-body';
+        body.textContent = msg.body;
+
+        var time = document.createElement('span');
+        time.className = 'safety-chat-time';
+        var created = new Date(msg.created);
+        time.textContent = isNaN(created.getTime()) ? '' : created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+        li.appendChild(sender);
+        li.appendChild(body);
+        li.appendChild(time);
+        list.appendChild(li);
+        list.scrollTop = list.scrollHeight;
+    }
+
+    var ws = null;
+    var retryDelay = 1000;
+    var maxDelay = 15000;
+
+    function setConnected(connected) {
+        if (status) status.hidden = connected;
+    }
+
+    function connect() {
+        var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        ws = new WebSocket(proto + location.host + wsPath);
+        ws.onopen = function () { retryDelay = 1000; setConnected(true); };
+        ws.onclose = function () {
+            setConnected(false);
+            setTimeout(connect, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, maxDelay);
+        };
+        ws.onerror = function () { ws.close(); };
+        ws.onmessage = function (ev) {
+            try { appendMessage(JSON.parse(ev.data)); } catch (e) { /* ignore malformed frame */ }
+        };
+    }
+    setConnected(false);
+    connect();
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var body = input.value.trim();
+        if (!body) return;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ body: body }));
+            input.value = '';
+            return;
+        }
+        // Socket momentarily down - fall back to a plain POST so the message still
+        // sends; it'll show up in this tab once the socket reconnects and someone
+        // (possibly this same profile, from the broadcast) triggers a re-render.
+        fetch(form.action, { method: 'POST', body: new FormData(form) });
+        input.value = '';
+    });
+}());
+</script>

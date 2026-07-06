@@ -13,10 +13,12 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import (
     EmergencyContactDefault,
     SafetyCheckin,
     SafetyCheckinContact,
+    SafetyCheckinMessage,
     SafetyCheckinStatus,
     SafetyPreference,
 )
@@ -27,8 +29,9 @@ if TYPE_CHECKING:
     import datetime
     from decimal import Decimal
 
+    from django.contrib.auth.models import AnonymousUser, User
+
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -382,3 +385,50 @@ def _conclude_checkin(checkin: SafetyCheckin) -> None:
         candidate_profiles=[],
         safety_checkin=checkin,
     )
+
+
+def resolve_message_sender(user: User | AnonymousUser, contact: SafetyCheckinContact | None) -> tuple[Profile | None, SafetyCheckinContact | None]:
+    """Resolve who is sending a chat message: the owner, a user-linked contact, or an anonymous/email-only contact.
+
+    Shared between the HTTP chat endpoint and the WebSocket consumer so the
+    two code paths can't drift.
+
+    Args:
+        user: The requesting Django user. Always authenticated on the owner
+            route; may or may not be on the contact route, since a contact
+            link works without an account.
+        contact: The SafetyCheckinContact authorizing this request, or None
+            on the owner route.
+
+    Returns:
+        (sender_profile, sender_contact) - exactly one is set. When contact
+        is None, sender_profile is the owner's own profile. When a contact is
+        set and the requesting user happens to be logged in as that same
+        linked profile, sender_profile is used instead so the message is
+        attributed to a real profile rather than the anonymous contact
+        record.
+    """
+    if contact is None:
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return profile, None
+    if contact.contact_profile_id and user.is_authenticated:
+        profile, _ = Profile.objects.get_or_create(user=user)
+        if profile.pk == contact.contact_profile_id:
+            return contact.contact_profile, None
+    return None, contact
+
+
+def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, contact: SafetyCheckinContact | None, body: str) -> SafetyCheckinMessage:
+    """Create a new chat message on a check-in.
+
+    Args:
+        checkin: The check-in the message belongs to.
+        user: The requesting Django user (see ``resolve_message_sender``).
+        contact: The SafetyCheckinContact authorizing this request, or None on the owner route.
+        body: Message text - the caller must have already validated it's non-empty.
+
+    Returns:
+        The newly created SafetyCheckinMessage.
+    """
+    sender_profile, sender_contact = resolve_message_sender(user, contact)
+    return SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)

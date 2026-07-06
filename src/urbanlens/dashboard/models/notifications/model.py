@@ -25,7 +25,7 @@ class NotificationLog(abstract.Model):
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
     importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
-    notification_type = models.CharField(max_length=20, choices=NotificationType.choices, default=NotificationType.INFO)
+    notification_type = models.CharField(max_length=30, choices=NotificationType.choices, default=NotificationType.INFO)
     title = models.CharField(max_length=255, blank=True)
     message = models.CharField(max_length=50000, blank=True)
     url = models.CharField(max_length=500, blank=True)

@@ -13,11 +13,12 @@ from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinMessage
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.safety import (
     ContactInput,
     check_in,
+    create_chat_message,
     create_checkin,
     default_contacts_as_input,
     get_or_create_preference,
@@ -351,25 +352,6 @@ class SafetyCheckinImageUploadView(LoginRequiredMixin, View):
         return JsonResponse({"id": img.pk, "url": img.image.url}, status=201)
 
 
-def _resolve_contact_sender(request: HttpRequest, contact: SafetyCheckinContact) -> tuple[Profile | None, SafetyCheckinContact | None]:
-    """Return the (sender_profile, sender_contact) pair to record for a message from this portal visit.
-
-    Args:
-        request: Incoming HTTP request.
-        contact: The contact whose token authorized this visit.
-
-    Returns:
-        (checkin.profile's linked user's profile, None) when the contact is
-        also the authenticated site user viewing their own token, otherwise
-        (None, contact) for an anonymous or email-only contact.
-    """
-    if contact.contact_profile_id and request.user.is_authenticated:
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if profile.pk == contact.contact_profile_id:
-            return contact.contact_profile, None
-    return None, contact
-
-
 class SafetyContactPortalView(View):
     """Public, token-gated view of a check-in for an emergency contact.
 
@@ -422,31 +404,15 @@ class SafetyContactMarkSafeView(View):
 
 
 class SafetyCheckinMessageView(View):
-    """Chat on a check-in, usable by the owner (session auth) or a contact (token auth).
+    """No-JS fallback for check-in chat, usable by the owner (session auth) or a contact (token auth).
 
-    GET  /safety/<uuid:checkin_uuid>/messages/ - owner polling.
+    Real-time delivery is handled by ``SafetyCheckinChatConsumer`` over a
+    WebSocket (see ``dashboard/consumers.py``); this endpoint only exists so
+    the chat form still works as a plain POST when JavaScript is unavailable.
+
     POST /safety/<uuid:checkin_uuid>/messages/ - owner sends a message.
-    GET  /safety/contact/<uuid:token>/messages/ - contact polling.
     POST /safety/contact/<uuid:token>/messages/ - contact sends a message.
     """
-
-    def get(self, request: HttpRequest, checkin_uuid: str | None = None, token: str | None = None) -> HttpResponse:
-        """Return the refreshed message list partial.
-
-        Args:
-            request: Incoming HTTP request.
-            checkin_uuid: UUID of the check-in (owner route).
-            token: Contact's magic-link token (contact route).
-
-        Returns:
-            Rendered message list partial.
-        """
-        checkin, contact = self._resolve(request, checkin_uuid, token)
-        return render(
-            request,
-            "dashboard/partials/safety/_chat_panel.html",
-            {"checkin": checkin, "contact": contact, "messages": checkin.messages.select_related("sender_profile", "sender_contact").all()},
-        )
 
     def post(self, request: HttpRequest, checkin_uuid: str | None = None, token: str | None = None) -> HttpResponse:
         """Post a new chat message and return the refreshed message list partial.
@@ -462,11 +428,7 @@ class SafetyCheckinMessageView(View):
         checkin, contact = self._resolve(request, checkin_uuid, token)
         body = request.POST.get("body", "").strip()
         if body:
-            if contact is not None:
-                sender_profile, sender_contact = _resolve_contact_sender(request, contact)
-            else:
-                sender_profile, sender_contact = request.user.profile, None
-            SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)
+            create_chat_message(checkin, user=request.user, contact=contact, body=body)
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",

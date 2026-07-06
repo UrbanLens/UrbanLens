@@ -87,6 +87,43 @@ services:
       retries: 3
       start_period: 15s
 
+  # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
+  # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
+  # unchanged - nginx routes just /ws/ to this service (see config/nginx/django.conf).
+  app-ws:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app_ws
+    build:
+      <<: *app-build
+
+    restart: unless-stopped
+
+    entrypoint: ["/docker-entrypoint.sh", "daphne"]
+    command: ["-b", "0.0.0.0", "-p", "8001", "urbanlens.UrbanLens.asgi:application"]
+
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+    volumes:
+      - logs:/var/log
+
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_app_ws
+
+    environment:
+      <<: *app-env
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   nginx:
     container_name: urbanlens_${UL_ENVIRONMENT:-production}_nginx
     image: nginxinc/nginx-unprivileged:alpine
@@ -100,6 +137,7 @@ services:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
       - app
+      - app-ws
     networks:
       app_network:
         aliases:

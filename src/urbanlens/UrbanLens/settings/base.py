@@ -47,6 +47,13 @@ ALLOWED_HOSTS = _app_settings.allowed_hosts
 
 # Application definition
 INSTALLED_APPS = [
+    # "daphne" must come before "django.contrib.staticfiles" - Channels patches
+    # the `runserver` management command to be ASGI/WebSocket-aware only when
+    # daphne is registered ahead of it, which is what gives local dev working
+    # WebSockets with no extra process (production instead runs a dedicated
+    # daphne container - see docker-compose.yml's `app-ws` service).
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -58,6 +65,11 @@ INSTALLED_APPS = [
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
 ]
+
+# Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
+# WSGI_APPLICATION in production (gunicorn) - only the dedicated `app-ws`
+# daphne container and local `runserver` actually serve ASGI traffic.
+ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
