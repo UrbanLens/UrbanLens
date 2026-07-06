@@ -31,46 +31,48 @@
         </button>
     </div>
 
-    {% include 'dashboard/partials/memories/_hero_stats.html' %}
+    <div class="page-inner">
+        {% include 'dashboard/partials/memories/_hero_stats.html' %}
 
-    <div id="memories-on-this-day"
-         hx-get="{% url 'memories.on_this_day' %}"
-         hx-trigger="load"
-         hx-swap="innerHTML"></div>
+        <div id="memories-on-this-day"
+            hx-get="{% url 'memories.on_this_day' %}"
+            hx-trigger="load"
+            hx-swap="innerHTML"></div>
 
-    <div class="memories-controls">
-        <div class="memories-date-range">
-            <input type="date" id="memories-start-date" min="{{ earliest_date }}" max="{{ today }}">
-            <span>&ndash;</span>
-            <input type="date" id="memories-end-date" min="{{ earliest_date }}" max="{{ today }}">
-            <button type="button" class="btn btn--sm btn--ghost" id="memories-apply-range">Apply</button>
+        <div class="memories-controls">
+            <div class="memories-date-range">
+                <input type="date" id="memories-start-date" min="{{ earliest_date }}" max="{{ today }}">
+                <span>&ndash;</span>
+                <input type="date" id="memories-end-date" min="{{ earliest_date }}" max="{{ today }}">
+                <button type="button" class="btn btn--sm btn--ghost" id="memories-apply-range">Apply</button>
+            </div>
+            <div class="memories-quick-range">
+                <button type="button" class="btn btn--sm btn--ghost" data-range="90">Last 90 days</button>
+                <button type="button" class="btn btn--sm btn--ghost" data-range="365">Last year</button>
+                <button type="button" class="btn btn--sm btn--ghost" data-range="all">All time</button>
+            </div>
+            <div class="memories-legend">
+                <label class="memories-legend-item" data-type="route">
+                    <span class="memories-legend-swatch" style="background:#2196F3"></span> Routes
+                </label>
+                <label class="memories-legend-item" data-type="trip">
+                    <span class="memories-legend-swatch" style="background:#FF9800"></span> Trips
+                </label>
+                <label class="memories-legend-item" data-type="visit">
+                    <span class="memories-legend-swatch" style="background:#4CAF50"></span> Visits
+                </label>
+                <label class="memories-legend-item" data-type="photo">
+                    <span class="memories-legend-swatch" style="background:#E91E63"></span> Photos
+                </label>
+            </div>
         </div>
-        <div class="memories-quick-range">
-            <button type="button" class="btn btn--sm btn--ghost" data-range="90">Last 90 days</button>
-            <button type="button" class="btn btn--sm btn--ghost" data-range="365">Last year</button>
-            <button type="button" class="btn btn--sm btn--ghost" data-range="all">All time</button>
+
+        <div class="memories-map-wrap">
+            <div id="memories-map"></div>
         </div>
-        <div class="memories-legend">
-            <label class="memories-legend-item" data-type="route">
-                <span class="memories-legend-swatch" style="background:#2196F3"></span> Routes
-            </label>
-            <label class="memories-legend-item" data-type="trip">
-                <span class="memories-legend-swatch" style="background:#FF9800"></span> Trips
-            </label>
-            <label class="memories-legend-item" data-type="visit">
-                <span class="memories-legend-swatch" style="background:#4CAF50"></span> Visits
-            </label>
-            <label class="memories-legend-item" data-type="photo">
-                <span class="memories-legend-swatch" style="background:#E91E63"></span> Photos
-            </label>
-        </div>
+
+        <div id="memories-timeline"></div>
     </div>
-
-    <div class="memories-map-wrap">
-        <div id="memories-map"></div>
-    </div>
-
-    <div id="memories-timeline"></div>
 </div>
 
 <div id="importPinsModal"></div>

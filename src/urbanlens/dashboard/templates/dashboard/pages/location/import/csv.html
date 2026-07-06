@@ -493,13 +493,13 @@
     <div id="iw-step-1">
         <div class="iw-body">
             <p class="iw-hint">
-                Many apps are supported, not just Google Takeout - see the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for exact steps by app.
-                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV{% if can_use_ai_features and profile.ai_enabled %}, plain text (.txt), Word documents (.docx){% endif %} - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. Multiple files accepted.
+                Import data from another app. Many apps are supported.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
             <div class="iw-takeout-help" style="margin-bottom:18px;">
                 <i class="material-symbols-outlined" style="vertical-align:middle;font-size:1.1rem;color:var(--ul-primary-color)">auto_awesome</i>
-                <strong>AI document import:</strong> upload a plain-text or Word file (trip notes, a forwarded list, research writeup) and AI will pull out only the locations it explicitly mentions for you to review before anything is imported. It will not add locations that aren't actually in your file, even if the file's wording tries to tell it to.
+                <strong>AI document import:</strong> You may upload a plain-text or Word file containing a list of locations and our AI will identify locations in it. The file can include trip notes, research, or other details. It does not have to be structured or organized in any particular way. You will have a chance to review the results before anything is imported.
             </div>
             {% endif %}
             <button type="button" class="iw-takeout-help-toggle" id="iw-takeout-help-toggle" aria-expanded="false">

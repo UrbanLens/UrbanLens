@@ -1,6 +1,9 @@
 @use 'variables' as *;
 
 // -- Memories page ----------------------------------------------------------
+#memories-page {
+    margin-top: 1rem;
+}
 
 .memories-header {
     display: flex;
