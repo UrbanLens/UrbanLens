@@ -105,10 +105,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def record_geolocation_visit(self, request, *args, **kwargs):
         """Record same-day PinVisit rows for pins containing a device geolocation."""
         try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-            latitude = float(body.get("latitude"))
-            longitude = float(body.get("longitude"))
-        except (TypeError, ValueError, json.JSONDecodeError):
+            latitude = float(request.data.get("latitude"))
+            longitude = float(request.data.get("longitude"))
+        except (TypeError, ValueError):
             return JsonResponse({"ok": False, "error": "Valid latitude and longitude are required."}, status=400)
 
         if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):

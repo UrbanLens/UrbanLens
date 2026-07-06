@@ -8,6 +8,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
@@ -27,6 +28,7 @@ from urbanlens.dashboard.services.safety import (
     create_chat_message,
     create_checkin,
     default_contacts_as_input,
+    get_active_checkin,
     get_or_create_preference,
     mark_found_safe,
     save_contact_defaults,
@@ -161,6 +163,29 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     return datetime.timedelta(hours=max(hours, 0.25))
 
 
+class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
+    """Navbar banner for the profile's currently active (unresolved) check-in, if any.
+
+    Loaded via HTMX from the site-wide navbar (see partials/layout/header.html)
+    on every page, so it stays in sync without every page's view needing to
+    fetch and pass the active check-in itself.
+
+    GET /safety/nav-banner/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the active check-in banner partial.
+
+        Args:
+            request: Incoming HTTP request.
+
+        Returns:
+            Rendered banner partial - empty when the profile has no active check-in.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(request, "dashboard/partials/safety/_active_checkin_banner.html", {"checkin": get_active_checkin(profile)})
+
+
 class SafetyHomeView(LoginRequiredMixin, View):
     """Safety defaults + check-in list.
 
@@ -186,6 +211,7 @@ class SafetyHomeView(LoginRequiredMixin, View):
             {
                 "preference": preference,
                 "checkins": checkins,
+                "active_checkin": get_active_checkin(profile),
                 "default_contacts": default_contacts_as_input(profile),
                 "connections": get_connections(profile),
             },
@@ -237,9 +263,14 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered page.
+            Rendered page, or a redirect to the profile's already-active
+            check-in - only one may be active at a time.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        active_checkin = get_active_checkin(profile)
+        if active_checkin is not None:
+            messages.info(request, "You already have an active check-in - check in or cancel it before starting a new one.")
+            return redirect("safety.checkin.detail", checkin_slug=active_checkin.slug or active_checkin.uuid)
         preference = get_or_create_preference(profile)
         return render(
             request,
@@ -289,17 +320,20 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         lat = request.POST.get("destination_latitude") or None
         lng = request.POST.get("destination_longitude") or None
 
-        checkin = create_checkin(
-            profile=profile,
-            title=title,
-            checkin_by=checkin_by,
-            grace_period=_parse_grace_period(request),
-            plan_details=request.POST.get("plan_details", "").strip(),
-            contact_message=request.POST.get("contact_message", "").strip(),
-            destination_latitude=float(lat) if lat else None,
-            destination_longitude=float(lng) if lng else None,
-            contacts=_parse_contacts_from_post(request, profile),
-        )
+        try:
+            checkin = create_checkin(
+                profile=profile,
+                title=title,
+                checkin_by=checkin_by,
+                grace_period=_parse_grace_period(request),
+                plan_details=request.POST.get("plan_details", "").strip(),
+                contact_message=request.POST.get("contact_message", "").strip(),
+                destination_latitude=float(lat) if lat else None,
+                destination_longitude=float(lng) if lng else None,
+                contacts=_parse_contacts_from_post(request, profile),
+            )
+        except ValueError as exc:
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
@@ -626,8 +660,10 @@ class SafetyCheckinMessageView(View):
             try:
                 create_chat_message(checkin, user=request.user, contact=contact, body=body)
             except ValueError as exc:
+                # create_chat_message only raises ValueError with a fixed, developer-authored
+                # message (blank/too-long body) - never a stack trace or sensitive data.
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
-                return HttpResponseBadRequest(str(exc))
+                return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",

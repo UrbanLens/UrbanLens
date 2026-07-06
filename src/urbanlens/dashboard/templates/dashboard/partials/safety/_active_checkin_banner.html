@@ -1,0 +1,55 @@
+{% load humanize %}
+{% comment %}
+Navbar banner shown site-wide while the profile has an active (unresolved)
+safety check-in - a profile may only have one at a time (see
+services.safety.create_checkin). Loaded via HTMX from partials/layout/header.html.
+
+Context: checkin (SafetyCheckin or None - renders an empty placeholder when None,
+so the hx-swap target still exists for the next poll/reload).
+{% endcomment %}
+{% if checkin %}
+<div class="safety-active-banner" id="safety-active-banner">
+    <div class="safety-active-banner-inner">
+        <i class="material-symbols-outlined safety-active-banner-icon">emergency</i>
+        <a href="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-active-banner-text">
+            Active check-in <strong>"{{ checkin.title }}"</strong> - check in {{ checkin.checkin_by|naturaltime }}
+        </a>
+        <button type="button" class="safety-active-banner-close-btn" id="safety-active-banner-close-btn"
+                data-checkin-url="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}"
+                title="Check in now and close">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+</div>
+<script>
+(function () {
+    var btn = document.getElementById('safety-active-banner-close-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var url = btn.dataset.checkinUrl;
+        var proceed = window.confirmDialog ? window.confirmDialog({
+            title: "Check in now?",
+            message: "This marks you as checked in and closes the active check-in.",
+            confirmLabel: "I'm safe - check in",
+            danger: false,
+        }) : Promise.resolve(window.confirm('Mark yourself checked in and close this check-in?'));
+        proceed.then(function (ok) {
+            if (!ok) return;
+            fetch(url, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            }).then(function (r) {
+                if (!r.ok) throw new Error();
+                var banner = document.getElementById('safety-active-banner');
+                if (banner) banner.remove();
+                if (window.toastr) toastr.success('Checked in - check-in closed.');
+            }).catch(function () {
+                if (window.toastr) toastr.error('Could not check in. Please try again.');
+            });
+        });
+    });
+}());
+</script>
+{% else %}
+<div id="safety-active-banner"></div>
+{% endif %}

@@ -12,6 +12,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.html import escape
 from django.views import View
 import requests
 
@@ -938,7 +939,7 @@ class TripMembersView(LoginRequiredMixin, View):
         try:
             user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
-            return HttpResponse(f'No user found with username "{username}".', status=404)
+            return HttpResponse(f'No user found with username "{escape(username)}".', status=404)
 
         max_members = SiteSettings.get_current().max_trip_members
         current_count = trip.profiles.count()

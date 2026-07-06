@@ -422,7 +422,6 @@
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
-          hx-on::response-error="toastr.error(event.detail.xhr.responseText || 'Could not add member.')"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">

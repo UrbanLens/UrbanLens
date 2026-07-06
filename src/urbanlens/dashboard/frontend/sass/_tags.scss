@@ -115,7 +115,7 @@
 .pinlist-panel-empty {
     padding: 1rem;
     font-size: 0.85rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     text-align: center;
 
     a {
@@ -129,7 +129,7 @@
     gap: 6px;
     padding: 0.6rem 1rem;
     font-size: 0.8rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     text-decoration: none;
     border-top: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-1);
@@ -164,7 +164,7 @@
 
     .tag-subtitle {
         font-size: 0.9rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         margin: 0;
     }
 }
@@ -275,7 +275,7 @@ dialog.tag-create-card.ul-dialog {
 
 .tag-card-desc {
     font-size: 0.85rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     @include truncate;
 }
 
@@ -305,7 +305,7 @@ dialog.tag-create-card.ul-dialog {
     gap: 3px;
     font-size: 0.78rem;
     font-weight: 500;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     background: var(--ul-grey-4);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
@@ -327,7 +327,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &.tag-stat--total {
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         background: var(--ul-grey-1);
         border-color: var(--ul-grey-1a);
         font-style: italic;
@@ -425,7 +425,7 @@ dialog.tag-create-card.ul-dialog {
     height: 22px;
     border-radius: 50%;
     background: var(--ul-grey-1a);
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     font-size: 0.7rem;
     font-weight: 700;
     flex-shrink: 0;
@@ -838,7 +838,7 @@ dialog.tag-create-card.ul-dialog {
     gap: .4rem;
     font-size: .85rem;
     font-weight: 600;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     margin-bottom: .75rem;
 
     i {
@@ -970,7 +970,7 @@ dialog.tag-create-card.ul-dialog {
 .tag-panel-empty {
     padding: 1rem;
     font-size: 0.85rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
 
     a {
         color: var(--primary-color);
@@ -983,7 +983,7 @@ dialog.tag-create-card.ul-dialog {
     gap: 6px;
     padding: 0.6rem 1rem;
     font-size: 0.8rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     text-decoration: none;
     border-top: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-1);
@@ -1074,7 +1074,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     &:hover {
-        color: $text-secondary;
+        color: var(--ul-grey-6);
     }
 
     &:active {
@@ -1402,7 +1402,7 @@ dialog.tag-create-card.ul-dialog {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .04em;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
 
     i {
         font-size: 1rem;
@@ -1491,7 +1491,7 @@ dialog.tag-create-card.ul-dialog {
     border-radius: 6px;
     padding: 4px 6px;
     cursor: pointer;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     display: flex;
     align-items: center;
     transition: background .12s, border-color .12s, color .12s;
@@ -1614,7 +1614,7 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: .35rem;
     font-size: .8rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     cursor: pointer;
     margin-top: .35rem;
 
@@ -1716,7 +1716,7 @@ dialog.tag-create-card.ul-dialog {
 
     .organize-subtitle {
         font-size: .9rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         margin: 0;
     }
 }
@@ -1827,7 +1827,7 @@ dialog.tag-create-card.ul-dialog {
     border: 1px solid var(--ul-grey-1a);
     background: var(--ul-grey-0);
     font-size: .85rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
 
     .material-symbols-outlined,
     .material-icons {
@@ -1914,7 +1914,7 @@ dialog.tag-create-card.ul-dialog {
 
     i {
         font-size: 1.15rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
     }
 
     .tag-icon-img {
@@ -2320,7 +2320,7 @@ dialog.tag-create-card.ul-dialog {
 
     i {
         font-size: 1.25rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
     }
 }
 

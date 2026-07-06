@@ -17,6 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.html import escape
 from django.views import View
 
 from urbanlens.dashboard.models.badges.model import (
@@ -618,7 +619,7 @@ class BadgeDeleteView(_BadgeKindMixin, LoginRequiredMixin, View):
         if isinstance(badge, HttpResponseForbidden):
             return badge
         if badge.is_protected:
-            return HttpResponse(f"'{badge.name}' is a protected status and cannot be deleted.", status=403)
+            return HttpResponse(f"'{escape(badge.name)}' is a protected status and cannot be deleted.", status=403)
 
         badge.delete()
         return _render_rows(request, self.kind, _request_profile(request))

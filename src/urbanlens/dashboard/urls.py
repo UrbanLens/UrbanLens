@@ -729,6 +729,7 @@ urlpatterns = [
             [
                 path("", safety.SafetyHomeView.as_view(), name="safety.home"),
                 path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
+                path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
                 path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),

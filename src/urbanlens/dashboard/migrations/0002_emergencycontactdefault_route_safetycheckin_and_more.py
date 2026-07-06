@@ -256,7 +256,7 @@ class Migration(migrations.Migration):
                     "default_message",
                     models.TextField(
                         blank=True,
-                        default="Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, I haven't checked in by my expected time - please try to reach me, and if you can't, take a look at my trip plan and last known destination below to help figure out where I might be.",
+                        default="Hi! You're specified as one of my emergency contacts in case I get lost or injured. If you're seeing this, I didn't make it home when I expected to, so this email was automatically sent to you. Please try to reach me, and if you can't, information about my trip plan is included to help figure out where I might be.",
                     ),
                 ),
                 (

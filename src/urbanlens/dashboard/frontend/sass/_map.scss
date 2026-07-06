@@ -1122,7 +1122,7 @@
 
     &.apdlg-badge-sugg-create {
         border-top: 1px solid var(--ul-grey-1a);
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         font-style: italic;
         font-size: .82rem;
         .material-symbols-outlined,
@@ -1207,7 +1207,7 @@
     align-items: center;
     gap: .4rem;
     font-size: .875rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     cursor: pointer;
     user-select: none;
 
@@ -3934,7 +3934,23 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     opacity: 0.8;
     transition: opacity .15s, box-shadow .15s;
 
-    &:hover, &:focus-within { opacity: 1; }
+    #address-search-input {
+        background-color: transparent;
+        border-color: transparent;
+        box-shadow: none;
+
+        &:active,
+        &:focus,
+        &:hover {
+            background-color: transparent;
+            border-color: transparent;
+            box-shadow: none;
+        }
+    }
+
+    &:hover, &:focus-within { 
+        opacity: 1; 
+    }
 
     // Move the bar to align with the zoom controls on desktop
     @include up($breakpoint-sm) {

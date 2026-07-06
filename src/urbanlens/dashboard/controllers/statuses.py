@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.html import escape
 from django.views import View
 
 from urbanlens.dashboard.models.badges.model import (
@@ -193,7 +194,7 @@ class StatusDeleteView(LoginRequiredMixin, View):
         if badge.profile is None or badge.profile.user != request.user:
             return HttpResponseForbidden()
         if badge.is_protected:
-            return HttpResponse(f"'{badge.name}' is a protected status and cannot be deleted.", status=403)
+            return HttpResponse(f"'{escape(badge.name)}' is a protected status and cannot be deleted.", status=403)
         badge.delete()
         return render(request, "dashboard/partials/status_rows.html", _rows_ctx(request.user.profile))
 

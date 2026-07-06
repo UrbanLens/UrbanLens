@@ -172,6 +172,22 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
     return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.filter(owner=profile)]
 
 
+def get_active_checkin(profile: Profile) -> SafetyCheckin | None:
+    """Return the profile's current active (unresolved) check-in, if any.
+
+    A profile may only have one active check-in at a time - ``create_checkin``
+    enforces this - so the earliest-due active check-in is also the only one,
+    in practice.
+
+    Args:
+        profile: Profile to look up.
+
+    Returns:
+        The active SafetyCheckin, or None if the profile has none.
+    """
+    return SafetyCheckin.objects.active().filter(profile=profile).order_by("checkin_by").first()
+
+
 def set_checkin_contacts(checkin: SafetyCheckin, contacts: Iterable[ContactInput]) -> None:
     """Reconcile a check-in's contact list with a newly submitted one.
 
@@ -237,7 +253,14 @@ def create_checkin(
 
     Returns:
         The newly created SafetyCheckin.
+
+    Raises:
+        ValueError: If the profile already has an active check-in - only one
+            may be active at a time (see ``get_active_checkin``).
     """
+    if get_active_checkin(profile) is not None:
+        raise ValueError("You already have an active check-in. Check in or cancel it before starting a new one.")
+
     checkin = SafetyCheckin.objects.create(
         profile=profile,
         title=title,

@@ -40,10 +40,16 @@ so it's always available by the time this script runs - no typeof guard needed.
     </div>
     {% endif %}
 </div>
+{% if markup_json_url and not readonly %}
+{# Unified draw/edit panel this dropdown opens - must be a sibling of #}
+{# .map-bottom-controls, not nested inside it, so it positions relative to #}
+{# .safety-map-wrapper instead of that small absolute-positioned button cluster. #}
+{% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
+{% endif %}
 {% if not readonly %}
 <input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
 <input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
-<p class="form-hint">Click the map, drag the marker, or search above to set your destination.</p>
+<p class="form-hint">Click the map or search above to set your destination. Once placed, drag the pin to reposition it - you'll be asked to confirm.</p>
 {% endif %}
 <script>
     var centerLat = {{ map_center_lat|default:"39.8283" }};
@@ -58,8 +64,36 @@ so it's always available by the time this script runs - no typeof guard needed.
     var destLat = {{ destination_lat|default:"null" }};
     var destLng = {{ destination_lng|default:"null" }};
     var marker = null;
+    var markerDragStartLatLng = null;
+
+    // A drag repositions the destination pin - a high-stakes field for a safety
+    // check-in - so (unlike a plain click) it's confirmed before taking effect;
+    // declining snaps the marker back to where the drag started.
+    function attachMarkerDragHandlers() {
+        if (readonly) return;
+        marker.on('dragstart', function () { markerDragStartLatLng = marker.getLatLng(); });
+        marker.on('dragend', function () {
+            var dropped = marker.getLatLng();
+            var priorLatLng = markerDragStartLatLng;
+            var proceed = window.confirmDialog ? window.confirmDialog({
+                title: 'Move destination?',
+                message: 'Set the destination to this location?',
+                confirmLabel: 'Move pin',
+                danger: false,
+            }) : Promise.resolve(window.confirm('Set the destination to this location?'));
+            proceed.then(function (ok) {
+                if (ok) {
+                    setDestination(dropped.lat, dropped.lng);
+                } else if (priorLatLng) {
+                    marker.setLatLng(priorLatLng);
+                }
+            });
+        });
+    }
+
     if (destLat !== null && destLng !== null) {
         marker = L.marker([destLat, destLng], { draggable: !readonly }).addTo(map);
+        attachMarkerDragHandlers();
     }
 
     function setDestination(lat, lng) {
@@ -70,19 +104,20 @@ so it's always available by the time this script runs - no typeof guard needed.
         if (marker) {
             marker.setLatLng([lat, lng]);
         } else {
-            marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-            marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
+            marker = L.marker([lat, lng], { draggable: !readonly }).addTo(map);
+            attachMarkerDragHandlers();
         }
-    }
-    if (marker && !readonly) {
-        marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
     }
     if (!readonly) {
         map.on('click', function (e) {
+            // Once the destination pin is placed, clicking the map must not move it -
+            // only dragging the marker (with a confirm step, above) repositions it
+            // from here on. A click only ever places the very first pin.
+            if (marker) return;
             // Skip while the markup toolbar (loaded further below, if present) is
-            // actively drawing - otherwise every point placed while adding an
+            // actively drawing - otherwise the first point placed while adding an
             // annotation (or the trailing click after a drag-to-draw gesture)
-            // would also relocate the destination marker to that spot.
+            // would also place the destination marker at that spot.
             if (typeof _drawSession !== 'undefined' && _drawSession && _drawSession.isBusy()) return;
             setDestination(e.latlng.lat, e.latlng.lng);
         });

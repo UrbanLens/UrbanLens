@@ -14,6 +14,7 @@ permissions:
   contents: read
   packages: write
   attestations: write
+  artifact-metadata: write
   id-token: write
 
 concurrency:
@@ -29,6 +30,8 @@ jobs:
   build-python-package:
     name: Build Python distribution
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -84,15 +87,15 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
+            type=match,pattern=v(.*),group=1,enable=${{ github.event_name == 'release' }}
+            type=match,pattern=v(\d+\.\d+)\.\d+$,group=1,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
             type=ref,event=branch,enable=${{ github.event_name != 'release' }}
             type=sha,prefix=sha-
 
       - name: Build and push image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile

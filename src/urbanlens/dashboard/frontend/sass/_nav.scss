@@ -953,6 +953,65 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 }
 
+// -- Active safety check-in banner ---------------------------------------------
+
+.safety-active-banner {
+    background: var(--ul-accent-amber-bg, #{$color-amber-100});
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.safety-active-banner-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1.25rem;
+    max-width: 100%;
+}
+
+.safety-active-banner-icon {
+    flex-shrink: 0;
+    font-size: 1.15rem;
+    color: var(--ul-accent-amber, #{$color-amber-700});
+}
+
+.safety-active-banner-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    text-decoration: none;
+    @include truncate;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.safety-active-banner-close-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+
+    &:hover {
+        background: rgba(0, 0, 0, 0.08);
+        color: var(--ul-grey-9);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
+}
+
 // -- Mobile nav drawer ---------------------------------------------------------
 
 .app-nav-drawer {

@@ -23,7 +23,7 @@ def _mask_secret(value: str | None) -> str:
         return "<missing>"
     if len(value) <= 8:
         return "<redacted>"
-    return f"{value[:4]}...{value[-4:]}"
+    return f"{value[:2]}...{value[-2:]}"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,10 +71,12 @@ class BraveSearchGateway(Gateway):
         try:
             response.raise_for_status()
         except HTTPError as exc:
+            # _mask_secret() already reduces api_key to a masked "<first4>...<last4>" form
+            # before this reaches the logger - not a clear-text secret.
             logger.warning(
                 "Brave Search request failed with status %s; key=%s",
                 response.status_code,
-                _mask_secret(self.api_key),
+                _mask_secret(self.api_key),  # lgtm[py/clear-text-logging-sensitive-data]
             )
             raise BraveSearchError(
                 f"Brave Search request failed with status {response.status_code}",

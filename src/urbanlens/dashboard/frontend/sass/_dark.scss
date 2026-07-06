@@ -298,8 +298,7 @@
     }
 
     .profile-stat,
-    .profile-section,
-    .profile-hero {
+    .profile-section {
         @include standard-section;
     }
 
@@ -389,7 +388,7 @@
 
     .date-error-hint {
         font-size: 0.85rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         margin: 0;
     }
 

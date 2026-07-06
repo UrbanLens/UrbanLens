@@ -128,6 +128,14 @@
     </div>
 </nav>
 
+{% if user.is_authenticated %}
+<div id="safety-active-banner"
+     hx-get="{% url 'safety.active_banner' %}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+</div>
+{% endif %}
+
 {# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
 <div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
     <ul class="app-nav-drawer-links">

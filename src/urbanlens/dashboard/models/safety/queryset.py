@@ -35,6 +35,20 @@ class SafetyCheckinQuerySet(abstract.QuerySet):
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
         ).filter(status=SafetyCheckinStatus.AWAITING_CHECKIN, overdue_at__lte=timezone.now())
 
+    def active(self) -> Self:
+        """Return check-ins that have not yet reached a terminal status.
+
+        Used to enforce that a profile may only have one active check-in at a
+        time (see ``services.safety.create_checkin``) and to power the
+        navbar's active-check-in banner.
+
+        Returns:
+            Filtered queryset.
+        """
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
+
+        return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+
 
 class SafetyCheckinManager(abstract.Manager.from_queryset(SafetyCheckinQuerySet)):
     """Manager for SafetyCheckin."""

@@ -109,11 +109,21 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
             });
         }
 
+        function safeImageUrl(url) {
+            try {
+                var parsed = new URL(url, window.location.origin);
+                return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
         function makeAvatar(avatarUrl, initialLetter) {
-            if (avatarUrl) {
+            var safeUrl = avatarUrl ? safeImageUrl(avatarUrl) : null;
+            if (safeUrl) {
                 var img = document.createElement('img');
                 img.className = 'safety-contact-chip-avatar';
-                img.src = avatarUrl;
+                img.src = safeUrl;
                 img.alt = '';
                 return img;
             }

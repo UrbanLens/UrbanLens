@@ -111,7 +111,7 @@ body div.container {
 
         p {
             margin: 0;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             font-size: .9rem;
             line-height: 1.6;
         }
@@ -173,7 +173,7 @@ body div.container {
             display: block;
             font-size: 0.72rem;
             font-weight: 600;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             text-transform: uppercase;
             letter-spacing: 0.07em;
             margin-bottom: 5px;
@@ -207,7 +207,7 @@ body div.container {
             width: 100%;
             padding: 6px 0;
             font-size: 0.875rem;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             border: none !important;
             border-radius: 0 !important;
             box-shadow: none !important;

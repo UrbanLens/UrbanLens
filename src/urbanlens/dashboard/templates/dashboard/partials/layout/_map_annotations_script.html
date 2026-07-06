@@ -731,6 +731,13 @@ markup_border_color, markup_border_opacity.
         _loadSavedCampus(_savedCampusGeoJSON);
     }
 
+    function finishCampusEdit() {
+        // Edits already autosave as they happen - just flush any pending debounced
+        // save so the very last tweak isn't dropped, then leave edit mode.
+        clearTimeout(_campusAutoSaveTimer);
+        saveCampus();
+    }
+
     // -- Circle-style swatch builder (bg/border for detail pins) --------------
     const _circlePalette = ['#e53e3e', '#1d4ed8', '#16a34a', '#d97706', '#7c3aed', '#0f172a', '#f8fafc', '#ffffff'];
 
@@ -773,6 +780,9 @@ markup_border_color, markup_border_opacity.
     let _editingDp        = null;
     let _dpMode           = null;   // 'add' | 'edit'
     let _dpActiveMarker   = null;   // marker being placed/moved while the panel is open
+    let _dpCreatedUuid    = null;   // uuid of the pin created immediately on first placement in 'add' mode
+    let _dpAutoSaveTimer  = null;
+    let _dpAutoSaveUuid   = null;
 
     function _currentDpIcon() {
         return _detailIcon({
@@ -788,6 +798,60 @@ markup_border_color, markup_border_opacity.
 
     function _updateDpMarkerIcon() {
         if (_dpActiveMarker) _dpActiveMarker.setIcon(_currentDpIcon());
+        _scheduleDpAutoSave();
+    }
+
+    function _collectDpFormData() {
+        return {
+            name:           document.getElementById('dp-name').value.trim(),
+            description:    document.getElementById('dp-description').value.trim(),
+            pin_type:       document.getElementById('dp-type').value,
+            icon:           document.getElementById('dp-icon').value || null,
+            color:          document.getElementById('dp-color').value || null,
+            bg_color:       document.getElementById('dp-bg-color').value || null,
+            bg_opacity:     parseInt(document.getElementById('dp-bg-opacity').value, 10),
+            border_color:   document.getElementById('dp-border-color').value || null,
+            border_opacity: parseInt(document.getElementById('dp-border-opacity').value, 10),
+            latitude:       document.getElementById('dp-lat').value,
+            longitude:      document.getElementById('dp-lon').value,
+        };
+    }
+
+    // Persists the new detail pin the instant it's first placed, so it survives
+    // even if the user navigates away without explicitly finishing the dialog.
+    function _createDpImmediately(lat, lng) {
+        const data = _collectDpFormData();
+        data.latitude = lat.toFixed(6);
+        data.longitude = lng.toFixed(6);
+        fetch("{{ detail_pin_create_url }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(data),
+        })
+        .then(r => r.json().then(resp => { if (!r.ok || resp.ok === false) throw resp; return resp; }))
+        .then(resp => { _dpCreatedUuid = resp.uuid; })
+        .catch((resp) => toastr.error((resp && resp.error) || 'Failed to save detail pin.'));
+    }
+
+    // Every subsequent field/position change while still in 'add' mode patches the
+    // already-created pin instead of waiting for an explicit save action.
+    function _scheduleDpAutoSave() {
+        if (_dpMode !== 'add' || !_dpCreatedUuid) return;
+        _dpAutoSaveUuid = _dpCreatedUuid;
+        clearTimeout(_dpAutoSaveTimer);
+        _dpAutoSaveTimer = setTimeout(_flushDpAutoSave, 500);
+    }
+
+    function _flushDpAutoSave() {
+        clearTimeout(_dpAutoSaveTimer);
+        const uuid = _dpAutoSaveUuid;
+        _dpAutoSaveUuid = null;
+        if (!uuid) return Promise.resolve();
+        return fetch(_dpEditBase + uuid + '/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify(_collectDpFormData()),
+        }).catch(() => toastr.error('Failed to save detail pin changes.'));
     }
 
     function _setDpLocation(lat, lng) {
@@ -802,6 +866,7 @@ markup_border_color, markup_border_opacity.
     function _onDpMarkerDragEnd() {
         const pos = _dpActiveMarker.getLatLng();
         _setDpLocation(pos.lat, pos.lng);
+        _scheduleDpAutoSave();
     }
 
     function _onMainMapClickForDp(e) {
@@ -812,11 +877,14 @@ markup_border_color, markup_border_opacity.
         const { lat, lng } = e.latlng;
         if (_dpActiveMarker) {
             _dpActiveMarker.setLatLng([lat, lng]);
+            _setDpLocation(lat, lng);
+            _scheduleDpAutoSave();
         } else {
             _dpActiveMarker = L.marker([lat, lng], { icon: _currentDpIcon(), draggable: true }).addTo(map);
             _dpActiveMarker.on('dragend', _onDpMarkerDragEnd);
+            _setDpLocation(lat, lng);
+            _createDpImmediately(lat, lng);
         }
-        _setDpLocation(lat, lng);
     }
 
     function _resetDpForm() {
@@ -844,10 +912,11 @@ markup_border_color, markup_border_opacity.
 
         _dpMode = 'add';
         _editingDp = null;
+        _dpCreatedUuid = null;
         _resetDpForm();
 
         document.getElementById('detail-pin-panel-title').textContent = 'Add Detail Pin';
-        document.getElementById('detail-pin-submit-btn').textContent = 'Add Pin';
+        document.getElementById('detail-pin-submit-btn').textContent = 'Close';
         document.getElementById('detail-pin-submit-btn').disabled = true;
         document.getElementById('detail-pin-delete-btn').hidden = true;
         document.getElementById('detail-pin-place-hint').classList.remove('is-placed');
@@ -912,6 +981,10 @@ markup_border_color, markup_border_opacity.
     function closeDetailPinPanel() {
         document.getElementById('detail-pin-panel').style.display = 'none';
         map.off('click', _onMainMapClickForDp);
+        // A pin created via 'add' mode is already persisted (see _createDpImmediately) -
+        // swap the provisional local marker for the fully-wired one loadDetailPins builds
+        // (autosaving drag, click-to-edit, sidebar list entry) instead of discarding it.
+        const wasAdding = _dpMode === 'add' && _dpCreatedUuid;
         if (_dpActiveMarker) {
             _dpActiveMarker.off('dragend', _onDpMarkerDragEnd);
             if (_dpMode === 'add') map.removeLayer(_dpActiveMarker);
@@ -919,6 +992,8 @@ markup_border_color, markup_border_opacity.
         _dpActiveMarker = null;
         _dpMode = null;
         _editingDp = null;
+        _dpCreatedUuid = null;
+        if (wasAdding) Promise.resolve(_flushDpAutoSave()).finally(loadDetailPins);
     }
 
     document.getElementById('dp-icon-picker').addEventListener('click', function (e) {
@@ -946,36 +1021,32 @@ markup_border_color, markup_border_opacity.
         _updateDpMarkerIcon();
     });
     document.getElementById('dp-type').addEventListener('change', _updateDpMarkerIcon);
+    document.getElementById('dp-name').addEventListener('input', _scheduleDpAutoSave);
+    document.getElementById('dp-description').addEventListener('input', _scheduleDpAutoSave);
 
     document.getElementById('detail-pin-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        if (_dpMode === 'add') {
+            // Already saved incrementally as each change was made (see
+            // _createDpImmediately/_scheduleDpAutoSave) - this button just closes
+            // the panel; closeDetailPinPanel flushes any pending debounced save.
+            closeDetailPinPanel();
+            return;
+        }
         const lat = document.getElementById('dp-lat').value;
         const lon = document.getElementById('dp-lon').value;
         if (!lat || !lon) { toastr.warning('Click a point on the map to set the location first.'); return; }
         const submitBtn = document.getElementById('detail-pin-submit-btn');
         submitBtn.disabled = true;
-        const data = {
-            name:           document.getElementById('dp-name').value.trim(),
-            description:    document.getElementById('dp-description').value.trim(),
-            pin_type:       document.getElementById('dp-type').value,
-            icon:           document.getElementById('dp-icon').value || null,
-            color:          document.getElementById('dp-color').value || null,
-            bg_color:       document.getElementById('dp-bg-color').value || null,
-            bg_opacity:     parseInt(document.getElementById('dp-bg-opacity').value, 10),
-            border_color:   document.getElementById('dp-border-color').value || null,
-            border_opacity: parseInt(document.getElementById('dp-border-opacity').value, 10),
-            latitude:       lat,
-            longitude:      lon,
-        };
-        const url = _dpMode === 'edit' ? (_dpEditBase + _editingDp.uuid + '/') : "{{ detail_pin_create_url }}";
-        fetch(url, {
+        const data = _collectDpFormData();
+        fetch(_dpEditBase + _editingDp.uuid + '/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify(data),
         })
         .then(r => r.json().then(resp => { if (!r.ok || resp.ok === false) throw resp; return resp; }))
         .then(() => {
-            toastr.success(_dpMode === 'edit' ? 'Detail pin updated.' : 'Detail pin added.');
+            toastr.success('Detail pin updated.');
             closeDetailPinPanel();
             loadDetailPins();
         })

@@ -49,10 +49,18 @@ _map_annotations_script.html for the parameterized JS half.
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
             <i class="material-symbols-outlined">close</i> Cancel
         </button>
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" onclick="finishCampusEdit()">
+            <i class="material-symbols-outlined">check</i> Done
+        </button>
     </div>
-    {# "Add Detail" dropdown + unified draw/edit panel - shared with the safety check-in map #}
+    {# "Add Detail" dropdown - shared with the safety check-in map #}
     {% include "dashboard/partials/layout/_markup_toolbar_panel.html" with show_add_pin_item=True %}
 </div>
+
+{# Unified draw/edit panel this dropdown opens - must be a sibling of #}
+{# .map-bottom-controls, not nested inside it, so it positions relative to #}
+{# .map-wrapper instead of that small absolute-positioned button cluster. #}
+{% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
 
 {# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
 {# embedded picker map - placing/moving the pin happens on the main map. Must --- #}

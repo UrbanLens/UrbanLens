@@ -68,7 +68,7 @@ services:
         condition: service_healthy
 
     volumes:
-      - logs:/var/log
+      - logs:/var/log/urbanlens
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
       - backups:/app/src/backups
@@ -115,7 +115,7 @@ services:
         condition: service_healthy
 
     volumes:
-      - logs:/var/log
+      - logs:/var/log/urbanlens
       - static_volume:/app/src/urbanlens/frontend/static
 
     networks:
@@ -203,7 +203,7 @@ services:
       valkey:
         condition: service_healthy
     volumes:
-      - logs:/var/log
+      - logs:/var/log/urbanlens
       - media_volume:/app/src/urbanlens/media
       - backups:/app/src/backups
     networks:
@@ -229,7 +229,7 @@ services:
       valkey:
         condition: service_healthy
     volumes:
-      - logs:/var/log
+      - logs:/var/log/urbanlens
     networks:
       - app_network
     environment:
