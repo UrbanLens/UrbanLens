@@ -310,7 +310,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
                 message=f'"{checkin.title}" is overdue. Take a look and let them know if you find them.',
                 url=portal_url,
             )
-        contact_email = contact.contact_profile.user.email if contact.contact_profile_id and contact.contact_profile.user else contact.email
+        contact_email = contact.contact_profile.user.email if contact.contact_profile and contact.contact_profile.user else contact.email
         _send_email(
             to=contact_email or "",
             subject=f"{checkin.profile.username} hasn't checked in",

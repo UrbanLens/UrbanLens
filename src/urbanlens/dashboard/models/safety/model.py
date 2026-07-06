@@ -308,7 +308,7 @@ class SafetyCheckinContact(abstract.Model):
         """
         if self.name:
             return self.name
-        if self.contact_profile_id:
+        if self.contact_profile:
             return self.contact_profile.username
         return self.email or "Unknown contact"
 
