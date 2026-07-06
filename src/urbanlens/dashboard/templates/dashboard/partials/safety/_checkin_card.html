@@ -1,12 +1,19 @@
+{% load humanize %}
 <div class="card safety-checkin-card safety-checkin-card--{{ checkin.status }}">
     <div class="card-header">
         <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
-        <h3><a href="{% url 'safety.checkin.detail' checkin.uuid %}">{{ checkin.title }}</a></h3>
+        <h3><a href="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}">{{ checkin.title }}</a></h3>
+        {% if not checkin.is_resolved %}
+        <a href="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" class="btn btn--primary btn--sm">Check in</a>
+        {% endif %}
     </div>
-    <p class="safety-checkin-meta">Check in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
-    {% with contact_count=checkin.contacts.all|length %}
-    {% if contact_count %}
-    <p class="safety-checkin-contacts">{{ contact_count }} emergency contact{{ contact_count|pluralize }}</p>
+    <p class="safety-checkin-meta" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
+    {% with contacts=checkin.contacts.all %}
+    {% if contacts %}
+    <p class="safety-checkin-contacts">
+        {% for contact in contacts|slice:":3" %}{{ contact.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% if contacts|length > 3 %} and {{ contacts|length|add:"-3" }} more{% endif %}
+    </p>
     {% endif %}
     {% endwith %}
 </div>

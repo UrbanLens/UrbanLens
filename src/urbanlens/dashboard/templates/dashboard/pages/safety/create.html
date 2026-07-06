@@ -16,11 +16,11 @@
 
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 
-    <form method="post" action="{% url 'safety.checkin.create' %}" class="safety-checkin-form">
+    <form method="post" action="{% url 'safety.checkin.create' %}" class="safety-checkin-form" id="safety-create-form">
         {% csrf_token %}
         <div class="form-row">
-            <label for="title">Title <span class="required">*</span></label>
-            <input type="text" name="title" id="title" required placeholder="e.g. Solo hike - Eagle Ridge">
+            <label for="title">Title <span class="form-hint-inline">(optional)</span></label>
+            <input type="text" name="title" id="title" placeholder="e.g. Solo hike - Eagle Ridge">
         </div>
         <div class="form-row form-row--two-col">
             <div>
@@ -30,19 +30,21 @@
             <div>
                 <label for="grace_period_hours">Grace period</label>
                 {% include "dashboard/partials/safety/_grace_period_slider.html" with value=preference.default_grace_period_hours %}
+                <p class="form-hint" id="safety-grace-end-hint"></p>
             </div>
         </div>
         <div class="form-row">
             <label for="plan_details">Trip plan</label>
-            <textarea name="plan_details" id="plan_details" rows="4" placeholder="Route, gear, who you're with..."></textarea>
+            <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" placeholder="Route, gear, who you're with..."></textarea>
         </div>
         <div class="form-row">
             <label>Destination</label>
             {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False %}
+            <p class="form-hint">Route markup (arrows, areas, labels) can be added once the check-in is created.</p>
         </div>
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>
-            <textarea name="contact_message" id="contact_message" rows="3">{{ preference.default_message }}</textarea>
+            <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>
         </div>
         {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
         <div class="form-actions">
@@ -51,4 +53,53 @@
         </div>
     </form>
 </div>
+{% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
+<script>
+(function () {
+    var checkinByInput = document.getElementById('checkin_by');
+    var form = document.getElementById('safety-create-form');
+    if (!checkinByInput || !form) return;
+
+    function toLocalInputValue(date) {
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+            'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    var now = new Date();
+    checkinByInput.min = toLocalInputValue(now);
+    if (!checkinByInput.value) {
+        // Default an hour out, not exactly "now" - otherwise the default value
+        // is already in the past by the time the page finishes loading.
+        checkinByInput.value = toLocalInputValue(new Date(now.getTime() + 60 * 60000));
+    }
+
+    // -- Grace period end time -------------------------------------------------
+    var graceRange = document.querySelector('.safety-grace-slider [data-role="range"]');
+    var endHint = document.getElementById('safety-grace-end-hint');
+    function refreshEndHint() {
+        if (!graceRange || !endHint || !checkinByInput.value) return;
+        var checkinBy = new Date(checkinByInput.value);
+        if (isNaN(checkinBy.getTime())) return;
+        var endsAt = new Date(checkinBy.getTime() + parseFloat(graceRange.value) * 3600000);
+        endHint.textContent = 'Contacts are notified around ' + endsAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + ' if you haven\'t checked in.';
+    }
+    if (graceRange) graceRange.addEventListener('input', refreshEndHint);
+    checkinByInput.addEventListener('input', refreshEndHint);
+    refreshEndHint();
+
+    // -- Future-date validation -------------------------------------------------
+    form.addEventListener('submit', function (evt) {
+        var checkinBy = new Date(checkinByInput.value);
+        if (isNaN(checkinBy.getTime()) || checkinBy <= new Date()) {
+            evt.preventDefault();
+            checkinByInput.setCustomValidity('Expected check-in time must be in the future.');
+            checkinByInput.reportValidity();
+        } else {
+            checkinByInput.setCustomValidity('');
+        }
+    });
+    checkinByInput.addEventListener('input', function () { checkinByInput.setCustomValidity(''); });
+}());
+</script>
 {% endblock %}

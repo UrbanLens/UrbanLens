@@ -58,12 +58,17 @@
 
     {% if other_contacts %}
     <div class="card safety-contacts-status">
-        <h3>Other emergency contacts</h3>
+        <div class="card-header">
+            <i class="material-symbols-outlined">contact_emergency</i>
+            <h3>Other emergency contacts</h3>
+        </div>
         <ul class="safety-contact-status-list">
             {% for other in other_contacts %}
             <li>
-                {{ other.display_name }}
-                {% if other.found_safe_at %}<span class="safety-badge safety-badge--success">Found them</span>{% endif %}
+                <span class="safety-contact-status-name">{{ other.display_name }}</span>
+                {% if other.found_safe_at %}<span class="safety-badge safety-badge--success">Found them</span>
+                {% elif other.notified_at %}<span class="safety-badge safety-badge--warning">Notified</span>
+                {% else %}<span class="safety-badge">Not yet notified</span>{% endif %}
             </li>
             {% endfor %}
         </ul>

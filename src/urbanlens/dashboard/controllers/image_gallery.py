@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.images import extract_gps_coords
+from urbanlens.dashboard.services.images import extract_gps_coords, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
 
 if TYPE_CHECKING:
@@ -25,19 +25,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
-
-
-def _image_to_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
-    """Serialise an Image to a dict suitable for the map photo layer."""
-    return {
-        "id": img.pk,
-        "url": request.build_absolute_uri(img.image.url),
-        "caption": img.caption or "",
-        "latitude": float(img.latitude) if img.latitude is not None else None,
-        "longitude": float(img.longitude) if img.longitude is not None else None,
-        "uploader": img.profile.username if img.profile else "",
-        "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
-    }
 
 
 # -- Pin gallery --------------------------------------------------------------
@@ -76,7 +63,7 @@ class PinGalleryView(LoginRequiredMixin, View):
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(_image_to_json(img, request, profile), status=201)
+        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 
 
 class PinGalleryJsonView(LoginRequiredMixin, View):
@@ -86,7 +73,7 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
-        data = [_image_to_json(img, request, profile) for img in images]
+        data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
 
@@ -155,7 +142,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(_image_to_json(img, request, profile), status=201)
+        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 
 
 class WikiGalleryJsonView(LoginRequiredMixin, View):
@@ -165,7 +152,7 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         location = get_object_or_404(Location, slug=location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
-        data = [_image_to_json(img, request, profile) for img in images]
+        data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
 

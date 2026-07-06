@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import datetime
+from decimal import Decimal
+import json
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
     ContactInput,
     check_in,
@@ -28,9 +33,11 @@ from urbanlens.dashboard.services.safety import (
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
+
+_GALLERY_PAGE_SIZE = 12
 
 
 def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[ContactInput]:
@@ -66,6 +73,29 @@ def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[Co
             contacts.append((None, email.lower(), name))
 
     return contacts
+
+
+def _get_checkin_by_slug(profile: Profile, checkin_slug: str) -> SafetyCheckin:
+    """Look up an owner's check-in by slug, falling back to UUID.
+
+    Mirrors the Pin controller's slug-then-uuid lookup: the URL kwarg is
+    usually a real slug, but older/direct-linked check-ins may still be
+    identified by their raw UUID.
+
+    Args:
+        profile: The check-in's owner (only their own check-ins match).
+        checkin_slug: The `<slug:checkin_slug>` value captured from the URL.
+
+    Returns:
+        The matching SafetyCheckin.
+
+    Raises:
+        Http404: If neither a slug nor a UUID match.
+    """
+    try:
+        return SafetyCheckin.objects.get(slug=checkin_slug, profile=profile)
+    except SafetyCheckin.DoesNotExist:
+        return get_object_or_404(SafetyCheckin, uuid=checkin_slug, profile=profile)
 
 
 def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:
@@ -207,16 +237,19 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             "connections": get_connections(profile),
             "checkin": None,
         }
-        title = request.POST.get("title", "").strip()
         raw_checkin_by = request.POST.get("checkin_by", "").strip()
-        if not title or not raw_checkin_by:
-            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Title and expected check-in time are required."}, status=400)
+        if not raw_checkin_by:
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Expected check-in time is required."}, status=400)
         try:
             checkin_by = datetime.datetime.fromisoformat(raw_checkin_by)
         except ValueError:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Invalid check-in time."}, status=400)
         if checkin_by.tzinfo is None:
             checkin_by = checkin_by.replace(tzinfo=datetime.UTC)
+        if checkin_by <= timezone.now():
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Expected check-in time must be in the future."}, status=400)
+
+        title = request.POST.get("title", "").strip() or f"Check-in - {checkin_by:%b} {checkin_by.day}, {checkin_by.year}"
 
         lat = request.POST.get("destination_latitude") or None
         lng = request.POST.get("destination_longitude") or None
@@ -232,28 +265,29 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             destination_longitude=float(lng) if lng else None,
             contacts=_parse_contacts_from_post(request, profile),
         )
-        return redirect("safety.checkin.detail", checkin_uuid=checkin.uuid)
+        return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
 class SafetyCheckinDetailView(LoginRequiredMixin, View):
     """View and manage a single safety check-in (owner-only).
 
-    GET  /safety/<uuid:checkin_uuid>/
-    POST /safety/<uuid:checkin_uuid>/ - update plan/contacts, or cancel.
+    GET  /safety/<slug:checkin_slug>/
+    POST /safety/<slug:checkin_slug>/ - update plan/contacts, or cancel.
     """
 
-    def get(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+    def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
         """Render the check-in detail/monitor page.
 
         Args:
             request: Incoming HTTP request.
-            checkin_uuid: UUID of the check-in.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
             Rendered page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        checkin.ensure_slug()
         contacts = list(checkin.contacts.all())
         return render(
             request,
@@ -267,19 +301,19 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             },
         )
 
-    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
         """Update or cancel the check-in.
 
         Args:
             request: Incoming HTTP request. ``action=cancel`` cancels the
                 check-in; otherwise the plan/message/contacts are updated.
-            checkin_uuid: UUID of the check-in.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
             Redirect back to the check-in detail page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
 
         if request.POST.get("action") == "cancel":
             from urbanlens.dashboard.services.safety import cancel_checkin
@@ -292,7 +326,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
         checkin.save(update_fields=["title", "plan_details", "contact_message", "updated"])
         set_checkin_contacts(checkin, _parse_contacts_from_post(request, profile))
-        return redirect("safety.checkin.detail", checkin_uuid=checkin.uuid)
+        return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
 class SafetyCheckinCancelView(LoginRequiredMixin, View):
@@ -322,64 +356,149 @@ class SafetyCheckinCancelView(LoginRequiredMixin, View):
 class SafetyCheckinCheckInView(LoginRequiredMixin, View):
     """Self check-in link target, from the reminder email/notification.
 
-    GET  /safety/<uuid:checkin_uuid>/checkin/ - confirmation page.
-    POST /safety/<uuid:checkin_uuid>/checkin/ - actually check in.
+    GET  /safety/<slug:checkin_slug>/checkin/ - confirmation page.
+    POST /safety/<slug:checkin_slug>/checkin/ - actually check in.
     """
 
-    def get(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+    def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
         """Render a confirmation page for checking in.
 
         Args:
             request: Incoming HTTP request.
-            checkin_uuid: UUID of the check-in.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
             Rendered confirmation page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
         return render(request, "dashboard/pages/safety/checkin_confirm.html", {"checkin": checkin})
 
-    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
         """Check in and redirect to the check-in detail page.
 
         Args:
             request: Incoming HTTP request.
-            checkin_uuid: UUID of the check-in.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
             Redirect to the check-in detail page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
         if not checkin.is_resolved:
             check_in(checkin, profile)
-        return redirect("safety.checkin.detail", checkin_uuid=checkin.uuid)
+        return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
-class SafetyCheckinImageUploadView(LoginRequiredMixin, View):
-    """Upload a photo to a safety check-in (owner-only).
+class SafetyGalleryView(LoginRequiredMixin, View):
+    """Photo gallery panel for the safety check-in detail page (owner-only).
 
-    POST /safety/<uuid:checkin_uuid>/images/
+    Mirrors ``PinGalleryView``/``WikiGalleryView`` (``controllers/image_gallery.py``)
+    so the check-in detail page can reuse the same gallery partial/JS - lightbox,
+    drag-drop upload, captions - instead of the plain grid it had before.
+
+    GET  /safety/<slug:checkin_slug>/gallery/ - HTML gallery partial.
+    POST /safety/<slug:checkin_slug>/gallery/ - upload a photo.
     """
 
-    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
-        """Attach an uploaded image to the check-in.
+    def _get_context(self, request: HttpRequest, checkin_slug: str) -> dict:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        images = Image.objects.filter(safety_checkin=checkin).select_related("profile").order_by("-created")
+        page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
+        return {
+            "checkin": checkin,
+            "images": page_obj.object_list,
+            "page_obj": page_obj,
+            "profile": profile,
+            "context_type": "safety",
+        }
+
+    def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Render the gallery partial.
 
         Args:
-            request: Incoming HTTP request. Reads the ``image`` file field.
-            checkin_uuid: UUID of the check-in.
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
-            JSON with the new image's id and URL, or a 400 if no file was given.
+            Rendered gallery partial.
+        """
+        return render(request, "dashboard/partials/pins/_photo_gallery.html", self._get_context(request, checkin_slug))
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Attach an uploaded photo to the check-in.
+
+        Args:
+            request: Incoming HTTP request. Reads the ``image`` file and optional ``caption``.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            JSON describing the new image, or a 400 if no file was given.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
-        img = Image.objects.create(image=image_file, safety_checkin=checkin, profile=profile)
-        return JsonResponse({"id": img.pk, "url": img.image.url}, status=201)
+        img = Image.objects.create(
+            image=image_file,
+            safety_checkin=checkin,
+            profile=profile,
+            caption=request.POST.get("caption", "").strip() or None,
+        )
+        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
+
+
+class SafetyImageView(LoginRequiredMixin, View):
+    """Reposition or delete a single photo on a safety check-in (owner-only).
+
+    POST   /safety/<slug:checkin_slug>/gallery/<int:image_id>/ - update lat/lng.
+    DELETE /safety/<slug:checkin_slug>/gallery/<int:image_id>/
+    """
+
+    def _get_image(self, request: HttpRequest, checkin_slug: str, image_id: int) -> Image:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        return get_object_or_404(Image, pk=image_id, safety_checkin=checkin, profile=profile)
+
+    def post(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:
+        """Update lat/lng when the user drags the photo marker on the map.
+
+        Args:
+            request: Incoming HTTP request with a JSON body (``latitude``/``longitude``).
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+            image_id: The image being repositioned.
+
+        Returns:
+            JSON with the saved coordinates, or a 400 on bad input.
+        """
+        img = self._get_image(request, checkin_slug, image_id)
+        try:
+            data = json.loads(request.body)
+            img.latitude = Decimal(str(data["latitude"]))
+            img.longitude = Decimal(str(data["longitude"]))
+            img.save(update_fields=["latitude", "longitude", "updated"])
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
+
+    def delete(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:
+        """Delete a photo from the check-in.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+            image_id: The image being deleted.
+
+        Returns:
+            204 on success.
+        """
+        img = self._get_image(request, checkin_slug, image_id)
+        img.image.delete(save=False)
+        img.delete()
+        return HttpResponse(status=204)
 
 
 class SafetyContactPortalView(View):

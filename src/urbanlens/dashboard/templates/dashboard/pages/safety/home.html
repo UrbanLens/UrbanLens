@@ -79,7 +79,7 @@
             {% csrf_token %}
             <div class="form-row">
                 <label for="default_message">Default message to emergency contacts</label>
-                <textarea name="default_message" id="default_message" rows="3">{{ preference.default_message }}</textarea>
+                <textarea name="default_message" id="default_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>
             </div>
             <div class="form-row">
                 <label for="grace_period_hours">Default grace period</label>
@@ -91,6 +91,7 @@
 
 </div>
 
+{% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 <script>
 (function () {
     var editBtn = document.getElementById('safety-defaults-edit-btn');
@@ -105,6 +106,11 @@
         form.hidden = false;
         editBtn.hidden = true;
         closeBtn.hidden = false;
+        // Auto-expanding textareas can't measure scrollHeight while hidden
+        // (display:none), so re-trigger sizing now that the form is visible.
+        if (window.safetyAutoExpand) {
+            form.querySelectorAll('textarea.safety-autoexpand').forEach(window.safetyAutoExpand);
+        }
         var firstField = form.querySelector('textarea, input');
         if (firstField) firstField.focus();
     }

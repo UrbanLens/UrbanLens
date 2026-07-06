@@ -251,6 +251,17 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
                 }
                 input.value = '';
                 suggestions.hidden = true;
+            } else if (evt.key === ' ') {
+                // A space right after a fully-qualified email acts like a comma,
+                // so users can just type "jane@example.com " and keep going -
+                // but don't swallow spaces while typing a friend's name.
+                var typed = input.value.trim();
+                if (EMAIL_RE.test(typed)) {
+                    evt.preventDefault();
+                    addEmailChip(typed);
+                    input.value = '';
+                    suggestions.hidden = true;
+                }
             } else if (evt.key === 'Escape') {
                 suggestions.hidden = true;
             }

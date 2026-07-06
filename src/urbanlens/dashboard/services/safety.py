@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
@@ -105,12 +106,26 @@ def _absolute_url(path: str) -> str:
     """Build an absolute URL from a site-relative path.
 
     Args:
-        path: Site-relative path, e.g. "/safety/<uuid>/".
+        path: Site-relative path, e.g. from ``reverse()`` - already includes
+            whatever prefix the urlconf mounts the dashboard app under.
 
     Returns:
         Absolute URL using the configured SITE_URL.
     """
     return f"{settings.SITE_URL.rstrip('/')}{path}"
+
+
+def _checkin_url_slug(checkin: SafetyCheckin) -> str:
+    """Return the identifier to reverse an owner-facing check-in URL with.
+
+    Args:
+        checkin: The check-in being linked to.
+
+    Returns:
+        The check-in's slug, falling back to its UUID for the rare case a
+        slug hasn't been generated yet.
+    """
+    return checkin.slug or str(checkin.uuid)
 
 
 def get_or_create_preference(profile: Profile) -> SafetyPreference:
@@ -216,6 +231,7 @@ def create_checkin(
         destination_latitude=destination_latitude,
         destination_longitude=destination_longitude,
     )
+    checkin.ensure_slug()
     set_checkin_contacts(checkin, contacts)
     return checkin
 
@@ -237,7 +253,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The check-in whose ``checkin_by`` time has arrived.
     """
-    checkin_url = _absolute_url(f"/safety/{checkin.uuid}/checkin/")
+    checkin_url = _absolute_url(reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)}))
     NotificationLog.objects.create(
         profile=checkin.profile,
         status=Status.UNREAD,
@@ -281,9 +297,8 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The overdue check-in.
     """
-    portal_base = "/safety/contact"
     for contact in checkin.contacts.all():
-        portal_url = _absolute_url(f"{portal_base}/{contact.token}/")
+        portal_url = _absolute_url(reverse("safety.contact.portal", kwargs={"token": contact.token}))
         if contact.contact_profile_id:
             NotificationLog.objects.create(
                 profile=contact.contact_profile,
@@ -320,6 +335,13 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     contact.save(update_fields=["found_safe_at", "updated"])
 
     checkin = contact.checkin
+    system_message = SafetyCheckinMessage.objects.create(
+        checkin=checkin,
+        sender_contact=contact,
+        body=f"Marked {checkin.profile.username} as safe.",
+    )
+    _broadcast_chat_message(checkin, system_message)
+
     if checkin.is_resolved:
         return
 
@@ -327,7 +349,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
 
-    checkin_url = _absolute_url(f"/safety/{checkin.uuid}/")
+    checkin_url = _absolute_url(reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)}))
     NotificationLog.objects.create(
         profile=checkin.profile,
         status=Status.UNREAD,
@@ -346,7 +368,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         )
 
     for other in checkin.contacts.exclude(pk=contact.pk):
-        portal_url = _absolute_url(f"/safety/contact/{other.token}/")
+        portal_url = _absolute_url(reverse("safety.contact.portal", kwargs={"token": other.token}))
         if other.contact_profile:
             NotificationLog.objects.create(
                 profile=other.contact_profile,
@@ -459,3 +481,42 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         sender_contact.display_name if sender_contact else (sender_profile.username if sender_profile else "unknown"),
     )
     return message
+
+
+def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage) -> None:
+    """Push a chat message to any live-connected chat clients for this check-in.
+
+    Mirrors the payload shape ``SafetyCheckinChatConsumer._create_message`` builds,
+    so the frontend's ``appendMessage()`` handles either source identically. Used
+    for system-generated messages (e.g. mark-safe) that don't go through the
+    consumer's own ``receive()`` broadcast path.
+
+    Best-effort: the message is already durably saved regardless of whether
+    anyone is connected right now, so a broadcast failure is logged, not raised.
+
+    Args:
+        checkin: The check-in whose chat group should receive the message.
+        message: The already-saved message to broadcast.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"safety_checkin_{checkin.pk}",
+            {
+                "type": "chat.message",
+                "message": {
+                    "type": "message",
+                    "id": message.pk,
+                    "sender_name": message.sender_name,
+                    "body": message.body,
+                    "created": message.created.isoformat(),
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)

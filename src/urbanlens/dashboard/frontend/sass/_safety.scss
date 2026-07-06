@@ -2,6 +2,50 @@
 
 // -- Safety check-ins -------------------------------------------------------
 
+.form-hint-inline {
+    font-size: .8rem;
+    font-weight: 400;
+    color: var(--ul-grey-6);
+}
+
+.safety-autoexpand {
+    overflow-y: hidden;
+    resize: none;
+}
+
+// The shared `.card .card-header` rule is a 4-column CSS grid keyed to specific
+// selectors (icon / span:not(.badge) / .badge / .gallery-upload-compact-btn).
+// Safety card headers mix a variable number of icons, badges, and status text
+// that don't match that contract, which causes auto-placed items to overlap or
+// stretch full-width. Override with a plain flex row instead - deterministic
+// regardless of how many children a given header has.
+.safety-page .card .card-header {
+    display: flex;
+    align-items: center;
+    grid-template-columns: unset;
+    grid-template-areas: unset;
+
+    > * { grid-area: unset; }
+
+    // h3 grows to fill remaining space - anything before it (an icon, a status
+    // badge) stays left and content-sized; anything after it (status text,
+    // action buttons) is naturally pushed to the right edge.
+    h3 {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .safety-chat-status,
+    .safety-autosave-status {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+}
+
 .safety-header {
     display: flex;
     align-items: flex-start;
@@ -369,6 +413,16 @@
     margin: .5rem 0;
 }
 
+.safety-map-search-row {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: .5rem;
+}
+
+.safety-map-search-input {
+    flex: 1;
+}
+
 .safety-photo-grid {
     display: flex;
     flex-wrap: wrap;
@@ -387,17 +441,29 @@
 .safety-contact-status-list {
     list-style: none;
     margin: 0;
-    padding: 0;
+    padding: 1rem 1.25rem;
     display: flex;
     flex-direction: column;
-    gap: .4rem;
+    gap: .6rem;
 
     li {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: .5rem;
+        padding-bottom: .6rem;
+        border-bottom: 1px solid var(--ul-grey-0b);
+
+        &:last-child {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
     }
+}
+
+.safety-contact-status-name {
+    font-weight: 600;
+    color: var(--ul-grey-8);
 }
 
 .safety-chat-panel {

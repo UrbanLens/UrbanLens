@@ -142,7 +142,7 @@ class SafetyCheckinStatus(abstract.TextChoices):
         return (cls.CHECKED_IN, cls.FOUND_SAFE, cls.CANCELLED)
 
 
-class SafetyCheckin(abstract.Model):
+class SafetyCheckin(abstract.HasSlug):
     """A planned trip with an expected check-in time and emergency contacts.
 
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
@@ -150,6 +150,11 @@ class SafetyCheckin(abstract.Model):
     (self check-in, or a contact marking the profile safe) raises a
     VisitSuggestion for the destination via ``services.safety._conclude_checkin``,
     reusing the same confirm/reject flow as any other tentative visit.
+
+    ``slug`` (from ``HasSlug``) is scoped per-profile - only the owner-facing
+    detail/check-in pages use it for a human-readable URL; the contact portal
+    keeps using its unguessable ``token``, since that's a security credential,
+    not just an identifier.
 
     Attributes:
         profile: The profile who created and owns this check-in.
@@ -167,7 +172,6 @@ class SafetyCheckin(abstract.Model):
         resolved_at: When the check-in concluded, if at all.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     title = CharField(max_length=200)
     plan_details = TextField(blank=True, default="")
     contact_message = TextField(blank=True, default="")
@@ -207,6 +211,25 @@ class SafetyCheckin(abstract.Model):
             True when status is checked_in, found_safe, or cancelled.
         """
         return self.status in SafetyCheckinStatus.resolved_statuses()
+
+    def _slugify_base(self) -> str:
+        """Return the raw text the URL slug is derived from.
+
+        Returns:
+            The check-in's title, or "checkin" if blank.
+        """
+        return self.title or "checkin"
+
+    def _slugify_qs(self):
+        """Return the queryset used to check slug uniqueness, scoped per-profile.
+
+        Returns:
+            This profile's other check-ins (excluding self, if saved).
+        """
+        qs = SafetyCheckin.objects.filter(profile_id=self.profile_id)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        return qs
 
     def __str__(self) -> str:
         """Return a human-readable description of this check-in.

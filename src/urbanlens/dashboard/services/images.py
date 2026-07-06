@@ -5,11 +5,17 @@ from __future__ import annotations
 import contextlib
 from datetime import datetime
 import logging
-from typing import IO, Any
+from typing import IO, TYPE_CHECKING, Any
 
 from django.utils import timezone
 from PIL import Image as PILImage
 from PIL.ExifTags import GPSTAGS
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +98,28 @@ def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
         logger.debug("Unparseable EXIF DateTimeOriginal value: %s", raw_value)
         return None
     return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
+
+
+def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
+    """Serialize an Image to a dict suitable for a photo gallery/map layer.
+
+    Shared by the pin, location wiki, and safety check-in gallery views so
+    the upload response and map layer JSON stay in the same shape everywhere.
+
+    Args:
+        img: The image to serialize.
+        request: Current request, used to build an absolute image URL.
+        viewer_profile: The requesting profile, if any - used to flag ``is_mine``.
+
+    Returns:
+        Dict with id/url/caption/latitude/longitude/uploader/is_mine.
+    """
+    return {
+        "id": img.pk,
+        "url": request.build_absolute_uri(img.image.url),
+        "caption": img.caption or "",
+        "latitude": float(img.latitude) if img.latitude is not None else None,
+        "longitude": float(img.longitude) if img.longitude is not None else None,
+        "uploader": img.profile.username if img.profile else "",
+        "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
+    }

@@ -7,11 +7,18 @@ Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
 (omit all three to skip markup entirely), readonly (true hides the draw toolbar
 and the destination marker becomes non-draggable).
 {% endcomment %}
+{% if not readonly %}
+<div class="safety-map-search-row">
+    <input type="text" id="safety-map-search" class="safety-map-search-input"
+           placeholder="Search an address, or enter coordinates like 40.7128, -74.0060" autocomplete="off">
+    <button type="button" class="btn btn--sm btn--ghost" id="safety-map-search-btn">Search</button>
+</div>
+{% endif %}
 <div id="safety-map" style="height:360px;border-radius:12px;overflow:hidden"></div>
 {% if not readonly %}
 <input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
 <input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
-<p class="form-hint">Click the map to set (or move) your destination marker - it's used to suggest a visit once your check-in concludes.</p>
+<p class="form-hint">Click the map, drag the marker, or search above to set your destination.</p>
 {% endif %}
 {% if markup_json_url %}
 <div class="safety-map-toolbar" id="safety-markup-toolbar" {% if readonly %}hidden{% endif %}>
@@ -56,6 +63,49 @@ and the destination marker becomes non-draggable).
     }
     if (!readonly) {
         map.on('click', function (e) { setDestination(e.latlng.lat, e.latlng.lng); });
+    }
+
+    // -- Address / coordinate search -------------------------------------------
+    if (!readonly) {
+        var searchInput = document.getElementById('safety-map-search');
+        var searchBtn = document.getElementById('safety-map-search-btn');
+        var COORD_RE = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+        function jumpTo(lat, lng, zoom) {
+            map.setView([lat, lng], zoom || 15);
+            setDestination(lat, lng);
+        }
+
+        function runSearch() {
+            var query = (searchInput.value || '').trim();
+            if (!query) return;
+            var coordMatch = COORD_RE.exec(query);
+            if (coordMatch) {
+                jumpTo(parseFloat(coordMatch[1]), parseFloat(coordMatch[2]));
+                return;
+            }
+            searchBtn.disabled = true;
+            fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query))
+                .then(function (r) { return r.json(); })
+                .then(function (results) {
+                    if (!results || !results.length) {
+                        if (window.toastr) toastr.warning('Location not found.');
+                        return;
+                    }
+                    jumpTo(parseFloat(results[0].lat), parseFloat(results[0].lon));
+                })
+                .catch(function () {
+                    if (window.toastr) toastr.error('Search failed. Please try again.');
+                })
+                .finally(function () { searchBtn.disabled = false; });
+        }
+
+        if (searchInput && searchBtn) {
+            searchBtn.addEventListener('click', runSearch);
+            searchInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+            });
+        }
     }
 
     {% if markup_json_url %}

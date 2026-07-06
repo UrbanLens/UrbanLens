@@ -1,25 +1,23 @@
-"""Tests for image_gallery helper functions.
+"""Tests for image_gallery/services.images helper functions.
 
 Covers:
 - _dms_to_decimal() - DMS→decimal conversion with N/S/E/W refs
 - extract_gps_coords() - EXIF GPS extraction with mock PIL
 - extract_taken_at() - EXIF DateTimeOriginal extraction with mock PIL
-- _image_to_json() - dict serialisation of Image instances
+- image_to_gallery_json() - dict serialisation of Image instances
 """
 from __future__ import annotations
 
 from datetime import datetime
-import io
 from decimal import Decimal
+import io
 from unittest.mock import MagicMock, patch
 
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.image_gallery import _image_to_json
-from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at
+from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at, image_to_gallery_json
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -263,11 +261,11 @@ class ExtractTakenAtMockTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _image_to_json
+# image_to_gallery_json
 # ---------------------------------------------------------------------------
 
-class ImageToJsonTests(TestCase):
-    """_image_to_json serialises Image model instances to map-layer dicts."""
+class ImageToGalleryJsonTests(TestCase):
+    """image_to_gallery_json serialises Image model instances to map-layer dicts."""
 
     def _make_image(self, lat=None, lng=None, caption=None, profile=None):
         img = MagicMock()
@@ -293,33 +291,33 @@ class ImageToJsonTests(TestCase):
 
     def test_id_included(self):
         img = self._make_image(lat=10.0, lng=20.0)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["id"], 42)
 
     def test_url_built_from_absolute_uri(self):
         img = self._make_image()
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertIn("http://testserver", result["url"])
 
     def test_caption_none_becomes_empty_string(self):
         img = self._make_image(caption=None)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["caption"], "")
 
     def test_caption_preserved(self):
         img = self._make_image(caption="A great photo")
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["caption"], "A great photo")
 
     def test_coords_none_when_not_set(self):
         img = self._make_image(lat=None, lng=None)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertIsNone(result["latitude"])
         self.assertIsNone(result["longitude"])
 
     def test_coords_float_when_set(self):
         img = self._make_image(lat=51.5, lng=-0.12)
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertAlmostEqual(result["latitude"], 51.5)
         self.assertAlmostEqual(result["longitude"], -0.12)
 
@@ -327,31 +325,31 @@ class ImageToJsonTests(TestCase):
         profile = self._make_profile(username="alice")
         img = self._make_image()
         img.profile = profile
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["uploader"], "alice")
 
     def test_uploader_empty_when_no_profile(self):
         img = self._make_image()
         img.profile = None
-        result = _image_to_json(img, self._make_request())
+        result = image_to_gallery_json(img, self._make_request())
         self.assertEqual(result["uploader"], "")
 
     def test_is_mine_true_for_owner(self):
         profile = self._make_profile(pk=7)
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=profile)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=profile)
         self.assertTrue(result["is_mine"])
 
     def test_is_mine_false_for_other_user(self):
         viewer = self._make_profile(pk=99)
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=viewer)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=viewer)
         self.assertFalse(result["is_mine"])
 
     def test_is_mine_false_when_no_viewer(self):
         img = self._make_image()
         img.profile_id = 7
-        result = _image_to_json(img, self._make_request(), viewer_profile=None)
+        result = image_to_gallery_json(img, self._make_request(), viewer_profile=None)
         self.assertFalse(result["is_mine"])

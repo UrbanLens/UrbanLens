@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load humanize %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -16,11 +17,11 @@
                 <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
                 {{ checkin.title }}
             </h1>
-            <p class="safety-subtitle">Check in by {{ checkin.checkin_by|date:"N j, Y g:i A" }} (grace period: {{ checkin.grace_period }})</p>
+            <p class="safety-subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
         </div>
         <div class="safety-header-right">
             {% if not checkin.is_resolved %}
-            <form method="post" action="{% url 'safety.checkin.checkin' checkin.uuid %}" style="display:inline">
+            <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn--primary">I'm safe - check in now</button>
             </form>
@@ -33,7 +34,7 @@
         </div>
     </div>
 
-    <form method="post" action="{% url 'safety.checkin.detail' checkin.uuid %}" class="safety-checkin-form">
+    <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form">
         {% csrf_token %}
         <div class="form-row">
             <label for="title">Title</label>
@@ -41,7 +42,7 @@
         </div>
         <div class="form-row">
             <label for="plan_details">Trip plan</label>
-            <textarea name="plan_details" id="plan_details" rows="4">{{ checkin.plan_details }}</textarea>
+            <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
         </div>
         <div class="form-row">
             <label>Destination &amp; route</label>
@@ -51,7 +52,7 @@
         </div>
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>
-            <textarea name="contact_message" id="contact_message" rows="3">{{ checkin.contact_message }}</textarea>
+            <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ checkin.contact_message }}</textarea>
         </div>
         {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input %}
         <div class="form-actions">
@@ -60,42 +61,17 @@
     </form>
 
     {# -- Photos -------------------------------------------------------------- #}
-    <div class="card safety-photos">
-        <div class="card-header">
-            <i class="material-symbols-outlined">photo_library</i>
-            <h3>Photos</h3>
+    <div id="safety-gallery-panel"
+         hx-get="{% url 'safety.checkin.gallery' checkin.slug|default:checkin.uuid %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card card--secondary">
+            <div class="card-header">
+                <i class="material-symbols-outlined">photo_library</i>
+                <span>Photos</span>
+            </div>
         </div>
-        <div class="safety-photo-grid" id="safety-photo-grid">
-            {% for image in checkin.images.all %}
-            <img src="{{ image.image.url }}" alt="" class="safety-photo-thumb">
-            {% endfor %}
-        </div>
-        <form id="safety-photo-upload-form">
-            <input type="file" name="image" accept="image/*" id="safety-photo-input">
-        </form>
     </div>
-    <script>
-    (function () {
-        var input = document.getElementById('safety-photo-input');
-        if (!input) return;
-        input.addEventListener('change', function () {
-            if (!input.files.length) return;
-            var data = new FormData();
-            data.append('image', input.files[0]);
-            fetch('{% url "safety.checkin.images" checkin.uuid %}', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
-                body: data,
-            }).then(function (r) { return r.json(); }).then(function (result) {
-                if (!result.url) return;
-                var img = document.createElement('img');
-                img.src = result.url; img.className = 'safety-photo-thumb';
-                document.getElementById('safety-photo-grid').appendChild(img);
-                input.value = '';
-            });
-        });
-    }());
-    </script>
 
     {# -- Emergency contacts --------------------------------------------------- #}
     <div class="card safety-contacts-status">
@@ -106,7 +82,7 @@
         <ul class="safety-contact-status-list">
             {% for contact in contacts %}
             <li>
-                {{ contact.display_name }}
+                <span class="safety-contact-status-name">{{ contact.display_name }}</span>
                 {% if contact.found_safe_at %}<span class="safety-badge safety-badge--success">Found you</span>
                 {% elif contact.notified_at %}<span class="safety-badge safety-badge--warning">Notified</span>
                 {% else %}<span class="safety-badge">Not yet notified</span>{% endif %}
@@ -118,4 +94,5 @@
     {% include "dashboard/partials/safety/_chat_panel.html" with contact=None %}
 
 </div>
+{% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 {% endblock %}

@@ -7,10 +7,10 @@
         Check in for "{{ checkin.title }}"
     </h1>
     <p>Confirm you're safe and this check-in is complete.</p>
-    <form method="post" action="{% url 'safety.checkin.checkin' checkin.uuid %}">
+    <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}">
         {% csrf_token %}
         <button type="submit" class="btn btn--primary btn--lg">I'm safe - check in now</button>
     </form>
-    <a href="{% url 'safety.checkin.detail' checkin.uuid %}" class="btn btn--ghost">View check-in details</a>
+    <a href="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="btn btn--ghost">View check-in details</a>
 </div>
 {% endblock %}

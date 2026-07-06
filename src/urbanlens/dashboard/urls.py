@@ -732,11 +732,15 @@ urlpatterns = [
                 path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
-                path("<uuid:checkin_uuid>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
+                path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
                 path("<uuid:checkin_uuid>/cancel/", safety.SafetyCheckinCancelView.as_view(), name="safety.checkin.cancel"),
-                path("<uuid:checkin_uuid>/checkin/", safety.SafetyCheckinCheckInView.as_view(), name="safety.checkin.checkin"),
+                path("<slug:checkin_slug>/checkin/", safety.SafetyCheckinCheckInView.as_view(), name="safety.checkin.checkin"),
                 path("<uuid:checkin_uuid>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.checkin.messages"),
-                path("<uuid:checkin_uuid>/images/", safety.SafetyCheckinImageUploadView.as_view(), name="safety.checkin.images"),
+                path("<slug:checkin_slug>/gallery/", safety.SafetyGalleryView.as_view(), name="safety.checkin.gallery"),
+                path("<slug:checkin_slug>/gallery/<int:image_id>/", safety.SafetyImageView.as_view(), name="safety.checkin.gallery.image"),
+                # No-trailing-slash variant so DELETE/POST fetch calls work even
+                # when APPEND_SLASH would otherwise downgrade the method to GET.
+                path("<slug:checkin_slug>/gallery/<int:image_id>", safety.SafetyImageView.as_view()),
                 path("<uuid:safety_checkin_uuid>/markup/json/", markup.MarkupJsonView.as_view(), name="safety.checkin.markup.json"),
                 path("<uuid:safety_checkin_uuid>/markup/", markup.MarkupView.as_view(), name="safety.checkin.markup"),
                 path(
