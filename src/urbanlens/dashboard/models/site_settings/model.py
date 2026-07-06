@@ -94,9 +94,7 @@ class SiteSettings(abstract.Model):
     ai_document_import_max_chars = IntegerField(
         default=20_000,
         help_text=(
-            "Maximum number of characters read from an uploaded .txt/.docx file before AI import "
-            "rejects it outright, to bound token usage per document. Uploads longer than this are "
-            "not truncated - the user is asked to shorten the file instead."
+            "Maximum number of characters read from an uploaded .txt/.docx file before AI import rejects it outright, to bound token usage per document. Uploads longer than this are not truncated - the user is asked to shorten the file instead."
         ),
         verbose_name="Document import max length (characters)",
         validators=[MinValueValidator(500), MaxValueValidator(200_000)],

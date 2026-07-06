@@ -125,11 +125,7 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip
 
-    trips = (
-        Trip.objects.filter(profiles=profile)
-        .filter(Q(start_date__range=(start, end)) | Q(activities__scheduled_at__date__range=(start, end)))
-        .distinct()
-    )
+    trips = Trip.objects.filter(profiles=profile).filter(Q(start_date__range=(start, end)) | Q(activities__scheduled_at__date__range=(start, end))).distinct()
 
     for trip in trips:
         occurred_at = trip.effective_start_date
@@ -186,13 +182,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
-    photos = (
-        Image.objects.filter(profile=profile)
-        .with_coords()
-        .annotate(effective_taken_at=Coalesce("taken_at", "created"))
-        .filter(effective_taken_at__date__range=(start, end))
-        .select_related("pin", "location")
-    )
+    photos = Image.objects.filter(profile=profile).with_coords().annotate(effective_taken_at=Coalesce("taken_at", "created")).filter(effective_taken_at__date__range=(start, end)).select_related("pin", "location")
     if bbox is not None:
         photos = photos.filter(
             latitude__range=(bbox.min_lat, bbox.max_lat),

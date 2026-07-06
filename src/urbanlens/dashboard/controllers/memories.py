@@ -191,22 +191,13 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
         today = timezone.now().date()
 
         visits = list(
-            PinVisit.objects.filter(pin__profile=profile, visited_at__month=today.month, visited_at__day=today.day)
-            .exclude(visited_at__year=today.year)
-            .select_related("pin")
-            .order_by("-visited_at")[:_ON_THIS_DAY_LIMIT],
+            PinVisit.objects.filter(pin__profile=profile, visited_at__month=today.month, visited_at__day=today.day).exclude(visited_at__year=today.year).select_related("pin").order_by("-visited_at")[:_ON_THIS_DAY_LIMIT],
         )
         routes = list(
-            Route.objects.for_profile(profile)
-            .filter(started_at__month=today.month, started_at__day=today.day)
-            .exclude(started_at__year=today.year)
-            .order_by("-started_at")[:_ON_THIS_DAY_LIMIT],
+            Route.objects.for_profile(profile).filter(started_at__month=today.month, started_at__day=today.day).exclude(started_at__year=today.year).order_by("-started_at")[:_ON_THIS_DAY_LIMIT],
         )
         photos = list(
-            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day)
-            .exclude(taken_at__year=today.year)
-            .select_related("pin", "location")
-            .order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
+            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year).select_related("pin", "location").order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
         )
 
         return render(

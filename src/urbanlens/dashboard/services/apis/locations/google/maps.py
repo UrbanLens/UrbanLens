@@ -60,10 +60,7 @@ def _notify_pin_import_parse_failure(fmt: str) -> None:
     notify(
         NotificationEvent.PIN_IMPORT_ERROR,
         subject="Pin import failed to process a file",
-        message=(
-            f"A pin import attempt failed to process an uploaded {fmt} file at "
-            f"{timezone.now().isoformat()}. Check the app logs for details."
-        ),
+        message=(f"A pin import attempt failed to process an uploaded {fmt} file at {timezone.now().isoformat()}. Check the app logs for details."),
     )
 
 

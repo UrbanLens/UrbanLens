@@ -54,10 +54,10 @@ class Image(abstract.Model):
     taken_at = DateTimeField(null=True, blank=True)
 
     if TYPE_CHECKING:
-        pin_id : int | None
-        location_id : int | None
-        safety_checkin_id : int | None
-        profile_id : int | None
+        pin_id: int | None
+        location_id: int | None
+        safety_checkin_id: int | None
+        profile_id: int | None
 
     objects = ImageManager()
 

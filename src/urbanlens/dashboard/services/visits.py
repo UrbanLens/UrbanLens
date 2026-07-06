@@ -407,12 +407,7 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    pins = (
-        Pin.objects.filter(profile=profile)
-        .root_pins()
-        .select_related("location")
-        .prefetch_related("campus")
-    )
+    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("campus")
     created_visits: list[PinVisit] = []
 
     for pin in pins:

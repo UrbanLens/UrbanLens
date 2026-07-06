@@ -125,9 +125,7 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             # transient channel-layer/Valkey hiccup). Tell the sender so they don't
             # think it vanished; other participants will still see it on next load.
             logger.exception("Safety chat broadcast failed on checkin %s", self.checkin.pk)
-            await self.send(
-                text_data=json.dumps({"type": "error", "detail": "Your message was saved but couldn't be delivered live. It'll appear on refresh."})
-            )
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message was saved but couldn't be delivered live. It'll appear on refresh."}))
 
     async def chat_message(self, event):
         """Deliver a broadcasted message to this connection.

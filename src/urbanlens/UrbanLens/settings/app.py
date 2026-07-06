@@ -7,6 +7,8 @@ from typing import Annotated, Any, Self
 
 from django import conf
 from django.conf import LazySettings
+from django.core.management.utils import get_random_secret_key
+
 from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
@@ -58,7 +60,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    secret_key: str = Field(default="1t5v24s98-fcbas23-vfsd238vc-asfdioj322", description="The secret key")
+    secret_key: str = Field(default=get_random_secret_key(), description="The secret key")
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")

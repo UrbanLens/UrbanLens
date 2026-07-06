@@ -1,4 +1,3 @@
-
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 

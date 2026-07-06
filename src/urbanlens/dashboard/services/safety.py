@@ -382,7 +382,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
             other_email = other.contact_profile.user.email if other.contact_profile and other.contact_profile.user else other.email
         else:
             other_email = other.email
-            
+
         _send_email(
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",

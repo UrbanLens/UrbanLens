@@ -4,7 +4,6 @@ Keep values in sync with the ``$color-*-500`` variables in
 ``dashboard/frontend/sass/_tokens.scss``.
 """
 
-
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 

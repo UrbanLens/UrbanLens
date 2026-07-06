@@ -91,10 +91,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             "Notifications - Channels",
             {
                 "fields": ["notify_admin_email", "notify_gotify_url", "notify_gotify_token"],
-                "description": (
-                    "Where critical site notifications are sent. Email defaults to <code>UL_ADMIN_NOTIFICATION_EMAIL</code>; "
-                    "Gotify defaults to <code>UL_GOTIFY_URL</code> / <code>UL_GOTIFY_TOKEN</code>."
-                ),
+                "description": ("Where critical site notifications are sent. Email defaults to <code>UL_ADMIN_NOTIFICATION_EMAIL</code>; Gotify defaults to <code>UL_GOTIFY_URL</code> / <code>UL_GOTIFY_TOKEN</code>."),
             },
         ),
         (

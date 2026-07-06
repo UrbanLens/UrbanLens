@@ -223,7 +223,7 @@ class TripActivity(abstract.Model):
         blank=True,
         related_name="trip_activities_added",
     )
-    
+
     if TYPE_CHECKING:
         location_id: int | None
         child_trip_id: int | None

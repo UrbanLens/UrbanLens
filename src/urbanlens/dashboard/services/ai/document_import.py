@@ -154,8 +154,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
 
     if len(data) > MAX_DOCUMENT_BYTES:
         raise DocumentTooLargeError(
-            f"'{filename}' is too large for AI import ({len(data):,} bytes, max {MAX_DOCUMENT_BYTES:,}). "
-            "Please upload a smaller file.",
+            f"'{filename}' is too large for AI import ({len(data):,} bytes, max {MAX_DOCUMENT_BYTES:,}). Please upload a smaller file.",
         )
 
     text = extract_text(filename, data)
@@ -165,8 +164,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
     max_chars = _get_max_document_chars()
     if len(text) > max_chars:
         raise DocumentTooLargeError(
-            f"'{filename}' is too long for AI import ({len(text):,} characters, max {max_chars:,}). "
-            "Please shorten the document and try again.",
+            f"'{filename}' is too long for AI import ({len(text):,} characters, max {max_chars:,}). Please shorten the document and try again.",
         )
 
     from urbanlens.dashboard.services.ai.factory import get_gateway
