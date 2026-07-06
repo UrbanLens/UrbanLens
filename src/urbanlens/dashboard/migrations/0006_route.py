@@ -74,11 +74,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="route",
-            index=models.Index(fields=["uuid"], name="dashboard_route_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_route_uuid_idx"),
         ),
         migrations.AddIndex(
             model_name="route",
-            index=models.Index(fields=["profile"], name="dashboard_route_profile_idx"),
+            index=models.Index(fields=["profile"], name="dash_route_profile_idx"),
         ),
         migrations.AddIndex(
             model_name="route",

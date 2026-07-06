@@ -35,12 +35,12 @@ class GooglePlace(abstract.Model):
         db_table = "dashboard_google_places"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["cid"]),
+            Index(fields=["latitude", "longitude"], name="idxdb_gplace_lat_long"),
+            Index(fields=["cid"], name="idxdb_gplace_cid"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude"],
-                name="dashboard_google_place_unique_coordinates",
+                name="db_google_place_unique_coordinates",
             ),
         ]

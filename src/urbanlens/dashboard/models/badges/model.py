@@ -185,7 +185,7 @@ class Badge(abstract.Model):
         get_latest_by = "updated"
         permissions = [("edit_global_badge", "Can edit global badges")]
         indexes = [
-            Index(fields=["uuid"], name="dashboard_badge_uuid_idx"),
-            Index(fields=["profile"]),
-            Index(fields=["profile", "order"]),
+            Index(fields=["uuid"], name="idxdb_badge_uuid"),
+            Index(fields=["profile"], name="idxdb_badge_profile"),
+            Index(fields=["profile", "order"], name="idxdb_badge_pfile_ord"),
         ]

@@ -130,7 +130,7 @@ class PinMarkup(abstract.Model):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
         indexes = [
-            Index(fields=["parent_pin"], name="dashboard_pm_pin_idx"),
-            Index(fields=["parent_location"], name="dashboard_pm_location_idx"),
-            Index(fields=["profile"], name="dashboard_pm_profile_idx"),
+            Index(fields=["parent_pin"], name="idxdb_pm_pin"),
+            Index(fields=["parent_location"], name="idxdb_pm_location"),
+            Index(fields=["profile"], name="idxdb_pm_profile"),
         ]

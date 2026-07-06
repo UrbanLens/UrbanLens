@@ -40,13 +40,13 @@ class PinShare(abstract.Model):
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_pin_shares"
         indexes = [
-            Index(fields=["to_profile", "status"]),
-            Index(fields=["from_profile", "created"]),
+            Index(fields=["to_profile", "status"], name="idxdb_pinshr_to_pfl_stat"),
+            Index(fields=["from_profile", "created"], name="idxdb_pinshr_f_pfl_cdt"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["pin", "to_profile"],
                 condition=Q(status="pending"),
-                name="dashboard_pin_share_one_pending_per_pin_user",
+                name="dash_pinshare_one_pending_per_pin_user",
             ),
         ]

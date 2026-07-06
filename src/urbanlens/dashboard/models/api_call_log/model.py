@@ -55,7 +55,7 @@ class ApiCallLog(abstract.Model):
         verbose_name_plural = "API Call Logs"
         indexes = [
             # Composite index for rate-limit window queries: service + created
-            Index(fields=["service", "created"], name="api_log_service_created_idx"),
+            Index(fields=["service", "created"], name="idxdb_apilog_svc_cdt"),
         ]
         ordering = ["-created"]
 

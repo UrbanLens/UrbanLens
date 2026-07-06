@@ -78,10 +78,10 @@ class NotificationLog(abstract.Model):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["profile", "status"]),
-            Index(fields=["status"]),
-            Index(fields=["importance"]),
-            Index(fields=["notification_type"]),
+            Index(fields=["profile", "status"], name="idxdb_notif_pfile_stat"),
+            Index(fields=["status"], name="idxdb_notif_status"),
+            Index(fields=["importance"], name="idxdb_notif_import"),
+            Index(fields=["notification_type"], name="idxdb_notif_type"),
         ]
 
 

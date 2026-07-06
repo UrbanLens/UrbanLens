@@ -41,7 +41,7 @@ class LocationCache(abstract.Model):
         db_table = "dashboard_location_cache"
         unique_together = [("location", "source")]
         indexes = [
-            models.Index(fields=["location", "source"]),
+            models.Index(fields=["location", "source"], name="idxdb_loccache_source"),
         ]
 
     @property

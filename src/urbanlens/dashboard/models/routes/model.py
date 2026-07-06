@@ -109,7 +109,7 @@ class Route(abstract.Model):
         ordering = ["-started_at", "-created"]
         get_latest_by = "started_at"
         indexes = [
-            Index(fields=["uuid"], name="dashboard_route_uuid_idx"),
-            Index(fields=["profile"], name="dashboard_route_profile_idx"),
-            Index(fields=["profile", "started_at"], name="dashboard_route_profile_started_idx"),
+            Index(fields=["uuid"], name="idxdb_route_uuid"),
+            Index(fields=["profile"], name="idxdb_route_profile"),
+            Index(fields=["profile", "started_at"], name="idxdb_rte_pfile_start"),
         ]

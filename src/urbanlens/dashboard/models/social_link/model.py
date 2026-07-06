@@ -45,5 +45,5 @@ class SocialLink(abstract.Model):
             UniqueConstraint(fields=["profile", "platform"], name="social_link_unique_profile_platform"),
         ]
         indexes = [
-            Index(fields=["profile"]),
+            Index(fields=["profile"], name="idxdb_soc_link_pfile"),
         ]

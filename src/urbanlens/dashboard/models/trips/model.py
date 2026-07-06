@@ -148,9 +148,9 @@ class Trip(abstract.Model):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="dashboard_trip_uuid_idx"),
-            Index(fields=["start_date"]),
-            Index(fields=["end_date"]),
+            Index(fields=["uuid"], name="idxdb_trip_uuid"),
+            Index(fields=["start_date"], name="idxdb_trip_start_date"),
+            Index(fields=["end_date"], name="idxdb_trip_end_date"),
         ]
 
 
@@ -256,8 +256,8 @@ class TripActivity(abstract.Model):
         db_table = "dashboard_trip_activities"
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
-            Index(fields=["trip"], name="dashboard_ta_trip_idx"),
-            Index(fields=["trip", "scheduled_at"], name="dashboard_ta_trip_dt_idx"),
+            Index(fields=["trip"], name="idxdb_ta_trip"),
+            Index(fields=["trip", "scheduled_at"], name="idxdb_ta_trip_dt"),
         ]
 
 
@@ -297,7 +297,7 @@ class TripMembership(abstract.Model):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
         indexes = [
-            Index(fields=["trip"], name="dashboard_tm_trip_idx"),
+            Index(fields=["trip"], name="idxdb_tm_trip"),
         ]
         permissions = [
             ("remove_trip_members", "Can remove members from trips"),
@@ -338,7 +338,7 @@ class TripComment(abstract.Model):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
         indexes = [
-            Index(fields=["trip"], name="dashboard_tc_trip_idx"),
+            Index(fields=["trip"], name="idxdb_tc_trip"),
         ]
 
 
@@ -375,5 +375,5 @@ class TripActivityVote(abstract.Model):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
         indexes = [
-            Index(fields=["activity"], name="dashboard_tav_activity_idx"),
+            Index(fields=["activity"], name="idxdb_tav_activity"),
         ]

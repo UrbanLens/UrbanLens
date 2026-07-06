@@ -34,5 +34,5 @@ class PinNote(abstract.Model):
         db_table = "dashboard_pin_notes"
         ordering = ["-created"]
         indexes = [
-            Index(fields=["pin"], name="dashboard_pn_pin_idx"),
+            Index(fields=["pin"], name="idxdb_pn_pin"),
         ]

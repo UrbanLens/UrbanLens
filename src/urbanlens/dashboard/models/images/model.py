@@ -50,4 +50,4 @@ class Image(abstract.Model):
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_images"
         get_latest_by = "updated"
-        indexes = [Index(fields=["uuid"], name="dashboard_image_uuid_idx")]
+        indexes = [Index(fields=["uuid"], name="idxdb_image_uuid")]

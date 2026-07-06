@@ -499,7 +499,7 @@ class Migration(migrations.Migration):
                         fields=["latitude", "longitude"],
                         name="dashboard_g_latitud_4cc7c1_idx",
                     ),
-                    models.Index(fields=["cid"], name="dashboard_g_cid_617a60_idx"),
+                    models.Index(fields=["cid"], name="dash_g_cid_617a60_idx"),
                 ],
                 "constraints": [
                     models.UniqueConstraint(
@@ -3173,7 +3173,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="location",
-            index=models.Index(fields=["uuid"], name="dashboard_l_uuid_f3ca34_idx"),
+            index=models.Index(fields=["uuid"], name="dash_l_uuid_f3ca34_idx"),
         ),
         migrations.AddIndex(
             model_name="location",
@@ -3183,7 +3183,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="location",
-            index=models.Index(fields=["name"], name="dashboard_l_name_11ee30_idx"),
+            index=models.Index(fields=["name"], name="dash_l_name_11ee30_idx"),
         ),
         migrations.AddIndex(
             model_name="location",
@@ -3213,7 +3213,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="pinalias",
-            index=models.Index(fields=["pin"], name="dashboard_pin_alias_pin_idx"),
+            index=models.Index(fields=["pin"], name="dash_pin_alias_pin_idx"),
         ),
         migrations.AddConstraint(
             model_name="pinalias",
@@ -3223,15 +3223,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="pinnote",
-            index=models.Index(fields=["pin"], name="dashboard_pn_pin_idx"),
+            index=models.Index(fields=["pin"], name="dash_pn_pin_idx"),
         ),
         migrations.AddIndex(
             model_name="pinvisit",
-            index=models.Index(fields=["uuid"], name="dashboard_pv_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_pv_uuid_idx"),
         ),
         migrations.AddIndex(
             model_name="pinvisit",
-            index=models.Index(fields=["pin"], name="dashboard_pv_pin_idx"),
+            index=models.Index(fields=["pin"], name="dash_pv_pin_idx"),
         ),
         migrations.AddIndex(
             model_name="pinvisit",
@@ -3241,7 +3241,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="profile",
-            index=models.Index(fields=["user"], name="dashboard_p_user_id_eb17ed_idx"),
+            index=models.Index(fields=["user"], name="dash_p_user_id_eb17ed_idx"),
         ),
         migrations.AddIndex(
             model_name="pinshare",
@@ -3266,7 +3266,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="pinmarkup",
-            index=models.Index(fields=["parent_pin"], name="dashboard_pm_pin_idx"),
+            index=models.Index(fields=["parent_pin"], name="dash_pm_pin_idx"),
         ),
         migrations.AddIndex(
             model_name="pinmarkup",
@@ -3276,11 +3276,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="pinmarkup",
-            index=models.Index(fields=["profile"], name="dashboard_pm_profile_idx"),
+            index=models.Index(fields=["profile"], name="dash_pm_profile_idx"),
         ),
         migrations.AddIndex(
             model_name="pin",
-            index=models.Index(fields=["uuid"], name="dashboard_u_uuid_1898a2_idx"),
+            index=models.Index(fields=["uuid"], name="dash_u_uuid_1898a2_idx"),
         ),
         migrations.AddIndex(
             model_name="pin",
@@ -3351,7 +3351,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="notificationlog",
-            index=models.Index(fields=["status"], name="dashboard_n_status_ff9f27_idx"),
+            index=models.Index(fields=["status"], name="dash_n_status_ff9f27_idx"),
         ),
         migrations.AddIndex(
             model_name="notificationlog",
@@ -3367,7 +3367,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="locationedit",
-            index=models.Index(fields=["location"], name="dashboard_le_location_idx"),
+            index=models.Index(fields=["location"], name="dash_le_location_idx"),
         ),
         migrations.AddIndex(
             model_name="locationedit",
@@ -3377,7 +3377,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="locationalias",
-            index=models.Index(fields=["location"], name="dashboard_loc_alias_loc_idx"),
+            index=models.Index(fields=["location"], name="dash_loc_alias_loc_idx"),
         ),
         migrations.AddConstraint(
             model_name="locationalias",
@@ -3387,7 +3387,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="image",
-            index=models.Index(fields=["uuid"], name="dashboard_image_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_image_uuid_idx"),
         ),
         migrations.AlterUniqueTogether(
             name="friendship",
@@ -3395,7 +3395,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="comment",
-            index=models.Index(fields=["uuid"], name="dashboard_comment_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_comment_uuid_idx"),
         ),
         migrations.AddConstraint(
             model_name="campus",
@@ -3421,7 +3421,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="badge",
-            index=models.Index(fields=["uuid"], name="dashboard_badge_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_badge_uuid_idx"),
         ),
         migrations.AddIndex(
             model_name="badge",
@@ -3523,7 +3523,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="tripactivity",
-            index=models.Index(fields=["trip"], name="dashboard_ta_trip_idx"),
+            index=models.Index(fields=["trip"], name="dash_ta_trip_idx"),
         ),
         migrations.AddIndex(
             model_name="tripactivity",
@@ -3533,7 +3533,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="tripactivityvote",
-            index=models.Index(fields=["activity"], name="dashboard_tav_activity_idx"),
+            index=models.Index(fields=["activity"], name="dash_tav_activity_idx"),
         ),
         migrations.AlterUniqueTogether(
             name="tripactivityvote",
@@ -3541,7 +3541,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="tripcomment",
-            index=models.Index(fields=["trip"], name="dashboard_tc_trip_idx"),
+            index=models.Index(fields=["trip"], name="dash_tc_trip_idx"),
         ),
         migrations.AddIndex(
             model_name="reaction",
@@ -3571,7 +3571,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="tripmembership",
-            index=models.Index(fields=["trip"], name="dashboard_tm_trip_idx"),
+            index=models.Index(fields=["trip"], name="dash_tm_trip_idx"),
         ),
         migrations.AlterUniqueTogether(
             name="tripmembership",
@@ -3579,7 +3579,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="trip",
-            index=models.Index(fields=["uuid"], name="dashboard_trip_uuid_idx"),
+            index=models.Index(fields=["uuid"], name="dash_trip_uuid_idx"),
         ),
         migrations.AddIndex(
             model_name="trip",

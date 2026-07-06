@@ -148,11 +148,11 @@ class VisitSuggestion(abstract.Model):
     class Meta(abstract.Model.Meta):
         db_table = "dashboard_visit_suggestions"
         indexes = [
-            Index(fields=["suggested_to", "status"], name="dashboard_visit_st_status_idx"),
+            Index(fields=["suggested_to", "status"], name="idxdb_visit_st_status"),
         ]
         constraints = [
             CheckConstraint(
                 condition=Q(origin_visit__isnull=False) ^ Q(trip_activity__isnull=False),
-                name="dashboard_visit_suggestion_exactly_one_origin",
+                name="db_visit_suggestion_exactly_one_origin",
             ),
         ]

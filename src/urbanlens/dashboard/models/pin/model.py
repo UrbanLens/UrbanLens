@@ -471,24 +471,24 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"]),
-            Index(fields=["profile"]),
-            Index(fields=["profile", "priority"]),
-            Index(fields=["profile", "last_visited"]),
-            Index(fields=["profile", "updated"], name="dashboard_profile_update_idx"),
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["parent_pin"]),
-            Index(fields=["parent_location"], name="dashboard_parent_loc_idx"),
+            Index(fields=["uuid"], name="idxdb_pin_uuid"),
+            Index(fields=["profile"], name="idxdb_pin_profile"),
+            Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
+            Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
+            Index(fields=["profile", "updated"], name="idxdb_profile_update"),
+            Index(fields=["latitude", "longitude"], name="idxdb_pin_lat_long"),
+            Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
+            Index(fields=["parent_location"], name="idxdb_pin_parent_loc"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude", "profile"],
                 condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
-                name="dashboard_pin_unique_location_per_profile",
+                name="db_pin_unique_location_per_profile",
             ),
             UniqueConstraint(
                 fields=["profile", "slug"],
                 condition=Q(slug__isnull=False),
-                name="dashboard_pin_unique_slug_per_profile",
+                name="db_pin_unique_slug_per_profile",
             ),
         ]

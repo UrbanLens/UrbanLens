@@ -90,7 +90,7 @@ class PinVisit(abstract.Model):
         ordering = ["-visited_at"]
         get_latest_by = "visited_at"
         indexes = [
-            Index(fields=["uuid"], name="dashboard_pv_uuid_idx"),
-            Index(fields=["pin"], name="dashboard_pv_pin_idx"),
-            Index(fields=["pin", "visited_at"], name="dashboard_pv_pin_visited_idx"),
+            Index(fields=["uuid"], name="idxdb_pv_uuid"),
+            Index(fields=["pin"], name="idxdb_pv_pin"),
+            Index(fields=["pin", "visited_at"], name="idxdb_pv_pin_visited"),
         ]

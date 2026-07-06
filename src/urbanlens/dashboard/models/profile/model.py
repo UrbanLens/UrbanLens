@@ -467,5 +467,5 @@ class Profile(abstract.HasSlug):
         db_table = "dashboard_profiles"
 
         indexes = [
-            Index(fields=["user"]),
+            Index(fields=["user"], name="idxdb_profile_user"),
         ]

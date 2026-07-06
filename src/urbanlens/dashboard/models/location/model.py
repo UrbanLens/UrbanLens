@@ -175,11 +175,11 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"]),
-            Index(fields=["latitude", "longitude"]),
-            Index(fields=["name"]),
-            Index(fields=["official_name"]),
-            Index(fields=["google_place"]),
+            Index(fields=["uuid"], name="idxdb_loc_uuid"),
+            Index(fields=["latitude", "longitude"], name="idxdb_loc_lat_long"),
+            Index(fields=["name"], name="idxdb_loc_name"),
+            Index(fields=["official_name"], name="idxdb_loc_offname"),
+            Index(fields=["google_place"], name="idxdb_loc_gplace"),
         ]
         unique_together = [
             ["latitude", "longitude"],
