@@ -114,9 +114,9 @@ def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
     for activity in activities:
         if activity.lat_override is not None and activity.lng_override is not None:
             return (activity.lat_override, activity.lng_override)
-        if activity.pin_id and activity.pin.effective_latitude is not None and activity.pin.effective_longitude is not None:
+        if activity.pin and activity.pin.effective_latitude is not None and activity.pin.effective_longitude is not None:
             return (float(activity.pin.effective_latitude), float(activity.pin.effective_longitude))
-        if activity.location_id and activity.location.latitude is not None and activity.location.longitude is not None:
+        if activity.location and activity.location.latitude is not None and activity.location.longitude is not None:
             return (float(activity.location.latitude), float(activity.location.longitude))
     return None
 

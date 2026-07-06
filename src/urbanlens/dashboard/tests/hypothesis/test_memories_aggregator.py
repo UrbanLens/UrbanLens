@@ -16,6 +16,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.aggregator import get_memory_events
+from urbanlens.dashboard.baker_recipes import _make_profile
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
 
@@ -28,7 +29,7 @@ class MemoryEventsDateRangeTests(TestCase):
     """get_memory_events() only returns events whose date falls within [start, end]."""
 
     def setUp(self):
-        self.profile = baker.make("auth.User").profile
+        self.profile =  _make_profile()
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
@@ -70,7 +71,7 @@ class MemoryEventsDateRangeTests(TestCase):
         self.assertEqual(events[1].occurred_at, earlier)
 
     def test_other_profiles_visits_are_excluded(self):
-        other_profile = baker.make("auth.User").profile
+        other_profile = _make_profile()
         other_pin = baker.make("dashboard.Pin", profile=other_profile, location=self.location)
         _make_visit(other_pin, timezone.make_aware(datetime.datetime(2024, 6, 15, 12, 0, 0)))
 

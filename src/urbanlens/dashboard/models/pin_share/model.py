@@ -47,6 +47,6 @@ class PinShare(abstract.Model):
             UniqueConstraint(
                 fields=["pin", "to_profile"],
                 condition=Q(status="pending"),
-                name="dash_pinshare_one_pending_per_pin_user",
+                name="db_pinshare_one_pending_per_pin_user",
             ),
         ]

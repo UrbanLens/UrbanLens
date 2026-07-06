@@ -39,10 +39,11 @@ def maybe_create_photo_visit(image: Image) -> PinVisit | None:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    if not image.pin_id or image.taken_at is None or image.latitude is None or image.longitude is None:
+    if not image.pin_id or image.taken_at is None or image.latitude is None or image.longitude is None or not image.pin:
         return None
 
-    pin = image.pin
+    pin : Pin = image.pin
+    
     photo_point = Point(float(image.longitude), float(image.latitude), srid=4326)
     within_range = Pin.objects.filter(
         pk=pin.pk,

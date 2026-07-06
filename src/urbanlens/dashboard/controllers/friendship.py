@@ -162,7 +162,7 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     profile page and the full friends page share this data but use different
     markup, so dispatch on HX-Target (the id of the element htmx is swapping).
     """
-    viewer_profile = request.user.profile
+    viewer_profile = Profile.objects.get_or_create(user=request.user)
     ctx = _friend_list_ctx(viewer_profile, viewer_profile)
     if request.headers.get("HX-Target") == "friends_page_list":
         return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)

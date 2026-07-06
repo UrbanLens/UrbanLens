@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, UUIDField
@@ -44,6 +45,11 @@ class Image(abstract.Model):
     # no EXIF data or that predate this field; consumers should fall back to
     # `created` when absent.
     taken_at = DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        pin_id : int | None
+        location_id : int | None
+        profile_id : int | None
 
     objects = ImageManager()
 
