@@ -338,3 +338,33 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_due_checkin_reminders() -> int:
+    """Send the check-in-due reminder for every safety check-in whose time has arrived."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import send_checkin_reminder
+
+    count = 0
+    for checkin in SafetyCheckin.objects.due_for_reminder():
+        send_checkin_reminder(checkin)
+        count += 1
+    if count:
+        logger.info("Sent %s safety check-in reminder(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def escalate_overdue_checkins() -> int:
+    """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import escalate_checkin
+
+    count = 0
+    for checkin in SafetyCheckin.objects.overdue():
+        escalate_checkin(checkin)
+        count += 1
+    if count:
+        logger.info("Escalated %s overdue safety check-in(s)", count)
+    return count

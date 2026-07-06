@@ -1,0 +1,215 @@
+@use 'variables' as *;
+
+// -- Safety check-ins -------------------------------------------------------
+
+.safety-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.safety-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 .25rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--ul-grey-8);
+
+    .material-symbols-outlined {
+        font-size: 1.7rem;
+        color: $color-red-500;
+    }
+}
+
+.safety-subtitle {
+    margin: 0;
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+}
+
+.safety-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--ul-grey-6);
+}
+
+.safety-checkin-list {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.safety-checkin-card {
+    padding: 1rem 1.25rem;
+
+    h3 {
+        margin: .25rem 0 0;
+        font-size: 1.1rem;
+
+        a {
+            color: var(--ul-grey-8);
+            text-decoration: none;
+
+            &:hover { text-decoration: underline; }
+        }
+    }
+}
+
+.safety-checkin-meta,
+.safety-checkin-contacts {
+    margin: .25rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+}
+
+.safety-checkin-status-badge {
+    display: inline-block;
+    padding: .15rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+
+    &--awaiting_checkin,
+    &--overdue { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
+    &--found_safe,
+    &--checked_in { background: rgba($color-green-500, .18); color: $color-green-700; }
+    &--cancelled { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
+}
+
+.safety-badge {
+    display: inline-block;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+
+    &--success { background: rgba($color-green-500, .18); color: $color-green-700; }
+    &--warning { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
+}
+
+.safety-contact-friends {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-bottom: .5rem;
+}
+
+.safety-contact-friend-option {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    border: 1px solid var(--ul-grey-1a);
+    font-size: .85rem;
+}
+
+.safety-map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin: .5rem 0;
+}
+
+.safety-photo-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: .75rem;
+}
+
+.safety-photo-thumb {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--ul-grey-1a);
+}
+
+.safety-contact-status-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+
+    li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+}
+
+.safety-chat-panel {
+    padding: 1rem 1.25rem;
+}
+
+.safety-chat-messages {
+    list-style: none;
+    margin: 0 0 .75rem;
+    padding: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.safety-chat-message {
+    display: flex;
+    align-items: baseline;
+    gap: .4rem;
+    font-size: .9rem;
+}
+
+.safety-chat-sender {
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.safety-chat-time {
+    margin-left: auto;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.safety-chat-empty {
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+}
+
+.safety-chat-form {
+    display: flex;
+    gap: .5rem;
+
+    input {
+        flex: 1;
+    }
+}
+
+.safety-contact-message,
+.safety-plan-details {
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.safety-checkin-confirm {
+    max-width: 32rem;
+    text-align: center;
+
+    form {
+        margin: 1.5rem 0;
+    }
+}

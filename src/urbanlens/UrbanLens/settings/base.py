@@ -183,6 +183,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
         "schedule": 60 * 60,
     },
+    "safety-checkin-due-reminders": {
+        "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
+        "schedule": 5 * 60,
+    },
+    "safety-checkin-escalation": {
+        "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
+        "schedule": 5 * 60,
+    },
 }
 
 
@@ -342,6 +350,9 @@ EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
 EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
+# Canonical base URL used to build absolute links in emails/notifications sent
+# from contexts with no HttpRequest to build them from (e.g. Celery tasks).
+SITE_URL = os.getenv("UL_SITE_URL", "http://localhost:21080")
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
 GOOGLE_DOMAIN_RESTRICTED_API_KEY = os.getenv("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY", "")

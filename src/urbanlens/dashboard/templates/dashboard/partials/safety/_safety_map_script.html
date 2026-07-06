@@ -1,0 +1,126 @@
+{% comment %}
+Compact map for safety check-in pages: a draggable destination marker plus,
+when markup_json_url is set, the shared route/plan drawing tools built on
+window.MarkupEngine (the same engine the pin detail and wiki maps use).
+Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
+(either may be blank), markup_json_url/markup_create_url/markup_edit_url_template
+(omit all three to skip markup entirely), readonly (true hides the draw toolbar
+and the destination marker becomes non-draggable).
+{% endcomment %}
+<div id="safety-map" style="height:360px;border-radius:12px;overflow:hidden"></div>
+{% if not readonly %}
+<input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
+<input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
+<p class="form-hint">Click the map to set (or move) your destination marker - it's used to suggest a visit once your check-in concludes.</p>
+{% endif %}
+{% if markup_json_url %}
+<div class="safety-map-toolbar" id="safety-markup-toolbar" {% if readonly %}hidden{% endif %}>
+    <button type="button" class="btn btn--sm btn--ghost" data-tool="line">Line</button>
+    <button type="button" class="btn btn--sm btn--ghost" data-tool="arrow">Arrow</button>
+    <button type="button" class="btn btn--sm btn--ghost" data-tool="polygon">Area</button>
+    <button type="button" class="btn btn--sm btn--ghost" data-tool="circle">Circle</button>
+    <button type="button" class="btn btn--sm btn--ghost" data-tool="text">Label</button>
+    <button type="button" class="btn btn--sm btn--ghost" id="safety-markup-done" hidden>Done</button>
+</div>
+{% endif %}
+<script>
+(function () {
+    if (typeof L === 'undefined') return;
+    var centerLat = {{ map_center_lat|default:"39.8283" }};
+    var centerLng = {{ map_center_lng|default:"-98.5795" }};
+    var map = L.map('safety-map').setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+
+    var readonly = {{ readonly|yesno:"true,false" }};
+    var destLat = {{ destination_lat|default:"null" }};
+    var destLng = {{ destination_lng|default:"null" }};
+    var marker = null;
+    if (destLat !== null && destLng !== null) {
+        marker = L.marker([destLat, destLng], { draggable: !readonly }).addTo(map);
+    }
+
+    function setDestination(lat, lng) {
+        var latInput = document.getElementById('safety-destination-lat');
+        var lngInput = document.getElementById('safety-destination-lng');
+        if (latInput) latInput.value = lat.toFixed(6);
+        if (lngInput) lngInput.value = lng.toFixed(6);
+        if (marker) {
+            marker.setLatLng([lat, lng]);
+        } else {
+            marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+            marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
+        }
+    }
+    if (marker && !readonly) {
+        marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
+    }
+    if (!readonly) {
+        map.on('click', function (e) { setDestination(e.latlng.lat, e.latlng.lng); });
+    }
+
+    {% if markup_json_url %}
+    var markupLayer = L.layerGroup().addTo(map);
+    function loadMarkup() {
+        fetch('{{ markup_json_url }}').then(function (r) { return r.json(); }).then(function (data) {
+            markupLayer.clearLayers();
+            (data.markup_items || []).forEach(function (item) {
+                var geom = item.geometry;
+                var shape = { type: item.markup_type, label: item.label, color: item.color,
+                    stroke_width: item.stroke_width, border_color: item.border_color,
+                    fill_opacity: item.fill_opacity, border_opacity: item.border_opacity };
+                if (geom.type === 'Circle') {
+                    shape.latlngs = [[geom.coordinates[1], geom.coordinates[0]], null];
+                    var center = L.latLng(geom.coordinates[1], geom.coordinates[0]);
+                    shape.type = 'circle';
+                    L.circle(center, { radius: geom.radius, color: shape.color, weight: shape.stroke_width }).addTo(markupLayer);
+                    return;
+                }
+                if (geom.type === 'Point') {
+                    shape.latlngs = [[geom.coordinates[1], geom.coordinates[0]]];
+                } else {
+                    shape.latlngs = geom.coordinates.map(function (c) { return [c[1], c[0]]; });
+                }
+                window.MarkupEngine.renderShape(shape, markupLayer, map.getZoom());
+            });
+        }).catch(function () {});
+    }
+    loadMarkup();
+
+    {% if not readonly %}
+    var session = window.MarkupEngine.createDrawSession(map, {
+        getColor: function () { return '#e53e3e'; },
+        getWidth: function () { return 3; },
+        getTextLabel: function () { return window.prompt('Label text?') || ''; },
+        onCommit: function (type, latlngs, extras) {
+            var geometry;
+            if (type === 'text') {
+                geometry = { type: 'Point', coordinates: [latlngs[0][1], latlngs[0][0]] };
+            } else if (type === 'circle') {
+                var p1 = L.latLng(latlngs[0]), p2 = L.latLng(latlngs[1]);
+                geometry = { type: 'Circle', coordinates: [p1.lng, p1.lat], radius: p1.distanceTo(p2) };
+            } else if (type === 'polygon' || type === 'rect') {
+                geometry = { type: 'Polygon', coordinates: latlngs.map(function (p) { return [p[1], p[0]]; }) };
+            } else {
+                geometry = { type: 'LineString', coordinates: latlngs.map(function (p) { return [p[1], p[0]]; }) };
+            }
+            fetch('{{ markup_create_url }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+                body: JSON.stringify({ markup_type: type === 'rect' ? 'square' : type, geometry: geometry, label: extras.label || '' }),
+            }).then(function () { loadMarkup(); session.deactivate(); toggleDone(false); });
+        },
+        onToolChange: function (tool) { toggleDone(!!tool); },
+    });
+    function toggleDone(show) {
+        var btn = document.getElementById('safety-markup-done');
+        if (btn) btn.hidden = !show;
+    }
+    document.querySelectorAll('#safety-markup-toolbar [data-tool]').forEach(function (btn) {
+        btn.addEventListener('click', function () { session.startTool(btn.dataset.tool); });
+    });
+    var doneBtn = document.getElementById('safety-markup-done');
+    if (doneBtn) doneBtn.addEventListener('click', function () { session.finishCurrent(); });
+    {% endif %}
+    {% endif %}
+}());
+</script>

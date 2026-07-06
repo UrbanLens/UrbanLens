@@ -1,0 +1,55 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block content %}
+<div class="safety-page page-content">
+    <h1 class="safety-title">
+        <i class="material-symbols-outlined">emergency</i>
+        New Safety Check-in
+    </h1>
+
+    {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+    <form method="post" action="{% url 'safety.checkin.create' %}" class="safety-checkin-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="title">Title <span class="required">*</span></label>
+            <input type="text" name="title" id="title" required placeholder="e.g. Solo hike - Eagle Ridge">
+        </div>
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="checkin_by">Expected check-in time <span class="required">*</span></label>
+                <input type="datetime-local" name="checkin_by" id="checkin_by" required>
+            </div>
+            <div>
+                <label for="grace_period_hours">Grace period (hours)</label>
+                <input type="number" step="0.25" min="0.25" name="grace_period_hours" id="grace_period_hours"
+                       value="{{ preference.default_grace_period_hours|default:'1' }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <label for="plan_details">Trip plan</label>
+            <textarea name="plan_details" id="plan_details" rows="4" placeholder="Route, gear, who you're with..."></textarea>
+        </div>
+        <div class="form-row">
+            <label>Destination</label>
+            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False %}
+        </div>
+        <div class="form-row">
+            <label for="contact_message">Message to emergency contacts</label>
+            <textarea name="contact_message" id="contact_message" rows="3">{{ preference.default_message }}</textarea>
+        </div>
+        {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg">Create check-in</button>
+            <a href="{% url 'safety.home' %}" class="btn btn--ghost">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

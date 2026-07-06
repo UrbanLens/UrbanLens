@@ -27,6 +27,14 @@ from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource
+from urbanlens.dashboard.models.safety import (
+    EmergencyContactDefault,
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinMessage,
+    SafetyCheckinStatus,
+    SafetyPreference,
+)
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription

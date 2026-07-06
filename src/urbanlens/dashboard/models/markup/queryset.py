@@ -21,6 +21,10 @@ class PinMarkupQuerySet(abstract.QuerySet):
         """All shared/community markup items belonging to a specific Location."""
         return self.filter(parent_location=location)
 
+    def for_safety_checkin(self, safety_checkin) -> Self:
+        """All markup items belonging to a specific safety check-in's route/plan."""
+        return self.filter(parent_safety_checkin=safety_checkin)
+
     def for_profile(self, profile) -> Self:
         """All markup items belonging to a specific profile."""
         return self.filter(profile=profile)

@@ -297,32 +297,6 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
     }
 
-    .notif-prefs__header {
-        background: var(--ul-grey-0);
-        border-bottom-color: var(--ul-grey-7b);
-    }
-
-    .notif-prefs__hdr {
-        color: var(--ul-grey-5a);
-    }
-
-    .notif-prefs__row {
-        border-bottom-color: var(--ul-grey-9a);
-
-        &:hover {
-            background: var(--ul-grey-0);
-        }
-    }
-
-    .notif-prefs__label {
-        color: var(--ul-grey-2);
-    }
-
-    .notif-prefs__saved {
-        background: $dk-success-bg;
-        color: $color-green-300;
-    }
-
     .profile-stat,
     .profile-section,
     .profile-hero {

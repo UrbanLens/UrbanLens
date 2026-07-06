@@ -1,0 +1,58 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="safety-page page-content">
+
+    <div class="safety-header">
+        <div class="safety-header-left">
+            <h1 class="safety-title">
+                <i class="material-symbols-outlined">emergency</i>
+                Safety
+            </h1>
+            <p class="safety-subtitle">Set an expected check-in time for a trip - if you don't check in, your emergency contacts are notified.</p>
+        </div>
+        <div class="safety-header-right">
+            <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
+                <i class="material-symbols-outlined">add</i>
+                New Check-in
+            </a>
+        </div>
+    </div>
+
+    {# -- Active/past check-ins --------------------------------------------- #}
+    <div class="safety-checkin-list">
+        {% if checkins %}
+        {% for checkin in checkins %}
+        {% include "dashboard/partials/safety/_checkin_card.html" %}
+        {% endfor %}
+        {% else %}
+        <p class="safety-empty">No check-ins yet. Create one before your next trip.</p>
+        {% endif %}
+    </div>
+
+    {# -- Defaults ------------------------------------------------------------ #}
+    <div class="card safety-defaults">
+        <div class="card-header">
+            <i class="material-symbols-outlined">settings</i>
+            <h3>Defaults for new check-ins</h3>
+        </div>
+        <form method="post" action="{% url 'safety.home' %}" class="safety-defaults-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="default_message">Default message to emergency contacts</label>
+                <textarea name="default_message" id="default_message" rows="3">{{ preference.default_message }}</textarea>
+            </div>
+            <div class="form-row">
+                <label for="grace_period_hours">Default grace period (hours)</label>
+                <input type="number" step="0.25" min="0.25" name="grace_period_hours" id="grace_period_hours"
+                       value="{{ preference.default_grace_period_hours|default:'1' }}">
+            </div>
+            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Save defaults</button>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

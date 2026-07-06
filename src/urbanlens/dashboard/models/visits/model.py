@@ -23,6 +23,7 @@ class VisitSource(TextChoices):
     - USER: Added by another user.
     - PHOTO: Added when the user uploaded a photo with location metadata.
     - GEOLOCATION: Added when the user's device provided a geolocation.
+    - SAFETY_CHECKIN: Added when a safety check-in concluded at this place.
     """
 
     MANUAL = "manual", "Manual"
@@ -31,6 +32,7 @@ class VisitSource(TextChoices):
     USER = "user", "User"
     PHOTO = "photo", "Photo"
     GEOLOCATION = "geolocation", "Geolocation"
+    SAFETY_CHECKIN = "safety_checkin", "Safety Check-in"
 
 
 class PinVisit(abstract.Model):

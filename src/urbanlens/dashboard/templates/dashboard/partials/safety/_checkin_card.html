@@ -1,0 +1,12 @@
+<div class="card safety-checkin-card safety-checkin-card--{{ checkin.status }}">
+    <div class="card-header">
+        <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
+        <h3><a href="{% url 'safety.checkin.detail' checkin.uuid %}">{{ checkin.title }}</a></h3>
+    </div>
+    <p class="safety-checkin-meta">Check in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
+    {% with contact_count=checkin.contacts.all|length %}
+    {% if contact_count %}
+    <p class="safety-checkin-contacts">{{ contact_count }} emergency contact{{ contact_count|pluralize }}</p>
+    {% endif %}
+    {% endwith %}
+</div>

@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.images.queryset import ImageManager
 
 
 class Image(abstract.Model):
-    """A photo uploaded by a user, attached to a pin or shared location."""
+    """A photo uploaded by a user, attached to a pin, shared location, or safety check-in."""
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
     image = ImageField(upload_to="pin_images/")
@@ -25,6 +25,13 @@ class Image(abstract.Model):
     )
     location = ForeignKey(
         "dashboard.Location",
+        on_delete=CASCADE,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
+    safety_checkin = ForeignKey(
+        "dashboard.SafetyCheckin",
         on_delete=CASCADE,
         related_name="images",
         null=True,
@@ -49,6 +56,7 @@ class Image(abstract.Model):
     if TYPE_CHECKING:
         pin_id : int | None
         location_id : int | None
+        safety_checkin_id : int | None
         profile_id : int | None
 
     objects = ImageManager()

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.trips.model import TripActivity
 
 logger = logging.getLogger(__name__)
@@ -180,13 +181,15 @@ def create_visit_suggestion(
     candidate_profiles: list[Profile],
     origin_visit: PinVisit | None = None,
     trip_activity: TripActivity | None = None,
+    safety_checkin: SafetyCheckin | None = None,
     origin_pin: Pin | None = None,
 ) -> VisitSuggestion | None:
     """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
 
-    Exactly one of ``origin_visit``/``trip_activity`` must be given - it determines
-    both which flow raised this suggestion and, on acceptance, which VisitSource
-    the resulting PinVisit gets (see ``_visit_source_for``).
+    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin`` must be
+    given - it determines both which flow raised this suggestion and, on
+    acceptance, which VisitSource the resulting PinVisit gets (see
+    ``_visit_source_for``).
 
     If suggested_to already has a visit logged for this place on this date, and
     every mutually-connected candidate this suggestion would add is already listed
@@ -206,6 +209,7 @@ def create_visit_suggestion(
         candidate_profiles: Other profiles from the same batch, minus suggested_to.
         origin_visit: The suggester's own PinVisit, for the manual-dialog flow.
         trip_activity: The completed TripActivity, for the trip flow.
+        safety_checkin: The concluded SafetyCheckin, for the safety check-in flow.
         origin_pin: The suggester's own pin, used only as a message fallback when
             there is no Location (e.g. a private, unlinked pin).
 
@@ -229,6 +233,7 @@ def create_visit_suggestion(
         suggested_to=suggested_to,
         origin_visit=origin_visit,
         trip_activity=trip_activity,
+        safety_checkin=safety_checkin,
         existing_visit=existing_visit,
     )
     suggestion.candidate_profiles.set(candidate_profiles)
@@ -241,12 +246,16 @@ def create_visit_suggestion(
         return suggestion
 
     place = build_visit_suggestion_message(location=location, official_name=origin_pin.official_name if origin_pin else None, city=origin_pin.city if origin_pin else None, state=origin_pin.state if origin_pin else None)
-    who = suggested_by.username if suggested_by else "A connection"
     when = visited_at.strftime("%b %d, %Y")
-    if existing_visit:
+    if safety_checkin is not None:
+        title = "Confirm your visit?"
+        message = f"Your safety check-in wrapped up - did you make it {place} on {when}?"
+    elif existing_visit:
+        who = suggested_by.username if suggested_by else "A connection"
         title = "Update your visit?"
         message = f"{who} says you were also {place} on {when}, which you already logged. Add them to that visit, or log it separately?"
     else:
+        who = suggested_by.username if suggested_by else "A connection"
         title = "Visit suggestion"
         message = f"{who} suggested you also visited {place} on {when}."
     notification = NotificationLog.objects.create(
@@ -270,11 +279,15 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
         suggestion: The suggestion being accepted.
 
     Returns:
-        VisitSource.USER for manual-dialog suggestions, VisitSource.TRIP for
-        trip-activity-triggered ones (the model's check constraint guarantees
-        exactly one of the two origins is set).
+        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, or VisitSource.USER
+        depending on which origin is set (the model's check constraint
+        guarantees exactly one of the three is set).
     """
-    return VisitSource.TRIP if suggestion.trip_activity_id else VisitSource.USER
+    if suggestion.trip_activity_id:
+        return VisitSource.TRIP
+    if suggestion.safety_checkin_id:
+        return VisitSource.SAFETY_CHECKIN
+    return VisitSource.USER
 
 
 def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit:

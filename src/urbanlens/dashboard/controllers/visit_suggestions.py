@@ -58,6 +58,14 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
 
+        if request.POST.get("context") == "pin" and request.POST.get("pin_slug"):
+            from urbanlens.dashboard.controllers.visits import _render_visit_history
+            from urbanlens.dashboard.models.pin.model import Pin
+
+            pin = get_object_or_404(Pin, slug=request.POST["pin_slug"], profile__user=request.user)
+            response = _render_visit_history(request, pin)
+            return _trigger_badge_refresh(response)
+
         notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
         response = render(
             request,

@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.pagination import get_page
@@ -32,10 +33,24 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
         Rendered HTML partial.
     """
     page_obj = get_page(request, pin.visit_history.all().prefetch_related("participants"), _VISITS_PAGE_SIZE)
+    pending_suggestions = (
+        VisitSuggestion.objects.for_profile(pin.profile)
+        .pending()
+        .for_place(location=pin.location, latitude=pin.effective_latitude, longitude=pin.effective_longitude)
+        .select_related("suggested_by", "existing_visit")
+        .prefetch_related("candidate_profiles")
+        .order_by("-created")
+    )
     return render(
         request,
         "dashboard/partials/pins/_visit_history.html",
-        {"pin": pin, "page_obj": page_obj, "visits": page_obj.object_list, "connections": get_connections(pin.profile)},
+        {
+            "pin": pin,
+            "page_obj": page_obj,
+            "visits": page_obj.object_list,
+            "connections": get_connections(pin.profile),
+            "pending_suggestions": pending_suggestions,
+        },
     )
 
 

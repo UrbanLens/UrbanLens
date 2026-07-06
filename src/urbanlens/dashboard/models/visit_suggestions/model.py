@@ -22,10 +22,12 @@ class VisitSuggestionStatus(abstract.TextChoices):
 class VisitSuggestion(abstract.Model):
     """A proposed PinVisit sent to another user for confirmation.
 
-    Created either when a user tags a connection as a co-visitor in the visit-add
-    dialog (``origin_visit`` set), or when a trip activity is marked completed and
-    another RSVP'd-yes member needs to confirm they were there (``trip_activity``
-    set). Exactly one of those two links is set per row.
+    Created when a user tags a connection as a co-visitor in the visit-add dialog
+    (``origin_visit`` set), when a trip activity is marked completed and another
+    RSVP'd-yes member needs to confirm they were there (``trip_activity`` set), or
+    when a safety check-in concludes and the checked-in user needs to confirm they
+    actually made it to the planned destination (``safety_checkin`` set). Exactly
+    one of those three links is set per row.
 
     Only ``location``/``latitude``/``longitude``/``visited_at`` are used to identify
     the place and time to the recipient - the origin pin's private custom name and
@@ -40,6 +42,7 @@ class VisitSuggestion(abstract.Model):
         suggested_to: Profile being asked to confirm the visit.
         origin_visit: The suggester's own PinVisit this suggestion was raised from.
         trip_activity: The completed TripActivity this suggestion was raised from.
+        safety_checkin: The concluded SafetyCheckin this suggestion was raised from.
         candidate_profiles: Other profiles from the same batch (minus suggested_to),
             re-filtered to mutual connections of suggested_to at accept time.
         notification: The notification delivered to suggested_to for this row.
@@ -89,6 +92,13 @@ class VisitSuggestion(abstract.Model):
         blank=True,
         related_name="visit_suggestions",
     )
+    safety_checkin = models.ForeignKey(
+        "dashboard.SafetyCheckin",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="visit_suggestions",
+    )
 
     candidate_profiles = models.ManyToManyField("dashboard.Profile", blank=True, related_name="+")
 
@@ -114,6 +124,7 @@ class VisitSuggestion(abstract.Model):
         suggested_to_id: int
         origin_visit_id: int | None
         trip_activity_id: int | None
+        safety_checkin_id: int | None
         existing_visit_id: int | None
         notification_id: int | None
 
@@ -152,7 +163,14 @@ class VisitSuggestion(abstract.Model):
         ]
         constraints = [
             CheckConstraint(
-                condition=Q(origin_visit__isnull=False) ^ Q(trip_activity__isnull=False),
+                # Exactly one of the three origin links must be set. CheckConstraint's ``^``
+                # only XORs two Q objects, so a third origin needs the explicit
+                # one-true-the-other-two-false form instead.
+                condition=(
+                    (Q(origin_visit__isnull=False) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=False) & Q(safety_checkin__isnull=True))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=False))
+                ),
                 name="db_visit_suggestion_exactly_one_origin",
             ),
         ]

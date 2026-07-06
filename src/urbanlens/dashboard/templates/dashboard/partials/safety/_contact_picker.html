@@ -1,0 +1,24 @@
+{% comment %}
+Contact picker: checkboxes for friends, plus a textarea for free email addresses
+(one per line, optionally "Name <email>"). Reused for both check-in defaults and
+individual check-ins. Context: `contacts` (existing (contact_profile, email, name)
+tuples to prefill) and `connections` (the profile's friends, for checkboxes).
+{% endcomment %}
+<div class="form-row">
+    <label>Emergency contacts</label>
+    {% if connections %}
+    <div class="safety-contact-friends">
+        {% for friend in connections %}
+        <label class="safety-contact-friend-option">
+            <input type="checkbox" name="contact_profile_ids" value="{{ friend.id }}"
+                   {% for contact_profile, email, name in contacts %}{% if contact_profile.id == friend.id %}checked{% endif %}{% endfor %}>
+            {{ friend.username }}
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <label for="contact_emails">Or add by email <small>(one per line - "Name &lt;email&gt;" or just the address)</small></label>
+    <textarea name="contact_emails" id="contact_emails" rows="3" placeholder="jane@example.com">{% for contact_profile, email, name in contacts %}{% if email %}{% if name %}{{ name }} <{{ email }}>
+{% else %}{{ email }}
+{% endif %}{% endif %}{% endfor %}</textarea>
+</div>
