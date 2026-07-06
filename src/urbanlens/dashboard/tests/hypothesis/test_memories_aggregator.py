@@ -14,9 +14,9 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.aggregator import get_memory_events
-from urbanlens.dashboard.baker_recipes import _make_profile
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
 
@@ -30,7 +30,7 @@ class MemoryEventsDateRangeTests(TestCase):
 
     def setUp(self):
         self.profile =  _make_profile()
-        self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        self.location = baker.make_recipe("dashboard.location")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
     def test_visit_within_range_is_included(self):

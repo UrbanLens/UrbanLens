@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.locations.naming import _MEANINGLESS_NAME_PHRASES
 from urbanlens.dashboard.services.visits import (
     accept_visit_suggestion,
     build_visit_suggestion_message,
@@ -107,7 +108,11 @@ class BuildVisitSuggestionMessageTests(TestCase):
         )
         self.assertEqual(build_visit_suggestion_message(location=location), "at a location")
 
-    @given(sentinel=st.text(alphabet=st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll")), min_size=5, max_size=20))
+    @given(
+        sentinel=st.text(alphabet=st.characters(max_codepoint=127, whitelist_categories=("Lu", "Ll")), min_size=5, max_size=20).filter(
+            lambda s: s.casefold() not in _MEANINGLESS_NAME_PHRASES,
+        ),
+    )
     @_hyp
     def test_never_reads_pin_or_visit_fields(self, sentinel: str) -> None:
         """The function only accepts a Location, so it structurally cannot leak Pin/PinVisit data."""

@@ -17,13 +17,18 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from xml.etree.ElementTree import Element, ParseError
+
+# Only used to catch exceptions
+from xml.etree.ElementTree import ParseError  # nosec B405
 
 from defusedxml.ElementTree import fromstring as parse_xml
 
 from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
 
 if TYPE_CHECKING:
+    # Only used for type checking
+    from xml.etree.ElementTree import Element  # nosec B405
+
     from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)

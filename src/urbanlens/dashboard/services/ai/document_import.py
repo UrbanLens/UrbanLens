@@ -309,7 +309,7 @@ def _parse_ai_csv_response(answer: str) -> list[dict[str, str]]:
         try:
             with open(path, encoding="utf-8", newline="") as fh:
                 rows = list(csv.DictReader(fh))
-        except (OSError, csv.Error):
+        except Exception:
             logger.warning("Could not parse AI response CSV from disk", exc_info=True)
             return []
 

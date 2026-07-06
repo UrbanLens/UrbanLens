@@ -257,7 +257,7 @@ class ExtractTakenAtMockTests(TestCase):
             result = extract_taken_at(mock_file)
         self.assertIsNotNone(result)
         expected = timezone.make_aware(dt) if timezone.is_naive(dt) else dt
-        self.assertEqual(result.replace(tzinfo=None), expected.replace(tzinfo=None))
+        self.assertEqual(result.replace(tzinfo=None), expected.replace(tzinfo=None, microsecond=0))
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,9 @@ import logging
 import math
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
-from xml.etree.ElementTree import ParseError as XMLParseError
+
+# Only used to catch exceptions
+from xml.etree.ElementTree import ParseError as XMLParseError  # nosec B405
 
 from django.core.cache import cache
 from django.db import DatabaseError

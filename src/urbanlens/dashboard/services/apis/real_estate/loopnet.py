@@ -88,7 +88,9 @@ class LoopNetGateway(Gateway):
         """Parse listing cards from the LoopNet search results HTML."""
         try:
             from defusedxml.lxml import fromstring as defused_fromstring
-            from lxml.etree import HTMLParser, LxmlError  # nosec B410 - HTMLParser is config only; parsing uses defused_fromstring
+
+            # HTMLParser is config only; parsing uses defused_fromstring
+            from lxml.etree import HTMLParser, LxmlError  # nosec B410
         except ImportError:
             return None
 
@@ -350,7 +352,9 @@ def _parse_property_page(html: str) -> dict[str, str] | None:
     """
     try:
         from defusedxml.lxml import fromstring as defused_fromstring
-        from lxml.etree import HTMLParser, LxmlError  # nosec B410 - HTMLParser is config only; parsing uses defused_fromstring
+
+        # HTMLParser is config only; parsing uses defused_fromstring
+        from lxml.etree import HTMLParser, LxmlError  # nosec B410
     except ImportError:
         return None
 

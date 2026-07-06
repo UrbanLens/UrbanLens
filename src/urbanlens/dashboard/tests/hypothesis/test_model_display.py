@@ -10,18 +10,16 @@ property/display tests use unittest.TestCase with unsaved instances.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from django.db import IntegrityError, transaction
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import LocationAlias, PinAlias
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-
 
 _MARKUP_TYPES = list(MarkupType.values)
 _VISIT_SOURCES = list(VisitSource.values)
@@ -35,7 +33,7 @@ class PinVisitStrTests(TestCase):
     def _visit(self, pin_id: int, year: int, month: int, day: int) -> PinVisit:
         v = PinVisit()
         v.pin_id = pin_id
-        v.visited_at = datetime(year, month, day, 10, 30, tzinfo=timezone.utc)
+        v.visited_at = datetime(year, month, day, 10, 30, tzinfo=UTC)
         return v
 
     def test_str_contains_pin_id(self) -> None:
@@ -50,14 +48,14 @@ class PinVisitStrTests(TestCase):
 
     @given(
         st.integers(min_value=1, max_value=9999),
-        st.dates(min_value=datetime(2000, 1, 1, tzinfo=timezone.utc).date(),
-                 max_value=datetime(2099, 12, 31, tzinfo=timezone.utc).date()),
+        st.dates(min_value=datetime(2000, 1, 1, tzinfo=UTC).date(),
+                 max_value=datetime(2099, 12, 31, tzinfo=UTC).date()),
     )
     @settings(max_examples=50, deadline=None)
     def test_str_always_contains_pin_id_and_date(self, pin_id: int, d) -> None:
         v = PinVisit()
         v.pin_id = pin_id
-        v.visited_at = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+        v.visited_at = datetime(d.year, d.month, d.day, tzinfo=UTC)
         s = str(v)
         self.assertIn(str(pin_id), s)
         self.assertIn(f"{d.year:04d}-{d.month:02d}-{d.day:02d}", s)
@@ -84,8 +82,11 @@ class VisitSourceEnumTests(TestCase):
     def test_geolocation_value(self) -> None:
         self.assertEqual(VisitSource.GEOLOCATION.value, "geolocation")
 
-    def test_exactly_six_members(self) -> None:
-        self.assertEqual(len(VisitSource.values), 6)
+    def test_safety_checkin_value(self) -> None:
+        self.assertEqual(VisitSource.SAFETY_CHECKIN.value, "safety_checkin")
+
+    def test_exactly_seven_members(self) -> None:
+        self.assertEqual(len(VisitSource.values), 7)
 
 
 # -- PinMarkup -----------------------------------------------------------------
@@ -262,9 +263,8 @@ class PinAliasUniquenessTests(TestCase):
         location = baker.make("dashboard.Location", latitude="47.0", longitude="-67.0")
         pin = baker.make("dashboard.Pin", profile=user.profile, location=location)
         baker.make("dashboard.PinAlias", pin=pin, name="Tunnel Entrance")
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                PinAlias.objects.create(pin=pin, name="Tunnel Entrance")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PinAlias.objects.create(pin=pin, name="Tunnel Entrance")
 
     def test_same_name_on_different_pins_is_allowed(self) -> None:
         user = baker.make("auth.User")

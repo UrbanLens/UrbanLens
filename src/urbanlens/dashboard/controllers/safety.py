@@ -9,7 +9,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.core.exceptions import ValidationError
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
@@ -122,7 +123,10 @@ def _get_checkin_by_slug(profile: Profile, checkin_slug: str) -> SafetyCheckin:
     try:
         return SafetyCheckin.objects.get(slug=checkin_slug, profile=profile)
     except SafetyCheckin.DoesNotExist:
-        return get_object_or_404(SafetyCheckin, uuid=checkin_slug, profile=profile)
+        try:
+            return get_object_or_404(SafetyCheckin, uuid=checkin_slug, profile=profile)
+        except ValidationError as exc:
+            raise Http404 from exc
 
 
 def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:

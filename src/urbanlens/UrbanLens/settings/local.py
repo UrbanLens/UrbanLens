@@ -15,7 +15,8 @@ load_dotenv(find_dotenv())
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb"  # nosec B105 - dev-only settings module, never used in production
+# this default is a dev-only settings module, never used in production
+SECRET_KEY = "django-insecure-r-8lxm+kdnd+j)-lxp7bdr8w260+7#d$j%&6l6g^3)3ly*()wb"  # nosec B105
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
