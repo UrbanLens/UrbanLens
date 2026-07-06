@@ -460,7 +460,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
                 _notify_pin_import_parse_failure(fmt)
 
-        if not parsed:
+        if not parsed and not location_history_files:
             yield sse({"type": "error", "message": "No valid location files found in the upload."})
             return
 

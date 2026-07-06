@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from django.db.models import Q
-from django.db.models.functions import Coalesce
+from django.db.models import DateField, Max, Min
+from django.db.models.functions import Cast, Coalesce
 from django.urls import reverse
 from django.utils import timezone
 
@@ -125,7 +125,21 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip
 
-    trips = Trip.objects.filter(profiles=profile).filter(Q(start_date__range=(start, end)) | Q(activities__scheduled_at__date__range=(start, end))).distinct()
+    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date
+    # win, else fall back to the earliest/latest scheduled activity. A trip with no
+    # end_date and no later activity is treated as ending on its effective start date,
+    # same as Trip.duration_days/timeline_status do.
+    trips = (
+        Trip.objects.filter(profiles=profile)
+        .annotate(
+            _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
+            _last_activity_date=Cast(Max("activities__scheduled_at"), output_field=DateField()),
+        )
+        .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
+        .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
+        .filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
+        .distinct()
+    )
 
     for trip in trips:
         occurred_at = trip.effective_start_date
@@ -133,6 +147,8 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
             continue
         ended_at = trip.effective_end_date
         point = _trip_representative_point(trip)
+        if bbox is not None and (point is None or not (bbox.min_lat <= point[0] <= bbox.max_lat and bbox.min_lng <= point[1] <= bbox.max_lng)):
+            continue
         yield MemoryEvent(
             type="trip",
             occurred_at=_date_to_datetime(occurred_at),

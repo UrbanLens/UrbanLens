@@ -224,8 +224,6 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         activity: The activity that was just marked completed.
         completer: The profile who marked the activity completed.
     """
-    if not activity.location_id:
-        return
     coords = _activity_coords(activity)
     if coords is None:
         return
@@ -701,6 +699,7 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         trip = result
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+        already_completed = activity.status == TripActivity.STATUS_COMPLETED
 
         today = datetime.date.today()
         completed_date_str = request.POST.get("completed_date", "")
@@ -719,7 +718,8 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
-        _create_visit_entries_for_completed_activity(trip, activity, profile)
+        if not already_completed:
+            _create_visit_entries_for_completed_activity(trip, activity, profile)
 
         return _render_activities_panel(request, trip, profile)
 

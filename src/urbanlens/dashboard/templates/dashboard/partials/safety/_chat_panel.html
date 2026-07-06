@@ -143,8 +143,9 @@ JavaScript is unavailable.
         // restored (so the message isn't lost) and the sender is told explicitly,
         // since a safety check-in message silently vanishing is far worse than most
         // other features failing quietly.
+        var formData = new FormData(form);
         input.value = '';
-        fetch(form.action, { method: 'POST', body: new FormData(form) })
+        fetch(form.action, { method: 'POST', body: formData })
             .then(function (resp) {
                 if (resp.ok) {
                     // This client isn't in the broadcast group while the socket is down,

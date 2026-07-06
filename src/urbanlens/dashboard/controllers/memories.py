@@ -7,7 +7,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Sum
+from django.db.models import DateField, Min, Sum
+from django.db.models.functions import Cast, Coalesce
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -16,7 +17,7 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
-from urbanlens.dashboard.models.trips.model import TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 
@@ -66,6 +67,20 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
     photo_at = Image.objects.filter(profile=profile).order_by("created").values_list("created", flat=True).first()
     if photo_at:
         candidates.append(photo_at.date())
+
+    # Mirrors Trip.effective_start_date: explicit start_date wins, else the
+    # earliest scheduled activity's date (see services.memories.aggregator._trips_for_range).
+    trip_start = (
+        Trip.objects.filter(profiles=profile)
+        .annotate(_first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()))
+        .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
+        .filter(_eff_start__isnull=False)
+        .order_by("_eff_start")
+        .values_list("_eff_start", flat=True)
+        .first()
+    )
+    if trip_start:
+        candidates.append(trip_start)
 
     return min(candidates) if candidates else None
 
