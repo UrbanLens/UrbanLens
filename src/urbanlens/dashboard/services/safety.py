@@ -173,21 +173,39 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
 
 
 def set_checkin_contacts(checkin: SafetyCheckin, contacts: Iterable[ContactInput]) -> None:
-    """Replace a check-in's contact list.
+    """Reconcile a check-in's contact list with a newly submitted one.
+
+    Matches submitted contacts to existing rows by (contact_profile, email)
+    identity and updates in place, rather than deleting and recreating
+    everything - a plain edit on the detail page must not invalidate the
+    magic-link ``token`` already emailed to a contact, nor wipe
+    ``notified_at``/``found_safe_at`` once a check-in has escalated.
 
     Args:
         checkin: The check-in whose contacts are being (re)set.
         contacts: Iterable of (contact_profile, email, name) tuples.
     """
-    checkin.contacts.all().delete()
+    existing_by_key = {(contact.contact_profile_id, contact.email): contact for contact in checkin.contacts.all()}
+    keep_ids: set[int] = set()
+
     for contact_profile, email, name in contacts:
         resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
-        SafetyCheckinContact.objects.create(
-            checkin=checkin,
-            contact_profile=resolved_profile,
-            email=resolved_email,
-            name=name,
-        )
+        existing = existing_by_key.get((resolved_profile.pk if resolved_profile else None, resolved_email))
+        if existing is not None:
+            if existing.name != name:
+                existing.name = name
+                existing.save(update_fields=["name", "updated"])
+            keep_ids.add(existing.pk)
+        else:
+            created = SafetyCheckinContact.objects.create(
+                checkin=checkin,
+                contact_profile=resolved_profile,
+                email=resolved_email,
+                name=name,
+            )
+            keep_ids.add(created.pk)
+
+    checkin.contacts.exclude(pk__in=keep_ids).delete()
 
 
 def create_checkin(

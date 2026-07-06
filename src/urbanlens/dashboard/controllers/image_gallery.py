@@ -95,7 +95,8 @@ class PinImageView(LoginRequiredMixin, View):
             img.longitude = Decimal(str(data["longitude"]))
             img.save(update_fields=["latitude", "longitude", "updated"])
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.warning("Failed to update image %s on pin %s: %s", image_id, pin_slug, exc)
+            return JsonResponse({"error": "Invalid request data."}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
@@ -173,7 +174,8 @@ class WikiImageView(LoginRequiredMixin, View):
             img.longitude = Decimal(str(data["longitude"]))
             img.save(update_fields=["latitude", "longitude", "updated"])
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.warning("Failed to update image %s on location %s: %s", image_id, location_slug, exc)
+            return JsonResponse({"error": "Invalid request data."}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, location_slug: str, image_id: int) -> HttpResponse:

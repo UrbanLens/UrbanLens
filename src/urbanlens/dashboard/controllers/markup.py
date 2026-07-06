@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -146,6 +146,33 @@ class MarkupJsonView(LoginRequiredMixin, View):
             JsonResponse with ``markup_items`` list.
         """
         _owner, items = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
+        return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
+
+
+class SafetyContactMarkupJsonView(View):
+    """Read-only markup JSON for the public, token-gated safety contact portal.
+
+    Deliberately not ``LoginRequiredMixin`` - an emergency contact has no
+    account to log into, only the magic-link ``token`` mailed to them, so
+    this mirrors the token-based auth already used by
+    ``SafetyContactPortalView``/``SafetyContactMarkSafeView`` instead of the
+    owner-only ``MarkupJsonView``.
+
+    GET /safety/contact/<uuid:token>/markup/json/
+    """
+
+    def get(self, request: HttpRequest, token: str) -> HttpResponse:
+        """Return the linked check-in's markup items as a JSON list.
+
+        Args:
+            request: HttpRequest.
+            token: The contact's magic-link token.
+
+        Returns:
+            JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
+        """
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin"), token=token)
+        items = PinMarkup.objects.for_safety_checkin(contact.checkin)
         return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
 
 

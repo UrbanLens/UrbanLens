@@ -358,10 +358,15 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             cancel_checkin(checkin)
             return redirect("safety.home")
 
+        lat = request.POST.get("destination_latitude") or None
+        lng = request.POST.get("destination_longitude") or None
+
         checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
         checkin.plan_details = request.POST.get("plan_details", checkin.plan_details).strip()
         checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
-        checkin.save(update_fields=["title", "plan_details", "contact_message", "updated"])
+        checkin.destination_latitude = float(lat) if lat else None
+        checkin.destination_longitude = float(lng) if lng else None
+        checkin.save(update_fields=["title", "plan_details", "contact_message", "destination_latitude", "destination_longitude", "updated"])
         set_checkin_contacts(checkin, _parse_contacts_from_post(request, profile))
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
@@ -518,7 +523,8 @@ class SafetyImageView(LoginRequiredMixin, View):
             img.longitude = Decimal(str(data["longitude"]))
             img.save(update_fields=["latitude", "longitude", "updated"])
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.warning("Failed to update image %s on checkin %s: %s", image_id, checkin_slug, exc)
+            return JsonResponse({"error": "Invalid request data."}, status=400)
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:

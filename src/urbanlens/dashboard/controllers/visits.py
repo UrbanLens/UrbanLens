@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
+import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponse

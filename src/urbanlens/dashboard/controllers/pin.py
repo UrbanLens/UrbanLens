@@ -548,7 +548,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 try:
                     extracted = extract_archive(data)
                 except ValueError as exc:
-                    return JsonResponse({"error": str(exc)}, status=400)
+                    logger.warning("Could not extract archive: %s", exc)
+                    return JsonResponse({"error": "Invalid archive."}, status=400)
 
                 for entry in extracted:
                     # Handle KMZ files (nested ZIPs) found inside an outer archive.
@@ -615,7 +616,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 data = uploaded_file.read()
             except OSError as exc:
-                return JsonResponse({"error": f"Failed to read {uploaded_file.name}: {exc}"}, status=400)
+                logger.warning("Failed to read uploaded file %s -> %s", uploaded_file.name, exc)
+                return JsonResponse({"error": f"Failed to read {uploaded_file.name}."}, status=400)
 
             # .txt/.docx are routed to the AI extraction pipeline below rather than the
             # geo-format dispatch - a .docx in particular starts with ZIP magic bytes and
@@ -626,7 +628,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 try:
                     extracted = extract_archive(data)
                 except ValueError as exc:
-                    return JsonResponse({"error": str(exc)}, status=400)
+                    logger.warning("Could not extract archive: %s", exc)
+                    return JsonResponse({"error": "Invalid archive."}, status=400)
                 for entry in extracted:
                     if is_archive(entry.data):
                         try:
@@ -648,8 +651,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for doc_name, doc_data in document_files:
             try:
                 doc_list = extract_pins_from_document(doc_name, doc_data, profile)
-            except DocumentTooLargeError as exc:
-                document_warnings.append(str(exc))
+            except DocumentTooLargeError:
+                document_warnings.append(f"Document too large: {doc_name}")
                 continue
             if doc_list:
                 lists.append(doc_list)
