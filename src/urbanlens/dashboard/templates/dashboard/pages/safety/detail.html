@@ -48,7 +48,8 @@
             <label>Destination &amp; route</label>
             {% url 'safety.checkin.markup.json' checkin.uuid as markup_json_url %}
             {% url 'safety.checkin.markup' checkin.uuid as markup_create_url %}
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url %}
+            {% url 'safety.checkin.markup.edit' checkin.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
+            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template %}
         </div>
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>

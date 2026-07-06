@@ -416,11 +416,20 @@
     color: var(--ul-grey-8);
 }
 
-.safety-map-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .4rem;
-    margin: .5rem 0;
+// Positioning context for the floating search bar (.addr-search-bar), the
+// bottom-left "Add Detail" markup controls (.map-bottom-controls), and the
+// markup side panel (.map-dialog--side) - all position themselves absolutely
+// relative to this, the same way pin detail's .map-wrapper does.
+.safety-map-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: .5rem;
+}
+
+#safety-map {
+    height: 360px;
+    border-radius: 12px;
+    overflow: hidden;
 }
 
 .safety-photo-grid {

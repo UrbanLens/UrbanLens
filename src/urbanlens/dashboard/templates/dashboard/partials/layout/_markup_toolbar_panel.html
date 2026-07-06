@@ -1,0 +1,119 @@
+{% comment %}
+Shared "Add Detail" markup dropdown + the unified draw/edit side panel. Used
+identically by the pin detail page, the Location wiki page, and the safety
+check-in map so a change to one lands on all three.
+
+Include inside a `position: relative` wrapper around the map (e.g. the pin
+detail/wiki `.map-wrapper`, or the safety check-in's own map wrapper) -
+`.map-dialog--side` and `.map-bottom-controls` position themselves absolutely
+relative to that ancestor. Pair with _markup_toolbar_script.html (see that
+file's own doc comment for the JS half's preconditions/parameters).
+
+Context:
+  show_add_pin_item - if truthy, adds a "Pin" entry above the markup tools
+                       that calls openAddPinDialog() (pin detail/wiki only -
+                       the safety check-in map has no such dialog, so it
+                       omits this flag and only shows markup tools).
+  markup_fill_color, markup_border_color - optional initial swatch values
+                       (defaults match the pre-existing hardcoded defaults).
+{% endcomment %}
+<div class="map-add-detail-wrap" id="add-detail-wrap">
+    <div id="add-detail-menu" class="add-detail-menu" style="display:none">
+        {% if show_add_pin_item %}
+        <button type="button" class="add-detail-item" onclick="openAddPinDialog()">
+            <i class="material-symbols-outlined">place</i> Pin
+        </button>
+        {% endif %}
+        <button type="button" class="add-detail-item" onclick="startMarkupDraw('line')">
+            <i class="material-symbols-outlined">show_chart</i> Line
+        </button>
+        <button type="button" class="add-detail-item" onclick="startMarkupDraw('arrow')">
+            <i class="material-symbols-outlined">arrow_forward</i> Arrow
+        </button>
+        <button type="button" class="add-detail-item" onclick="startTextPlacement()">
+            <i class="material-symbols-outlined">title</i> Text
+        </button>
+        <button type="button" class="add-detail-item" onclick="startShapeDraw('square')">
+            <i class="material-symbols-outlined">crop_square</i> Square
+        </button>
+        <button type="button" class="add-detail-item" onclick="startShapeDraw('circle')">
+            <i class="material-symbols-outlined">circle</i> Circle
+        </button>
+        <button type="button" class="add-detail-item" onclick="startShapeDraw('polygon')">
+            <i class="material-symbols-outlined">format_shapes</i> Polygon
+        </button>
+    </div>
+    <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
+            id="add-detail-btn" onclick="toggleAddDetailMenu()">
+        <i class="material-symbols-outlined">add_location_alt</i> Add Detail
+        <i class="material-icons add-detail-chevron">expand_less</i>
+    </button>
+</div>
+
+{# -- Unified markup panel: same shell/fields for drawing AND editing -- #}
+<div id="markup-panel" class="map-dialog map-dialog--side" style="display:none">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Draw Arrow" title_id="markup-panel-title" closefn="closeMarkupPanel" %}
+    <div class="markup-form-body">
+        <p id="markup-panel-hint" class="markup-place-hint" hidden>
+            <i class="material-symbols-outlined">touch_app</i>
+            <span id="markup-panel-hint-text"></span>
+        </p>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line"><span id="markup-panel-label-caption">Label</span> <small>(optional)</small></span>
+            <input type="text" id="markup-panel-label" placeholder="e.g. Route in" class="markup-form-input"
+                   oninput="_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row">
+            <span id="markup-panel-color-label">Fill Color</span>
+            <div class="markup-color-swatches" id="markup-panel-color-swatches"></div>
+            <input type="hidden" id="markup-panel-color" value="{{ markup_fill_color|default:'#e53e3e' }}">
+        </label>
+        <label class="markup-form-label-row">
+            <span id="markup-panel-border-label">Border Color</span>
+            <div class="markup-color-swatches" id="markup-panel-border-swatches"></div>
+            <input type="hidden" id="markup-panel-border" value="{{ markup_border_color|default:'' }}">
+        </label>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line">
+                <span id="markup-panel-width-label-text">Width</span>&nbsp;<span id="markup-panel-width-label">3</span>px
+            </span>
+            <input type="range" id="markup-panel-width" min="1" max="8" value="3"
+                   oninput="document.getElementById('markup-panel-width-label').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row">
+            <span class="markup-form-label-line">
+                <span id="markup-panel-fill-opacity-label-text">Fill Opacity</span>&nbsp;<span id="markup-panel-fill-opacity-val">87</span>%
+            </span>
+            <input type="range" id="markup-panel-fill-opacity" min="0" max="100" value="87"
+                   oninput="document.getElementById('markup-panel-fill-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row" id="markup-panel-border-opacity-row">
+            <span class="markup-form-label-line">
+                Border Opacity&nbsp;<span id="markup-panel-border-opacity-val">100</span>%
+            </span>
+            <input type="range" id="markup-panel-border-opacity" min="0" max="100" value="100"
+                   oninput="document.getElementById('markup-panel-border-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row" id="markup-panel-security-row">
+            Security Type
+            <select id="markup-panel-security" class="markup-form-select" onchange="_liveApplyMarkupEdit()">
+                <option value="">- None -</option>
+                <option value="fence">Fence</option>
+                <option value="camera">Camera</option>
+                <option value="alarm">Alarm</option>
+                <option value="security">Security Guard</option>
+                <option value="sign">Sign</option>
+                <option value="plywood">Plywood</option>
+                <option value="locked">Locked</option>
+                <option value="vps">VPS</option>
+            </select>
+        </label>
+        <div class="form-actions" id="markup-panel-draw-actions" style="margin-top:.5rem">
+            <button type="button" class="btn btn--primary btn--lg btn--submit" onclick="_closeMarkupDraw()" style="margin-left:auto">Close</button>
+        </div>
+        <div class="form-actions" id="markup-panel-edit-actions" style="margin-top:.5rem" hidden>
+            {# The dialog header's X already closes this panel - no need to duplicate it here. #}
+            <button type="button" class="btn btn--danger" onclick="deleteMarkupEdit()" style="margin-left:auto">Delete</button>
+        </div>
+    </div>
+</div>

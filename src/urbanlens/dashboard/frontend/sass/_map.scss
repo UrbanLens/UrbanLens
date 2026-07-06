@@ -2034,22 +2034,6 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     border-color: var(--ul-grey-3b);
 }
 
-/* Inline variant: a normal in-flow form field rather than a floating overlay */
-.addr-search-bar--inline {
-    position: relative;
-    top: auto;
-    left: auto;
-    width: 100%;
-    opacity: 1;
-    margin-bottom: .5rem;
-
-    @include up($breakpoint-sm) {
-        top: auto;
-        left: auto;
-        width: 100%;
-    }
-}
-
 .addr-search-icon {
     font-size: 0.9rem;
     color: var(--ul-grey-7);

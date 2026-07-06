@@ -39,6 +39,33 @@ logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
 
+# Safety check-in maps use a single fixed OSM tile layer (no layer switcher),
+# so - unlike the main map page - this attribution never needs to change at
+# runtime; it's rendered as static text in the page footer, matching the main
+# map's "attributionControl: false" + footer-attribution convention.
+_MAP_ATTRIBUTION = "© OpenStreetMap contributors · Leaflet"
+
+
+def _markup_style_context(profile: Profile) -> dict:
+    """Return the profile's markup color/opacity defaults for the markup panel.
+
+    Shared with the pin detail and location wiki pages' map context, so a
+    check-in's route/plan markup starts from the same fill/border defaults
+    the user already has configured elsewhere.
+
+    Args:
+        profile: The requesting user's Profile instance.
+
+    Returns:
+        Dict of markup_fill_color/markup_fill_opacity/markup_border_color/markup_border_opacity.
+    """
+    return {
+        "markup_fill_color": profile.markup_fill_color,
+        "markup_fill_opacity": profile.markup_fill_opacity,
+        "markup_border_color": profile.markup_border_color,
+        "markup_border_opacity": profile.markup_border_opacity,
+    }
+
 
 def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[ContactInput]:
     """Parse a submitted contact list (friend chips + email chips) into ContactInput tuples.
@@ -218,6 +245,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 "default_contacts": default_contacts_as_input(profile),
                 "connections": get_connections(profile),
                 "checkin": None,
+                "map_attribution": _MAP_ATTRIBUTION,
+                **_markup_style_context(profile),
             },
         )
 
@@ -236,6 +265,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             "default_contacts": default_contacts_as_input(profile),
             "connections": get_connections(profile),
             "checkin": None,
+            "map_attribution": _MAP_ATTRIBUTION,
+            **_markup_style_context(profile),
         }
         raw_checkin_by = request.POST.get("checkin_by", "").strip()
         if not raw_checkin_by:
@@ -298,6 +329,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contacts_input": [(c.contact_profile, c.email, c.name) for c in contacts],
                 "connections": get_connections(profile),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                "map_attribution": _MAP_ATTRIBUTION,
+                **_markup_style_context(profile),
             },
         )
 
@@ -527,6 +560,7 @@ class SafetyContactPortalView(View):
                 "contact": contact,
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                "map_attribution": _MAP_ATTRIBUTION,
             },
         )
 

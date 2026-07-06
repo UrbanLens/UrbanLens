@@ -1,49 +1,58 @@
 {% comment %}
-Compact map for safety check-in pages: a draggable destination marker plus,
-when markup_json_url is set, the shared route/plan drawing tools built on
-window.MarkupEngine (the same engine the pin detail and wiki maps use).
+Compact map for safety check-in pages: a draggable destination marker, the
+same floating "jump to" search bar as the main map (window.LocationSearchEngine),
+and - when markup_json_url is set and the map isn't readonly - the exact same
+"Add Detail" markup toolbar/side-panel as the pin detail and Location wiki
+maps (window.MarkupEngine via _markup_toolbar_panel.html/_markup_toolbar_script.html).
+
+A readonly map (the contact portal) only ever needs to *view* any existing
+markup, never draw/edit it, so it keeps its own minimal read-only renderer
+instead of pulling in the shared toolbar.
+
 Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
 (either may be blank), markup_json_url/markup_create_url/markup_edit_url_template
-(omit all three to skip markup entirely), readonly (true hides the draw toolbar
-and the destination marker becomes non-draggable).
+(omit all three to skip markup entirely), markup_fill_color/markup_border_color/
+markup_fill_opacity/markup_border_opacity (optional, profile defaults), readonly
+(true hides all editing controls and the destination marker becomes non-draggable).
+
+Leaflet itself is loaded by each including page's own {% templatetag openblock %} header {% templatetag closeblock %},
+so it's always available by the time this script runs - no typeof guard needed.
 {% endcomment %}
-{% if not readonly %}
-<div id="safety-map-search-bar" class="addr-search-bar addr-search-bar--inline">
-    <i class="material-icons addr-search-icon">place</i>
-    <input type="text" id="safety-map-search" class="addr-search-input"
-           placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
-    <button type="button" class="addr-search-history" id="safety-map-search-history" aria-label="Previous searches">
-        <i class="material-symbols-outlined">arrow_upward</i>
-    </button>
-    <button type="button" class="addr-search-clear" id="safety-map-search-clear" aria-label="Clear search">
-        <i class="material-symbols-outlined">close</i>
-    </button>
-    <div id="safety-map-search-suggestions" class="addr-search-suggestions" hidden></div>
+<div class="safety-map-wrapper">
+    {% if not readonly %}
+    <div id="safety-map-search-bar" class="addr-search-bar">
+        <i class="material-icons addr-search-icon">place</i>
+        <input type="text" id="safety-map-search" class="addr-search-input"
+               placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
+        <button type="button" class="addr-search-history" id="safety-map-search-history" aria-label="Previous searches">
+            <i class="material-symbols-outlined">arrow_upward</i>
+        </button>
+        <button type="button" class="addr-search-clear" id="safety-map-search-clear" aria-label="Clear search">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+        <div id="safety-map-search-suggestions" class="addr-search-suggestions" hidden></div>
+    </div>
+    {% endif %}
+    <div id="safety-map"></div>
+    {% if markup_json_url and not readonly %}
+    <div class="map-bottom-controls">
+        {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
+    </div>
+    {% endif %}
 </div>
-{% endif %}
-<div id="safety-map" style="height:360px;border-radius:12px;overflow:hidden"></div>
 {% if not readonly %}
 <input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
 <input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
 <p class="form-hint">Click the map, drag the marker, or search above to set your destination.</p>
 {% endif %}
-{% if markup_json_url %}
-<div class="safety-map-toolbar" id="safety-markup-toolbar" {% if readonly %}hidden{% endif %}>
-    <button type="button" class="btn btn--sm btn--ghost" data-tool="line">Line</button>
-    <button type="button" class="btn btn--sm btn--ghost" data-tool="arrow">Arrow</button>
-    <button type="button" class="btn btn--sm btn--ghost" data-tool="polygon">Area</button>
-    <button type="button" class="btn btn--sm btn--ghost" data-tool="circle">Circle</button>
-    <button type="button" class="btn btn--sm btn--ghost" data-tool="text">Label</button>
-    <button type="button" class="btn btn--sm btn--ghost" id="safety-markup-done" hidden>Done</button>
-</div>
-{% endif %}
 <script>
-(function () {
-    if (typeof L === 'undefined') return;
     var centerLat = {{ map_center_lat|default:"39.8283" }};
     var centerLng = {{ map_center_lng|default:"-98.5795" }};
-    var map = L.map('safety-map').setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    // attributionControl: false - attribution renders as static text in the
+    // page footer instead (see partials/layout/footer.html's map_attribution).
+    var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    setTimeout(function () { map.invalidateSize(); }, 300);
 
     var readonly = {{ readonly|yesno:"true,false" }};
     var destLat = {{ destination_lat|default:"null" }};
@@ -74,29 +83,40 @@ and the destination marker becomes non-draggable).
 
     // -- Address / coordinate search (shared window.LocationSearchEngine) ------
     if (!readonly) {
-        function jumpTo(lat, lng, zoom) {
-            map.setView([lat, lng], zoom || 15);
-            setDestination(lat, lng);
-        }
+        (function () {
+            function jumpTo(lat, lng, zoom) {
+                map.setView([lat, lng], zoom || 15);
+                setDestination(lat, lng);
+            }
 
-        window.LocationSearchEngine.create({
-            input: document.getElementById('safety-map-search'),
-            suggestions: document.getElementById('safety-map-search-suggestions'),
-            bar: document.getElementById('safety-map-search-bar'),
-            clearBtn: document.getElementById('safety-map-search-clear'),
-            historyBtn: document.getElementById('safety-map-search-history'),
-            historyKey: 'ul_safety_dest_history_v1',
-            sources: {
-                localPins: { url: '{% url "map.autocomplete.local" %}' },
-                osmNominatim: true,
-            },
-            enableMyLocation: true,
-            defaultZoom: 15,
-            onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },
-        });
+            window.LocationSearchEngine.create({
+                input: document.getElementById('safety-map-search'),
+                suggestions: document.getElementById('safety-map-search-suggestions'),
+                bar: document.getElementById('safety-map-search-bar'),
+                clearBtn: document.getElementById('safety-map-search-clear'),
+                historyBtn: document.getElementById('safety-map-search-history'),
+                historyKey: 'ul_safety_dest_history_v1',
+                sources: {
+                    localPins: { url: '{% url "map.autocomplete.local" %}' },
+                    osmNominatim: true,
+                },
+                enableMyLocation: true,
+                defaultZoom: 15,
+                onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },
+            });
+        })();
     }
-
-    {% if markup_json_url %}
+</script>
+{% if markup_json_url %}
+{% if not readonly %}
+<script>
+    // Shared with the pin detail / Location wiki maps - see that file's own doc comment.
+    const _markupLayer = L.layerGroup().addTo(map);
+    {% include "dashboard/partials/layout/_markup_toolbar_script.html" %}
+</script>
+{% else %}
+{# Readonly (contact portal): view existing markup only, no editing UI. #}
+<script>
     var markupLayer = L.layerGroup().addTo(map);
     function loadMarkup() {
         fetch('{{ markup_json_url }}').then(function (r) { return r.json(); }).then(function (data) {
@@ -123,42 +143,6 @@ and the destination marker becomes non-draggable).
         }).catch(function () {});
     }
     loadMarkup();
-
-    {% if not readonly %}
-    var session = window.MarkupEngine.createDrawSession(map, {
-        getColor: function () { return '#e53e3e'; },
-        getWidth: function () { return 3; },
-        getTextLabel: function () { return window.prompt('Label text?') || ''; },
-        onCommit: function (type, latlngs, extras) {
-            var geometry;
-            if (type === 'text') {
-                geometry = { type: 'Point', coordinates: [latlngs[0][1], latlngs[0][0]] };
-            } else if (type === 'circle') {
-                var p1 = L.latLng(latlngs[0]), p2 = L.latLng(latlngs[1]);
-                geometry = { type: 'Circle', coordinates: [p1.lng, p1.lat], radius: p1.distanceTo(p2) };
-            } else if (type === 'polygon' || type === 'rect') {
-                geometry = { type: 'Polygon', coordinates: latlngs.map(function (p) { return [p[1], p[0]]; }) };
-            } else {
-                geometry = { type: 'LineString', coordinates: latlngs.map(function (p) { return [p[1], p[0]]; }) };
-            }
-            fetch('{{ markup_create_url }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
-                body: JSON.stringify({ markup_type: type === 'rect' ? 'square' : type, geometry: geometry, label: extras.label || '' }),
-            }).then(function () { loadMarkup(); session.deactivate(); toggleDone(false); });
-        },
-        onToolChange: function (tool) { toggleDone(!!tool); },
-    });
-    function toggleDone(show) {
-        var btn = document.getElementById('safety-markup-done');
-        if (btn) btn.hidden = !show;
-    }
-    document.querySelectorAll('#safety-markup-toolbar [data-tool]').forEach(function (btn) {
-        btn.addEventListener('click', function () { session.startTool(btn.dataset.tool); });
-    });
-    var doneBtn = document.getElementById('safety-markup-done');
-    if (doneBtn) doneBtn.addEventListener('click', function () { session.finishCurrent(); });
-    {% endif %}
-    {% endif %}
-}());
 </script>
+{% endif %}
+{% endif %}
