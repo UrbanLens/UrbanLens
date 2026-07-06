@@ -185,7 +185,7 @@ class SafetyHomeView(LoginRequiredMixin, View):
             return JsonResponse(
                 {
                     "default_message": preference.default_message,
-                    "default_grace_period_hours": preference.default_grace_period_hours,
+                    "default_grace_period_display": preference.default_grace_period_display,
                     "contact_labels": [_contact_display_label(*contact) for contact in default_contacts_as_input(profile)],
                 }
             )

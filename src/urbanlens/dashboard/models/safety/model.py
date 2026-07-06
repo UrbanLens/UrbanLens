@@ -39,6 +39,25 @@ DEFAULT_CONTACT_MESSAGE = (
 )
 
 
+def humanize_hours_minutes(delta: timedelta) -> str:
+    """Render a duration as a human-readable "X hours Y minutes" string.
+
+    Args:
+        delta: The duration to render.
+
+    Returns:
+        E.g. "30 minutes", "1 hour", "1 hour 30 minutes", or "0 minutes".
+    """
+    total_minutes = round(delta.total_seconds() / 60)
+    hours, minutes = divmod(total_minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} hour" + ("" if hours == 1 else "s"))
+    if minutes or not hours:
+        parts.append(f"{minutes} minute" + ("" if minutes == 1 else "s"))
+    return " ".join(parts)
+
+
 class EmergencyContactDefault(abstract.Model):
     """A reusable emergency contact saved to a profile's safety defaults.
 
@@ -109,6 +128,15 @@ class SafetyPreference(abstract.Model):
             The grace period as a plain float number of hours.
         """
         return self.default_grace_period.total_seconds() / 3600
+
+    @property
+    def default_grace_period_display(self) -> str:
+        """``default_grace_period`` as a human-readable "X hours Y minutes" string.
+
+        Returns:
+            E.g. "30 minutes", "1 hour", or "1 hour 30 minutes".
+        """
+        return humanize_hours_minutes(self.default_grace_period)
 
     def __str__(self) -> str:
         """Return a human-readable description of this preference row.

@@ -35,10 +35,6 @@
         </div>
         <h2 class="safety-empty-state-title">No check-ins yet</h2>
         <p class="safety-empty-state-text">Create a check-in before your next trip so someone knows to look for you.</p>
-        <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
-            <i class="material-symbols-outlined">add</i>
-            New Check-in
-        </a>
     </div>
     {% endif %}
 
@@ -65,7 +61,7 @@
             </div>
             <div class="safety-defaults-summary-row">
                 <span class="safety-defaults-summary-label">Grace period</span>
-                <span class="safety-defaults-summary-value" id="safety-defaults-summary-grace">{{ preference.default_grace_period_hours|floatformat:"-2" }} hour{{ preference.default_grace_period_hours|pluralize }}</span>
+                <span class="safety-defaults-summary-value" id="safety-defaults-summary-grace">{{ preference.default_grace_period_display }}</span>
             </div>
             <div class="safety-defaults-summary-row">
                 <span class="safety-defaults-summary-label">Emergency contacts</span>
@@ -147,8 +143,7 @@
             return response.json();
         }).then(function (data) {
             document.getElementById('safety-defaults-summary-message').textContent = data.default_message || 'Not set';
-            document.getElementById('safety-defaults-summary-grace').textContent =
-                data.default_grace_period_hours + ' hour' + (data.default_grace_period_hours === 1 ? '' : 's');
+            document.getElementById('safety-defaults-summary-grace').textContent = data.default_grace_period_display;
             document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
             setStatus('Saved', false);
             if (window.toastr) toastr.success('Defaults saved.');

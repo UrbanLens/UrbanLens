@@ -116,5 +116,5 @@ class SafetyHomeViewDefaultsPostTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content)
         self.assertEqual(payload["default_message"], "Ping me if I go quiet.")
-        self.assertEqual(payload["default_grace_period_hours"], 1.5)
+        self.assertEqual(payload["default_grace_period_display"], "1 hour 30 minutes")
         self.assertEqual(payload["contact_labels"], [self.friend_profile.username])
