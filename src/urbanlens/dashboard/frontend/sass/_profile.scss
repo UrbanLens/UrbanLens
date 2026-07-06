@@ -864,6 +864,10 @@
 .edit-field {
     margin-bottom: 1.1rem;
     flex: 1;
+
+    + .edit-field {
+        margin-left: 1rem;
+    }
 }
 
 .edit-field-row {

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import logging
+from datetime import UTC, datetime
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponse
@@ -15,7 +15,11 @@ from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, sync_last_visited
+from urbanlens.dashboard.services.visits import (
+    add_visited_status,
+    create_visit_suggestion,
+    sync_last_visited,
+)
 
 logger = logging.getLogger(__name__)
 
