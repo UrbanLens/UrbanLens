@@ -115,7 +115,7 @@ services:
 
     volumes:
       - logs:/var/log
-      - static_volume:/app/src/urbanlens/frontend/static:ro
+      - static_volume:/app/src/urbanlens/frontend/static
 
     networks:
       app_network:

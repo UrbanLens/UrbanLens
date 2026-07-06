@@ -2798,23 +2798,8 @@ dialog.tag-create-card.ul-dialog {
 }
 
 .org-bulk-btn--merge {
-    background: var(--primary-color);
-    color: var(--ul-grey-0);
-    border-color: var(--primary-color);
-    box-shadow: 0 1px 4px color-mix(in srgb, $primary-color 35%, transparent);
-
-    &:hover:not(:disabled) {
-        background: color-mix(in srgb, $primary-color 88%, black);
-        border-color: color-mix(in srgb, $primary-color 88%, black);
-        box-shadow: 0 2px 8px color-mix(in srgb, $primary-color 40%, transparent);
-    }
-
     &:disabled {
-        background: color-mix(in srgb, $primary-color 35%, transparent);
-        border-color: transparent;
-        color: color-mix(in srgb, var(--ul-grey-0) 70%, transparent);
         box-shadow: none;
-        opacity: 1;
         cursor: not-allowed;
     }
 }

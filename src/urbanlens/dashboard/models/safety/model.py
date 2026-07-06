@@ -61,7 +61,7 @@ class EmergencyContactDefault(abstract.Model):
         """
         if self.label:
             return self.label
-        if self.contact_profile_id:
+        if self.contact_profile:
             return self.contact_profile.username
         return self.email or "Unknown contact"
 
@@ -303,9 +303,9 @@ class SafetyCheckinMessage(abstract.Model):
         Returns:
             The contact's display name, the sending profile's username, or "Unknown".
         """
-        if self.sender_contact_id:
+        if self.sender_contact:
             return self.sender_contact.display_name
-        if self.sender_profile_id:
+        if self.sender_profile:
             return self.sender_profile.username
         return "Unknown"
 

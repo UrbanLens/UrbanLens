@@ -198,8 +198,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             grace_period=_parse_grace_period(request),
             plan_details=request.POST.get("plan_details", "").strip(),
             contact_message=request.POST.get("contact_message", "").strip(),
-            destination_latitude=lat,
-            destination_longitude=lng,
+            destination_latitude=float(lat) if lat else None,
+            destination_longitude=float(lng) if lng else None,
             contacts=_parse_contacts_from_post(request, profile),
         )
         return redirect("safety.checkin.detail", checkin_uuid=checkin.uuid)

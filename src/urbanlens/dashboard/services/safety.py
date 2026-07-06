@@ -342,7 +342,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
 
     for other in checkin.contacts.exclude(pk=contact.pk):
         portal_url = _absolute_url(f"/safety/contact/{other.token}/")
-        if other.contact_profile_id:
+        if other.contact_profile:
             NotificationLog.objects.create(
                 profile=other.contact_profile,
                 status=Status.UNREAD,
@@ -352,7 +352,10 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
                 message=f"{contact.display_name} marked {checkin.profile.username} safe.",
                 url=portal_url,
             )
-        other_email = other.contact_profile.user.email if other.contact_profile_id and other.contact_profile.user else other.email
+            other_email = other.contact_profile.user.email if other.contact_profile and other.contact_profile.user else other.email
+        else:
+            other_email = other.email
+            
         _send_email(
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
