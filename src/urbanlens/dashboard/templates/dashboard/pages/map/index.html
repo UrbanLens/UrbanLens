@@ -590,6 +590,7 @@
     let _MAP_DARK_MODE       = '{{ map_dark_mode|default:"light" }}';
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
+    const _GEOLOCATION_VISIT_URL = '{% url "map.geolocation.visits" %}';
 
     // -- Browser-side user location cache (never sent to server) --------------
     const _USER_LOC_KEY     = 'ul_user_location_v1';
@@ -610,6 +611,17 @@
 
     function _cacheUserLocation(lat, lng) {
         try { localStorage.setItem(_USER_LOC_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch (_) {}
+    }
+
+    function _recordGeolocationVisit(lat, lng) {
+        fetch(_GEOLOCATION_VISIT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ latitude: lat, longitude: lng }),
+            keepalive: true,
+        }).catch(() => {
+            // Visit tracking is best-effort and should never block map use.
+        });
     }
 
     // For GPS mode, prefer a recently cached user position over the generic fallback
@@ -746,6 +758,7 @@
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
                 _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
                 _markGeoReady();
@@ -3578,6 +3591,7 @@
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
                 _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
                 if (!cached) _setFetching(false);
