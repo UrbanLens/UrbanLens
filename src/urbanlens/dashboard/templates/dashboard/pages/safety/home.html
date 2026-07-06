@@ -8,6 +8,7 @@
             <h1 class="safety-title">
                 <i class="material-symbols-outlined">emergency</i>
                 Safety
+                {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
             </h1>
             <p class="safety-subtitle">Set an expected check-in time for a trip - if you don't check in, your emergency contacts are notified.</p>
         </div>
@@ -19,24 +20,57 @@
         </div>
     </div>
 
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, the emergency contacts you choose are notified automatically with your plan details and last known location." %}
+
     {# -- Active/past check-ins --------------------------------------------- #}
+    {% if checkins %}
     <div class="safety-checkin-list">
-        {% if checkins %}
         {% for checkin in checkins %}
         {% include "dashboard/partials/safety/_checkin_card.html" %}
         {% endfor %}
-        {% else %}
-        <p class="safety-empty">No check-ins yet. Create one before your next trip.</p>
-        {% endif %}
     </div>
+    {% else %}
+    <div class="safety-empty-state">
+        <div class="safety-empty-state-icon-wrap">
+            <i class="material-icons safety-empty-state-icon">shield</i>
+        </div>
+        <h2 class="safety-empty-state-title">No check-ins yet</h2>
+        <p class="safety-empty-state-text">Create a check-in before your next trip so someone knows to look for you.</p>
+        <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
+            <i class="material-symbols-outlined">add</i>
+            New Check-in
+        </a>
+    </div>
+    {% endif %}
 
     {# -- Defaults ------------------------------------------------------------ #}
     <div class="card safety-defaults">
         <div class="card-header">
             <i class="material-symbols-outlined">settings</i>
             <h3>Defaults for new check-ins</h3>
+            <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-edit-btn">
+                <i class="material-symbols-outlined">edit</i> Edit
+            </button>
         </div>
-        <form method="post" action="{% url 'safety.home' %}" class="safety-defaults-form">
+
+        <div class="safety-defaults-summary" id="safety-defaults-summary">
+            <div class="safety-defaults-summary-row">
+                <span class="safety-defaults-summary-label">Message to contacts</span>
+                <span class="safety-defaults-summary-value">{{ preference.default_message|default:"Not set" }}</span>
+            </div>
+            <div class="safety-defaults-summary-row">
+                <span class="safety-defaults-summary-label">Grace period</span>
+                <span class="safety-defaults-summary-value">{{ preference.default_grace_period_hours|floatformat:"-2" }} hour{{ preference.default_grace_period_hours|pluralize }}</span>
+            </div>
+            <div class="safety-defaults-summary-row">
+                <span class="safety-defaults-summary-label">Emergency contacts</span>
+                <span class="safety-defaults-summary-value">
+                    {% if default_contacts %}{% for contact_profile, email, name in default_contacts %}{{ contact_profile.username|default:name|default:email }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Not set{% endif %}
+                </span>
+            </div>
+        </div>
+
+        <form method="post" action="{% url 'safety.home' %}" class="safety-defaults-form" id="safety-defaults-form" hidden>
             {% csrf_token %}
             <div class="form-row">
                 <label for="default_message">Default message to emergency contacts</label>
@@ -50,9 +84,36 @@
             {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary">Save defaults</button>
+                <button type="button" class="btn btn--ghost" id="safety-defaults-cancel-btn">Cancel</button>
             </div>
         </form>
     </div>
 
 </div>
+
+<script>
+(function () {
+    var editBtn = document.getElementById('safety-defaults-edit-btn');
+    var cancelBtn = document.getElementById('safety-defaults-cancel-btn');
+    var summary = document.getElementById('safety-defaults-summary');
+    var form = document.getElementById('safety-defaults-form');
+    if (!editBtn || !form || !summary) return;
+
+    function showForm() {
+        summary.hidden = true;
+        form.hidden = false;
+        editBtn.hidden = true;
+        var firstField = form.querySelector('textarea, input');
+        if (firstField) firstField.focus();
+    }
+    function showSummary() {
+        summary.hidden = false;
+        form.hidden = true;
+        editBtn.hidden = false;
+    }
+
+    editBtn.addEventListener('click', showForm);
+    if (cancelBtn) cancelBtn.addEventListener('click', showSummary);
+}());
+</script>
 {% endblock %}
