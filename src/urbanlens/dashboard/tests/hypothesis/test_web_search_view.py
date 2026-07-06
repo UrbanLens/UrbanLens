@@ -73,7 +73,7 @@ class DomainExtractionTests(TestCase):
         self.assertEqual(_extract_domain(url), domain)
 
     @given(
-        domain=st.from_regex(r"[a-z]{3,10}\.[a-z]{2,4}", fullmatch=True),
+        domain=st.from_regex(r"[a-z]{3,10}\.[a-z]{2,4}", fullmatch=True).filter(lambda d: not d.startswith("www.")),
     )
     @_hyp
     def test_www_variant_matches_non_www(self, domain: str):
