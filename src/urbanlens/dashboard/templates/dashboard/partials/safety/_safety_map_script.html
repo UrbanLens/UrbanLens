@@ -78,7 +78,14 @@ so it's always available by the time this script runs - no typeof guard needed.
         marker.on('dragend', function () { var ll = marker.getLatLng(); setDestination(ll.lat, ll.lng); });
     }
     if (!readonly) {
-        map.on('click', function (e) { setDestination(e.latlng.lat, e.latlng.lng); });
+        map.on('click', function (e) {
+            // Skip while the markup toolbar (loaded further below, if present) is
+            // actively drawing - otherwise every point placed while adding an
+            // annotation (or the trailing click after a drag-to-draw gesture)
+            // would also relocate the destination marker to that spot.
+            if (typeof _drawSession !== 'undefined' && _drawSession && _drawSession.isBusy()) return;
+            setDestination(e.latlng.lat, e.latlng.lng);
+        });
     }
 
     // -- Address / coordinate search (shared window.LocationSearchEngine) ------
