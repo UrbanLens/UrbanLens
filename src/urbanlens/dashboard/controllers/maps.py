@@ -638,6 +638,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         import contextlib
 
+        previous_name = (pin.name or "").strip()
         if name is not None:
             pin.name = name or None
             pin.name_is_user_provided = bool(name.strip())
@@ -655,6 +656,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.custom_icon = custom_icon
         pin.is_private = is_private
         pin.save()
+
+        if name is not None:
+            from urbanlens.dashboard.services.locations.naming import (
+                sync_pin_aliases_after_rename,
+            )
+
+            sync_pin_aliases_after_rename(pin, previous_name)
 
         if badge_ids:
             from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
@@ -1001,8 +1009,13 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     elif is_meaningful_name(google_place.cached_place_name):
         canonical_name = (google_place.cached_place_name or canonical_name).strip()
 
+    # official_name is the searchable canonical identifier (see Pin.meaningful_official_name);
+    # leave it unset when we never resolved a real name so search stays gated correctly.
+    official_name = canonical_name if is_meaningful_name(canonical_name) else None
+
     return Location.objects.create(
         name=canonical_name,
+        official_name=official_name,
         latitude=lat,
         longitude=lon,
         google_place=google_place,

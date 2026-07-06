@@ -462,9 +462,26 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         return qs
 
     def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug from the pin name/location if not already set."""
+        """Auto-generate a unique slug and keep ``point`` synced to the effective coordinates.
+
+        ``point`` (not latitude/longitude) is what distance-based queries filter on, so
+        it must always reflect ``effective_latitude``/``effective_longitude`` - the pin's
+        own override if set, otherwise the linked Location's coordinates. Forcing
+        ``point`` into ``update_fields`` (when given) guards against callers that save a
+        partial update after reassigning ``location`` without also refreshing ``point``.
+        """
         if not self.slug:
             self.slug = self._generate_slug()
+
+        latitude = self.effective_latitude
+        longitude = self.effective_longitude
+        if latitude is not None and longitude is not None:
+            self.point = Point(longitude, latitude, srid=4326)
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
+            kwargs["update_fields"] = {*update_fields, "point"}
+
         super().save(*args, **kwargs)
 
     class Meta(abstract.AddressableModel.Meta):

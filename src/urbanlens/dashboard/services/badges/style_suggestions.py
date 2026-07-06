@@ -46,7 +46,11 @@ def suggest_badge_style(name: str, profile: Profile) -> BadgeStyleSuggestion:
 
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
-    gateway = get_gateway("badge_style_suggestions", instructions=_build_instructions())
+    try:
+        gateway = get_gateway("badge_style_suggestions", instructions=_build_instructions())
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning("AI gateway unavailable for badge style suggestion %r: %s", name, exc)
+        return BadgeStyleSuggestion()
     if not gateway:
         return BadgeStyleSuggestion()
 

@@ -6,19 +6,18 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import DatabaseError, IntegrityError
+from django.db import DatabaseError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
+from urbanlens.dashboard.services.locations.naming import sync_pin_aliases_after_rename
 
 logger = logging.getLogger(__name__)
 
@@ -319,8 +318,6 @@ class PinEditView(LoginRequiredMixin, View):
 
         previous_name = (pin.name or "").strip()
         next_name = (name or "").strip()
-        name_changed = "name" in body and previous_name != next_name
-        should_alias_previous_name = name_changed and bool(previous_name)
 
         pin.name = name
         pin.name_is_user_provided = bool(next_name)
@@ -359,21 +356,7 @@ class PinEditView(LoginRequiredMixin, View):
             ]
         )
 
-        if should_alias_previous_name:
-            try:
-                PinAlias.objects.get_or_create(pin=pin, name=previous_name)
-            except IntegrityError:
-                logger.debug("Pin alias already exists for pin %s and name %s", pin.pk, previous_name)
-
-        # An alias that now matches the pin's new name - ignoring case, spacing,
-        # and punctuation - is redundant, since it can't add anything a search
-        # wouldn't already find via the name itself. Drop it rather than leaving
-        # a stale near-duplicate of the current name.
-        if name_changed and next_name:
-            normalized_next = normalize_name_for_comparison(next_name)
-            for alias in pin.aliases.all():
-                if normalize_name_for_comparison(alias.name) == normalized_next:
-                    alias.delete()
+        sync_pin_aliases_after_rename(pin, previous_name)
 
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:

@@ -420,7 +420,6 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
             continue
 
         campus = Campus.objects.effective_for_pin(pin)
-        contains_point = False
         if campus is not None:
             contains_point = campus.effective_polygon.contains(point)
         else:
