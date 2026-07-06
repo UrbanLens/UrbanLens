@@ -100,14 +100,22 @@ services:
     entrypoint: ["/docker-entrypoint.sh", "daphne"]
     command: ["-b", "0.0.0.0", "-p", "8001", "urbanlens.UrbanLens.asgi:application"]
 
+    # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
+    # its healthcheck can pass - waiting on `app` being healthy, not just
+    # db/valkey, is what actually guarantees the schema and static manifest
+    # this container's WebSocket consumers depend on exist before it serves
+    # any traffic. app-ws never runs migrate/collectstatic itself.
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      app:
+        condition: service_healthy
 
     volumes:
       - logs:/var/log
+      - static_volume:/app/src/urbanlens/frontend/static:ro
 
     networks:
       app_network:
