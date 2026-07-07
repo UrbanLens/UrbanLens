@@ -71,11 +71,12 @@ class SubscriptionRole(abstract.DashboardModel):
 class UserSubscription(abstract.DashboardModel):
     """Subscription role granted to a user by a site administrator."""
 
+    expires_at = DateTimeField(null=True, blank=True)
+    revoked_at = DateTimeField(null=True, blank=True)
+    
     user = ForeignKey(User, on_delete=CASCADE, related_name="subscriptions")
     role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="user_subscriptions")
     granted_by = ForeignKey(User, on_delete=CASCADE, related_name="granted_subscriptions")
-    expires_at = DateTimeField(null=True, blank=True)
-    revoked_at = DateTimeField(null=True, blank=True)
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]

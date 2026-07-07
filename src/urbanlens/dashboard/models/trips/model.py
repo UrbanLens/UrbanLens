@@ -192,6 +192,7 @@ class TripActivity(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="activities",
     )
+    # TODO: Reassess linking both location and pin.
     location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
@@ -199,8 +200,6 @@ class TripActivity(abstract.DashboardModel):
         blank=True,
         related_name="trip_activities",
     )
-    # Optional link to the adding user's personal Pin (for icon/status context).
-    # TODO: I don't think this should be necessary. Probably remove it.
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
@@ -308,6 +307,10 @@ class TripMembership(abstract.DashboardModel):
 class TripComment(abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
 
+    text = TextField()
+    image = ImageField(upload_to="comment_images/", null=True, blank=True)
+    map_data = JSONField(null=True, blank=True)
+    
     trip = ForeignKey(
         Trip,
         on_delete=CASCADE,
@@ -327,9 +330,6 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    text = TextField()
-    image = ImageField(upload_to="comment_images/", null=True, blank=True)
-    map_data = JSONField(null=True, blank=True)
 
     def __str__(self) -> str:
         author = self.author.user.username if self.author and self.author.user else "Unknown"
@@ -350,12 +350,14 @@ class TripActivityVote(abstract.DashboardModel):
     meaningful while the activity is in the 'proposed' status.
     """
 
+    # TODO: Convert to TextChoices
     VOTE_UP = "up"
     VOTE_DOWN = "down"
     VOTE_CHOICES = [
         ("up", "Up"),
         ("down", "Down"),
     ]
+    vote = CharField(max_length=4, choices=VOTE_CHOICES)
 
     activity = ForeignKey(
         TripActivity,
@@ -367,7 +369,6 @@ class TripActivityVote(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="activity_votes",
     )
-    vote = CharField(max_length=4, choices=VOTE_CHOICES)
 
     def __str__(self) -> str:
         return f"{self.profile} {self.vote} on {self.activity}"

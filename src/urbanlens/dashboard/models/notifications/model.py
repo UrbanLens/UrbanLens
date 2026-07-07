@@ -88,11 +88,6 @@ class NotificationLog(abstract.DashboardModel):
 class NotificationPreference(abstract.DashboardModel):
     """Per-user delivery preferences for each notification type."""
 
-    profile = models.OneToOneField(
-        "dashboard.Profile",
-        on_delete=models.CASCADE,
-        related_name="notification_preferences",
-    )
     trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     friend_request = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     message = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
@@ -104,5 +99,11 @@ class NotificationPreference(abstract.DashboardModel):
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
 
+    profile = models.OneToOneField(
+        "dashboard.Profile",
+        on_delete=models.CASCADE,
+        related_name="notification_preferences",
+    )
+    
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notification_preferences"

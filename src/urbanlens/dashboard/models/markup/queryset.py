@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 logger = logging.getLogger(__name__)
 
 
-class PinMarkupQuerySet(abstract.DashboardQuerySet):
+class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for PinMarkup map annotations (lines, arrows, text labels)."""
 
     def for_pin(self, pin) -> Self:
@@ -30,5 +30,5 @@ class PinMarkupQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class PinMarkupManager(abstract.DashboardManager.from_queryset(PinMarkupQuerySet)):
+class PinMarkupManager(abstract.FrontendDashboardManager.from_queryset(PinMarkupQuerySet)):
     """Manager for PinMarkup."""

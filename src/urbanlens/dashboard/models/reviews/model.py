@@ -13,6 +13,7 @@ class Review(abstract.DashboardModel):
     rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
     review = TextField()
 
+    # TODO: This should link to Profile, not User
     user = ForeignKey(
         User,
         on_delete=CASCADE,

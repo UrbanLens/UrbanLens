@@ -229,7 +229,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
     )
 
     # --- Bootstrap admin ---
-
+    bootstrap_admin_onboarding_complete = BooleanField(
+        default=False,
+        help_text="True once the bootstrap admin has visited the site admin settings page.",
+    )
     bootstrap_admin_user = ForeignKey(
         "auth.User",
         null=True,
@@ -237,10 +240,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         on_delete=SET_NULL,
         related_name="+",
         help_text="The first user created on this site; receives site admin and a one-time setup redirect.",
-    )
-    bootstrap_admin_onboarding_complete = BooleanField(
-        default=False,
-        help_text="True once the bootstrap admin has visited the site admin settings page.",
     )
 
     objects = SiteSettingsManager()

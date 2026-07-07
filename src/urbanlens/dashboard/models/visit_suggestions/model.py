@@ -61,7 +61,8 @@ class VisitSuggestion(abstract.DashboardModel):
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     visited_at = models.DateTimeField()
     status = models.CharField(max_length=20, choices=VisitSuggestionStatus.choices, default=VisitSuggestionStatus.PENDING)
-
+    candidate_profiles = models.ManyToManyField("dashboard.Profile", blank=True, related_name="+")
+    
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.SET_NULL,
@@ -81,38 +82,34 @@ class VisitSuggestion(abstract.DashboardModel):
         on_delete=models.CASCADE,
         related_name="received_visit_suggestions",
     )
-
     origin_visit = models.ForeignKey(
         "dashboard.PinVisit",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="suggestions_sent",
     )
     trip_activity = models.ForeignKey(
         "dashboard.TripActivity",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="visit_suggestions",
     )
     safety_checkin = models.ForeignKey(
         "dashboard.SafetyCheckin",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="visit_suggestions",
     )
     origin_image = models.ForeignKey(
         "dashboard.Image",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="visit_suggestions",
     )
-
-    candidate_profiles = models.ManyToManyField("dashboard.Profile", blank=True, related_name="+")
-
     existing_visit = models.ForeignKey(
         "dashboard.PinVisit",
         on_delete=models.SET_NULL,
@@ -120,7 +117,6 @@ class VisitSuggestion(abstract.DashboardModel):
         blank=True,
         related_name="merge_suggestions",
     )
-
     notification = models.OneToOneField(
         "dashboard.NotificationLog",
         on_delete=models.SET_NULL,

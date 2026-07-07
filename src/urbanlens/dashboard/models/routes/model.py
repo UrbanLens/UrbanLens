@@ -67,11 +67,6 @@ class Route(abstract.FrontendDashboardModel):
         ended_at: Timestamp of the last point that carried one, if any.
     """
 
-    profile = ForeignKey(
-        "dashboard.Profile",
-        on_delete=CASCADE,
-        related_name="routes",
-    )
     name = CharField(max_length=255, blank=True, default="")
     source = CharField(max_length=30, choices=RouteSource.choices)
     source_filename = CharField(max_length=255, blank=True, default="")
@@ -87,6 +82,12 @@ class Route(abstract.FrontendDashboardModel):
     started_at = DateTimeField(null=True, blank=True)
     ended_at = DateTimeField(null=True, blank=True)
 
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="routes",
+    )
+    
     objects = RouteManager()
 
     if TYPE_CHECKING:

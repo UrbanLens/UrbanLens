@@ -21,17 +21,18 @@ class ProfileEmail(abstract.DashboardModel):
     someone else's address to hijack invites or logins meant for them.
     """
 
-    profile = ForeignKey(
-        "dashboard.Profile",
-        on_delete=CASCADE,
-        related_name="secondary_emails",
-    )
     email = EmailField()
     normalized_email = CharField(max_length=254, db_index=True)
     is_verified = BooleanField(default=False)
     verification_token = UUIDField(default=uuid.uuid4, editable=False)
     verified_at = DateTimeField(null=True, blank=True)
 
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="secondary_emails",
+    )
+    
     if TYPE_CHECKING:
         profile_id: int
 

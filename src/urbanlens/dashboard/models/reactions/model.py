@@ -14,12 +14,13 @@ class Reaction(abstract.DashboardModel):
     A profile can react with the same emoji only once per comment.
     """
 
+    emoji = models.CharField(max_length=10)
+    
     profile = models.ForeignKey(
         "dashboard.Profile",
         on_delete=models.CASCADE,
         related_name="reactions",
     )
-    emoji = models.CharField(max_length=10)
     comment = models.ForeignKey(
         "dashboard.Comment",
         on_delete=models.CASCADE,

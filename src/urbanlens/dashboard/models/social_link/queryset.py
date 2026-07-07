@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class QuerySet(abstract.DashboardQuerySet):
+class SocialLinkQuerySet(abstract.DashboardQuerySet):
     def for_profile(self, profile: Profile | int) -> Self:
         """Return all links belonging to a given profile."""
         if isinstance(profile, int):
@@ -22,5 +22,5 @@ class QuerySet(abstract.DashboardQuerySet):
         return self.filter(platform=platform)
 
 
-class Manager(abstract.DashboardManager.from_queryset(QuerySet)):
+class SocialLinkManager(abstract.DashboardManager.from_queryset(SocialLinkQuerySet)):
     pass

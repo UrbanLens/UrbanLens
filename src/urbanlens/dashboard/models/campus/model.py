@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
 from django.contrib.gis.geos import Point
-from django.db.models import CASCADE, ForeignKey, IntegerField, Q
+from django.db.models import CASCADE, SET_NULL, ForeignKey, IntegerField, Q
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -53,11 +53,15 @@ class Campus(abstract.DashboardModel):
     # Radius (metres) used when both polygons are None (circle fallback).
     default_radius_meters = IntegerField(default=_DEFAULT_RADIUS_METERS)
 
-    # The place whose boundary this Campus describes.  Required on all rows.
-    # For pin campuses: always matches pin.location (synced lazily by controller).
+    # TODO [UL-351]: We previously handled Pin->Location relationships differently. Now that they are
+    # fully independent, these Campus relationships should be changed.
+    
+    # When a campus is linked to a location. None for pin-scoped boundaries.
     location = ForeignKey(
         "dashboard.Location",
         on_delete=CASCADE,
+        null=True,
+        blank=True,
         related_name="campuses",
     )
     # Set for pin-scoped boundaries; None for location wiki/default boundaries.
@@ -72,7 +76,7 @@ class Campus(abstract.DashboardModel):
     # Always None on location default campuses.
     profile = ForeignKey(
         "dashboard.Profile",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         null=True,
         blank=True,
         related_name="campuses",

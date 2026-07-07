@@ -51,7 +51,7 @@ class Comment(abstract.FrontendDashboardModel):
 
     objects = CommentManager()
 
-    class Meta(abstract.DashboardModel.Meta):
+    class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_comments"
         get_latest_by = "updated"
         ordering = ["created"]

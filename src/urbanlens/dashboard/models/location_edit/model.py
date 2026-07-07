@@ -26,6 +26,11 @@ class LocationEdit(abstract.DashboardModel):
     Bounding-box changes are stored as WKT strings under the key "bounding_box".
     """
 
+    # {"field": {"from": old_val, "to": new_val}, ...}
+    changes = JSONField()
+    # True when this edit has been superseded by a revert.
+    reverted = BooleanField(default=False)
+
     location = ForeignKey(
         "dashboard.Location",
         on_delete=CASCADE,
@@ -38,10 +43,6 @@ class LocationEdit(abstract.DashboardModel):
         blank=True,
         related_name="location_edits",
     )
-    # {"field": {"from": old_val, "to": new_val}, ...}
-    changes = JSONField()
-    # True when this edit has been superseded by a revert.
-    reverted = BooleanField(default=False)
     # The edit that reverted this one (filled in on the *target* edit when someone reverts it).
     reverted_by = ForeignKey(
         "self",

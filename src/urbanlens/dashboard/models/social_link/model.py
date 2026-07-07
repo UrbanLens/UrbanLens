@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, CharField, ForeignKey, Index, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.social_link.queryset import Manager
+from urbanlens.dashboard.models.social_link.queryset import SocialLinkManager
 
 
 class SocialLink(abstract.DashboardModel):
@@ -31,7 +31,7 @@ class SocialLink(abstract.DashboardModel):
         related_name="social_links",
     )
 
-    objects = Manager()
+    objects = SocialLinkManager()
 
     if TYPE_CHECKING:
         profile_id: int

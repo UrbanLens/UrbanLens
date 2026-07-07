@@ -125,9 +125,9 @@ class EmergencyContactDefault(abstract.DashboardModel):
 class SafetyPreference(abstract.DashboardModel):
     """Per-profile defaults applied to new safety check-ins."""
 
-    profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
     default_message = TextField(blank=True, default=DEFAULT_CONTACT_MESSAGE)
     default_grace_period = DurationField(default=DEFAULT_GRACE_PERIOD)
+    profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
 
     if TYPE_CHECKING:
         profile_id: int
@@ -315,14 +315,14 @@ class SafetyCheckinContact(abstract.DashboardModel):
     portal, since a contact identified only by email has no account to log
     into.
     """
-
-    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")
-    contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     email = EmailField(null=True, blank=True)
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
     notified_at = DateTimeField(null=True, blank=True)
     found_safe_at = DateTimeField(null=True, blank=True)
+
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")
+    contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
 
     if TYPE_CHECKING:
         checkin_id: int
@@ -381,11 +381,11 @@ class SafetyContactOptOut(abstract.DashboardModel):
     every safety check-in notification from the site, regardless of who created the check-in.
     """
 
-    contact_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
     email = EmailField(null=True, blank=True)
     scope = CharField(max_length=10, choices=SafetyContactOptOutScope.choices)
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, null=True, blank=True, related_name="contact_opt_outs")
+    contact_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
 
     if TYPE_CHECKING:
         contact_profile_id: int | None
@@ -433,11 +433,11 @@ class SafetyCheckinMessage(abstract.DashboardModel):
     as ``sender_profile``; a contact with no account posts as
     ``sender_contact`` so their display name still resolves without a login.
     """
-
+    body = TextField()
+    
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="messages")
     sender_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     sender_contact = ForeignKey(SafetyCheckinContact, on_delete=SET_NULL, null=True, blank=True, related_name="+")
-    body = TextField()
 
     if TYPE_CHECKING:
         checkin_id: int
