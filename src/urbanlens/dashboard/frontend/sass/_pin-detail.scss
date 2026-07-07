@@ -378,13 +378,40 @@
     .visit-item {
         display: flex;
         align-items: flex-start;
-        gap: .5rem;
-        padding: .5rem 1rem;
+        gap: .65rem;
+        padding: .7rem 1rem;
         border-bottom: 1px solid var(--ul-grey-1a);
+        transition: background .12s;
 
         &:last-child {
             border-bottom: none;
         }
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    // -- Leading circular source icon, doubling as a timeline marker --------
+    .visit-item-icon {
+        @include flex-center;
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        margin-top: .1rem;
+        border-radius: 50%;
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.05rem;
+        }
+
+        &.visit-source--history { color: var(--ul-info, #3b82f6); }
+        &.visit-source--photo   { color: var(--ul-accent, #8b5cf6); }
+        &.visit-source--user,
+        &.visit-source--trip    { color: var(--ul-primary, #2563eb); }
     }
 
     // Column wrapper holding the date line, notes, participants, photos and map.
@@ -392,20 +419,21 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: .25rem;
+        gap: .35rem;
         min-width: 0;
     }
 
     .visit-item-main {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         gap: .5rem;
         flex-wrap: wrap;
     }
 
     .visit-date {
-        font-weight: 500;
-        font-size: .88rem;
+        font-weight: 600;
+        font-size: .92rem;
+        color: var(--ul-grey-9);
     }
 
     .visit-time {
@@ -413,6 +441,17 @@
         color: var(--ul-grey-6);
     }
 
+    .visit-source-label {
+        font-size: .68rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--ul-grey-6);
+        background: var(--ul-grey-1a);
+        padding: .08rem .45rem;
+        border-radius: 999px;
+    }
+
+    // Kept for the pending-suggestion rows which still use the inline badge.
     .visit-source {
         font-size: .75rem;
         color: var(--ul-grey-6);
@@ -422,32 +461,44 @@
     }
 
     .visit-notes {
-        font-size: .82rem;
-        color: var(--ul-grey-7);
+        font-size: .86rem;
+        line-height: 1.4;
+        color: var(--ul-grey-8);
+        white-space: pre-wrap;
+        word-break: break-word;
     }
 
     .visit-participants {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
         font-size: .8rem;
         color: var(--ul-grey-6);
-        font-style: italic;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .95rem;
+        }
     }
 
-    // -- Tiny attached-photo thumbnails on a visit row ----------------------
+    // -- Attached-photo thumbnails on a visit row ---------------------------
     .visit-photos {
         display: flex;
         align-items: center;
-        gap: .25rem;
+        gap: .35rem;
         flex-wrap: wrap;
-        margin-top: .15rem;
+        margin-top: .1rem;
     }
 
     .visit-photo-thumb {
         display: block;
-        width: 28px;
-        height: 28px;
-        border-radius: 4px;
+        width: 52px;
+        height: 52px;
+        border-radius: 8px;
         overflow: hidden;
         border: 1px solid var(--ul-grey-1a);
+        cursor: pointer;
+        transition: transform .1s, box-shadow .1s;
 
         img {
             width: 100%;
@@ -455,55 +506,105 @@
             object-fit: cover;
             display: block;
         }
-    }
-
-    .visit-photo-more {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 28px;
-        height: 28px;
-        padding: 0 .35rem;
-        border-radius: 4px;
-        background: var(--ul-grey-1a);
-        color: var(--ul-grey-7);
-        font-size: .72rem;
-        font-weight: 600;
-        text-decoration: none;
-    }
-
-    // -- Map snapshot chip on a visit row -----------------------------------
-    .visit-map-chip {
-        align-self: flex-start;
-        display: inline-flex;
-        align-items: center;
-        gap: .2rem;
-        margin-top: .15rem;
-        padding: .1rem .45rem;
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 999px;
-        background: transparent;
-        color: var(--ul-grey-7);
-        font-size: .74rem;
-        cursor: pointer;
-
-        i {
-            font-size: 15px;
-        }
 
         &:hover {
-            background: var(--ul-grey-1a);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
         }
+    }
+
+    // -- Inline map preview on a visit row ----------------------------------
+    // (The shared thumbnail JS forces the thumb height inline, so we only
+    // constrain the width here to keep the preview compact.)
+    .visit-map-preview {
+        margin: .15rem 0 0;
+        max-width: 340px;
+    }
+
+    // Transparent full-cover button so a click anywhere on the small map opens
+    // the enlarged viewer (the thumb itself is pointer-events:none).
+    .visit-map-open {
+        position: absolute;
+        inset: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .visit-map-open-badge {
+        position: absolute;
+        bottom: .4rem;
+        right: .4rem;
+        @include flex-center;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, .9);
+        border: 1px solid var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+        backdrop-filter: blur(4px);
+        transition: background .1s;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
+
+    .visit-map-open:hover .visit-map-open-badge {
+        background: #fff;
+    }
+
+    // -- Edit / delete actions, revealed on row hover -----------------------
+    .visit-item-actions {
+        display: flex;
+        align-items: center;
+        gap: .1rem;
+        margin-left: auto;
+        opacity: 0;
+        transition: opacity .12s;
+    }
+
+    .visit-item:hover .visit-item-actions,
+    .visit-item-actions:focus-within {
+        opacity: 1;
+    }
+
+    .visit-edit-btn {
+        @include icon-btn(28px);
+        outline: none;
     }
 
     .visit-delete-btn {
-        @include icon-btn-danger(24px);
-        margin-left: auto;
+        @include icon-btn-danger(28px);
         outline: none;
 
         &:focus {
             outline: none;
         }
+    }
+}
+
+// The lazily-loaded edit form's placeholder while HTMX fetches it.
+.visit-edit-loading {
+    padding: 1.25rem 1rem;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-style: italic;
+}
+
+// -- Reference pin marker on visit maps (composer, thumbnail, viewer) --------
+.ul-ref-marker {
+    background: transparent;
+    border: none;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 30px;
+        line-height: 30px;
+        color: $danger-color;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
     }
 }
 

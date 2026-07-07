@@ -19,7 +19,7 @@
             <div class="visit-item-main">
                 <span class="visit-date">{{ suggestion.visited_at|date:"N j, Y" }}</span>
                 <span class="visit-source visit-source--pending" title="Awaiting confirmation">
-                    <i class="material-icons" style="font-size:14px">hourglass_empty</i>
+                    <i class="material-symbols-outlined">hourglass_empty</i>
                     Pending
                 </span>
             </div>
@@ -57,52 +57,65 @@
     <ul class="visit-list">
         {% for visit in visits %}
         <li class="visit-item">
+            {# -- Leading source icon, doubles as a timeline marker -------------- #}
+            <span class="visit-item-icon visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
+                {% if visit.source == "history" %}<i class="material-symbols-outlined">cloud_download</i>
+                {% elif visit.source == "trip" %}<i class="material-symbols-outlined">luggage</i>
+                {% elif visit.source == "user" %}<i class="material-symbols-outlined">group</i>
+                {% elif visit.source == "photo" %}<i class="material-symbols-outlined">photo_camera</i>
+                {% elif visit.source == "geolocation" %}<i class="material-symbols-outlined">my_location</i>
+                {% elif visit.source == "safety_checkin" %}<i class="material-symbols-outlined">health_and_safety</i>
+                {% else %}<i class="material-symbols-outlined">edit_note</i>{% endif %}
+            </span>
+
             <div class="visit-item-body">
                 <div class="visit-item-main">
                     <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
                     {% if visit.visited_at|time:"H:i" != "00:00" %}
                     <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
                     {% endif %}
-                    <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
-                        {% if visit.source == "google_takeout" %}
-                        <i class="material-icons" style="font-size:14px">cloud_download</i>
-                        {% else %}
-                        <i class="material-icons" style="font-size:14px">edit</i>
-                        {% endif %}
-                        {{ visit.get_source_display }}
-                    </span>
+                    <span class="visit-source-label">{{ visit.get_source_display }}</span>
                 </div>
                 {% if visit.notes %}
                 <div class="visit-notes">{{ visit.notes }}</div>
                 {% endif %}
                 {% with visit_participants=visit.participants.all %}
                 {% if visit_participants %}
-                <div class="visit-participants">with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
-                {% endif %}
-                {% endwith %}
-
-                {# -- Attached photos: tiny thumbnails, capped with a +N counter -- #}
-                {% with visit_images=visit.images.all %}
-                {% if visit_images %}
-                <div class="visit-photos">
-                    {% for img in visit_images|slice:":4" %}
-                    <a href="{{ img.image.url }}" target="_blank" class="visit-photo-thumb" title="{{ img.caption|default:'Photo' }}">
-                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}">
-                    </a>
-                    {% endfor %}
-                    {% if visit_images|length > 4 %}
-                    <a href="#photo-gallery" class="visit-photo-more" title="See all photos in the gallery">+{{ visit_images|length|add:"-4" }}</a>
-                    {% endif %}
+                <div class="visit-participants">
+                    <i class="material-symbols-outlined">group</i>
+                    with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
                 </div>
                 {% endif %}
                 {% endwith %}
 
-                {# -- Attached map snapshot: reuses the comment-map viewer -------- #}
+                {# -- Attached photos: click a thumbnail to open the lightbox ----- #}
+                {% with visit_images=visit.images.all %}
+                {% if visit_images %}
+                <div class="visit-photos">
+                    {% for img in visit_images %}
+                    <a href="{{ img.image.url }}" class="visit-photo-thumb"
+                       data-full="{{ img.image.url }}" data-caption="{{ img.caption|default:'' }}"
+                       title="{{ img.caption|default:'Photo' }}"
+                       onclick="visitOpenLightbox(event, this)">
+                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- Attached map snapshot: small live preview, click to enlarge -- #}
                 {% if visit.map_data %}
                 {% with vid=visit.id|stringformat:"d" %}{% with sid="comment-map-data-visit-"|add:vid %}{{ visit.map_data|json_script:sid }}{% endwith %}{% endwith %}
-                <button type="button" class="visit-map-chip" onclick="_expandCommentMap('visit-{{ visit.id }}')">
-                    <i class="material-symbols-outlined">map</i> Map
-                </button>
+                <div class="comment-map-preview visit-map-preview" data-comment-id="visit-{{ visit.id }}"
+                     data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
+                     data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
+                    <div class="comment-map-thumb" id="comment-map-thumb-visit-{{ visit.id }}"></div>
+                    <button type="button" class="visit-map-open" aria-label="Enlarge map"
+                            onclick="_expandCommentMap('visit-{{ visit.id }}')">
+                        <span class="visit-map-open-badge"><i class="material-symbols-outlined">open_in_full</i></span>
+                    </button>
+                </div>
                 <dialog id="comment-map-dialog-visit-{{ visit.id }}" class="comment-map-view-dialog ul-dialog">
                     <div class="dialog-header">
                         <span>Visit map</span>
@@ -111,19 +124,33 @@
                             <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
-                    <div id="comment-map-view-visit-{{ visit.id }}" class="comment-map-view-body"></div>
+                    <div id="comment-map-view-visit-{{ visit.id }}" class="comment-map-view-body"
+                         data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
+                         data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}"></div>
                 </dialog>
                 {% endif %}
             </div>
-            <button type="button"
-                    hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
-                    hx-target="#visit-history-panel"
-                    hx-swap="outerHTML"
-                    hx-confirm="Delete this visit record?"
-                    class="icon-btn visit-delete-btn"
-                    title="Delete visit">
-                <i class="material-symbols-outlined">delete_outline</i>
-            </button>
+
+            <div class="visit-item-actions">
+                <button type="button"
+                        hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
+                        hx-target="#visit-edit-body-{{ pin.slug }}"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('visit-edit-dialog-{{ pin.slug }}').showModal()"
+                        class="icon-btn visit-edit-btn"
+                        title="Edit visit">
+                    <i class="material-symbols-outlined">edit</i>
+                </button>
+                <button type="button"
+                        hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
+                        hx-target="#visit-history-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete this visit record?"
+                        class="icon-btn visit-delete-btn"
+                        title="Delete visit">
+                    <i class="material-symbols-outlined">delete_outline</i>
+                </button>
+            </div>
         </li>
         {% endfor %}
     </ul>
@@ -135,88 +162,81 @@
     {# -- Log-a-visit dialog -------------------------------------------- #}
     <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Log a Visit" %}
-        <form hx-post="{% url 'pin.visits' pin.slug %}"
-              hx-target="#visit-history-panel"
-              hx-swap="outerHTML"
-              hx-encoding="multipart/form-data"
-              hx-on::after-request="if(event.detail.successful){document.getElementById('visit-add-dialog-{{ pin.slug }}').close()}"
-              class="visit-add-form">
-            {% csrf_token %}
-            {# Hidden field carrying the map snapshot - populated by the shared map composer JS #}
-            <input type="hidden" name="map_data" class="comment-map-data-field" value="">
-            <div class="form-row">
-                <label for="visited_date_{{ pin.slug }}">Date</label>
-                <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required>
-            </div>
-            <div class="form-row">
-                <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>
-                <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}">
-            </div>
-            <div class="form-row">
-                <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
-                <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
-            </div>
+        {% include "dashboard/partials/pins/_visit_form.html" with dialog_id="visit-add-dialog-"|add:pin.slug %}
+    </dialog>
 
-            {# -- Photos: select existing pin photos and/or upload new ones -------- #}
-            <div class="form-row">
-                <label>Photos <small>(optional)</small></label>
-                {% if pin_images %}
-                <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
-                    {% for img in pin_images %}
-                    <label class="visit-photo-pick" title="{{ img.caption|default:'Photo' }}">
-                        <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}">
-                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}">
-                        <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
-                    </label>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                <label class="visit-photo-upload">
-                    <i class="material-symbols-outlined">add_photo_alternate</i>
-                    <span class="visit-photo-upload-text">Upload new photos</span>
-                    <input type="file" name="photos" accept="image/*" multiple
-                           onchange="this.closest('.visit-photo-upload').querySelector('.visit-photo-upload-text').textContent = this.files.length ? this.files.length + ' photo(s) selected' : 'Upload new photos'">
-                </label>
-            </div>
+    {# -- Edit-visit dialog: the form is lazily loaded via HTMX on click -- #}
+    <dialog id="visit-edit-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Visit" %}
+        <div id="visit-edit-body-{{ pin.slug }}" class="visit-edit-body">
+            <p class="visit-edit-loading">Loading&hellip;</p>
+        </div>
+    </dialog>
 
-            {# -- Map with markup: reuses the shared comment-map composer ---------- #}
-            <div class="form-row">
-                <label>Map <small>(optional)</small></label>
-                <div class="comment-map-chip visit-map-attached-chip" hidden>
-                    <i class="material-symbols-outlined">map</i>
-                    <span class="comment-map-chip-label">Map attached</span>
-                    <button type="button" class="comment-map-chip-edit" title="Edit map"
-                            onclick="_openCommentMapComposer(this.closest('form'))">
-                        <i class="material-symbols-outlined">edit</i>
-                    </button>
-                    <button type="button" class="comment-map-chip-remove" title="Remove map"
-                            onclick="_clearCommentMap(this.closest('form'))">
-                        <i class="material-symbols-outlined">close</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--ghost btn--sm visit-map-attach-btn"
-                        onclick="window._commentMapDefaultLat={{ pin.effective_latitude|default_if_none:'null' }};window._commentMapDefaultLng={{ pin.effective_longitude|default_if_none:'null' }};_openCommentMapComposer(this.closest('form'))">
-                    <i class="material-symbols-outlined">add_location_alt</i> Draw a map
-                </button>
-            </div>
-
-            {% if connections %}
-            <div class="form-row">
-                <label>Who else was there? <small>(optional)</small></label>
-                <div class="visit-participant-picker">
-                    {% for friend in connections %}
-                    <label class="visit-participant-option">
-                        <input type="checkbox" name="participant_ids" value="{{ friend.id }}">
-                        {{ friend.username }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Visit</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-            </div>
-        </form>
+    {# -- Shared lightbox for photos attached to a visit ------------------ #}
+    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog">
+        <div class="lightbox-inner">
+            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)">
+                <i class="material-symbols-outlined">chevron_left</i>
+            </button>
+            <img class="lightbox-img" src="" alt="">
+            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)">
+                <i class="material-symbols-outlined">chevron_right</i>
+            </button>
+            <p class="lightbox-caption"></p>
+        </div>
     </dialog>
 </div>
+
+<script>
+(function () {
+    var LB = document.getElementById('visit-photo-lightbox-{{ pin.slug }}');
+    if (!LB) return;
+    var imgEl = LB.querySelector('.lightbox-img');
+    var capEl = LB.querySelector('.lightbox-caption');
+    var set = [];
+    var idx = 0;
+
+    function _show() {
+        var it = set[idx];
+        if (!it) return;
+        imgEl.src = it.url;
+        capEl.textContent = it.caption || '';
+    }
+
+    // Open the lightbox on the photo the user clicked, navigating within the
+    // photos of that same visit row.
+    window.visitOpenLightbox = function (evt, el) {
+        if (evt) evt.preventDefault();
+        var container = el.closest('.visit-photos');
+        if (!container) return;
+        set = Array.prototype.map.call(container.querySelectorAll('.visit-photo-thumb'), function (a) {
+            return { url: a.dataset.full, caption: a.dataset.caption || '' };
+        });
+        idx = set.findIndex(function (it) { return it.url === el.dataset.full; });
+        if (idx < 0) idx = 0;
+        _show();
+        LB.showModal();
+    };
+
+    window.visitLightboxNav = function (dir) {
+        if (!set.length) return;
+        idx = (idx + dir + set.length) % set.length;
+        _show();
+    };
+
+    // Arrow-key navigation, registered once regardless of HTMX re-swaps.
+    if (!window._visitLightboxKeys) {
+        window._visitLightboxKeys = true;
+        document.addEventListener('keydown', function (e) {
+            var open = document.querySelector('.visit-photo-lightbox[open]');
+            if (!open) return;
+            if (e.key === 'ArrowLeft') window.visitLightboxNav(-1);
+            else if (e.key === 'ArrowRight') window.visitLightboxNav(1);
+        });
+    }
+})();
+</script>

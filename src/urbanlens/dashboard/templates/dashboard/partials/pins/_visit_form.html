@@ -1,0 +1,111 @@
+{% load dashboard_tags %}
+{% comment %}
+Shared "Log a Visit" / "Edit Visit" form body.
+
+Context:
+  pin        - Pin the visit belongs to
+  pin_images - owner's gallery photos on this pin (existing-photo picker)
+  connections- profiles that can be tagged as participants
+  visit      - PinVisit being edited, or absent/None for the add form
+  dialog_id  - id of the enclosing <dialog>, closed on a successful save
+
+The action URL, submit label, and pre-filled state are all derived from
+whether `visit` is present, so both dialogs can share this single template.
+{% endcomment %}
+{% if visit %}
+{% url 'pin.visit.edit' pin.slug visit.id as form_action %}
+{% else %}
+{% url 'pin.visits' pin.slug as form_action %}
+{% endif %}
+<form hx-post="{{ form_action }}"
+      hx-target="#visit-history-panel"
+      hx-swap="outerHTML"
+      hx-encoding="multipart/form-data"
+      hx-on::after-request="if(event.detail.successful){document.getElementById('{{ dialog_id }}').close()}"
+      class="visit-add-form"
+      data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
+      data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
+    {% csrf_token %}
+    {# Hidden field carrying the map snapshot - populated by the shared map composer JS. #}
+    <input type="hidden" name="map_data" class="comment-map-data-field" value="{{ visit.map_data|to_json }}">
+    <div class="form-row">
+        <label for="visited_date_{{ pin.slug }}">Date</label>
+        <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required
+               value="{{ visit.visited_at|date:'Y-m-d' }}">
+    </div>
+    <div class="form-row">
+        <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>
+        <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}"
+               value="{% if visit and visit.visited_at|time:'H:i' != '00:00' %}{{ visit.visited_at|time:'H:i' }}{% endif %}">
+    </div>
+    <div class="form-row">
+        <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
+        <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?">{{ visit.notes|default:'' }}</textarea>
+    </div>
+
+    {# -- Photos: select existing pin photos and/or upload new ones -------- #}
+    <div class="form-row">
+        <label>Photos <small>(optional)</small></label>
+        {% if pin_images %}
+        <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
+            {% for img in pin_images %}
+            <label class="visit-photo-pick" title="{{ img.caption|default:'Photo' }}">
+                <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}"
+                       {% if visit and img.visit_id == visit.id %}checked{% endif %}>
+                <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <label class="visit-photo-upload">
+            <i class="material-symbols-outlined">add_photo_alternate</i>
+            <span class="visit-photo-upload-text">Upload new photos</span>
+            <input type="file" name="photos" accept="image/*" multiple
+                   onchange="this.closest('.visit-photo-upload').querySelector('.visit-photo-upload-text').textContent = this.files.length ? this.files.length + ' photo(s) selected' : 'Upload new photos'">
+        </label>
+    </div>
+
+    {# -- Map with markup: reuses the shared comment-map composer ---------- #}
+    <div class="form-row">
+        <label>Map <small>(optional)</small></label>
+        <div class="comment-map-chip visit-map-attached-chip" {% if not visit.map_data %}hidden{% endif %}>
+            <i class="material-symbols-outlined">map</i>
+            <span class="comment-map-chip-label">Map attached</span>
+            <button type="button" class="comment-map-chip-edit" title="Edit map"
+                    onclick="_openCommentMapComposer(this.closest('form'))">
+                <i class="material-symbols-outlined">edit</i>
+            </button>
+            <button type="button" class="comment-map-chip-remove" title="Remove map"
+                    onclick="_clearCommentMap(this.closest('form'))">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm visit-map-attach-btn"
+                onclick="window._commentMapDefaultLat={{ pin.effective_latitude|default_if_none:'null' }};window._commentMapDefaultLng={{ pin.effective_longitude|default_if_none:'null' }};_openCommentMapComposer(this.closest('form'))">
+            <i class="material-symbols-outlined">add_location_alt</i>
+            {% if visit.map_data %}Edit map{% else %}Draw a map{% endif %}
+        </button>
+    </div>
+
+    {% if connections %}
+    {% with visit_participants=visit.participants.all %}
+    <div class="form-row">
+        <label>Who else was there? <small>(optional)</small></label>
+        <div class="visit-participant-picker">
+            {% for friend in connections %}
+            <label class="visit-participant-option">
+                <input type="checkbox" name="participant_ids" value="{{ friend.id }}"
+                       {% if friend in visit_participants %}checked{% endif %}>
+                {{ friend.username }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endwith %}
+    {% endif %}
+    <div class="form-actions">
+        <button type="submit" class="btn btn--primary btn--lg btn--submit">{% if visit %}Save Changes{% else %}Save Visit{% endif %}</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</form>

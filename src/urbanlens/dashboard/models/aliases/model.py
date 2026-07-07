@@ -4,23 +4,50 @@ from __future__ import annotations
 
 import logging
 
-from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField
 
 from urbanlens.dashboard.models import abstract
 
 logger = logging.getLogger(__name__)
 
+class AliasType(TextChoices):
+    """
+    The type of alias.
+    * NICKNAME: A user-defined nickname for the pin or location. 
+                Created by checking the "nickname" checkbox when adding an alias.
+    * OFFICIAL: An official name for the pin or location.
+                Created by the system when the pin or location is created, or queried from an external API source.
+    * ALTERNATE: An alternate name for the pin or location.
+                Created by the user when adding an alias. (without the "nickname" checkbox)
+    """
+    NICKNAME = "nickname", "Nickname"
+    OFFICIAL = "official", "Official Name"
+    ALTERNATE = "alternate", "Alternate Name"
 
+class AliasSource(TextChoices):
+    """
+    The source of the alias.
+    * USER: A user-defined alias for the pin or location.
+    * GOOGLE_PLACES: An alias from Google Places.
+    * WIKIPEDIA: An alias from Wikipedia.
+    * OTHER: An alias from another external API source.
+    """
+    USER = "user", "User-defined Alias"
+    GOOGLE_PLACES = "google_places", "Google Places"
+    WIKIPEDIA = "wikipedia", "Wikipedia"
+    OTHER = "other", "Other"
+    
 class _AliasBase(abstract.DashboardModel):
     """Shared fields for all alias types."""
 
     name = CharField(max_length=255)
+    kind = CharField(max_length=10, choices=AliasType.choices, default=AliasType.ALTERNATE)
+    source = CharField(max_length=10, choices=AliasSource.choices, default=AliasSource.USER)
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True
         ordering = ["name"]
-
 
 class PinAlias(_AliasBase):
     """An alternate name for a Pin, visible only to the pin's owner.
@@ -41,7 +68,9 @@ class PinAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_pin_aliases"
         indexes = [
-            Index(fields=["pin"], name="idxdb_pin_alias_pin"),
+            Index(fields=["pin"], name="idxdb_palias_pin"),
+            Index(fields=["pin", "kind"], name="idxdb_palias_pin_kind"),
+            Index(fields=["pin", "source"], name="idxdb_palias_pin_source"),
         ]
         constraints = [
             UniqueConstraint(fields=["pin", "name"], name="db_pin_alias_unique"),
@@ -74,8 +103,10 @@ class LocationAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_location_aliases"
         indexes = [
-            Index(fields=["location"], name="idxdb_loc_alias_loc"),
+            Index(fields=["location"], name="idxdb_lalias_loc"),
+            Index(fields=["location", "kind"], name="idxdb_lalias_loc_kind"),
+            Index(fields=["location", "source"], name="idxdb_lalias_loc_source"),
         ]
         constraints = [
-            UniqueConstraint(fields=["location", "name"], name="db_loc_alias_unique"),
+            UniqueConstraint(fields=["location", "name"], name="db_lalias_unique"),
         ]

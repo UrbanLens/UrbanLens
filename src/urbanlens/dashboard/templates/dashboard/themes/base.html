@@ -663,12 +663,39 @@
             return L.tileLayer(cfg.url, cfg.options);
         }
 
+        // -- Reference marker --------------------------------------------------
+        // A non-interactive pin marker (used to show a PinVisit's location on its
+        // map). Uses a divIcon so it needs no external image assets.
+        function _makeRefMarker(lat, lng) {
+            return L.marker([lat, lng], {
+                interactive: false,
+                keyboard: false,
+                icon: L.divIcon({
+                    className: 'ul-ref-marker',
+                    html: '<i class="material-symbols-outlined">location_on</i>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 28]
+                })
+            });
+        }
+
+        // Read a [lat, lng] reference-marker location off an element's dataset,
+        // returning null when either coordinate is absent or non-numeric.
+        function _readMarkerLatLng(el) {
+            if (!el) return null;
+            var lat = parseFloat(el.dataset.markerLat);
+            var lng = parseFloat(el.dataset.markerLng);
+            if (isNaN(lat) || isNaN(lng)) return null;
+            return [lat, lng];
+        }
+
         // -- Composer state ----------------------------------------------------
         var _composerMap = null;
         var _composerTileLayer = null;    // active tile layer
         var _composerLayerMode = 'standard';
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
+        var _composerRefMarker = null;    // optional pin-location reference marker
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
         var _originForm = null;           // the .comment-compose element that opened the dialog
         var _pinSearchTimer = null;
@@ -770,6 +797,15 @@
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
                 _composerMap.setView([defLat, defLng], 14);
                 _composerShapes = [];
+            }
+
+            // Show a reference marker at the pin's coordinates when the origin
+            // form provides them (e.g. the PinVisit map composer), so the user
+            // can see where the pin sits while drawing.
+            if (_composerRefMarker) { _composerMap.removeLayer(_composerRefMarker); _composerRefMarker = null; }
+            var refLatLng = _readMarkerLatLng(form);
+            if (refLatLng) {
+                _composerRefMarker = _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(_composerMap);
             }
 
             // invalidateSize() tells Leaflet to re-read the container pixel size
@@ -1063,6 +1099,9 @@
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, markupGroup); });
 
+            var refLatLng = _readMarkerLatLng(el);
+            if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
+
             viewMap.invalidateSize();
             _viewerMaps[commentId] = viewMap;
 
@@ -1097,6 +1136,9 @@
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+
+                var refLatLng = _readMarkerLatLng(preview);
+                if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
             });
         }
 

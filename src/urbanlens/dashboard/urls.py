@@ -229,6 +229,11 @@ urlpatterns = [
                                 name="pin.visits",
                             ),
                             path(
+                                "<slug:pin_slug>/visits/<int:visit_id>/edit/",
+                                visits.VisitEditView.as_view(),
+                                name="pin.visit.edit",
+                            ),
+                            path(
                                 "<slug:pin_slug>/visits/<int:visit_id>/delete/",
                                 visits.VisitDeleteView.as_view(),
                                 name="pin.visit.delete",

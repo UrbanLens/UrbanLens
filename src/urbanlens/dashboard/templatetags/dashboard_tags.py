@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +44,28 @@ def tag_total_pins(tag: Badge) -> int:
         child_count = getattr(child, "pin_count", None)
         total += child_count if child_count is not None else child.pins.count()
     return total
+
+
+@register.filter
+def to_json(value: Any) -> str:
+    """Serialize ``value`` to a compact JSON string for embedding in an attribute.
+
+    Django auto-escapes the returned string, so quotes become ``&quot;`` and the
+    blob remains a well-formed HTML attribute value. When JavaScript later reads
+    the attribute (e.g. ``input.value``) the browser decodes the entities back to
+    valid JSON, so ``JSON.parse`` round-trips cleanly.
+
+    Usage: ``<input value="{{ obj.map_data|to_json }}">``
+
+    Args:
+        value: Any JSON-serializable value (typically a dict from a JSONField).
+
+    Returns:
+        A JSON-encoded string, or an empty string when ``value`` is falsy.
+    """
+    if not value:
+        return ""
+    return json.dumps(value, separators=(",", ":"))
 
 
 @register.filter
