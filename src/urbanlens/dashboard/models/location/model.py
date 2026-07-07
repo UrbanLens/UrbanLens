@@ -43,7 +43,7 @@ class Location(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.A
     What does NOT belong here:
     - Custom labels or notes a user gave the place → Pin.name / Pin.description
     - Visit history or visit status → Pin.last_visited / Pin.status
-    - Per-user coordinate overrides → Pin.latitude / Pin.longitude
+    - Pin marker coordinates → Pin.latitude / Pin.longitude
     - Priority rankings → Pin.priority
     - User reviews → Review model (FK to Pin, not Location)
 

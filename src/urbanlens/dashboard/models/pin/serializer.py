@@ -16,8 +16,7 @@ class PinSerializer(serializers.ModelSerializer):
     nest a LocationSerializer or add read-only source= fields pointing through
     the location FK (e.g. source="location.address").
 
-    effective_* fields are read-only - they resolve overrides against the linked
-    Location and should be preferred by the frontend over the raw nullable fields.
+    effective_* fields are read-only compatibility aliases for pin-owned coordinates.
 
     categories/tags are read-only views of the pin's badges, filtered by kind.
     Badge assignment is handled by the dedicated badges controller/endpoints,

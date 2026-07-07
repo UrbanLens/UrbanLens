@@ -156,9 +156,9 @@ These two models are often confused. Keep their responsibilities strictly separa
 
 **`Pin`** - a specific user's personal record for a location.
 - `location` FK pointing at the shared Location
-- User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and an optional coordinate override (so the user can nudge the marker on their own map)
+- User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and marker coordinates
 - `name` is nullable - `None` means "display the location's canonical name" (use `pin.effective_name`)
-- `latitude`/`longitude` are nullable - `None` means "use the location's coordinates" (use `pin.effective_latitude` / `pin.effective_longitude`)
+- `latitude`/`longitude` are required and store the pin marker coordinates directly.
 - Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin
 
 **Rule of thumb**: if the data describes the place itself, it belongs on `Location`. If it describes what a particular user thinks or knows about the place, it belongs on `Pin`.

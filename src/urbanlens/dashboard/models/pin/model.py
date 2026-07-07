@@ -57,16 +57,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     A Pin belongs to exactly one Profile (user). Multiple users can each have
     their own Pin that references the same Location. Everything stored here is
     specific to that one user: their custom label, notes, visit history, status,
-    priority, and an optional coordinate override to reposition the marker.
+    priority, and the marker coordinates.
     """
 
-    # Optional per-user marker override. When unset, coordinates fall back to the
-    # linked Location's canonical latitude/longitude.
-    # TODO: LSP violation - AddressableModel.latitude is non-nullable but Pin needs nullable
-    # for its coordinate-override feature. Proper fix: make AddressableModel.latitude nullable
-    # (requires a migration for Location and other subclasses).
-    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
-    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
+    # Pin marker coordinates are always stored directly on the pin. Shared
+    # Location coordinates describe the canonical place, not a fallback for pins.
+    latitude = DecimalField(max_digits=9, decimal_places=6)
+    longitude = DecimalField(max_digits=9, decimal_places=6)
 
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
@@ -160,7 +157,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # ------------------------------------------------------------------
-    # Effective values - resolve overrides against the linked Location
+    # Effective values
     # ------------------------------------------------------------------
 
     def display_badge(self) -> Badge | None:
@@ -321,18 +318,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return self.effective_name if is_meaningful_name(self.effective_name) else None
 
     @property
-    def effective_latitude(self) -> float | None:
-        """User's position override, or the location's latitude."""
-        if self.latitude is not None:
-            return float(self.latitude)
-        return float(self.location.latitude) if self.location else None
+    def effective_latitude(self) -> float:
+        """Pin marker latitude."""
+        return float(self.latitude)
 
     @property
-    def effective_longitude(self) -> float | None:
-        """User's position override, or the location's longitude."""
-        if self.longitude is not None:
-            return float(self.longitude)
-        return float(self.location.longitude) if self.location else None
+    def effective_longitude(self) -> float:
+        """Pin marker longitude."""
+        return float(self.longitude)
 
     @property
     def effective_date_last_active(self):
@@ -465,8 +458,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """Auto-generate a unique slug and keep ``point`` synced to the effective coordinates.
 
         ``point`` (not latitude/longitude) is what distance-based queries filter on, so
-        it must always reflect ``effective_latitude``/``effective_longitude`` - the pin's
-        own override if set, otherwise the linked Location's coordinates. Forcing
+        it must always reflect the pin's own coordinates. Forcing
         ``point`` into ``update_fields`` (when given) guards against callers that save a
         partial update after reassigning ``location`` without also refreshing ``point``.
         """
@@ -475,8 +467,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
         latitude = self.effective_latitude
         longitude = self.effective_longitude
-        if latitude is not None and longitude is not None:
-            self.point = Point(longitude, latitude, srid=4326)
+        self.point = Point(longitude, latitude, srid=4326)
 
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
