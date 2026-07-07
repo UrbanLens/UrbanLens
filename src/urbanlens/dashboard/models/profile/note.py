@@ -12,7 +12,7 @@ if __import__("typing").TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class ProfileNote(abstract.Model):
+class ProfileNote(abstract.DashboardModel):
     """A private note one user keeps about another user's profile.
 
     The note is visible only to the *author*; the *subject* profile owner
@@ -36,7 +36,7 @@ class ProfileNote(abstract.Model):
         author_id: int
         subject_id: int
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
 
     def __str__(self) -> str:

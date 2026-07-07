@@ -12,7 +12,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
 
 
-class FriendInvitation(abstract.Model):
+class FriendInvitation(abstract.DashboardModel):
     """Sent when a user invites someone by email who is not yet registered.
 
     On sign-up the new user's email is matched against open invitations and
@@ -31,7 +31,7 @@ class FriendInvitation(abstract.Model):
 
     objects = FriendInvitationManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         pass
 
     def save(self, *args, **kwargs):

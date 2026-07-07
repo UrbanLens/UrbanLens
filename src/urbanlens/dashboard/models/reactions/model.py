@@ -7,7 +7,7 @@ from django.db import models
 from urbanlens.dashboard.models import abstract
 
 
-class Reaction(abstract.Model):
+class Reaction(abstract.DashboardModel):
     """An emoji reaction from a user on a Comment or TripComment.
 
     Exactly one of ``comment`` or ``trip_comment`` must be set.
@@ -35,7 +35,7 @@ class Reaction(abstract.Model):
         blank=True,
     )
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_reactions"
         constraints = [
             models.UniqueConstraint(

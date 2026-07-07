@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_RADIUS_METERS = 50
 
 
-class Campus(abstract.Model):
+class Campus(abstract.DashboardModel):
     """Spatial boundary for a Location or a user's Pin.
 
     Two kinds of Campus rows exist:
@@ -120,7 +120,7 @@ class Campus(abstract.Model):
         owner = f"profile {self.profile_id}" if self.profile_id else "default"
         return f"Campus(location={self.location_id}, {owner})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_campuses"
         get_latest_by = "updated"
         constraints = [

@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.notifications.queryset import NotificationManage
 logger = logging.getLogger(__name__)
 
 
-class NotificationLog(abstract.Model):
+class NotificationLog(abstract.DashboardModel):
     """Records a notification sent to a specific user profile."""
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
@@ -74,7 +74,7 @@ class NotificationLog(abstract.Model):
         friendship = Friendship.objects.between(self.source_profile_id, self.profile_id)
         return friendship is not None and friendship.status == FriendshipStatus.REQUESTED
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
         indexes = [
@@ -85,7 +85,7 @@ class NotificationLog(abstract.Model):
         ]
 
 
-class NotificationPreference(abstract.Model):
+class NotificationPreference(abstract.DashboardModel):
     """Per-user delivery preferences for each notification type."""
 
     profile = models.OneToOneField(
@@ -104,5 +104,5 @@ class NotificationPreference(abstract.Model):
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notification_preferences"

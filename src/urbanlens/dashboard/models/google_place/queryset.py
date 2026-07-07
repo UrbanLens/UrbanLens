@@ -5,7 +5,7 @@ from __future__ import annotations
 from urbanlens.dashboard.models import abstract
 
 
-class GooglePlaceQuerySet(abstract.QuerySet):
+class GooglePlaceQuerySet(abstract.DashboardQuerySet):
     """Query helpers for coordinate-keyed Google Place cache rows."""
 
     def by_coordinates(self, latitude, longitude):
@@ -17,5 +17,5 @@ class GooglePlaceQuerySet(abstract.QuerySet):
         return self.filter(cid=cid)
 
 
-class GooglePlaceManager(abstract.Manager.from_queryset(GooglePlaceQuerySet)):
+class GooglePlaceManager(abstract.DashboardManager.from_queryset(GooglePlaceQuerySet)):
     """Manager for GooglePlace."""

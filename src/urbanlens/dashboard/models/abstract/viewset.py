@@ -14,7 +14,7 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from urbanlens.dashboard.models.abstract.serializer import Serializer
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.abstract.queryset import QuerySet
+    from urbanlens.dashboard.models.abstract.queryset import DashboardQuerySet
 
 
 class ViewSet(HasParams, ReadOnlyModelViewSet):
@@ -28,7 +28,7 @@ class ViewSet(HasParams, ReadOnlyModelViewSet):
     ordering_fields = ["__all__"]
     ordering = ["id"]
 
-    def apply_filters(self, queryset: QuerySet) -> QuerySet:
+    def apply_filters(self, queryset: DashboardQuerySet) -> DashboardQuerySet:
         """
         Apply filters to the queryset. This is applied automatically in the get_queryset method using the filterset_fields attribute and request params.
 
@@ -77,7 +77,7 @@ class ViewSet(HasParams, ReadOnlyModelViewSet):
         return queryset
 
     @override
-    def get_queryset(self) -> QuerySet:
+    def get_queryset(self) -> DashboardQuerySet:
         # Get the queryset from the parent class
         queryset = super().get_queryset()
         # Apply filters to the queryset automatically

@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 import logging
 import os
+from pathlib import Path
 import shutil
 import signal
 import subprocess  # nosec B404
 import sys
-from dataclasses import dataclass
-from functools import lru_cache
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as pkg_version
-from pathlib import Path
-
 import tomllib
 
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_ROOT

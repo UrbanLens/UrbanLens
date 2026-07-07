@@ -70,7 +70,7 @@ def humanize_hours_minutes(delta: timedelta) -> str:
     return " ".join(parts)
 
 
-class EmergencyContactDefault(abstract.Model):
+class EmergencyContactDefault(abstract.DashboardModel):
     """A reusable emergency contact saved to a profile's safety defaults.
 
     Copied onto each new SafetyCheckin as a SafetyCheckinContact snapshot at
@@ -110,7 +110,7 @@ class EmergencyContactDefault(abstract.Model):
         """
         return f"{self.display_name} (default for {self.owner_id})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_defaults"
         ordering = ["order", "created"]
         indexes = [Index(fields=["owner"], name="idxdb_ecd_owner")]
@@ -122,7 +122,7 @@ class EmergencyContactDefault(abstract.Model):
         ]
 
 
-class SafetyPreference(abstract.Model):
+class SafetyPreference(abstract.DashboardModel):
     """Per-profile defaults applied to new safety check-ins."""
 
     profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
@@ -158,7 +158,7 @@ class SafetyPreference(abstract.Model):
         """
         return f"Safety preferences for {self.profile_id}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_preferences"
 
 
@@ -182,7 +182,7 @@ class SafetyCheckinStatus(abstract.TextChoices):
         return (cls.CHECKED_IN, cls.FOUND_SAFE, cls.CANCELLED)
 
 
-class SafetyCheckin(abstract.HasSlug):
+class SafetyCheckin(abstract.PublicDashboardModel):
     """A planned trip with an expected check-in time and emergency contacts.
 
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
@@ -191,7 +191,7 @@ class SafetyCheckin(abstract.HasSlug):
     VisitSuggestion for the destination via ``services.safety._conclude_checkin``,
     reusing the same confirm/reject flow as any other tentative visit.
 
-    ``slug`` (from ``HasSlug``) is scoped per-profile - only the owner-facing
+    ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing
     detail/check-in pages use it for a human-readable URL; the contact portal
     keeps using its unguessable ``token``, since that's a security credential,
     not just an identifier.
@@ -296,7 +296,7 @@ class SafetyCheckin(abstract.HasSlug):
         """
         return f"{self.title} ({self.profile_id})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_safety_checkins"
         ordering = ["-checkin_by"]
         indexes = [
@@ -306,7 +306,7 @@ class SafetyCheckin(abstract.HasSlug):
         ]
 
 
-class SafetyCheckinContact(abstract.Model):
+class SafetyCheckinContact(abstract.DashboardModel):
     """A single emergency contact attached to one specific check-in.
 
     A snapshot, not a live link back to ``EmergencyContactDefault`` - editing
@@ -349,7 +349,7 @@ class SafetyCheckinContact(abstract.Model):
         """
         return f"{self.display_name} for checkin {self.checkin_id}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_contacts"
         indexes = [
             Index(fields=["checkin"], name="idxdb_scc_checkin"),
@@ -371,7 +371,7 @@ class SafetyContactOptOutScope(abstract.TextChoices):
     GLOBAL = "global", "All safety check-in notifications"
 
 
-class SafetyContactOptOut(abstract.Model):
+class SafetyContactOptOut(abstract.DashboardModel):
     """Records that a contact (by profile or email) no longer wants safety check-in notifications.
 
     Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of
@@ -401,7 +401,7 @@ class SafetyContactOptOut(abstract.Model):
         who = self.contact_profile.username if self.contact_profile else (self.email or "Unknown contact")
         return f"{who} opted out ({self.scope})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_opt_outs"
         indexes = [
             Index(fields=["contact_profile"], name="idxdb_scoo_profile"),
@@ -425,7 +425,7 @@ class SafetyContactOptOut(abstract.Model):
         ]
 
 
-class SafetyCheckinMessage(abstract.Model):
+class SafetyCheckinMessage(abstract.DashboardModel):
     """A chat message on a check-in, from either the owner or an emergency contact.
 
     Exactly one of ``sender_profile``/``sender_contact`` is set at the
@@ -465,7 +465,7 @@ class SafetyCheckinMessage(abstract.Model):
         """
         return f"[{self.sender_name}] {self.body[:60]}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_messages"
         ordering = ["created"]
         indexes = [Index(fields=["checkin"], name="idxdb_scm_checkin")]

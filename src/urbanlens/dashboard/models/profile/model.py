@@ -47,7 +47,7 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     return 6_371.0 * 2 * math.asin(math.sqrt(a))
 
 
-class Profile(abstract.HasSlug):
+class Profile(abstract.PublicDashboardModel):
     # Global uniqueness with a shorter cap to fit within username length limits.
     slug = SlugField(max_length=150, null=True, blank=True, unique=True)
 
@@ -468,7 +468,7 @@ class Profile(abstract.HasSlug):
     def __str__(self):
         return self.username
 
-    class Meta(abstract.HasSlug.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_profiles"
 
         indexes = [

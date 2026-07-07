@@ -9,10 +9,11 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
 
+from urbanlens.dashboard.models.abstract import DashboardModel
 from urbanlens.dashboard.models.account.queryset import EmailVerificationManager
 
 
-class EmailVerification(models.Model):
+class EmailVerification(DashboardModel):
     """One-time token used to verify a new user's email address.
 
     Created when a user registers via email/password.  SSO users skip this
@@ -27,7 +28,7 @@ class EmailVerification(models.Model):
 
     objects = EmailVerificationManager()
 
-    class Meta:
+    class Meta(DashboardModel.Meta):
         db_table = "dashboard_email_verification"
 
     def __str__(self) -> str:

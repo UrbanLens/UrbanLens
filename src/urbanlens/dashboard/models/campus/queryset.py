@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 logger = logging.getLogger(__name__)
 
 
-class CampusQuerySet(abstract.QuerySet):
+class CampusQuerySet(abstract.DashboardQuerySet):
     """QuerySet for Campus - spatial region data for a Location or Pin.
 
     Campus is distinct from Location (canonical place data) and Pin (user visit
@@ -38,7 +38,7 @@ class CampusQuerySet(abstract.QuerySet):
         return self.select_related("location")
 
 
-class CampusManager(abstract.Manager.from_queryset(CampusQuerySet)):
+class CampusManager(abstract.DashboardManager.from_queryset(CampusQuerySet)):
     """Manager for Campus.
 
     Use effective_for(location) for location wiki lookups and

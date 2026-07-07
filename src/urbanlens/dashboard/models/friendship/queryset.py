@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class QuerySet(abstract.QuerySet["Friendship"]):
+class QuerySet(abstract.DashboardQuerySet["Friendship"]):
     def profile(self, profile: Profile | int) -> Self:
         """
         Return a list of all friendships for a given profile.
@@ -98,5 +98,5 @@ class QuerySet(abstract.QuerySet["Friendship"]):
         return self.filter(permissions=permission)
 
 
-class Manager(abstract.Manager.from_queryset(QuerySet)):
+class Manager(abstract.DashboardManager.from_queryset(QuerySet)):
     pass

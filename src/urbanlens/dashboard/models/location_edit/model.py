@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.location_edit.queryset import LocationEditManage
 logger = logging.getLogger(__name__)
 
 
-class LocationEdit(abstract.Model):
+class LocationEdit(abstract.DashboardModel):
     """A single community edit applied to a Location's wiki-editable fields.
 
     Each edit stores the set of field changes as a JSON diff:
@@ -53,7 +53,7 @@ class LocationEdit(abstract.Model):
 
     objects = LocationEditManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_location_edits"
         ordering = ["-created"]
         get_latest_by = "created"

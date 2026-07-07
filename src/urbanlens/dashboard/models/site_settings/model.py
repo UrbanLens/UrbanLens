@@ -22,7 +22,7 @@ from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
-class SiteSettings(abstract.Model):
+class SiteSettings(abstract.FrontendDashboardModel):
     """Singleton model for site-wide configurable settings.
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
@@ -31,7 +31,7 @@ class SiteSettings(abstract.Model):
     # Regenerated each time the database is wiped or the app is redeployed from scratch.
     # Clients embed this in their local pin cache; a mismatch signals a stale cache that
     # must be cleared (avoids ghost pins appearing after a DB reset).
-    instance_uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    #uuid = UUIDField(default=uuid4, unique=True, editable=False)
 
     # --- Trip settings ---
 
@@ -321,7 +321,7 @@ class SiteSettings(abstract.Model):
             EnvironmentTypes.TESTING,
         }
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_site_settings"
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"

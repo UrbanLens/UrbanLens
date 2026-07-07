@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
+class Location(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
     """Shared, globally recognised data about a physical place.
 
     Location is the *global* half of the two-model design:
@@ -171,7 +171,7 @@ class Location(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableMod
             self.point = Point(lon, lat, srid=4326)
         super().save(*args, **kwargs)
 
-    class Meta(abstract.AddressableModel.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [

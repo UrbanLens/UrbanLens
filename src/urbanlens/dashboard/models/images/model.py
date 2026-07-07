@@ -11,10 +11,9 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 
-class Image(abstract.Model):
+class Image(abstract.FrontendDashboardModel):
     """A photo uploaded by a user, attached to a pin, shared location, or safety check-in."""
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     image = ImageField(upload_to="pin_images/")
     pin = ForeignKey(
         "dashboard.Pin",
@@ -72,7 +71,7 @@ class Image(abstract.Model):
 
     objects = ImageManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_images"
         get_latest_by = "updated"
         indexes = [Index(fields=["uuid"], name="idxdb_image_uuid")]

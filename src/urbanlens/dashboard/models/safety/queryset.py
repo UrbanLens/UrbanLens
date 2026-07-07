@@ -10,7 +10,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 
-class SafetyCheckinQuerySet(abstract.QuerySet):
+class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for SafetyCheckin records."""
 
     def due_for_reminder(self) -> Self:
@@ -73,5 +73,5 @@ class SafetyCheckinQuerySet(abstract.QuerySet):
         return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
 
 
-class SafetyCheckinManager(abstract.Manager.from_queryset(SafetyCheckinQuerySet)):
+class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):
     """Manager for SafetyCheckin."""

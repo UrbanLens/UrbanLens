@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, JSONField, ManyToManyField, TextChoices, TextField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, Index, JSONField, ManyToManyField, TextChoices, TextField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin.model import Pin
 
 
 class VisitSource(TextChoices):
@@ -35,7 +31,7 @@ class VisitSource(TextChoices):
     SAFETY_CHECKIN = "safety_checkin", "Safety Check-in"
 
 
-class PinVisit(abstract.Model):
+class PinVisit(abstract.PublicDashboardModel):
     """A single recorded visit by a user to one of their pinned locations.
 
     Multiple PinVisit rows can exist per pin. When a visit is created or deleted
@@ -53,11 +49,11 @@ class PinVisit(abstract.Model):
             ``Comment.map_data``; sanitized via ``services.map_snapshot``.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     visited_at = DateTimeField()
     notes = TextField(null=True, blank=True)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
     map_data = JSONField(null=True, blank=True)
+    tentative = BooleanField(default=False)
 
     participants = ManyToManyField(
         "dashboard.Profile",
@@ -91,12 +87,14 @@ class PinVisit(abstract.Model):
         """
         return f"Visit to {self.pin_id} on {self.visited_at:%Y-%m-%d}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_pin_visits"
         ordering = ["-visited_at"]
         get_latest_by = "visited_at"
         indexes = [
             Index(fields=["uuid"], name="idxdb_pv_uuid"),
             Index(fields=["pin"], name="idxdb_pv_pin"),
-            Index(fields=["pin", "visited_at"], name="idxdb_pv_pin_visited"),
+            Index(fields=["pin", "tentative"], name="idxdb_pv_pin_tent"),
+            Index(fields=["pin", "visited_at"], name="idxdb_pv_pin_vat"),
+            Index(fields=["pin", "visited_at", "tentative"], name="idxdb_pv_pin_vat_tent"),
         ]

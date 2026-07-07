@@ -12,12 +12,12 @@ from urbanlens.dashboard.models import abstract
 logger = logging.getLogger(__name__)
 
 
-class _AliasBase(abstract.Model):
+class _AliasBase(abstract.DashboardModel):
     """Shared fields for all alias types."""
 
     name = CharField(max_length=255)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         abstract = True
         ordering = ["name"]
 

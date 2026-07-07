@@ -9,7 +9,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.queryset import Manager
 
 
-class Review(abstract.Model):
+class Review(abstract.DashboardModel):
     rating = IntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
     review = TextField()
 
@@ -26,6 +26,6 @@ class Review(abstract.Model):
 
     objects = Manager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         unique_together = ("user", "pin")
         get_latest_by = "created"

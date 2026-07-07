@@ -19,7 +19,7 @@ class VisitSuggestionStatus(abstract.TextChoices):
     REJECTED = "rejected", "Rejected"
 
 
-class VisitSuggestion(abstract.Model):
+class VisitSuggestion(abstract.DashboardModel):
     """A proposed PinVisit sent to a user for confirmation.
 
     Created when a user tags a connection as a co-visitor in the visit-add dialog
@@ -178,7 +178,7 @@ class VisitSuggestion(abstract.Model):
         """
         return f"Visit suggestion to {self.suggested_to_id} on {self.visited_at:%Y-%m-%d}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_visit_suggestions"
         indexes = [
             Index(fields=["suggested_to", "status"], name="idxdb_visit_st_status"),

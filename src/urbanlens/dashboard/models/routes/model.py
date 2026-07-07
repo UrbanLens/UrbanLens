@@ -39,7 +39,7 @@ class RouteSource(TextChoices):
     GOOGLE_TAKEOUT_SEMANTIC = "google_takeout_semantic", "Google Takeout (Semantic History)"
 
 
-class Route(abstract.Model):
+class Route(abstract.FrontendDashboardModel):
     """A recorded path a profile travelled, imported from GPX or Google Takeout.
 
     The stored ``path`` is a simplified polyline (see
@@ -67,7 +67,6 @@ class Route(abstract.Model):
         ended_at: Timestamp of the last point that carried one, if any.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -104,7 +103,7 @@ class Route(abstract.Model):
         when = self.started_at.strftime("%Y-%m-%d") if self.started_at else "unknown date"
         return f"{self.get_source_display()} on {when}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_routes"
         ordering = ["-started_at", "-created"]
         get_latest_by = "started_at"

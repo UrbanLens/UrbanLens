@@ -16,7 +16,7 @@ from urbanlens.dashboard.models import abstract
 logger = logging.getLogger(__name__)
 
 
-class LocationQuerySet(abstract.QuerySet):
+class LocationQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for Location - the shared, user-agnostic half of the place model.
 
     Filters here operate on global place data (coordinates, name, CID, address).
@@ -113,7 +113,7 @@ class LocationQuerySet(abstract.QuerySet):
         return self.filter(query)
 
 
-class LocationManager(abstract.Manager.from_queryset(LocationQuerySet)):
+class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
     """Manager for Location. Use get_for_point to find a Location whose Campus polygon contains a coordinate."""
 
     def get_for_point(self, latitude: float, longitude: float):

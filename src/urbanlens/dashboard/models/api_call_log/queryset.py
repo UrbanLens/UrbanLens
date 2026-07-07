@@ -11,7 +11,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 
-class ApiCallLogQuerySet(abstract.QuerySet):
+class ApiCallLogQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ApiCallLog."""
 
     def for_service(self, service: str) -> Self:
@@ -66,5 +66,5 @@ class ApiCallLogQuerySet(abstract.QuerySet):
         )
 
 
-class ApiCallLogManager(abstract.Manager.from_queryset(ApiCallLogQuerySet)):
+class ApiCallLogManager(abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)):
     """Manager for ApiCallLog that proxies all ApiCallLogQuerySet methods."""

@@ -23,7 +23,7 @@ class SiteFeature(TextChoices):
     SEARCH = "search", "Web search engines"
 
 
-class SubscriptionRole(abstract.Model):
+class SubscriptionRole(abstract.DashboardModel):
     """Extensible role definition that grants a set of site features."""
 
     slug = CharField(max_length=50, unique=True, db_index=True)
@@ -31,7 +31,7 @@ class SubscriptionRole(abstract.Model):
     description = CharField(max_length=255, blank=True)
     features = CharField(max_length=500, blank=True, help_text="Comma-separated SiteFeature values.")
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]
 
     # Canonical features every VIP role must include.  Add new SiteFeature values here
@@ -68,7 +68,7 @@ class SubscriptionRole(abstract.Model):
         return self.name
 
 
-class UserSubscription(abstract.Model):
+class UserSubscription(abstract.DashboardModel):
     """Subscription role granted to a user by a site administrator."""
 
     user = ForeignKey(User, on_delete=CASCADE, related_name="subscriptions")
@@ -77,7 +77,7 @@ class UserSubscription(abstract.Model):
     expires_at = DateTimeField(null=True, blank=True)
     revoked_at = DateTimeField(null=True, blank=True)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
         constraints = [
             UniqueConstraint(
@@ -105,7 +105,7 @@ class UserSubscription(abstract.Model):
         return f"{self.user} → {self.role}"
 
 
-class PendingSubscriptionGrant(abstract.Model):
+class PendingSubscriptionGrant(abstract.DashboardModel):
     """Subscription grant attached to an invite for a user who has not joined yet."""
 
     invitation = ForeignKey("dashboard.FriendInvitation", on_delete=CASCADE, related_name="pending_subscription_grants")
@@ -113,7 +113,7 @@ class PendingSubscriptionGrant(abstract.Model):
     granted_by = ForeignKey(User, on_delete=CASCADE, related_name="pending_subscription_grants")
     duration_months = CharField(max_length=20, blank=True, help_text="Blank means indefinite.")
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
 
     def duration_as_int(self) -> int | None:

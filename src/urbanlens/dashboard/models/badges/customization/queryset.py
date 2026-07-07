@@ -5,9 +5,9 @@ from __future__ import annotations
 from urbanlens.dashboard.models import abstract
 
 
-class BadgeCustomizationQuerySet(abstract.QuerySet):
+class BadgeCustomizationQuerySet(abstract.DashboardQuerySet):
     """QuerySet for per-user badge display overrides."""
 
 
-class BadgeCustomizationManager(abstract.Manager.from_queryset(BadgeCustomizationQuerySet)):
+class BadgeCustomizationManager(abstract.DashboardManager.from_queryset(BadgeCustomizationQuerySet)):
     """Manager for BadgeCustomization records."""

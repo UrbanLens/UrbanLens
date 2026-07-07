@@ -10,7 +10,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.social_link.queryset import Manager
 
 
-class SocialLink(abstract.Model):
+class SocialLink(abstract.DashboardModel):
     """A single social media or community link belonging to a user profile.
 
     Storing links in a separate table (rather than as columns on Profile) means
@@ -39,7 +39,7 @@ class SocialLink(abstract.Model):
     def __str__(self) -> str:
         return f"{self.profile} - {self.platform}: {self.handle}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_social_links"
         constraints = [
             UniqueConstraint(fields=["profile", "platform"], name="social_link_unique_profile_platform"),

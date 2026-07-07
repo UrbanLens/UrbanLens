@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 
-class LocationCache(abstract.Model):
+class LocationCache(abstract.DashboardModel):
     """
     Caches responses from external data sources keyed to a shared Location.
 
@@ -37,7 +37,7 @@ class LocationCache(abstract.Model):
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_location_cache"
         unique_together = [("location", "source")]
         indexes = [

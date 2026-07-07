@@ -9,7 +9,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.google_place.queryset import GooglePlaceManager
 
 
-class GooglePlace(abstract.Model):
+class GooglePlace(abstract.DashboardModel):
     """Cached Google Place / geocoding metadata for a coordinate pair.
 
     Location and Pin rows that share the same latitude and longitude reference
@@ -31,7 +31,7 @@ class GooglePlace(abstract.Model):
         label = self.cached_place_name or f"({self.latitude}, {self.longitude})"
         return f"GooglePlace: {label}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_google_places"
         get_latest_by = "updated"
         indexes = [

@@ -8,7 +8,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.badges.profile_assignment.queryset import ProfileBadgeAssignmentManager
 
 
-class ProfileBadgeAssignment(abstract.Model):
+class ProfileBadgeAssignment(abstract.DashboardModel):
     """Records that *author* has privately applied a user-type Badge to *subject*.
 
     Only the author can see this assignment; the subject profile owner cannot.
@@ -33,7 +33,7 @@ class ProfileBadgeAssignment(abstract.Model):
 
     objects = ProfileBadgeAssignmentManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         constraints = [
             UniqueConstraint(
                 fields=["author", "subject", "badge"],

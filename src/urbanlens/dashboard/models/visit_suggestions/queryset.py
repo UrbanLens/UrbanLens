@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class VisitSuggestionQuerySet(abstract.QuerySet):
+class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
     """QuerySet for VisitSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -57,5 +57,5 @@ class VisitSuggestionQuerySet(abstract.QuerySet):
         return self.filter(status=VisitSuggestionStatus.PENDING)
 
 
-class VisitSuggestionManager(abstract.Manager.from_queryset(VisitSuggestionQuerySet)):
+class VisitSuggestionManager(abstract.DashboardManager.from_queryset(VisitSuggestionQuerySet)):
     """Manager for VisitSuggestion."""

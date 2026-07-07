@@ -31,19 +31,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Trip(abstract.Model):
+class Trip(abstract.FrontendDashboardModel):
     """A planned trip shared among one or more users.
 
     The creator is the user who created the trip. Members includes the creator
     plus any additional users added. Only members can view and edit the trip.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
 
+    # TODO: Convert to TextChoices
     PERM_NONE = "none"
     PERM_ORGANIZERS = "organizers"
     PERM_EVERYONE = "everyone"
@@ -144,7 +144,7 @@ class Trip(abstract.Model):
             return (end - start).days + 1
         return None
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
@@ -154,7 +154,7 @@ class Trip(abstract.Model):
         ]
 
 
-class TripActivity(abstract.Model):
+class TripActivity(abstract.DashboardModel):
     """A single planned activity within a trip.
 
     Each activity is associated with a Location and has an optional scheduled
@@ -253,7 +253,7 @@ class TripActivity(abstract.Model):
     def __str__(self) -> str:
         return f"{self.effective_title} ({self.trip})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activities"
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
@@ -262,7 +262,7 @@ class TripActivity(abstract.Model):
         ]
 
 
-class TripMembership(abstract.Model):
+class TripMembership(abstract.DashboardModel):
     """RSVP through-model linking a Profile to a Trip.
 
     Replaces the implicit M2M join table so each membership can carry an RSVP
@@ -294,7 +294,7 @@ class TripMembership(abstract.Model):
     def __str__(self) -> str:
         return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
         indexes = [
@@ -305,7 +305,7 @@ class TripMembership(abstract.Model):
         ]
 
 
-class TripComment(abstract.Model):
+class TripComment(abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
 
     trip = ForeignKey(
@@ -335,7 +335,7 @@ class TripComment(abstract.Model):
         author = self.author.user.username if self.author and self.author.user else "Unknown"
         return f"[{author}] {self.text[:60]}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
         indexes = [
@@ -343,7 +343,7 @@ class TripComment(abstract.Model):
         ]
 
 
-class TripActivityVote(abstract.Model):
+class TripActivityVote(abstract.DashboardModel):
     """A member's thumbs-up or thumbs-down vote on a proposed activity.
 
     Only one vote per (activity, profile) pair is allowed. Votes are only
@@ -372,7 +372,7 @@ class TripActivityVote(abstract.Model):
     def __str__(self) -> str:
         return f"{self.profile} {self.vote} on {self.activity}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
         indexes = [

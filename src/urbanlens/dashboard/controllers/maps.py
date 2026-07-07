@@ -157,7 +157,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "color_choices": COLOR_CHOICES,
                 "profile_uuid": profile.uuid,
                 "profile_slug": profile.slug or str(profile.uuid),
-                "app_uuid": str(site.instance_uuid),
+                "app_uuid": str(site.uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
                 "show_pin_count": show_pin_count,
@@ -577,7 +577,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(
             {
                 "last_updated": last_updated.isoformat() if last_updated else None,
-                "app_uuid": str(site.instance_uuid),
+                "app_uuid": str(site.uuid),
             },
         )
 

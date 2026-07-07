@@ -10,14 +10,13 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.comments.queryset import CommentManager
 
 
-class Comment(abstract.Model):
+class Comment(abstract.FrontendDashboardModel):
     """A user comment on a Pin or a Location wiki page.
 
     Exactly one of ``pin`` or ``location`` must be non-null.
     ``parent`` is set only for replies (depth-1 threading).
     """
 
-    uuid = models.UUIDField(default=uuid4, unique=True, editable=False)
     pin = models.ForeignKey(
         "dashboard.Pin",
         on_delete=models.CASCADE,
@@ -52,7 +51,7 @@ class Comment(abstract.Model):
 
     objects = CommentManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_comments"
         get_latest_by = "updated"
         ordering = ["created"]

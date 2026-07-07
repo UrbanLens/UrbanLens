@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class BadgeCustomization(abstract.Model):
+class BadgeCustomization(abstract.DashboardModel):
     """Stores a user's display overrides for a global badge (tag or category).
 
     Each field is nullable - null means "use the badge's global value", non-null
@@ -40,7 +40,7 @@ class BadgeCustomization(abstract.Model):
 
     objects = BadgeCustomizationManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_tag_customizations"
         constraints = [
             UniqueConstraint(

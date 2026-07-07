@@ -11,7 +11,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 
 
-class PinShare(abstract.Model):
+class PinShare(abstract.DashboardModel):
     """A one-to-one share of a single pin from one profile to another."""
 
     status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
@@ -37,7 +37,7 @@ class PinShare(abstract.Model):
     def is_actionable(self) -> bool:
         return self.status == PinShareStatus.PENDING
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_shares"
         indexes = [
             Index(fields=["to_profile", "status"], name="idxdb_pinshr_to_pfl_stat"),

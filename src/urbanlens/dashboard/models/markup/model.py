@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.markup.queryset import PinMarkupManager
 logger = logging.getLogger(__name__)
 
 
-class PinMarkup(abstract.Model):
+class PinMarkup(abstract.FrontendDashboardModel):
     """A map annotation attached to a user's Pin, or shared on a Location's wiki.
 
     Markup items let users annotate a map view with lines, arrows, text
@@ -62,7 +62,6 @@ class PinMarkup(abstract.Model):
         border_opacity: Border/background opacity as a 0-100 integer (percent).
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     markup_type = CharField(max_length=20, choices=MarkupType.choices)
     geometry = JSONField()
     label = TextField(blank=True, default="")
@@ -142,7 +141,7 @@ class PinMarkup(abstract.Model):
             owner = f"safety_checkin={self.parent_safety_checkin_id}"
         return f"{self.markup_type}: {self.label or '(unlabelled)'} [{owner}]"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
         indexes = [

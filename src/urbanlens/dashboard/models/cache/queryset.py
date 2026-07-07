@@ -10,9 +10,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.cache.model import GeocodedLocation
 
 
-class GeocodedLocationQuerySet(abstract.QuerySet):
+class GeocodedLocationQuerySet(abstract.DashboardQuerySet):
     """QuerySet for cached geocoding API responses."""
 
 
-class GeocodedLocationManager(abstract.Manager.from_queryset(GeocodedLocationQuerySet)):
+class GeocodedLocationManager(abstract.DashboardManager.from_queryset(GeocodedLocationQuerySet)):
     """Manager for GeocodedLocation cache records."""

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class BadgeQuerySet(abstract.QuerySet):
+class BadgeQuerySet(abstract.DashboardQuerySet):
     """QuerySet for Badge with visibility and ordering helpers."""
 
     def visible_to(self, profile: Profile | int) -> Self:
@@ -92,5 +92,5 @@ class BadgeQuerySet(abstract.QuerySet):
         return self.order_by("-order", "name")
 
 
-class BadgeManager(abstract.Manager.from_queryset(BadgeQuerySet)):
+class BadgeManager(abstract.DashboardManager.from_queryset(BadgeQuerySet)):
     pass

@@ -13,7 +13,7 @@ if __import__("typing").TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class ProfileTrust(abstract.Model):
+class ProfileTrust(abstract.DashboardModel):
     """A private 1-5 star trust rating one user keeps about another user's profile.
 
     Only the *author* can see their own rating; the *subject* profile owner
@@ -40,7 +40,7 @@ class ProfileTrust(abstract.Model):
         author_id: int
         subject_id: int
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         constraints = [
             UniqueConstraint(
                 fields=["author", "subject"],

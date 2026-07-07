@@ -7,7 +7,7 @@ from typing import Self
 from urbanlens.dashboard.models import abstract
 
 
-class LocationEditQuerySet(abstract.QuerySet):
+class LocationEditQuerySet(abstract.DashboardQuerySet):
     """QuerySet for community Location wiki edit history."""
 
     def for_location(self, location) -> Self:
@@ -19,5 +19,5 @@ class LocationEditQuerySet(abstract.QuerySet):
         return self.filter(reverted=False)
 
 
-class LocationEditManager(abstract.Manager.from_queryset(LocationEditQuerySet)):
+class LocationEditManager(abstract.DashboardManager.from_queryset(LocationEditQuerySet)):
     """Manager for LocationEdit audit records."""

@@ -10,7 +10,7 @@ from django.contrib.gis.geos import Point
 from django.db.models import SET_NULL, ForeignKey
 from django.db.models.fields import CharField, DecimalField
 
-from urbanlens.dashboard.models.abstract.model import Model
+from urbanlens.dashboard.models.abstract.model import DashboardModel
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AddressableModel(Model):
+class AddressableModel(DashboardModel):
     """Adds Google Geocoding API address components and derived address properties.
 
     Google Place metadata (canonical place name, CID) lives on the linked
@@ -206,5 +206,5 @@ class AddressableModel(Model):
                 return
         super().__setattr__(name, value)
 
-    class Meta(Model.Meta):
+    class Meta(DashboardModel.Meta):
         abstract = True

@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.redact import redact_coordinate
 logger = logging.getLogger(__name__)
 
 
-class PinQuerySet(abstract.QuerySet):
+class PinQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for Pin - the user-specific half of the place model.
 
     Filters here operate on per-user data (profile, visit history, status, priority).
@@ -224,7 +224,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(reviews__rating__lte=rating)
 
 
-class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
+class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
     """Manager for Pin. Use get_nearby_or_create to avoid duplicate pins for the same profile+location."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):

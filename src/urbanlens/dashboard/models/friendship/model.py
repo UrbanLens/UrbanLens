@@ -4,7 +4,7 @@ import logging
 
 from django.db.models import CASCADE, CharField, ForeignKey
 
-from urbanlens.dashboard.models.abstract import Model, TextChoices
+from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.profile import Profile
 logger = logging.getLogger(__name__)
 
 
-class Friendship(Model):
+class Friendship(DashboardModel):
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
     permissions = CharField(max_length=16, choices=Permission.choices)
@@ -147,6 +147,6 @@ class Friendship(Model):
     def __str__(self):
         return f"{self.from_profile.username} to {self.to_profile.username} - {self.relationship_type} - {self.status}"
 
-    class Meta(Model.Meta):
+    class Meta(DashboardModel.Meta):
         db_table = "dashboard_friendships"
         unique_together = ("from_profile", "to_profile")

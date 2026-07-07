@@ -47,7 +47,7 @@ class PinType(TextChoices):
     OTHER = "other", "Other"
 
 
-class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
+class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -484,7 +484,7 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
         super().save(*args, **kwargs)
 
-    class Meta(abstract.AddressableModel.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
