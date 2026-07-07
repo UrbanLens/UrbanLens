@@ -55,28 +55,64 @@
     <ul class="visit-list">
         {% for visit in visits %}
         <li class="visit-item">
-            <div class="visit-item-main">
-                <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
-                {% if visit.visited_at|time:"H:i" != "00:00" %}
-                <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
-                {% endif %}
-                <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
-                    {% if visit.source == "google_takeout" %}
-                    <i class="material-icons" style="font-size:14px">cloud_download</i>
-                    {% else %}
-                    <i class="material-icons" style="font-size:14px">edit</i>
+            <div class="visit-item-body">
+                <div class="visit-item-main">
+                    <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
+                    {% if visit.visited_at|time:"H:i" != "00:00" %}
+                    <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
                     {% endif %}
-                    {{ visit.get_source_display }}
-                </span>
+                    <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
+                        {% if visit.source == "google_takeout" %}
+                        <i class="material-icons" style="font-size:14px">cloud_download</i>
+                        {% else %}
+                        <i class="material-icons" style="font-size:14px">edit</i>
+                        {% endif %}
+                        {{ visit.get_source_display }}
+                    </span>
+                </div>
+                {% if visit.notes %}
+                <div class="visit-notes">{{ visit.notes }}</div>
+                {% endif %}
+                {% with visit_participants=visit.participants.all %}
+                {% if visit_participants %}
+                <div class="visit-participants">with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- Attached photos: tiny thumbnails, capped with a +N counter -- #}
+                {% with visit_images=visit.images.all %}
+                {% if visit_images %}
+                <div class="visit-photos">
+                    {% for img in visit_images|slice:":4" %}
+                    <a href="{{ img.image.url }}" target="_blank" class="visit-photo-thumb" title="{{ img.caption|default:'Photo' }}">
+                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}">
+                    </a>
+                    {% endfor %}
+                    {% if visit_images|length > 4 %}
+                    <a href="#photo-gallery" class="visit-photo-more" title="See all photos in the gallery">+{{ visit_images|length|add:"-4" }}</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- Attached map snapshot: reuses the comment-map viewer -------- #}
+                {% if visit.map_data %}
+                {% with vid=visit.id|stringformat:"d" %}{% with sid="comment-map-data-visit-"|add:vid %}{{ visit.map_data|json_script:sid }}{% endwith %}{% endwith %}
+                <button type="button" class="visit-map-chip" onclick="_expandCommentMap('visit-{{ visit.id }}')">
+                    <i class="material-symbols-outlined">map</i> Map
+                </button>
+                <dialog id="comment-map-dialog-visit-{{ visit.id }}" class="comment-map-view-dialog ul-dialog">
+                    <div class="dialog-header">
+                        <span>Visit map</span>
+                        <button type="button" class="dialog-close"
+                                onclick="document.getElementById('comment-map-dialog-visit-{{ visit.id }}').close()">
+                            <i class="material-symbols-outlined">close</i>
+                        </button>
+                    </div>
+                    <div id="comment-map-view-visit-{{ visit.id }}" class="comment-map-view-body"></div>
+                </dialog>
+                {% endif %}
             </div>
-            {% if visit.notes %}
-            <div class="visit-notes">{{ visit.notes }}</div>
-            {% endif %}
-            {% with visit_participants=visit.participants.all %}
-            {% if visit_participants %}
-            <div class="visit-participants">with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
-            {% endif %}
-            {% endwith %}
             <button type="button"
                     hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
                     hx-target="#visit-history-panel"
@@ -100,8 +136,12 @@
         <form hx-post="{% url 'pin.visits' pin.slug %}"
               hx-target="#visit-history-panel"
               hx-swap="outerHTML"
+              hx-encoding="multipart/form-data"
+              hx-on::after-request="if(event.detail.successful){document.getElementById('visit-add-dialog-{{ pin.slug }}').close()}"
               class="visit-add-form">
             {% csrf_token %}
+            {# Hidden field carrying the map snapshot - populated by the shared map composer JS #}
+            <input type="hidden" name="map_data" class="comment-map-data-field" value="">
             <div class="form-row">
                 <label for="visited_date_{{ pin.slug }}">Date</label>
                 <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required>
@@ -114,6 +154,50 @@
                 <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
                 <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
             </div>
+
+            {# -- Photos: select existing pin photos and/or upload new ones -------- #}
+            <div class="form-row">
+                <label>Photos <small>(optional)</small></label>
+                {% if pin_images %}
+                <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
+                    {% for img in pin_images %}
+                    <label class="visit-photo-pick" title="{{ img.caption|default:'Photo' }}">
+                        <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}">
+                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}">
+                        <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <label class="visit-photo-upload">
+                    <i class="material-symbols-outlined">add_photo_alternate</i>
+                    <span class="visit-photo-upload-text">Upload new photos</span>
+                    <input type="file" name="photos" accept="image/*" multiple
+                           onchange="this.closest('.visit-photo-upload').querySelector('.visit-photo-upload-text').textContent = this.files.length ? this.files.length + ' photo(s) selected' : 'Upload new photos'">
+                </label>
+            </div>
+
+            {# -- Map with markup: reuses the shared comment-map composer ---------- #}
+            <div class="form-row">
+                <label>Map <small>(optional)</small></label>
+                <div class="comment-map-chip visit-map-attached-chip" hidden>
+                    <i class="material-symbols-outlined">map</i>
+                    <span class="comment-map-chip-label">Map attached</span>
+                    <button type="button" class="comment-map-chip-edit" title="Edit map"
+                            onclick="_openCommentMapComposer(this.closest('form'))">
+                        <i class="material-symbols-outlined">edit</i>
+                    </button>
+                    <button type="button" class="comment-map-chip-remove" title="Remove map"
+                            onclick="_clearCommentMap(this.closest('form'))">
+                        <i class="material-symbols-outlined">close</i>
+                    </button>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm visit-map-attach-btn"
+                        onclick="window._commentMapDefaultLat={{ pin.effective_latitude|default_if_none:'null' }};window._commentMapDefaultLng={{ pin.effective_longitude|default_if_none:'null' }};_openCommentMapComposer(this.closest('form'))">
+                    <i class="material-symbols-outlined">add_location_alt</i> Draw a map
+                </button>
+            </div>
+
             {% if connections %}
             <div class="form-row">
                 <label>Who else was there? <small>(optional)</small></label>

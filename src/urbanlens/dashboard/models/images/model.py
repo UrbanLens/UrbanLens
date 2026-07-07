@@ -37,6 +37,16 @@ class Image(abstract.Model):
         null=True,
         blank=True,
     )
+    # The specific visit this photo documents, if the user attached it to one.
+    # SET_NULL (not CASCADE) so deleting a visit record leaves the photo in the
+    # pin/location gallery - it just loses its visit association.
+    visit = ForeignKey(
+        "dashboard.PinVisit",
+        on_delete=SET_NULL,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
@@ -57,6 +67,7 @@ class Image(abstract.Model):
         pin_id: int | None
         location_id: int | None
         safety_checkin_id: int | None
+        visit_id: int | None
         profile_id: int | None
 
     objects = ImageManager()

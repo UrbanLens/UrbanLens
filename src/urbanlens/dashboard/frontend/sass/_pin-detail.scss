@@ -387,11 +387,19 @@
         }
     }
 
+    // Column wrapper holding the date line, notes, participants, photos and map.
+    .visit-item-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .25rem;
+        min-width: 0;
+    }
+
     .visit-item-main {
         display: flex;
         align-items: center;
         gap: .5rem;
-        flex: 1;
         flex-wrap: wrap;
     }
 
@@ -416,16 +424,76 @@
     .visit-notes {
         font-size: .82rem;
         color: var(--ul-grey-7);
-        margin-top: .2rem;
-        padding: 0 1rem .35rem;
     }
 
     .visit-participants {
         font-size: .8rem;
         color: var(--ul-grey-6);
         font-style: italic;
-        margin-top: .2rem;
-        padding: 0 1rem .35rem;
+    }
+
+    // -- Tiny attached-photo thumbnails on a visit row ----------------------
+    .visit-photos {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+        flex-wrap: wrap;
+        margin-top: .15rem;
+    }
+
+    .visit-photo-thumb {
+        display: block;
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid var(--ul-grey-1a);
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    }
+
+    .visit-photo-more {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 28px;
+        padding: 0 .35rem;
+        border-radius: 4px;
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+        font-size: .72rem;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    // -- Map snapshot chip on a visit row -----------------------------------
+    .visit-map-chip {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        gap: .2rem;
+        margin-top: .15rem;
+        padding: .1rem .45rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ul-grey-7);
+        font-size: .74rem;
+        cursor: pointer;
+
+        i {
+            font-size: 15px;
+        }
+
+        &:hover {
+            background: var(--ul-grey-1a);
+        }
     }
 
     .visit-delete-btn {
@@ -476,6 +544,105 @@
         gap: .35rem;
         font-size: .85rem;
         font-weight: 400;
+    }
+
+    // -- Existing-photo picker grid -----------------------------------------
+    .visit-photo-existing {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        max-height: 10rem;
+        overflow-y: auto;
+        padding: .1rem;
+    }
+
+    .visit-photo-pick {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        border-radius: 6px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 2px solid transparent;
+
+        input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: filter .1s ease;
+        }
+
+        .visit-photo-pick-check {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--ul-primary-color);
+            color: #fff;
+            display: none;
+            align-items: center;
+            justify-content: center;
+
+            i {
+                font-size: 14px;
+            }
+        }
+
+        &:has(input:checked) {
+            border-color: var(--ul-primary-color);
+
+            .visit-photo-pick-check {
+                display: inline-flex;
+            }
+
+            img {
+                filter: brightness(.85);
+            }
+        }
+    }
+
+    // -- Upload-new-photos control ------------------------------------------
+    .visit-photo-upload {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .5rem;
+        padding: .35rem .6rem;
+        border: 1px dashed var(--ul-grey-3, #bbb);
+        border-radius: 6px;
+        font-size: .82rem;
+        color: var(--ul-grey-7);
+        cursor: pointer;
+        width: fit-content;
+
+        input[type="file"] {
+            display: none;
+        }
+
+        &:hover {
+            border-color: var(--ul-primary-color);
+            color: var(--ul-primary-color);
+        }
+    }
+
+    // -- Attached-map chip / draw button ------------------------------------
+    .visit-map-attached-chip {
+        margin-bottom: .4rem;
+    }
+
+    .visit-map-attach-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
     }
 }
 

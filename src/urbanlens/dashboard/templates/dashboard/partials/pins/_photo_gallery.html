@@ -10,7 +10,8 @@ Context:
   checkin      - SafetyCheckin instance (when context_type == "safety")
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
-     data-collapse-scope="{{ context_type }}" data-collapse-section="gallery">
+     data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
+     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>

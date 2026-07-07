@@ -10,10 +10,12 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.map_snapshot import parse_map_data
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.visits import (
     add_visited_status,
@@ -36,7 +38,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     Returns:
         Rendered HTML partial.
     """
-    page_obj = get_page(request, pin.visit_history.all().prefetch_related("participants"), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, pin.visit_history.all().prefetch_related("participants", "images"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
@@ -44,6 +46,11 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
         .select_related("suggested_by", "existing_visit")
         .prefetch_related("candidate_profiles")
         .order_by("-created")
+    )
+    # The pin owner's own photos already on this pin, offered in the "Log a Visit"
+    # dialog so they can attach existing gallery photos to the visit.
+    pin_images = list(
+        Image.objects.filter(pin=pin, profile=pin.profile).order_by("-created")[:60],
     )
     return render(
         request,
@@ -54,8 +61,49 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "visits": page_obj.object_list,
             "connections": get_connections(pin.profile),
             "pending_suggestions": pending_suggestions,
+            "pin_images": pin_images,
         },
     )
+
+
+def _attach_photos_to_visit(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
+    """Attach uploaded and pre-existing photos to a newly created visit.
+
+    New files (POST ``photos``) are created as ``Image`` rows tied to the pin,
+    its location, the owner, and this visit, then queued for EXIF processing.
+    Selected existing photos (POST ``existing_photo_ids``) - which are already in
+    the pin gallery - have their ``visit`` FK pointed at this visit. Only the
+    owner's own photos may be linked.
+
+    Args:
+        request: Incoming request carrying the files and selected ids.
+        pin: The pin the visit belongs to.
+        visit: The freshly created visit to attach photos to.
+
+    Returns:
+        True if any brand-new file was uploaded (so callers can refresh the
+        gallery), False otherwise.
+    """
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import process_image_upload
+
+    uploaded_new = False
+    for image_file in request.FILES.getlist("photos"):
+        img = Image.objects.create(
+            image=image_file,
+            pin=pin,
+            location=pin.location,
+            profile=pin.profile,
+            visit=visit,
+        )
+        safely_enqueue_task(process_image_upload, img.pk)
+        uploaded_new = True
+
+    existing_ids = {int(pid) for pid in request.POST.getlist("existing_photo_ids") if pid.strip().isdigit()}
+    if existing_ids:
+        Image.objects.filter(pk__in=existing_ids, pin=pin, profile=pin.profile).update(visit=visit)
+
+    return uploaded_new
 
 
 class VisitHistoryView(LoginRequiredMixin, View):
@@ -82,8 +130,11 @@ class VisitHistoryView(LoginRequiredMixin, View):
         """Create a new manual visit entry and return the updated panel.
 
         Args:
-            request: Incoming HTTP request. POST body must include ``visited_at``
-                (datetime-local string) and optionally ``notes``.
+            request: Incoming HTTP request. POST body must include
+                ``visited_date`` and optionally ``visited_time``, ``notes``,
+                ``participant_ids``, ``map_data`` (a Leaflet snapshot),
+                ``photos`` (newly uploaded files), and ``existing_photo_ids``
+                (ids of gallery photos to link to this visit).
             pin_slug: Primary key of the target pin.
 
         Returns:
@@ -102,9 +153,18 @@ class VisitHistoryView(LoginRequiredMixin, View):
             return HttpResponse("Invalid date format.", status=400)
 
         notes = request.POST.get("notes", "").strip() or None
-        visit = PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL)
+        map_data = parse_map_data(request)
+        visit = PinVisit.objects.create(
+            pin=pin,
+            visited_at=visited_at,
+            notes=notes,
+            source=VisitSource.MANUAL,
+            map_data=map_data,
+        )
         sync_last_visited(pin)
         add_visited_status(pin)
+
+        uploaded_new = _attach_photos_to_visit(request, pin, visit)
 
         connections_by_id = {p.pk: p for p in get_connections(pin.profile)}
         participant_ids = {int(pid) for pid in request.POST.getlist("participant_ids") if pid.strip().isdigit()}
@@ -128,7 +188,12 @@ class VisitHistoryView(LoginRequiredMixin, View):
                     origin_pin=pin,
                 )
 
-        return _render_visit_history(request, pin)
+        response = _render_visit_history(request, pin)
+        if uploaded_new:
+            # Tell the photo gallery panel to reload so freshly uploaded photos
+            # appear there too (see the refreshGallery listener in _photo_gallery.html).
+            response["HX-Trigger"] = "refreshGallery"
+        return response
 
 
 class VisitDeleteView(LoginRequiredMixin, View):

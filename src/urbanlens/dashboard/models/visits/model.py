@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Index, JSONField, ManyToManyField, TextChoices, TextField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -48,12 +48,16 @@ class PinVisit(abstract.Model):
         notes: Optional free-text note about the visit.
         source: Whether this was entered manually or imported from Google Takeout.
         participants: Other profiles the pin owner says were present for this visit.
+        map_data: Optional Leaflet map snapshot (centre, zoom, freehand markup)
+            the user drew to document the visit. Same schema as
+            ``Comment.map_data``; sanitized via ``services.map_snapshot``.
     """
 
     uuid = UUIDField(default=uuid4, unique=True, editable=False)
     visited_at = DateTimeField()
     notes = TextField(null=True, blank=True)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
+    map_data = JSONField(null=True, blank=True)
 
     participants = ManyToManyField(
         "dashboard.Profile",
