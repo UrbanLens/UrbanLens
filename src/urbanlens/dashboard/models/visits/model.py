@@ -26,10 +26,10 @@ class VisitSource(TextChoices):
     - SAFETY_CHECKIN: Added when a safety check-in concluded at this place.
     """
 
-    MANUAL = "manual", "Manual"
-    HISTORY = "history", "History"
+    MANUAL = "manual", "Journal"
+    HISTORY = "history", "Imported"
     TRIP = "trip", "Trip"
-    USER = "user", "User"
+    USER = "user", "A Friend's Journal"
     PHOTO = "photo", "Photo"
     GEOLOCATION = "geolocation", "Geolocation"
     SAFETY_CHECKIN = "safety_checkin", "Safety Check-in"

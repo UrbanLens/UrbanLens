@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     import datetime
     from decimal import Decimal
 
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
@@ -182,12 +183,13 @@ def create_visit_suggestion(
     origin_visit: PinVisit | None = None,
     trip_activity: TripActivity | None = None,
     safety_checkin: SafetyCheckin | None = None,
+    origin_image: Image | None = None,
     origin_pin: Pin | None = None,
 ) -> VisitSuggestion | None:
     """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
 
-    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin`` must be
-    given - it determines both which flow raised this suggestion and, on
+    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin``/``origin_image``
+    must be given - it determines both which flow raised this suggestion and, on
     acceptance, which VisitSource the resulting PinVisit gets (see
     ``_visit_source_for``).
 
@@ -210,6 +212,8 @@ def create_visit_suggestion(
         origin_visit: The suggester's own PinVisit, for the manual-dialog flow.
         trip_activity: The completed TripActivity, for the trip flow.
         safety_checkin: The concluded SafetyCheckin, for the safety check-in flow.
+        origin_image: The uploaded photo, for the geotagged-photo flow (a
+            self-directed suggestion where ``suggested_to`` is the uploader).
         origin_pin: The suggester's own pin, used only as a message fallback when
             there is no Location (e.g. a private, unlinked pin).
 
@@ -234,6 +238,7 @@ def create_visit_suggestion(
         origin_visit=origin_visit,
         trip_activity=trip_activity,
         safety_checkin=safety_checkin,
+        origin_image=origin_image,
         existing_visit=existing_visit,
     )
     suggestion.candidate_profiles.set(candidate_profiles)
@@ -250,6 +255,9 @@ def create_visit_suggestion(
     if safety_checkin is not None:
         title = "Confirm your visit?"
         message = f"Your safety check-in wrapped up - did you make it {place} on {when}?"
+    elif origin_image is not None:
+        title = "Confirm your visit?"
+        message = f"A photo you added looks like you visited {place} on {when}. Add it to your visit history?"
     elif existing_visit:
         who = suggested_by.username if suggested_by else "A connection"
         title = "Update your visit?"
@@ -279,14 +287,16 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
         suggestion: The suggestion being accepted.
 
     Returns:
-        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, or VisitSource.USER
-        depending on which origin is set (the model's check constraint
-        guarantees exactly one of the three is set).
+        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, VisitSource.PHOTO, or
+        VisitSource.USER depending on which origin is set (the model's check
+        constraint guarantees exactly one of the four is set).
     """
     if suggestion.trip_activity_id:
         return VisitSource.TRIP
     if suggestion.safety_checkin_id:
         return VisitSource.SAFETY_CHECKIN
+    if suggestion.origin_image_id:
+        return VisitSource.PHOTO
     return VisitSource.USER
 
 
@@ -310,6 +320,13 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
     visit = PinVisit.objects.create(pin=pin, visited_at=suggestion.visited_at, source=_visit_source_for(suggestion))
     sync_last_visited(pin)
     add_visited_status(pin)
+
+    # A photo-raised suggestion carries the originating photo; on confirmation,
+    # attach it to the visit so it appears on the visit row and in the gallery.
+    if suggestion.origin_image_id:
+        from urbanlens.dashboard.models.images.model import Image
+
+        Image.objects.filter(pk=suggestion.origin_image_id).update(visit=visit)
 
     mutual = _mutual_candidates(accepting_profile, suggestion.suggested_by, list(suggestion.candidate_profiles.all()))
     visit.participants.set(mutual.values())

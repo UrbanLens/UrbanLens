@@ -24,7 +24,9 @@
                 </span>
             </div>
             <div class="visit-pending-message">
-                {% if suggestion.offers_merge %}
+                {% if suggestion.is_from_photo %}
+                A photo you added suggests you visited here on {{ suggestion.visited_at|date:"N j, Y" }}. Add it to your visit history?
+                {% elif suggestion.offers_merge %}
                 {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} says you were also there - add them to your existing visit on {{ suggestion.existing_visit.visited_at|date:"N j" }}, or log it separately?
                 {% else %}
                 {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} suggested you also visited here on {{ suggestion.visited_at|date:"N j, Y" }}.

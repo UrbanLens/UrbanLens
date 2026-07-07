@@ -241,7 +241,7 @@ def process_image_upload(self, image_id: int) -> bool:
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.images import extract_gps_coords, extract_taken_at
-    from urbanlens.dashboard.services.memories.visits import maybe_create_photo_visit
+    from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
     image = Image.objects.filter(pk=image_id).select_related("pin").first()
@@ -268,7 +268,7 @@ def process_image_upload(self, image_id: int) -> bool:
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
 
-    maybe_create_photo_visit(image)
+    maybe_suggest_photo_visit(image)
 
     update_task_progress(self, current=1, total=1, message="Image metadata processed")
     return True

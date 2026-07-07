@@ -18,21 +18,21 @@ class Image(abstract.Model):
     image = ImageField(upload_to="pin_images/")
     pin = ForeignKey(
         "dashboard.Pin",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         related_name="images",
         null=True,
         blank=True,
     )
     location = ForeignKey(
         "dashboard.Location",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         related_name="images",
         null=True,
         blank=True,
     )
     safety_checkin = ForeignKey(
         "dashboard.SafetyCheckin",
-        on_delete=CASCADE,
+        on_delete=SET_NULL,
         related_name="images",
         null=True,
         blank=True,
@@ -49,7 +49,7 @@ class Image(abstract.Model):
     )
     profile = ForeignKey(
         "dashboard.Profile",
-        on_delete=SET_NULL,
+        on_delete=CASCADE,
         related_name="uploaded_images",
         null=True,
         blank=True,
