@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOutScope,
     SafetyPreference,
 )
+from urbanlens.dashboard.services.email_normalization import normalize_email
 from urbanlens.dashboard.services.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -52,15 +53,20 @@ MAX_CHAT_MESSAGE_LENGTH = 4000
 def _find_profile_by_email(email: str) -> Profile | None:
     """Return the Profile for an existing active user with this email, if any.
 
+    Uses the site-wide normalized email matching (``find_user_by_email``) - the same
+    lookup used by registration, friend invites, and profile contact settings - so
+    Gmail dot/plus variants and a verified secondary email all resolve to the same
+    account, not just an exact match on ``User.email``.
+
     Args:
         email: Email address to look up.
 
     Returns:
         The matching Profile, or None.
     """
-    from django.contrib.auth.models import User
+    from urbanlens.dashboard.services.email_normalization import find_user_by_email
 
-    user = User.objects.filter(email__iexact=email, is_active=True).select_related("profile").first()
+    user = find_user_by_email(email)
     return user.profile if user else None
 
 
@@ -262,7 +268,16 @@ def validate_notifiable_contacts(
     *,
     checkin: SafetyCheckin | None = None,
 ) -> tuple[list[ContactInput], list[str]]:
-    """Split submitted contacts into those that can be notified and those that have opted out.
+    """Split submitted contacts into those safe to save and those that must be rejected.
+
+    Rejects, each with a ready-to-display message:
+      - the owner's own account/email - notifying yourself as your own emergency contact
+        makes no sense and is almost certainly a mistake;
+      - a contact identity that duplicates another one already in this same submission
+        (e.g. a friend picked by avatar *and* separately typed in by their own email -
+        two different-looking chips that ``_resolve_contact`` resolves to the same account);
+      - a contact who has opted out and would never actually be notified (see
+        ``is_contact_opted_out``).
 
     Args:
         owner: The profile these contacts are being added for.
@@ -270,17 +285,25 @@ def validate_notifiable_contacts(
         checkin: The specific check-in being edited, if any - see ``is_contact_opted_out``.
 
     Returns:
-        (allowed, rejected_labels) - contacts safe to save, and display labels of any rejected
-        because they've opted out and would never actually be notified.
+        (allowed, rejected_messages).
     """
     allowed: list[ContactInput] = []
     rejected: list[str] = []
+    seen: set[tuple[int | None, str | None]] = set()
+
     for contact_profile, email, name in contacts:
         resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
-        if is_contact_opted_out(resolved_profile, resolved_email, owner=owner, checkin=checkin):
-            label = name or (resolved_profile.username if resolved_profile else resolved_email) or "That contact"
-            rejected.append(label)
+        label = name or (resolved_profile.username if resolved_profile else resolved_email) or "That contact"
+        key = (resolved_profile.pk if resolved_profile else None, normalize_email(resolved_email) if resolved_email else None)
+
+        if resolved_profile is not None and resolved_profile.pk == owner.pk:
+            rejected.append(f"{label} is your own account and can't be an emergency contact.")
+        elif key in seen:
+            rejected.append(f"{label} was already added.")
+        elif is_contact_opted_out(resolved_profile, resolved_email, owner=owner, checkin=checkin):
+            rejected.append(f"{label} has opted out of notifications and wasn't added.")
         else:
+            seen.add(key)
             allowed.append((contact_profile, email, name))
     return allowed, rejected
 

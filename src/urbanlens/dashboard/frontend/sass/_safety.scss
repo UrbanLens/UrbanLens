@@ -238,6 +238,34 @@
 
 // -- Contact picker: chips, avatar picker, autocomplete -------------------------
 
+.safety-contact-picker {
+    @include surface($radius-sm);
+    padding: 1rem 1.25rem;
+    max-width: 32rem;
+}
+
+.safety-contact-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .5rem;
+
+    label { margin: 0; }
+}
+
+// Collapsed (default) state on the check-in detail page - hides every add/remove
+// control behind the header's "Edit" button until it's clicked (see .is-editing,
+// toggled by _contact_picker.html's own script). Not applied to the defaults page
+// or check-in creation, where the picker is always meant to be immediately editable.
+.safety-contact-picker--collapsible:not(.is-editing) {
+    [data-role="avatar-picker"],
+    [data-role="input-wrap"],
+    .safety-contact-chip-remove {
+        display: none;
+    }
+}
+
 .safety-contact-chips {
     display: flex;
     flex-wrap: wrap;

@@ -7,12 +7,19 @@ defaults and individual check-ins. Context: `contacts` (existing (contact_profil
 email, name) tuples to prefill), `connections` (the profile's friends), and
 optionally `contact_status` (dict keyed by contact_profile.id or email -> {"label",
 "class"}, shown as a badge next to each chip - only passed on the check-in detail
-page, which is also the only caller that ever passes `locked=True`) and `locked`
-(drops the remove button/avatar-picker/input entirely once contacts have already
-been notified - see SafetyCheckin.contacts_locked).
+page, which is also the only caller that ever passes `locked=True`/`collapsible=True`),
+`locked` (drops the remove button/avatar-picker/input entirely once contacts have
+already been notified - see SafetyCheckin.contacts_locked), and `collapsible` (starts
+collapsed to a plain read-only chip list behind an "Edit" button rather than showing
+the add/remove controls inline right away - only meaningful when not `locked`).
 {% endcomment %}
-<div class="form-row safety-contact-picker" data-role="contact-picker">
-    <label>Emergency contacts</label>
+<div class="form-row safety-contact-picker{% if collapsible and not locked %} safety-contact-picker--collapsible{% endif %}" data-role="contact-picker">
+    <div class="safety-contact-picker-header">
+        <label>Emergency contacts</label>
+        {% if collapsible and not locked %}
+        <button type="button" class="btn btn--ghost btn--sm" data-role="edit-toggle">Edit</button>
+        {% endif %}
+    </div>
 
     <div class="safety-contact-chips" data-role="chips">
         {% for contact_profile, email, name in contacts %}
@@ -93,11 +100,22 @@ been notified - see SafetyCheckin.contacts_locked).
         var input = root.querySelector('[data-role="input"]');
         var suggestions = root.querySelector('[data-role="suggestions"]');
         var avatarPicker = root.querySelector('[data-role="avatar-picker"]');
+        var editToggle = root.querySelector('[data-role="edit-toggle"]');
         var friendsDataEl = root.querySelector('script[type="application/json"]') || document.getElementById('safety-contact-friends-data');
         var friends = [];
         try { friends = friendsDataEl ? JSON.parse(friendsDataEl.textContent) : []; } catch (e) { friends = []; }
 
         var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        // -- Collapsible mode (detail page only - see the `collapsible` doc comment above) --
+        // Starts collapsed to a plain chip list; "Edit" reveals the add/remove controls
+        // (hidden via CSS on .safety-contact-picker--collapsible:not(.is-editing)).
+        if (editToggle) {
+            editToggle.addEventListener('click', function () {
+                var editing = root.classList.toggle('is-editing');
+                editToggle.textContent = editing ? 'Done' : 'Edit';
+            });
+        }
 
         function addedProfileIds() {
             return Array.prototype.map.call(chips.querySelectorAll('[data-type="profile"]'), function (chip) {

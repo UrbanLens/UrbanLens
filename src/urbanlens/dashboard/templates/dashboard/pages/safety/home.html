@@ -154,9 +154,7 @@
             document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
             setStatus('Saved', false);
             if (window.toastr) {
-                (data.rejected_contacts || []).forEach(function (label) {
-                    toastr.error(label + ' has opted out of notifications and wasn\'t saved as a default contact.');
-                });
+                (data.rejected_contacts || []).forEach(function (message) { toastr.error(message); });
                 toastr.success('Defaults saved.');
             }
         }).catch(function () {

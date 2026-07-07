@@ -281,8 +281,8 @@ class SafetyHomeView(LoginRequiredMixin, View):
                     "rejected_contacts": rejected,
                 }
             )
-        for label in rejected:
-            messages.error(request, f"{label} has opted out of notifications and wasn't saved as a default contact.")
+        for message in rejected:
+            messages.error(request, message)
         return redirect("safety.home")
 
 
@@ -359,8 +359,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
 
         allowed_contacts, rejected_contacts = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
         if rejected_contacts:
-            error = f"{', '.join(rejected_contacts)} opted out of notifications and can't be added as an emergency contact."
-            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": error}, status=400)
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": " ".join(rejected_contacts)}, status=400)
 
         try:
             checkin = create_checkin(
@@ -484,8 +483,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
             allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile), checkin=checkin)
             set_checkin_contacts(checkin, allowed)
-            for label in rejected:
-                warnings.append(f"{label} has opted out of notifications and wasn't added.")
+            warnings.extend(rejected)
 
         checkin.save(update_fields=update_fields)
 

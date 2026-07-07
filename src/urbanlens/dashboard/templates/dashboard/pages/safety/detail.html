@@ -61,7 +61,7 @@
             {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
         </div>
         <div id="safety-contact-picker-container">
-            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=checkin.contacts_locked %}
+            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=checkin.contacts_locked collapsible=True %}
         </div>
     </form>
 
@@ -101,7 +101,17 @@
     // node via createElement/appendChild instead, which does run it, to rewire the chip
     // add/remove listeners on the freshly swapped-in markup.
     function replaceHtmlAndRunScripts(container, html) {
+        // Carry the collapsible picker's "Edit"/"Done" toggle state across the swap - the
+        // user is very likely still mid-edit (this only fires right after a contacts change
+        // or another autosave), so re-rendering shouldn't silently collapse it back on them.
+        var wasEditing = !!container.querySelector('.safety-contact-picker.is-editing');
         container.innerHTML = html;
+        if (wasEditing) {
+            var picker = container.querySelector('.safety-contact-picker');
+            var toggleBtn = container.querySelector('[data-role="edit-toggle"]');
+            if (picker) picker.classList.add('is-editing');
+            if (toggleBtn) toggleBtn.textContent = 'Done';
+        }
         container.querySelectorAll('script').forEach(function (oldScript) {
             var newScript = document.createElement('script');
             Array.prototype.forEach.call(oldScript.attributes, function (attr) {
