@@ -2,19 +2,43 @@
 
 import django.db.models.deletion
 import uuid
+from decimal import Decimal
 from django.db import migrations, models
+from django.db.models import F
 from django.contrib.gis.geos import Point
+
+# Smallest representable step at the field's decimal_places=6 precision. Used to
+# nudge colliding root-pin coordinates apart (~0.1m, negligible on the map).
+COORD_STEP = Decimal("0.000001")
+
 
 def backfill_pin_coordinates(apps, schema_editor):
     Pin = apps.get_model("dashboard", "Pin")
-    pins = Pin.objects.select_related("location").only(
-        "latitude",
-        "longitude",
-        "point",
-        "location__latitude",
-        "location__longitude",
+    # Process rows with existing coordinates first so they claim their slot in
+    # `seen` before NULL rows are backfilled and (if necessary) nudged.
+    pins = (
+        Pin.objects.select_related("location")
+        .only(
+            "latitude",
+            "longitude",
+            "point",
+            "profile",
+            "parent_pin",
+            "parent_location",
+            "location__latitude",
+            "location__longitude",
+        )
+        .order_by(F("latitude").asc(nulls_last=True), F("longitude").asc(nulls_last=True), "pk")
     )
     updated = []
+    # The db_pin_unique_location_per_profile partial unique constraint covers
+    # (latitude, longitude, profile) for root pins (no parent_pin/parent_location).
+    # Coordinates used to be nullable and Postgres treats NULLs as distinct, so a
+    # profile could hold several root pins that now backfill to identical non-null
+    # coordinates (e.g. duplicates sharing a Location, or the 0,0 fallback). Track
+    # claimed coordinates and nudge collisions apart to avoid violating the
+    # constraint mid-migration.
+    seen: set[tuple[int | None, Decimal, Decimal]] = set()
     for pin in pins.iterator():
         latitude = pin.latitude
         longitude = pin.longitude
@@ -33,6 +57,15 @@ def backfill_pin_coordinates(apps, schema_editor):
         # complete instead of failing mid-deploy.
         latitude = latitude if latitude is not None else 0
         longitude = longitude if longitude is not None else 0
+
+        latitude = Decimal(str(latitude)).quantize(COORD_STEP)
+        longitude = Decimal(str(longitude)).quantize(COORD_STEP)
+
+        is_root = pin.parent_pin_id is None and pin.parent_location_id is None
+        if is_root:
+            while (pin.profile_id, latitude, longitude) in seen:
+                longitude += COORD_STEP
+            seen.add((pin.profile_id, latitude, longitude))
 
         point = Point(float(longitude), float(latitude), srid=4326)
         if pin.latitude != latitude or pin.longitude != longitude or pin.point != point:

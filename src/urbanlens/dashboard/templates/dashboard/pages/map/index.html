@@ -1330,57 +1330,58 @@
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
-            let _dragUnlocked = false;
-            const PIN_DRAG_CONFIRM_ZOOM = 14;
 
+            // Return the marker to the cluster group, wherever it currently sits.
+            const _reclusterMarker = function () {
+                if (map.hasLayer(marker)) map.removeLayer(marker);
+                clusterGroup.addLayer(marker);
+            };
+
+            // Drag freely; the position is only committed once the user confirms on drop.
             marker.on('dragstart', function () {
-                if (map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !_dragUnlocked) {
-                    marker.dragging.disable();
-                    marker.setLatLng([_savedLat, _savedLng]);
-                    window.confirmDialog({
-                        title: 'Move pin?',
-                        message: 'At this zoom level it is easy to move a pin by accident.\n\nDrag again after confirming to reposition it.',
-                        confirmLabel: 'Enable move',
-                        danger: false,
-                    }).then(function (ok) {
-                        if (ok) {
-                            _dragUnlocked = true;
-                            marker.dragging.enable();
-                            toastr.info('Drag the pin to its new location.');
-                        }
-                    });
-                    return;
-                }
                 clusterGroup.removeLayer(marker);
                 marker.addTo(map);
             });
             marker.on('dragend', function () {
-                _dragUnlocked = false;
                 const pos = marker.getLatLng();
-                fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                    body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
-                })
-                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-                .then(() => {
-                    _savedLat = pos.lat;
-                    _savedLng = pos.lng;
-                    if (_pinStore.has(pin.uuid)) {
-                        const cached = _pinStore.get(pin.uuid);
-                        cached.latitude = pos.lat.toFixed(6);
-                        cached.longitude = pos.lng.toFixed(6);
-                        _scheduleCache();
+                // Ignore an incidental click-drag that left the pin where it started.
+                if (pos.lat.toFixed(6) === _savedLat.toFixed(6) && pos.lng.toFixed(6) === _savedLng.toFixed(6)) {
+                    _reclusterMarker();
+                    return;
+                }
+                window.confirmDialog({
+                    title: 'Move pin here?',
+                    message: 'Save this pin at its new location?',
+                    confirmLabel: 'Move pin',
+                    danger: false,
+                }).then(function (ok) {
+                    if (!ok) {
+                        marker.setLatLng([_savedLat, _savedLng]);
+                        _reclusterMarker();
+                        return;
                     }
-                    toastr.success('Pin moved.');
-                })
-                .catch(() => {
-                    toastr.error('Failed to save new position.');
-                    marker.setLatLng([_savedLat, _savedLng]);
-                })
-                .finally(() => {
-                    if (map.hasLayer(marker)) map.removeLayer(marker);
-                    clusterGroup.addLayer(marker);
+                    fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                        body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                    })
+                    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(() => {
+                        _savedLat = pos.lat;
+                        _savedLng = pos.lng;
+                        if (_pinStore.has(pin.uuid)) {
+                            const cached = _pinStore.get(pin.uuid);
+                            cached.latitude = pos.lat.toFixed(6);
+                            cached.longitude = pos.lng.toFixed(6);
+                            _scheduleCache();
+                        }
+                        toastr.success('Pin moved.');
+                    })
+                    .catch(() => {
+                        toastr.error('Failed to save new position.');
+                        marker.setLatLng([_savedLat, _savedLng]);
+                    })
+                    .finally(_reclusterMarker);
                 });
             });
         }
@@ -4473,7 +4474,16 @@
             if (e.key === 'Escape') { box.hidden = true; }
             if (e.key === 'Enter') {
                 const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
-                if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); }
+                if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); return; }
+                // No item focused: mirror Tab and select the top real suggestion.
+                if (items.length) {
+                    e.preventDefault();
+                    const q = this.value.trim();
+                    const topMatch = _apdlgAllBadges.find(b =>
+                        !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                    );
+                    if (topMatch) _apdlgSelectBadge(topMatch);
+                }
             }
         });
     }
