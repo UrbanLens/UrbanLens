@@ -1,0 +1,23 @@
+{% comment %}
+Pin-search results for manually filing a photo onto one of the user's pins.
+
+Context:
+  results  - list[AutocompleteResult] (pin type only)
+  image_id - PK of the photo being filed
+  query    - the raw search string
+{% endcomment %}
+{% for r in results %}
+<button type="button" class="photo-pin-result"
+        hx-post="{% url 'memories.photos.action' image_id 'log-visit' %}"
+        hx-vals='{"pin_slug": "{{ r.pin_slug }}"}'
+        hx-target="#photo-card-{{ image_id }}"
+        hx-swap="outerHTML">
+    <i class="material-symbols-outlined">place</i>
+    <span class="photo-pin-result-title">{{ r.title }}</span>
+    {% if r.subtitle %}<small class="photo-pin-result-sub">{{ r.subtitle }}</small>{% endif %}
+</button>
+{% empty %}
+{% if query|length >= 2 %}
+<p class="photo-pin-empty">No matching pins. Try a different name.</p>
+{% endif %}
+{% endfor %}

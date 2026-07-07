@@ -186,6 +186,40 @@ class ImageQuerySet(QuerySet):
         """Filter to images that have GPS coordinates (suitable for the map layer)."""
         return self.filter(latitude__isnull=False, longitude__isnull=False)
 
+    def uploaded_by(self, profile: Profile) -> Self:
+        """Filter to images uploaded by a given profile, newest first.
+
+        Args:
+            profile: The uploader whose photos to return.
+
+        Returns:
+            Filtered queryset ordered by upload time descending.
+        """
+        return self.filter(profile=profile).order_by("-created")
+
+    def needs_attention(self, profile: Profile) -> Self:
+        """Filter to a profile's unfiled photos awaiting organization.
+
+        These are photos the user uploaded that are not yet tied to a visit and
+        have not been dismissed - the pool the Memories "needs attention" queue
+        surfaces so they can be confirmed, pinned, or manually logged. Photos
+        uploaded directly to a pin/location gallery are excluded; only bare
+        Memories-page uploads (no pin, no location) qualify.
+
+        Args:
+            profile: The uploader whose unfiled photos to return.
+
+        Returns:
+            Filtered queryset ordered by upload time descending.
+        """
+        return self.filter(
+            profile=profile,
+            visit__isnull=True,
+            organize_dismissed=False,
+            pin__isnull=True,
+            location__isnull=True,
+        ).order_by("-created")
+
 
 class ImageManager(Manager.from_queryset(ImageQuerySet)):
     pass

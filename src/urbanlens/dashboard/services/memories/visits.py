@@ -18,36 +18,44 @@ PHOTO_VISIT_MATCH_RADIUS_M = 100
 
 
 def maybe_suggest_photo_visit(image: Image) -> VisitSuggestion | None:
-    """Suggest a PinVisit when an uploaded photo has GPS + capture time near its pin.
+    """Raise a self-directed VisitSuggestion when a geotagged, timestamped photo implies a visit.
 
-    Rather than silently logging a visit, this raises a self-directed
-    ``VisitSuggestion`` the uploader confirms or dismisses from the pin's visit
-    history panel. Only runs for photos attached to one of the uploader's own
-    pins (bare location-wiki uploads have no pin). The photo's own GPS is checked
-    against its pin's location as a sanity check against batch-uploaded photos
-    from an unrelated trip.
+    Dispatches on how the photo was uploaded:
 
-    No suggestion is raised when the photo doesn't qualify (missing pin,
-    timestamp, or coordinates, or too far from the pin), when the uploader
-    already has a visit logged for that place on the photo's capture date (the
-    "relevant day" - handled by ``create_visit_suggestion``), or when an
-    equivalent pending suggestion already exists (so uploading many photos from
-    the same day yields at most one suggestion).
+    - Attached to one of the uploader's own pins (pin/location gallery upload):
+      the photo's GPS is checked against that specific pin.
+    - Unfiled Memories-page upload (no pin, no location): the photo's GPS is
+      matched against all of the uploader's top-level pins to find one it was
+      likely taken at.
+
+    Either way, rather than silently logging a visit, a ``VisitSuggestion`` the
+    uploader confirms or dismisses is raised. No suggestion is created when the
+    photo lacks a timestamp or coordinates, matches no pin, when the uploader
+    already has a visit logged for that place on the capture date, or when an
+    equivalent pending suggestion already exists (so a same-day batch upload
+    yields at most one suggestion).
 
     Args:
-        image: The uploaded Image, with ``pin``, ``taken_at``, ``latitude``, and
-            ``longitude`` already populated.
+        image: The uploaded Image, with ``taken_at``, ``latitude``, and
+            ``longitude`` populated (and ``pin``/``profile`` as applicable).
 
     Returns:
-        The created VisitSuggestion, or None if the photo doesn't qualify or a
-        visit/suggestion already covers that day.
+        The created VisitSuggestion, or None if the photo doesn't qualify.
     """
+    if image.taken_at is None or image.latitude is None or image.longitude is None:
+        return None
+    if image.pin_id and image.pin:
+        return _suggest_for_pinned_photo(image)
+    if image.profile_id and not image.location_id:
+        return _suggest_for_unfiled_photo(image)
+    return None
+
+
+def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
+    """Raise a visit suggestion for a photo uploaded directly to one of the user's pins."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.services.visits import create_visit_suggestion
-
-    if not image.pin_id or image.taken_at is None or image.latitude is None or image.longitude is None or not image.pin:
-        return None
 
     pin: Pin = image.pin
 
@@ -78,6 +86,52 @@ def maybe_suggest_photo_visit(image: Image) -> VisitSuggestion | None:
 
     return create_visit_suggestion(
         suggested_to=pin.profile,
+        suggested_by=None,
+        visited_at=image.taken_at,
+        location=pin.location,
+        latitude=lat,
+        longitude=lng,
+        candidate_profiles=[],
+        origin_image=image,
+        origin_pin=pin,
+    )
+
+
+def _suggest_for_unfiled_photo(image: Image) -> VisitSuggestion | None:
+    """Raise a visit suggestion for an unfiled Memories-page photo near one of the user's pins.
+
+    Matches the photo's GPS against all of the uploader's top-level pins (via
+    ``find_matching_pin``) and, on a hit, raises a self-directed suggestion for
+    that pin's place. The suggestion carries ``origin_image`` so accepting it
+    attaches the photo to the resulting visit.
+    """
+    from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
+    from urbanlens.dashboard.services.memories.photos import find_matching_pin
+    from urbanlens.dashboard.services.visits import create_visit_suggestion
+
+    profile = image.profile
+    pin = find_matching_pin(profile, image.latitude, image.longitude)
+    if pin is None:
+        return None
+
+    lat = pin.effective_latitude
+    lng = pin.effective_longitude
+    if lat is None or lng is None:
+        return None
+
+    # Collapse a same-day batch upload into a single pending suggestion per place.
+    already_pending = (
+        VisitSuggestion.objects.for_profile(profile)
+        .pending()
+        .for_place(location=pin.location, latitude=lat, longitude=lng)
+        .filter(visited_at__date=image.taken_at.date())
+        .exists()
+    )
+    if already_pending:
+        return None
+
+    return create_visit_suggestion(
+        suggested_to=profile,
         suggested_by=None,
         visited_at=image.taken_at,
         location=pin.location,

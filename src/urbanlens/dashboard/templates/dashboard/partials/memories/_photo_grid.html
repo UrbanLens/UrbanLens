@@ -1,0 +1,28 @@
+{% comment %}
+One page of the full photo gallery grid. The trailing sentinel <li> lazy-loads the
+next page via HTMX when scrolled into view, replacing itself with the next slice.
+
+Context:
+  images   - Image queryset slice for this page
+  page_obj - the Django Page (for has_next / next_page_number)
+  profile  - current viewer
+{% endcomment %}
+{% for img in images %}
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.image.url }}">
+    <button type="button" class="photo-tile-btn" onclick="photosOpenLightbox({{ img.pk }})">
+        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+        {% if img.latitude and img.longitude %}
+        <span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>
+        {% endif %}
+    </button>
+    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
+</li>
+{% endfor %}
+{% if page_obj.has_next %}
+<li class="photo-grid-sentinel"
+    hx-get="{% url 'memories.photos.page' %}?page={{ page_obj.next_page_number }}"
+    hx-trigger="revealed"
+    hx-swap="outerHTML"></li>
+{% endif %}

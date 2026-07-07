@@ -1,0 +1,15 @@
+{% comment %}
+Reusable "search your pins" input + results box for a photo card.
+
+Context:
+  image - the Image being filed (its pk scopes the results container)
+{% endcomment %}
+<input type="search" class="photo-pin-search-input" placeholder="Search your pins by name…"
+       aria-label="Search your pins"
+       hx-get="{% url 'memories.photos.pin_search' %}"
+       hx-trigger="keyup changed delay:300ms, search"
+       hx-target="#pin-results-{{ image.pk }}"
+       hx-swap="innerHTML"
+       hx-vals='{"image_id": "{{ image.pk }}"}'
+       name="q">
+<div id="pin-results-{{ image.pk }}" class="photo-pin-results"></div>

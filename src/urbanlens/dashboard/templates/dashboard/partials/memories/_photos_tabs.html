@@ -1,0 +1,20 @@
+{% comment %}
+Timeline | Photos tab strip for the Memories section.
+
+Context:
+  active - "timeline" or "photos" (which tab is current)
+{% endcomment %}
+<nav class="memories-tabs" aria-label="Memories views">
+    <a href="{% url 'memories.view' %}"
+       class="memories-tab {% if active == 'timeline' %}is-active{% endif %}"
+       {% if active == 'timeline' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">timeline</i>
+        <span>Timeline</span>
+    </a>
+    <a href="{% url 'memories.photos' %}"
+       class="memories-tab {% if active == 'photos' %}is-active{% endif %}"
+       {% if active == 'photos' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">photo_library</i>
+        <span>Photos</span>
+    </a>
+</nav>

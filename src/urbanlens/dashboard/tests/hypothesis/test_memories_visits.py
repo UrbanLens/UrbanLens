@@ -98,7 +98,26 @@ class MaybeSuggestPhotoVisitTests(TestCase):
         photo = self._photo(None, None, taken_at)
         self.assertIsNone(maybe_suggest_photo_visit(photo))
 
-    def test_no_suggestion_without_pin(self):
+    def test_unfiled_photo_near_pin_still_suggests(self):
+        # An unfiled Memories upload (no pin attached) whose GPS lands near one of
+        # the user's pins is matched to that pin via the unfiled-photo path.
         taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
-        photo = self._photo(_PIN_LAT, _PIN_LNG, taken_at, pin=None)
+        photo = self._photo(_PIN_LAT + 0.0003, _PIN_LNG + 0.0003, taken_at, pin=None)
+
+        suggestion = maybe_suggest_photo_visit(photo)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.origin_image_id, photo.pk)
+        self.assertEqual(suggestion.suggested_to_id, self.profile.pk)
+
+    def test_no_suggestion_when_unfiled_photo_has_no_profile(self):
+        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        photo = baker.make(
+            "dashboard.Image",
+            pin=None,
+            profile=None,
+            latitude=Decimal(str(_PIN_LAT)),
+            longitude=Decimal(str(_PIN_LNG)),
+            taken_at=taken_at,
+        )
         self.assertIsNone(maybe_suggest_photo_visit(photo))

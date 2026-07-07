@@ -1,0 +1,28 @@
+{% comment %}
+The Memories "needs attention" organize queue - a horizontally scrolling band of
+actionable photo cards. Re-fetched via the `refreshQueue` event after uploads so
+newly ingested suggestions appear without a full page reload.
+
+Context:
+  attention_cards - list of {"image", "state", "suggestion"} dicts
+{% endcomment %}
+{% if attention_cards %}
+<section class="photos-attention" aria-label="Photos needing attention">
+    <div class="photos-attention-head">
+        <h2><i class="material-symbols-outlined">assignment_turned_in</i> Needs your attention</h2>
+        <span class="badge">{{ attention_cards|length }}</span>
+    </div>
+    <div class="photos-attention-scroll">
+        {% for card in attention_cards %}
+        {% include "dashboard/partials/memories/_photo_card.html" with image=card.image state=card.state suggestion=card.suggestion %}
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="photos-attention photos-attention--empty" aria-label="Photos needing attention">
+    <p class="photos-attention-clear">
+        <i class="material-symbols-outlined">task_alt</i>
+        You're all caught up - every photo is filed.
+    </p>
+</section>
+{% endif %}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, UUIDField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
@@ -61,6 +61,11 @@ class Image(abstract.FrontendDashboardModel):
     # no EXIF data or that predate this field; consumers should fall back to
     # `created` when absent.
     taken_at = DateTimeField(null=True, blank=True)
+    # Set when the user explicitly clears an unfiled photo out of the Memories
+    # "needs attention" organize queue without deleting it (e.g. a photo with no
+    # GPS they don't want to tie to a visit). Keeps that queue finite; the photo
+    # still appears in the full gallery.
+    organize_dismissed = BooleanField(default=False)
 
     if TYPE_CHECKING:
         pin_id: int | None

@@ -24,6 +24,7 @@
 
     {% if not has_memory_data %}
     <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" %}
         <div class="memories-empty-state">
             <div class="memories-empty-state-icon"><i class="material-symbols-outlined">auto_awesome_motion</i></div>
             <h2>No memory data yet</h2>
@@ -47,6 +48,7 @@
     </div>
 
     <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" %}
         {% include 'dashboard/partials/memories/_hero_stats.html' %}
 
         <div id="memories-on-this-day"
