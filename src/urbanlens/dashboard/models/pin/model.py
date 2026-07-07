@@ -11,6 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
 from django.db.models import (
     CASCADE,
+    RESTRICT,
     SET_NULL,
     ForeignKey,
     ImageField,
@@ -60,6 +61,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     priority, and the marker coordinates.
     """
 
+    # TODO: Route these through the Location model exclusively.
     # Pin marker coordinates are always stored directly on the pin. Shared
     # Location coordinates describe the canonical place, not a fallback for pins.
     latitude = DecimalField(max_digits=9, decimal_places=6)
@@ -113,10 +115,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         on_delete=CASCADE,
         related_name="pins",
     )
-    # The shared place this pin points at. SET_NULL so deleting a Location
-    # doesn't cascade-delete all users' Pins for that place.
+    # The shared place this pin points at.
     location = ForeignKey(
         "dashboard.Location",
+        on_delete=RESTRICT,
+        related_name="pins",
+    )
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=SET_NULL,
         null=True,
         blank=True,
@@ -135,6 +141,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="detail_pins",
     )
+    # TODO: Handle detail pins differently.
     # Community detail pin - attached directly to a Wiki (community-level, shared).
     parent_wiki = ForeignKey(
         "dashboard.Wiki",
@@ -153,6 +160,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         notes: DjangoManager[PinNote]
         markup_items: DjangoManager[PinMarkup]
         visit_history: DjangoManager[PinVisit]
+        wiki_id: int | None
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -296,20 +304,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if winning:
             return winning.effective_color
         return None
-
-    @property
-    def wiki(self):
-        """Community Wiki for this pin's Location, if one exists.
-
-        Prefetch with ``select_related("location__wiki")`` in bulk to avoid a
-        query per pin.
-        """
-        if not self.location_id:
-            return None
-        try:
-            return self.location.wiki
-        except ObjectDoesNotExist:
-            return None
 
     @property
     def effective_name(self) -> str:

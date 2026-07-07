@@ -19,7 +19,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import DatabaseError
-from django.db.models import SET_NULL, Index, ManyToManyField, OneToOneField
+from django.db.models import RESTRICT, SET_NULL, Index, ManyToManyField, OneToOneField
 from django.db.models.fields import CharField, DateField, SlugField, TextField
 
 from urbanlens.dashboard.models import abstract
@@ -76,14 +76,12 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel):
     # Location can be removed without cascade-deleting community content.
     location = OneToOneField(
         "dashboard.Location",
-        on_delete=SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=RESTRICT,
         related_name="wiki",
     )
 
     if TYPE_CHECKING:
-        location_id: int | None
+        location_id: int
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
 

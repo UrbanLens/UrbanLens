@@ -102,7 +102,7 @@ class CreatePinAndLogVisitTests(TestCase):
 
     @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
     def test_raises_without_coordinates(self, _mock_enqueue):
-        photo = baker.make("dashboard.Image", profile=self.profile, pin=None, location=None, latitude=None, longitude=None)
+        photo = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
         with self.assertRaises(ValueError):
             create_pin_and_log_visit(self.profile, photo)
 
@@ -122,7 +122,7 @@ class LogVisitOnPinTests(TestCase):
         )
 
     def test_logs_visit_and_backfills_coords(self):
-        photo = baker.make("dashboard.Image", profile=self.profile, pin=None, location=None, latitude=None, longitude=None)
+        photo = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
 
         visit = log_visit_on_pin(self.profile, photo, self.pin)
 

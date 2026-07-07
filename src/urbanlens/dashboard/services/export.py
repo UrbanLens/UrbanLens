@@ -450,7 +450,7 @@ def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") ->
 def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.comments.model import Comment
 
-    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
+    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
 
     rows = []
     for comment in comments:
@@ -472,7 +472,7 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.images.model import Image
 
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
+    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
 
     photos_dir = os.path.join(temp_dir, "photos")
     os.makedirs(photos_dir, exist_ok=True)

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class BadgeQuerySet(abstract.DashboardQuerySet):
+class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for Badge with visibility and ordering helpers."""
 
     def visible_to(self, profile: Profile | int) -> Self:
@@ -55,9 +55,9 @@ class BadgeQuerySet(abstract.DashboardQuerySet):
         # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
 
-    def location_badges(self) -> Self:
-        """Return only items with kind='location'."""
-        # TODO: Don't hardcode 'location' string
+    def wiki_badges(self) -> Self:
+        """Return only items with kind='wiki'."""
+        # TODO: Don't hardcode 'user' string
         return self.exclude(kind="user")
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
@@ -74,12 +74,12 @@ class BadgeQuerySet(abstract.DashboardQuerySet):
         )
 
     def with_pin_counts(self) -> Self:
-        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents."""
+        """Annotate pin_count / wiki_count and prefetch children (with their own pin_count) and parents."""
         from urbanlens.dashboard.models.badges.model import Badge
 
         return self.annotate(
             pin_count=Count("pins", distinct=True),
-            location_count=Count("locations", distinct=True),
+            wiki_count=Count("wikis", distinct=True),
         ).prefetch_related(
             Prefetch(
                 "children",
@@ -92,5 +92,5 @@ class BadgeQuerySet(abstract.DashboardQuerySet):
         return self.order_by("-order", "name")
 
 
-class BadgeManager(abstract.DashboardManager.from_queryset(BadgeQuerySet)):
+class BadgeManager(abstract.FrontendDashboardManager.from_queryset(BadgeQuerySet)):
     pass

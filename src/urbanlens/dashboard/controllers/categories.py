@@ -578,21 +578,20 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location, wiki = _resolve_wiki(location_slug)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "wiki": wiki,
                 "all_categories": _all_badges(profile),
-                "member_ids": _wiki_member_ids(wiki),
+                "member_ids": _location_member_ids(location),
             },
         )
 
     def post(self, request, location_slug, *args, **kwargs):
-        """Add or remove a badge from a community wiki.
+        """Add or remove a badge from a location.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
@@ -601,20 +600,19 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location, wiki = _resolve_wiki(location_slug)
+        location = get_object_or_404(Location, slug=location_slug)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
-        _apply_badge_to_wiki(wiki, badge, action)
+        _apply_badge_to_location(location, badge, action)
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
-                "wiki": wiki,
                 "all_categories": _all_badges(profile),
-                "member_ids": _wiki_member_ids(wiki),
+                "member_ids": _location_member_ids(location),
             },
         )
 

@@ -74,9 +74,8 @@ class CampusManager(abstract.DashboardManager.from_queryset(CampusQuerySet)):
         Returns:
             Campus | None
         """
-        pin_campus = self.filter(pin=pin).select_related("location").first()
-        if pin_campus:
+        if pin_campus := self.filter(pin=pin).select_related("location").first():
             return pin_campus
         if pin.location_id:
-            return self.filter(location_id=pin.location_id, profile__isnull=True, pin__isnull=True).select_related("location").first()
+            return self.filter(wiki__location_id=pin.location_id, profile__isnull=True, pin__isnull=True).select_related("location").first()
         return None

@@ -118,7 +118,7 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
             The rendered Photos page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gallery = Image.objects.uploaded_by(profile).select_related("pin", "location")
+        gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
         return render(
             request,
@@ -173,7 +173,7 @@ class PhotoGridPageView(LoginRequiredMixin, View):
             The rendered grid-slice partial.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gallery = Image.objects.uploaded_by(profile).select_related("pin", "location")
+        gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
         return render(
             request,

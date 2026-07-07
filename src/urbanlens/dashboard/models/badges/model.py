@@ -25,9 +25,9 @@ from urbanlens.dashboard.models.badges.queryset import BadgeManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.customization import BadgeCustomization
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 class Badge(abstract.FrontendDashboardModel):
@@ -82,7 +82,7 @@ class Badge(abstract.FrontendDashboardModel):
     if TYPE_CHECKING:
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
-        locations: ManyToManyField[Location, Location]
+        wikis: ManyToManyField[Wiki, Wiki]
 
     objects = BadgeManager()
 

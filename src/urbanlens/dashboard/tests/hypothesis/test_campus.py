@@ -84,7 +84,7 @@ class CampusEffectivePolygonTests(TestCase):
             generated_polygon=generated_polygon,
             default_radius_meters=50,
         )
-        return Campus.objects.select_related("location").get(pk=campus.pk)
+        return Campus.objects.select_related("wiki").get(pk=campus.pk)
 
     def test_returns_polygon_when_set(self) -> None:
         coords = ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0))

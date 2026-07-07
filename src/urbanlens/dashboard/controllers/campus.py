@@ -59,12 +59,12 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         campus, _ = Campus.objects.get_or_create(
             pin=pin,
-            defaults={"location": pin.location, "profile": profile},
+            defaults={"profile": profile},
         )
-        # Sync location in case pin.location was reassigned since this campus was created.
-        if campus.location_id != pin.location_id:
-            campus.location = pin.location
-            campus.save(update_fields=["location", "updated"])
+        # Sync wiki in case pin.wiki was reassigned since this campus was created.
+        if campus.wiki_id != pin.wiki_id:
+            campus.wiki = pin.wiki
+            campus.save(update_fields=["wiki", "updated"])
 
         # Boundary generation (Overpass, building-footprint downloads, shapely
         # work) never runs on the request path: schedule it in Celery and tell
@@ -102,22 +102,6 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
-        # Auto-create a Location for legacy pins that don't have one yet.
-        if not pin.location_id:
-            lat = pin.effective_latitude
-            lon = pin.effective_longitude
-            if not lat or not lon:
-                return JsonResponse({"error": "Pin has no coordinates"}, status=400)
-            location = Location.objects.get_for_point(lat, lon)
-            if not location:
-                location = Location.objects.create(
-                    name=pin.effective_name or "Unnamed Location",
-                    latitude=lat,
-                    longitude=lon,
-                )
-            pin.location = location
-            pin.save(update_fields=["location"])
-
         data = request.data
         if not isinstance(data, dict):
             return JsonResponse({"error": "Invalid request body"}, status=400)
@@ -130,9 +114,9 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         polygon_geojson = data.get("polygon")
         campus, _ = Campus.objects.get_or_create(
             pin=pin,
-            defaults={"location": pin.location, "profile": profile},
+            defaults={"profile": profile},
         )
-        # Sync stale location reference if pin.location was reassigned.
+        # Sync stale location reference if pin.location was reassigned. (TODO Look at this. Should campus even have a location field?)
         if campus.location_id != pin.location_id:
             campus.location = pin.location
 

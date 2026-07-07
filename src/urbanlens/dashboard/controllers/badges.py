@@ -699,8 +699,7 @@ class BadgeMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
             return HttpResponse(f"Cannot merge a {cfg.singular_title.lower()} into itself.", status=400)
 
         target.pins.add(*source.pins.all())
-        if self.kind == KIND_CATEGORY:
-            target.locations.add(*source.locations.all())
+        target.wikis.add(*source.wikis.all())
         source.delete()
 
         return _render_rows(request, self.kind, profile)
