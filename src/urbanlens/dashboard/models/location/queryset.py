@@ -128,7 +128,7 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
         Returns:
             QuerySet of matching Location rows, ordered by name.  May be empty.
         """
-        return self.within_bounding_box(latitude, longitude).order_by("name")
+        return self.within_bounding_box(latitude, longitude)
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
         """
