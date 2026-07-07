@@ -544,20 +544,6 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(backfill_wikis, migrations.RunPython.noop),
         migrations.RemoveField(
-            model_name="comment",
-            name="location",
-        ),
-        migrations.RemoveField(
-            model_name="image",
-            name="location",
-        ),
-        migrations.DeleteModel(
-            name="LocationAlias",
-        ),
-        migrations.DeleteModel(
-            name="LocationEdit",
-        ),
-        migrations.RemoveField(
             model_name="locationalias",
             name="created_by",
         ),
@@ -576,6 +562,20 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name="locationedit",
             name="reverted_by",
+        ),
+        migrations.RemoveField(
+            model_name="comment",
+            name="location",
+        ),
+        migrations.RemoveField(
+            model_name="image",
+            name="location",
+        ),
+        migrations.DeleteModel(
+            name="LocationAlias",
+        ),
+        migrations.DeleteModel(
+            name="LocationEdit",
         ),
         migrations.RemoveField(
             model_name="location",
