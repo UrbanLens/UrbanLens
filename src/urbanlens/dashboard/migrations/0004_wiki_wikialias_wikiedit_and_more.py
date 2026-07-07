@@ -54,8 +54,6 @@ def backfill_wikis(apps, schema_editor):
             WikiAlias.objects.create(
                 wiki=wiki,
                 name=alias.name,
-                kind=alias.kind,
-                source=alias.source,
                 created_by=alias.created_by,
             )
 
