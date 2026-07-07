@@ -222,11 +222,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 name=name,
                 name_is_user_provided=bool((name or "").strip()),
                 location=location,
-                # Private pins have no Location to hold coordinates (they never
-                # get a shared wiki entry), so the position must live on the pin
-                # itself via the latitude/longitude override.
-                latitude=lat_f if is_private else None,
-                longitude=lon_f if is_private else None,
+                latitude=lat_f,
+                longitude=lon_f,
                 icon=icon,
                 custom_icon=custom_icon,
                 color=color,

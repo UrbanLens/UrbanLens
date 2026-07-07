@@ -35,14 +35,8 @@ class LocationCreationService:
         if pin is None or pin.location_id or pin.is_private or pin.parent_pin_id or pin.parent_location_id:
             return pin.location if pin and pin.location_id else None
 
-        latitude = pin.effective_latitude
-        longitude = pin.effective_longitude
-        if latitude is None or longitude is None:
-            logger.warning("Cannot create location for pin %s without coordinates.", pin_id)
-            return None
-
-        latitude = float(latitude)
-        longitude = float(longitude)
+        latitude = float(pin.effective_latitude)
+        longitude = float(pin.effective_longitude)
         point = Point(longitude, latitude, srid=4326)
         location = Location.objects.get_for_point(latitude, longitude)
         service = GooglePlaceService(name_resolver=self.name_resolver)
