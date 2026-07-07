@@ -16,6 +16,7 @@ class NotificationType(TextChoices):
     PIN_SHARED = "pin_shared", "Pin Shared"
     VISIT_SUGGESTED = "visit_suggested", "Visit Suggested"
     SAFETY_CHECKIN_DUE = "safety_ci_due", "Safety Check-in Due"
+    SAFETY_CHECKIN_FINAL_WARNING = "safety_ci_final_warning", "Safety Check-in Final Warning"
     SAFETY_CHECKIN_OVERDUE = "safety_ci_overdue", "Safety Check-in Overdue"
     SAFETY_CHECKIN_RESOLVED = "safety_ci_resolved", "Safety Check-in Resolved"
     ERROR = "error", "Error"

@@ -356,6 +356,21 @@ def send_due_checkin_reminders() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_final_checkin_warnings() -> int:
+    """Send a final "check in now" warning for every safety check-in about to escalate."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import send_final_warning
+
+    count = 0
+    for checkin in SafetyCheckin.objects.due_for_final_warning():
+        send_final_warning(checkin)
+        count += 1
+    if count:
+        logger.info("Sent %s safety check-in final warning(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckin

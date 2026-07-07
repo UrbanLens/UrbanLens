@@ -35,6 +35,29 @@ class SafetyCheckinQuerySet(abstract.QuerySet):
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
         ).filter(status=SafetyCheckinStatus.AWAITING_CHECKIN, overdue_at__lte=timezone.now())
 
+    def due_for_final_warning(self) -> Self:
+        """Return awaiting check-ins about to escalate to emergency contacts.
+
+        Catches check-ins within ``FINAL_WARNING_LEAD_TIME`` of their overdue
+        point that haven't already gotten a final warning - once escalated,
+        ``overdue()`` takes over and this no longer matches (status moves off
+        AWAITING_CHECKIN).
+
+        Returns:
+            Filtered queryset.
+        """
+        from urbanlens.dashboard.models.safety.model import FINAL_WARNING_LEAD_TIME, SafetyCheckinStatus
+
+        now = timezone.now()
+        return self.annotate(
+            overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
+        ).filter(
+            status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            final_warning_sent_at__isnull=True,
+            overdue_at__gt=now,
+            overdue_at__lte=now + FINAL_WARNING_LEAD_TIME,
+        )
+
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.
 

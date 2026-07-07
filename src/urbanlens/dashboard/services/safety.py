@@ -316,6 +316,34 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     checkin.save(update_fields=["status", "reminder_sent_at", "updated"])
 
 
+def send_final_warning(checkin: SafetyCheckin) -> None:
+    """Give the owner one last chance to check in before contacts are notified.
+
+    Args:
+        checkin: The check-in nearing the end of its grace period (see
+            ``SafetyCheckin.objects.due_for_final_warning``).
+    """
+    checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
+    NotificationLog.objects.create(
+        profile=checkin.profile,
+        status=Status.UNREAD,
+        importance=Importance.HIGH,
+        notification_type=NotificationType.SAFETY_CHECKIN_FINAL_WARNING,
+        title="Check in now",
+        message=f'Your emergency contacts will be notified soon if you don\'t check in for "{checkin.title}".',
+        url=checkin_path,
+    )
+    if checkin.profile.user and checkin.profile.user.email:
+        _send_email(
+            to=checkin.profile.user.email,
+            subject=f'Final reminder: check in for "{checkin.title}"',
+            template="dashboard/email/safety_checkin_final_warning.html",
+            context={"checkin": checkin, "checkin_url": _absolute_url(checkin_path)},
+        )
+    checkin.final_warning_sent_at = timezone.now()
+    checkin.save(update_fields=["final_warning_sent_at", "updated"])
+
+
 def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
     """Record that the profile checked in on time (or late, before escalation).
 

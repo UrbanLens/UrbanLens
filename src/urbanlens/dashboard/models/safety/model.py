@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 
+# How long before a check-in escalates to emergency contacts that the owner gets one
+# last "check in now" warning. Matches the polling cadence of the Celery beat tasks
+# that drive this feature, so it can't realistically be tightened further without
+# also tightening send_due_checkin_reminders/escalate_overdue_checkins.
+FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
+
 DEFAULT_CONTACT_MESSAGE = (
     "Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, "
     "I haven't checked in by my expected time - please try to reach me, and if you can't, take a look "
@@ -196,6 +202,7 @@ class SafetyCheckin(abstract.HasSlug):
         destination_latitude: Destination latitude, used for the concluding VisitSuggestion.
         destination_longitude: Destination longitude, used for the concluding VisitSuggestion.
         reminder_sent_at: When the check-in-due reminder was sent, if at all.
+        final_warning_sent_at: When the owner's last "check in now" warning was sent, if at all.
         escalated_at: When emergency contacts were notified, if at all.
         resolved_at: When the check-in concluded, if at all.
     """
@@ -211,6 +218,7 @@ class SafetyCheckin(abstract.HasSlug):
     destination_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     reminder_sent_at = DateTimeField(null=True, blank=True)
+    final_warning_sent_at = DateTimeField(null=True, blank=True)
     escalated_at = DateTimeField(null=True, blank=True)
     resolved_at = DateTimeField(null=True, blank=True)
 

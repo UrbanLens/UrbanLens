@@ -217,6 +217,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
     },
+    "safety-checkin-final-warnings": {
+        "task": "urbanlens.dashboard.tasks.send_final_checkin_warnings",
+        "schedule": 5 * 60,
+    },
     "safety-checkin-escalation": {
         "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
         "schedule": 5 * 60,
