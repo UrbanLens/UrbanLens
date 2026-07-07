@@ -450,6 +450,13 @@ class _RateLimitedSession:
             )
             raise ServiceDisabledError(self._service_key)
 
+        # requests has no default timeout at all: a gateway call that forgets
+        # timeout= would otherwise block its caller (and, when running under a
+        # call_with_deadline guard, pin an executor slot) indefinitely. The
+        # (connect, read) tuple bounds each phase separately; callers that pass
+        # their own timeout are untouched, including long-running offline jobs.
+        kwargs.setdefault("timeout", (5, 30))
+
         t0 = time.monotonic()
         try:
             resp = self._session.request(method, url, **kwargs)

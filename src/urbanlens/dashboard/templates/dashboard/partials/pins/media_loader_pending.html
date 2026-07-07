@@ -1,0 +1,16 @@
+{% comment %}
+Self-polling replacement for one media provider's hidden loader div while its
+background fetch is in flight (see services/external_data.py). Served with the
+UL-Panel-Pending response header (so the gallery JS's response counting skips
+it) plus HX-Retarget/HX-Reswap headers that swap this div in place of the
+requesting loader instead of appending to the gallery grid. Keeps the
+media-provider-loader class and the grid target so the eventual real response
+behaves exactly like a first-load response.
+{% endcomment %}
+<div class="media-provider-loader" id="media-loader-{{ source }}"
+    hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+    hx-trigger="load delay:{{ poll_interval }}s"
+    hx-target="#media-gallery-grid"
+    hx-swap="beforeend"
+    hx-timeout="25000"
+    hidden></div>

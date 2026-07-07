@@ -111,7 +111,12 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
         features: list[dict] = []
         for row in matches:
-            response = self.session.get(row["Url"], timeout=180)
+            # Runs inside the campus panel-fetch Celery task (via
+            # BoundaryProviderChain, see services/external_data.py), whose
+            # soft time limit is the real budget - the (connect, read) tuple
+            # just keeps a dead connection from eating that budget while a
+            # genuinely slow shard download may keep trickling within it.
+            response = self.session.get(row["Url"], timeout=(5, 60))
             response.raise_for_status()
             raw = gzip.decompress(response.content)
             for line in raw.splitlines():

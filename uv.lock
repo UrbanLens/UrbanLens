@@ -2373,6 +2373,12 @@ wheels = [
 ]
 
 [[package]]
+name = "psycogreen"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/72/4a7965cf54e341006ad74cdc72cd6572c789bc4f4e3fadc78672f1fbcfbd/psycogreen-1.0.2.tar.gz", hash = "sha256:c429845a8a49cf2f76b71265008760bcd7c7c77d80b806db4dc81116dbcd130d", size = 5411, upload-time = "2020-02-22T19:55:22.02Z" }
+
+[[package]]
 name = "psycopg2-binary"
 version = "2.9.12"
 source = { registry = "https://pypi.org/simple" }
@@ -3991,6 +3997,7 @@ dependencies = [
     { name = "overturemaps" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "psycogreen" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -4073,6 +4080,7 @@ requires-dist = [
     { name = "overturemaps", specifier = ">=1.0.1" },
     { name = "pandas", specifier = "~=3.0.3" },
     { name = "pillow", specifier = ">=12.2,<12.4" },
+    { name = "psycogreen", specifier = "~=1.0.2" },
     { name = "psycopg2-binary", specifier = "~=2.9.12" },
     { name = "pydantic", specifier = "~=2.13.4" },
     { name = "pydantic-settings", specifier = "~=2.14.1" },
@@ -4101,18 +4109,18 @@ dev = [
     { name = "django-debug-toolbar", specifier = "~=7.0.0" },
     { name = "django-stubs", specifier = "~=6.0.5" },
     { name = "django-stubs-ext", specifier = "~=6.0.5" },
-    { name = "faker", specifier = "~=40.23.0" },
+    { name = "faker", specifier = ">=40.23,<40.29" },
     { name = "hypothesis", extras = ["django"], specifier = ">=6.155.5,<6.157.0" },
     { name = "icecream", specifier = "~=2.2.0" },
     { name = "kombu", specifier = "~=5.6.2" },
     { name = "libcst", specifier = "~=1.8.6" },
-    { name = "model-bakery", specifier = "~=1.23.5" },
+    { name = "model-bakery", specifier = ">=1.23.5,<1.25.0" },
     { name = "mypy", specifier = "~=2.1.0" },
     { name = "pre-commit", specifier = "~=4.6.0" },
     { name = "prospector", specifier = ">=1.18,<1.20" },
     { name = "pytest-django", specifier = "~=4.12.0" },
     { name = "ruff", specifier = "~=0.15.20" },
-    { name = "setuptools", specifier = "~=82.0.1" },
+    { name = "setuptools", specifier = ">=82.0.1,<83.1.0" },
     { name = "sphinx", specifier = "~=9.1.0" },
     { name = "sphinx-rtd-theme", specifier = "~=3.1.0" },
     { name = "tqdm", specifier = "~=4.68.3" },

@@ -604,13 +604,23 @@ markup_border_color, markup_border_opacity.
         if (typeof _attachCampusClickHandlers === 'function') _attachCampusClickHandlers();
     }
 
-    fetch(campusApiUrl)
-        .then(r => r.json())
-        .then(data => {
-            _savedCampusGeoJSON = data.polygon || null;
-            _loadSavedCampus(_savedCampusGeoJSON);
-        })
-        .catch(err => console.warn('Could not load campus:', err));
+    // Boundary generation happens in a background task on first view (see
+    // services/external_data.py) - while the server reports pending, poll
+    // until the generated polygon lands rather than blocking the page load.
+    function _fetchCampus(attempt) {
+        fetch(campusApiUrl)
+            .then(r => r.json())
+            .then(data => {
+                if (data.pending) {
+                    if ((attempt || 0) < 30) setTimeout(() => _fetchCampus((attempt || 0) + 1), 2000);
+                    return;
+                }
+                _savedCampusGeoJSON = data.polygon || null;
+                _loadSavedCampus(_savedCampusGeoJSON);
+            })
+            .catch(err => console.warn('Could not load campus:', err));
+    }
+    _fetchCampus(0);
 
     function _attachEditRightClickDelete() {
         // Walk the edit handler's marker group and fire a click (delete) on right-click
@@ -701,6 +711,9 @@ markup_border_color, markup_border_opacity.
         .then(data => {
             _savedCampusGeoJSON = data.polygon || geometry || null;
             if (!geometry && data.polygon) _loadSavedCampus(data.polygon);
+            // Reset with no generated default yet: the server queued background
+            // generation - poll until the default boundary lands, then draw it.
+            if (!geometry && !data.polygon && data.pending) _fetchCampus(0);
             if (!options.quiet) toastr.success(geometry ? 'Boundary saved.' : 'Boundary reset to the default.');
             if (options.exitEdit !== false) _exitCampusEdit();
         })

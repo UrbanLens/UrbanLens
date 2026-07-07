@@ -37,7 +37,11 @@ class SmithsonianGateway(MediaProvider):
                 "q": search_term,
                 "online_media_type": "Images",
             }
-            response = self.session.get(self.base_url, params=params, timeout=60)
+            # (connect, read) tuple: bounds connect and inactivity-between-reads
+            # separately. This runs inside the panel-fetch Celery task
+            # (services/external_data.py); a search this slow is failing, and
+            # failing fast lets the task's failure policy suppress and retry later.
+            response = self.session.get(self.base_url, params=params, timeout=(5, 15))
             response.raise_for_status()  # Will raise an HTTPError for bad requests
 
             data = response.json()

@@ -14,9 +14,7 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.dashboard.models.campus.model import Campus
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.apis.locations.base import default_bbox
-from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
-from urbanlens.dashboard.services.timeout_utils import call_with_deadline
+from urbanlens.dashboard.services.external_data import schedule_panel_fetch
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -68,24 +66,19 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             campus.location = pin.location
             campus.save(update_fields=["location", "updated"])
 
+        # Boundary generation (Overpass, building-footprint downloads, shapely
+        # work) never runs on the request path: schedule it in Celery and tell
+        # the map JS to poll. A user-drawn polygon still renders immediately --
+        # generation only fills the fallback shown when nothing is drawn.
+        pending = False
         if campus.generated_polygon is None:
-            # Bounded to a hard wall-clock deadline: the BoundaryProviderChain can
-            # fall through several providers (Microsoft/Google building footprints
-            # allow up to 180s each), and requests' own timeout= only bounds
-            # inactivity between reads, not total call duration -- without this, a
-            # slow/down provider (e.g. Overpass 504ing) can hold the gevent worker
-            # hostage for the whole chain, stalling every other request on it.
-            campus.generated_polygon = call_with_deadline(
-                lambda: boundary_as_multipolygon(lat, lon, name=pin.effective_name),
-                timeout=20,
-                default=MultiPolygon(default_bbox(lat, lon), srid=4326),
-            )
-            campus.save(update_fields=["generated_polygon", "updated"])
+            pending = schedule_panel_fetch("campus", pin)
 
         effective = campus.polygon or campus.generated_polygon
         return JsonResponse(
             {
                 "polygon": json.loads(effective.geojson) if effective else None,
+                "pending": pending and effective is None,
                 "default_radius_meters": campus.default_radius_meters,
                 "latitude": lat,
                 "longitude": lon,
@@ -149,30 +142,31 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
                 geom = MultiPolygon(geom, srid=geom.srid)
             campus.polygon = geom
         else:
-            # Clear user drawing; ensure generated_polygon is cached so the
-            # fallback display doesn't require a fresh API call.
+            # Clear user drawing; kick off default-boundary generation in the
+            # background so the map has a fallback to show. The response marks
+            # itself pending and the map JS polls get_campus until the task
+            # lands the generated polygon.
             campus.polygon = None
             if campus.generated_polygon is None:
                 lat = pin.effective_latitude
                 lon = pin.effective_longitude
                 if lat is None or lon is None:
                     return JsonResponse({"error": "Pin has no coordinates"}, status=400)
-                # Bounded to a hard wall-clock deadline: the BoundaryProviderChain can
-                # fall through several providers (Microsoft/Google building footprints
-                # allow up to 180s each), and requests' own timeout= only bounds
-                # inactivity between reads, not total call duration -- without this, a
-                # slow/down provider (e.g. Overpass 504ing) can hold the gevent worker
-                # hostage for the whole chain, stalling every other request on it.
-                campus.generated_polygon = call_with_deadline(
-                    lambda: boundary_as_multipolygon(lat, lon, name=pin.effective_name),
-                    timeout=20,
-                    default=MultiPolygon(default_bbox(lat, lon), srid=4326),
-                )
+                schedule_panel_fetch("campus", pin)
 
-        campus.save(update_fields=["polygon", "generated_polygon", "location", "updated"])
+        # generated_polygon is deliberately absent: only the background fetch
+        # task writes it (single-column queryset update), so this save can
+        # never clobber a boundary the worker landed concurrently.
+        campus.save(update_fields=["polygon", "location", "updated"])
 
         effective = campus.polygon or campus.generated_polygon
-        return JsonResponse({"status": "ok", "polygon": json.loads(effective.geojson) if effective else None})
+        return JsonResponse(
+            {
+                "status": "ok",
+                "polygon": json.loads(effective.geojson) if effective else None,
+                "pending": effective is None,
+            },
+        )
 
     def list_campuses(self, request: HttpRequest):
         """Return all campus boundaries visible to the current user for the main map overlay.

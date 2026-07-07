@@ -37,6 +37,7 @@ dependencies = [
     "orjson~=3.11.9",
     "pandas~=3.0.3",
     "pillow>=12.2,<12.4",
+    "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
     "pydantic-settings~=2.14.1",

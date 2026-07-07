@@ -13,6 +13,14 @@ x-app-build: &app-build
 # binary directly, which avoids the "install postgresql-client-<ver>" error
 # when the wrapper can't find a local cluster matching the remote server.
 x-app-env: &app-env
+  # Read natively by gunicorn (no --workers flag is passed in package.json's
+  # `start` script) - without this, gunicorn defaults to a single worker
+  # process, so every concurrent request across every user shares one gevent
+  # event loop. A handful of slow/hanging external API calls (see
+  # timeout_utils.call_with_deadline) can then wedge that single loop and
+  # freeze the entire site for everyone, not just the request that triggered
+  # them.
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
   UL_DB_PASS: ${UL_DB_PASS:-postgres}
@@ -195,7 +203,11 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=2"]
+    # Concurrency sized for the external-data panel fetches (see
+    # services/external_data.py): a cold pin detail page enqueues ~10 small
+    # IO-bound tasks at once, and 2 workers made the last panels wait through
+    # every earlier provider's network time before starting.
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=4"]
     restart: on-failure
     depends_on:
       db:

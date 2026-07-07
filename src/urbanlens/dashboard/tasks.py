@@ -383,3 +383,30 @@ def escalate_overdue_checkins() -> int:
     if count:
         logger.info("Escalated %s overdue safety check-in(s)", count)
     return count
+
+
+# No autoretry here, deliberately: run_panel_fetch owns the failure policy
+# (suppression markers with their own TTLs), and Celery-level retries would
+# race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
+# sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
+# single-flight marker expires right after the task does.
+@shared_task(soft_time_limit=110, time_limit=130)
+def fetch_panel_source(source_key: str, pin_id: int) -> None:
+    """Fetch one external-data panel's upstream data in the background.
+
+    Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
+    finds a panel's store empty; the page polls until this task persists the
+    result (LocationCache row, Campus boundary column, or warmed slide caches).
+
+    Args:
+        source_key: An ``external_data.PANEL_SOURCES`` key.
+        pin_id: PK of the pin whose panel data should be fetched.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.external_data import run_panel_fetch
+
+    pin = Pin.objects.select_related("location").filter(pk=pin_id).first()
+    if pin is None:
+        logger.info("fetch_panel_source: pin %s no longer exists", pin_id)
+        return
+    run_panel_fetch(source_key, pin)

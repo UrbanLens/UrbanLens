@@ -217,21 +217,25 @@
             <div class="pagination-bar" data-adaptive-pagination-controls
                  data-server-page="1" data-server-pages="1" hidden></div>
         </div>
-        <div class="media-provider-loader"
+        {# Loader ids are load-bearing: while a provider's background fetch is #}
+        {# in flight, the server's pending response retargets itself onto the #}
+        {# requesting loader by id (HX-Retarget) so the loader re-polls itself #}
+        {# instead of appending into the gallery grid. #}
+        <div class="media-provider-loader" id="media-loader-smithsonian"
             hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader"
+        <div class="media-provider-loader" id="media-loader-wikimedia"
             hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader"
+        <div class="media-provider-loader" id="media-loader-loc"
             hx-get="{% url 'pin.media' pin.slug 'loc' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -705,6 +709,7 @@
             'wikipedia-section', 'nominatim-section', 'nps-section',
             'loopnet-section', 'usgs-topo-section',
             'web-search-section',
+            'satellite-view-section', 'street-view-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
@@ -946,6 +951,11 @@
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (!isMediaLoader(el)) return;
+            // A pending response means the provider's background fetch is still
+            // running: the response body is a replacement loader that re-polls
+            // itself (via HX-Retarget), so this provider hasn't reported in yet -
+            // don't count it as finished or touch the gallery.
+            if (evt.detail.xhr.getResponseHeader('UL-Panel-Pending') === '1') return;
             if (evt.detail.xhr.status === 200) {
                 var section = document.getElementById('media-gallery-section');
                 if (section) section.hidden = false;
