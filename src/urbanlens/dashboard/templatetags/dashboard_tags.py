@@ -55,6 +55,15 @@ def get_attr(obj: Any, attr: str) -> Any:
 
 
 @register.filter
+def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
+    """Return mapping.get(key), for looking up a dict value by a template variable key.
+
+    Usage: {{ my_dict|dict_get:some_key }}
+    """
+    return (mapping or {}).get(key)
+
+
+@register.filter
 def human_timesince(value: datetime.datetime | datetime.date) -> str:
     """Return a human-friendly relative time string.
 

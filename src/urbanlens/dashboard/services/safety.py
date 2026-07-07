@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -16,11 +17,14 @@ from urbanlens.dashboard.models.notifications.meta import Importance, Notificati
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import (
+    PLAN_UPDATE_NOTIFICATION_COOLDOWN,
     EmergencyContactDefault,
     SafetyCheckin,
     SafetyCheckinContact,
     SafetyCheckinMessage,
     SafetyCheckinStatus,
+    SafetyContactOptOut,
+    SafetyContactOptOutScope,
     SafetyPreference,
 )
 from urbanlens.dashboard.services.visits import create_visit_suggestion
@@ -224,6 +228,151 @@ def set_checkin_contacts(checkin: SafetyCheckin, contacts: Iterable[ContactInput
     checkin.contacts.exclude(pk__in=keep_ids).delete()
 
 
+def is_contact_opted_out(
+    contact_profile: Profile | None,
+    email: str | None,
+    *,
+    owner: Profile,
+    checkin: SafetyCheckin | None = None,
+) -> bool:
+    """Whether a contact identity has opted out of notifications relevant to this owner/check-in.
+
+    Args:
+        contact_profile: The contact's linked profile, already resolved via ``_resolve_contact``.
+        email: The contact's raw email, already resolved via ``_resolve_contact``.
+        owner: The profile who would be sending/notifying on this contact - matches an
+            ``OWNER``-scoped opt-out against this specific owner.
+        checkin: The specific check-in being notified about, if any - omitted when validating
+            contacts not yet attached to any check-in (e.g. saved as defaults), in which case
+            only ``GLOBAL``/``OWNER``-scoped opt-outs apply.
+
+    Returns:
+        True if a matching ``SafetyContactOptOut`` row blocks notifying this identity.
+    """
+    identity = Q(contact_profile=contact_profile) if contact_profile else Q(email__iexact=email)
+    scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
+    if checkin is not None:
+        scope |= Q(scope=SafetyContactOptOutScope.CHECKIN, checkin=checkin)
+    return SafetyContactOptOut.objects.filter(identity & scope).exists()
+
+
+def validate_notifiable_contacts(
+    owner: Profile,
+    contacts: Iterable[ContactInput],
+    *,
+    checkin: SafetyCheckin | None = None,
+) -> tuple[list[ContactInput], list[str]]:
+    """Split submitted contacts into those that can be notified and those that have opted out.
+
+    Args:
+        owner: The profile these contacts are being added for.
+        contacts: Iterable of (contact_profile, email, name) tuples, as submitted.
+        checkin: The specific check-in being edited, if any - see ``is_contact_opted_out``.
+
+    Returns:
+        (allowed, rejected_labels) - contacts safe to save, and display labels of any rejected
+        because they've opted out and would never actually be notified.
+    """
+    allowed: list[ContactInput] = []
+    rejected: list[str] = []
+    for contact_profile, email, name in contacts:
+        resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
+        if is_contact_opted_out(resolved_profile, resolved_email, owner=owner, checkin=checkin):
+            label = name or (resolved_profile.username if resolved_profile else resolved_email) or "That contact"
+            rejected.append(label)
+        else:
+            allowed.append((contact_profile, email, name))
+    return allowed, rejected
+
+
+def record_contact_opt_out(contact: SafetyCheckinContact, scope: SafetyContactOptOutScope) -> None:
+    """Record that a contact no longer wants certain safety check-in notifications.
+
+    Idempotent - repeat clicks (or an email client's link-scanner prefetching the GET confirm
+    page behind an opt-out link) don't create duplicate rows.
+
+    Args:
+        contact: The contact opting out, identified via its own profile/email.
+        scope: How broadly to suppress future notifications.
+    """
+    SafetyContactOptOut.objects.get_or_create(
+        contact_profile=contact.contact_profile,
+        email=contact.email,
+        scope=scope,
+        owner=contact.checkin.profile if scope == SafetyContactOptOutScope.OWNER else None,
+        checkin=contact.checkin if scope == SafetyContactOptOutScope.CHECKIN else None,
+    )
+
+
+def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
+    """Build the three opt-out confirmation URLs for a contact-facing email footer.
+
+    Args:
+        contact: The contact these links are being generated for.
+
+    Returns:
+        Dict of ``optout_checkin_url``/``optout_owner_url``/``optout_global_url`` absolute URLs.
+    """
+    return {
+        f"optout_{scope.value}_url": _absolute_url(
+            reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})
+        )
+        for scope in SafetyContactOptOutScope
+    }
+
+
+def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
+    """Re-notify already-notified contacts that the owner changed something after escalation.
+
+    No-ops unless the check-in has actually escalated and is still unresolved - editing before
+    contacts have been told to watch a check-in, or after it's already concluded, leaves no one
+    to notify. Also no-ops within ``PLAN_UPDATE_NOTIFICATION_COOLDOWN`` of the last such resend,
+    so a burst of edits (e.g. drawing several map annotations in a row) sends one notification,
+    not one per edit.
+
+    Args:
+        checkin: The check-in that was just edited.
+        summary: Short description of what changed, e.g. "updated their trip plan".
+    """
+    if checkin.escalated_at is None or checkin.is_resolved:
+        return
+    now = timezone.now()
+    if checkin.plan_update_notified_at and now - checkin.plan_update_notified_at < PLAN_UPDATE_NOTIFICATION_COOLDOWN:
+        return
+
+    for contact in checkin.contacts.filter(notified_at__isnull=False, found_safe_at__isnull=True):
+        if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
+            continue
+        portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
+        if contact.contact_profile_id:
+            NotificationLog.objects.create(
+                profile=contact.contact_profile,
+                source_profile=checkin.profile,
+                status=Status.UNREAD,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.SAFETY_CHECKIN_PLAN_UPDATED,
+                title=f"{checkin.profile.username} {summary}",
+                message=f'"{checkin.title}" was just updated - take another look.',
+                url=portal_path,
+            )
+        contact_email = contact.contact_profile.user.email if contact.contact_profile and contact.contact_profile.user else contact.email
+        _send_email(
+            to=contact_email or "",
+            subject=f"{checkin.profile.username} updated their check-in",
+            template="dashboard/email/safety_checkin_plan_updated.html",
+            context={
+                "checkin": checkin,
+                "contact": contact,
+                "summary": summary,
+                "portal_url": _absolute_url(portal_path),
+                **_optout_urls(contact),
+            },
+        )
+
+    checkin.plan_update_notified_at = now
+    checkin.save(update_fields=["plan_update_notified_at", "updated"])
+
+
 def create_checkin(
     *,
     profile: Profile,
@@ -367,6 +516,8 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
         checkin: The overdue check-in.
     """
     for contact in checkin.contacts.all():
+        if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
+            continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
         if contact.contact_profile_id:
             NotificationLog.objects.create(
@@ -384,7 +535,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
             to=contact_email or "",
             subject=f"{checkin.profile.username} hasn't checked in",
             template="dashboard/email/safety_checkin_overdue.html",
-            context={"checkin": checkin, "contact": contact, "portal_url": _absolute_url(portal_path)},
+            context={"checkin": checkin, "contact": contact, "portal_url": _absolute_url(portal_path), **_optout_urls(contact)},
         )
         contact.notified_at = timezone.now()
         contact.save(update_fields=["notified_at", "updated"])
@@ -437,6 +588,8 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         )
 
     for other in checkin.contacts.exclude(pk=contact.pk):
+        if is_contact_opted_out(other.contact_profile, other.email, owner=checkin.profile, checkin=checkin):
+            continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
         if other.contact_profile:
             NotificationLog.objects.create(
@@ -456,7 +609,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(portal_path)},
+            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(portal_path), **_optout_urls(other)},
         )
 
     _conclude_checkin(checkin)

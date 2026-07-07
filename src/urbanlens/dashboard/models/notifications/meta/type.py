@@ -19,6 +19,7 @@ class NotificationType(TextChoices):
     SAFETY_CHECKIN_FINAL_WARNING = "safety_ci_final_warning", "Safety Check-in Final Warning"
     SAFETY_CHECKIN_OVERDUE = "safety_ci_overdue", "Safety Check-in Overdue"
     SAFETY_CHECKIN_RESOLVED = "safety_ci_resolved", "Safety Check-in Resolved"
+    SAFETY_CHECKIN_PLAN_UPDATED = "safety_ci_plan_updated", "Safety Check-in Plan Updated"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"
     INFO = "info", "Info"

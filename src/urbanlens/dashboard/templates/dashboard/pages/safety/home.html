@@ -153,7 +153,12 @@
             document.getElementById('safety-defaults-summary-grace').textContent = data.default_grace_period_display;
             document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
             setStatus('Saved', false);
-            if (window.toastr) toastr.success('Defaults saved.');
+            if (window.toastr) {
+                (data.rejected_contacts || []).forEach(function (label) {
+                    toastr.error(label + ' has opted out of notifications and wasn\'t saved as a default contact.');
+                });
+                toastr.success('Defaults saved.');
+            }
         }).catch(function () {
             setStatus('Could not save', true);
             if (window.toastr) toastr.error('Could not save your safety defaults. Please try again.');

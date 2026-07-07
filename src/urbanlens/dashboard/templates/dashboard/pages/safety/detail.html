@@ -34,15 +34,18 @@
         </div>
     </div>
 
-    <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form">
+    <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form" id="safety-checkin-form">
         {% csrf_token %}
+        <p class="safety-autosave-status" id="safety-autosave-status"></p>
         <div class="form-row">
             <label for="title">Title</label>
-            <input type="text" name="title" id="title" value="{{ checkin.title }}">
+            <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked %}disabled{% endif %}>
+            {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
         </div>
         <div class="form-row">
             <label for="plan_details">Trip plan</label>
             <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
+            {% if checkin.contacts_locked %}<p class="form-hint">Editing this will notify your emergency contacts of the update.</p>{% endif %}
         </div>
         <div class="form-row">
             <label>Destination &amp; route</label>
@@ -50,14 +53,15 @@
             {% url 'safety.checkin.markup' checkin.uuid as markup_create_url %}
             {% url 'safety.checkin.markup.edit' checkin.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
             {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template %}
+            {% if checkin.contacts_locked %}<p class="form-hint">Editing the destination or route will notify your emergency contacts of the update.</p>{% endif %}
         </div>
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>
-            <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ checkin.contact_message }}</textarea>
+            <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.contacts_locked %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
+            {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
         </div>
-        {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input %}
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary">Save</button>
+        <div id="safety-contact-picker-container">
+            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=checkin.contacts_locked %}
         </div>
     </form>
 
@@ -74,26 +78,76 @@
         </div>
     </div>
 
-    {# -- Emergency contacts --------------------------------------------------- #}
-    <div class="card safety-contacts-status">
-        <div class="card-header">
-            <i class="material-symbols-outlined">contact_emergency</i>
-            <h3>Emergency contacts</h3>
-        </div>
-        <ul class="safety-contact-status-list">
-            {% for contact in contacts %}
-            <li>
-                <span class="safety-contact-status-name">{{ contact.display_name }}</span>
-                {% if contact.found_safe_at %}<span class="safety-badge safety-badge--success">Found you</span>
-                {% elif contact.notified_at %}<span class="safety-badge safety-badge--warning">Notified</span>
-                {% else %}<span class="safety-badge">Not yet notified</span>{% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-
     {% include "dashboard/partials/safety/_chat_panel.html" with contact=None %}
 
 </div>
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
+<script>
+(function () {
+    var form = document.getElementById('safety-checkin-form');
+    var status = document.getElementById('safety-autosave-status');
+    var pickerContainer = document.getElementById('safety-contact-picker-container');
+    if (!form) return;
+    var csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+    var saveTimer = null;
+
+    function setStatus(text, isError) {
+        status.textContent = text;
+        status.classList.toggle('safety-autosave-status--error', !!isError);
+    }
+
+    // Setting .innerHTML does not execute embedded <script> tags (a long-standing DOM
+    // quirk) - _contact_picker.html ships its own init <script>, so re-create each script
+    // node via createElement/appendChild instead, which does run it, to rewire the chip
+    // add/remove listeners on the freshly swapped-in markup.
+    function replaceHtmlAndRunScripts(container, html) {
+        container.innerHTML = html;
+        container.querySelectorAll('script').forEach(function (oldScript) {
+            var newScript = document.createElement('script');
+            Array.prototype.forEach.call(oldScript.attributes, function (attr) {
+                newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    function save() {
+        setStatus('Saving…', false);
+        fetch(form.action, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+            body: new FormData(form),
+        }).then(function (response) {
+            if (!response.ok) throw new Error('Save failed');
+            return response.json();
+        }).then(function (data) {
+            if (pickerContainer && data.contacts_html) replaceHtmlAndRunScripts(pickerContainer, data.contacts_html);
+            setStatus('Saved', false);
+            (data.warnings || []).forEach(function (warning) { if (window.toastr) toastr.error(warning); });
+        }).catch(function () {
+            setStatus('Could not save', true);
+            if (window.toastr) toastr.error('Could not save your changes. Please try again.');
+        });
+    }
+
+    function scheduleSave(immediate) {
+        window.clearTimeout(saveTimer);
+        if (immediate) { save(); return; }
+        saveTimer = window.setTimeout(save, 800);
+    }
+
+    form.addEventListener('input', function (evt) {
+        if (evt.target.type === 'range') return;
+        scheduleSave(false);
+    });
+    form.addEventListener('change', function (evt) {
+        // Text inputs/textareas already autosave via the debounced 'input' listener above;
+        // 'change' only needs to force an immediate save for discrete-action fields - the
+        // hidden destination lat/lng (set via the map, see setDestination()) and any slider.
+        if (evt.target.type === 'hidden' || evt.target.type === 'range') scheduleSave(true);
+    });
+    form.addEventListener('contactschange', function () { scheduleSave(true); });
+}());
+</script>
 {% endblock %}

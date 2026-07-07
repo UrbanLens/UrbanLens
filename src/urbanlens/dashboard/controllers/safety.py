@@ -13,12 +13,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyContactOptOutScope
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.images import image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
@@ -30,12 +31,18 @@ from urbanlens.dashboard.services.safety import (
     default_contacts_as_input,
     get_active_checkin,
     get_or_create_preference,
+    is_contact_opted_out,
     mark_found_safe,
+    notify_contacts_of_update,
+    record_contact_opt_out,
     save_contact_defaults,
     set_checkin_contacts,
+    validate_notifiable_contacts,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -147,6 +154,32 @@ def _contact_display_label(contact_profile: Profile | None, email: str | None, l
     return label or email or ""
 
 
+def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckinContact]) -> dict[int | str, dict[str, str]]:
+    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status badges.
+
+    Args:
+        checkin: The check-in these contacts belong to (used to resolve opt-out scopes).
+        contacts: The check-in's contacts (avoids re-querying ``checkin.contacts``).
+
+    Returns:
+        Dict keyed by ``contact_profile_id`` (int) or ``email`` (str) - matching the lookup key
+        ``_contact_picker.html`` computes via ``contact_profile.id|default:email``.
+    """
+    status_map: dict[int | str, dict[str, str]] = {}
+    for contact in contacts:
+        if contact.found_safe_at:
+            label, css_class = "Found you", "safety-badge--success"
+        elif is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
+            label, css_class = "Opted out", "safety-badge--muted"
+        elif contact.notified_at:
+            label, css_class = "Notified", "safety-badge--warning"
+        else:
+            label, css_class = "Not yet notified", ""
+        key = contact.contact_profile_id or contact.email
+        status_map[key] = {"label": label, "class": css_class}
+    return status_map
+
+
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     """Parse the submitted grace period, in hours, into a timedelta.
 
@@ -236,7 +269,8 @@ class SafetyHomeView(LoginRequiredMixin, View):
         preference.default_message = request.POST.get("default_message", "").strip()
         preference.default_grace_period = _parse_grace_period(request)
         preference.save(update_fields=["default_message", "default_grace_period", "updated"])
-        save_contact_defaults(profile, _parse_contacts_from_post(request, profile))
+        allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
+        save_contact_defaults(profile, allowed)
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse(
@@ -244,8 +278,11 @@ class SafetyHomeView(LoginRequiredMixin, View):
                     "default_message": preference.default_message,
                     "default_grace_period_display": preference.default_grace_period_display,
                     "contact_labels": [_contact_display_label(*contact) for contact in default_contacts_as_input(profile)],
+                    "rejected_contacts": rejected,
                 }
             )
+        for label in rejected:
+            messages.error(request, f"{label} has opted out of notifications and wasn't saved as a default contact.")
         return redirect("safety.home")
 
 
@@ -320,6 +357,11 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         lat = request.POST.get("destination_latitude") or None
         lng = request.POST.get("destination_longitude") or None
 
+        allowed_contacts, rejected_contacts = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
+        if rejected_contacts:
+            error = f"{', '.join(rejected_contacts)} opted out of notifications and can't be added as an emergency contact."
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": error}, status=400)
+
         try:
             checkin = create_checkin(
                 profile=profile,
@@ -330,7 +372,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 contact_message=request.POST.get("contact_message", "").strip(),
                 destination_latitude=float(lat) if lat else None,
                 destination_longitude=float(lng) if lng else None,
-                contacts=_parse_contacts_from_post(request, profile),
+                contacts=allowed_contacts,
             )
         except ValueError as exc:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
@@ -365,6 +407,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "checkin": checkin,
                 "contacts": contacts,
                 "contacts_input": [(c.contact_profile, c.email, c.name) for c in contacts],
+                "contact_status": _contact_status_map(checkin, contacts),
                 "connections": get_connections(profile),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
                 "map_attribution": _MAP_ATTRIBUTION,
@@ -373,15 +416,23 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Update or cancel the check-in.
+        """Autosave an edit, or cancel the check-in.
+
+        Trip plan and destination stay editable at any time - editing either after contacts
+        have been notified (``checkin.contacts_locked``) re-notifies them, debounced by
+        ``notify_contacts_of_update``'s cooldown. Title, message, and the contact list are only
+        applied while unlocked; the frontend never submits them once locked (their inputs are
+        disabled), but they're re-checked here too in case a request bypasses the UI.
 
         Args:
-            request: Incoming HTTP request. ``action=cancel`` cancels the
-                check-in; otherwise the plan/message/contacts are updated.
+            request: Incoming HTTP request. ``action=cancel`` cancels the check-in; otherwise
+                whichever fields are present are saved.
             checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
-            Redirect back to the check-in detail page.
+            For an XHR autosave request, a JSON summary (including any ``warnings`` about
+            fields that couldn't be changed, and a freshly-rendered contact-picker fragment).
+            Otherwise, a redirect back to the check-in detail page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = _get_checkin_by_slug(profile, checkin_slug)
@@ -392,16 +443,70 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             cancel_checkin(checkin)
             return redirect("safety.home")
 
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        warnings: list[str] = []
+        plan_or_map_changed = False
+
         lat = request.POST.get("destination_latitude") or None
         lng = request.POST.get("destination_longitude") or None
+        new_lat = float(lat) if lat else None
+        new_lng = float(lng) if lng else None
+        old_lat = float(checkin.destination_latitude) if checkin.destination_latitude is not None else None
+        old_lng = float(checkin.destination_longitude) if checkin.destination_longitude is not None else None
 
-        checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
-        checkin.plan_details = request.POST.get("plan_details", checkin.plan_details).strip()
-        checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
-        checkin.destination_latitude = float(lat) if lat else None
-        checkin.destination_longitude = float(lng) if lng else None
-        checkin.save(update_fields=["title", "plan_details", "contact_message", "destination_latitude", "destination_longitude", "updated"])
-        set_checkin_contacts(checkin, _parse_contacts_from_post(request, profile))
+        new_plan = request.POST.get("plan_details", checkin.plan_details).strip()
+        if new_plan != checkin.plan_details:
+            checkin.plan_details = new_plan
+            plan_or_map_changed = True
+        if new_lat != old_lat or new_lng != old_lng:
+            checkin.destination_latitude = new_lat
+            checkin.destination_longitude = new_lng
+            plan_or_map_changed = True
+
+        update_fields = ["plan_details", "destination_latitude", "destination_longitude", "updated"]
+
+        if checkin.contacts_locked:
+            existing_contacts = list(checkin.contacts.all())
+            for field, label in (("title", "Title"), ("contact_message", "Message")):
+                submitted = request.POST.get(field)
+                if submitted is not None and submitted.strip() != getattr(checkin, field):
+                    warnings.append(f"{label} is locked and can't be changed once contacts have been notified.")
+            submitted_ids = set(request.POST.getlist("contact_profile_ids"))
+            submitted_emails = {e.strip().lower() for e in request.POST.getlist("contact_emails") if e.strip()}
+            current_ids = {str(c.contact_profile_id) for c in existing_contacts if c.contact_profile_id}
+            current_emails = {c.email.lower() for c in existing_contacts if c.email}
+            if submitted_ids != current_ids or submitted_emails != current_emails:
+                warnings.append("Contacts are locked and can't be changed once they've been notified.")
+        else:
+            checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
+            checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
+            update_fields += ["title", "contact_message"]
+
+            allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile), checkin=checkin)
+            set_checkin_contacts(checkin, allowed)
+            for label in rejected:
+                warnings.append(f"{label} has opted out of notifications and wasn't added.")
+
+        checkin.save(update_fields=update_fields)
+
+        if plan_or_map_changed and checkin.contacts_locked:
+            notify_contacts_of_update(checkin, "updated their trip plan or destination")
+
+        if is_xhr:
+            contacts = list(checkin.contacts.all())
+            contacts_html = render_to_string(
+                "dashboard/partials/safety/_contact_picker.html",
+                {
+                    "contacts": [(c.contact_profile, c.email, c.name) for c in contacts],
+                    "connections": get_connections(profile),
+                    "contact_status": _contact_status_map(checkin, contacts),
+                    "locked": checkin.contacts_locked,
+                },
+                request=request,
+            )
+            return JsonResponse({"ok": True, "warnings": warnings, "contacts_html": contacts_html})
+        for warning in warnings:
+            messages.warning(request, warning)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
@@ -627,6 +732,62 @@ class SafetyContactMarkSafeView(View):
         """
         contact = get_object_or_404(SafetyCheckinContact, token=token)
         mark_found_safe(contact)
+        return redirect("safety.contact.portal", token=token)
+
+
+class SafetyContactOptOutView(View):
+    """Let a contact stop receiving certain safety check-in notifications (token-gated, no login).
+
+    GET renders a confirmation page rather than performing the opt-out directly - a bare
+    GET link is exactly what an email client's link-scanner prefetches, which would otherwise
+    silently unsubscribe a real emergency contact. The opt-out only actually happens on the
+    POST from that confirmation page's button, mirroring the mark-safe flow's own confirm step.
+
+    GET  /safety/contact/<uuid:token>/opt-out/<str:scope>/
+    POST /safety/contact/<uuid:token>/opt-out/<str:scope>/
+    """
+
+    def get(self, request: HttpRequest, token: str, scope: str) -> HttpResponse:
+        """Render the opt-out confirmation page.
+
+        Args:
+            request: Incoming HTTP request.
+            token: The contact's magic-link token.
+            scope: One of ``SafetyContactOptOutScope`` values.
+
+        Returns:
+            Rendered confirmation page, or 404 if the token or scope is invalid.
+        """
+        if SafetyContactOptOutScope.invalid(scope):
+            raise Http404
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile"), token=token)
+        return render(
+            request,
+            "dashboard/pages/safety/contact_optout_confirm.html",
+            {
+                "checkin": contact.checkin,
+                "contact": contact,
+                "scope": scope,
+                "scope_label": SafetyContactOptOutScope(scope).label,
+            },
+        )
+
+    def post(self, request: HttpRequest, token: str, scope: str) -> HttpResponse:
+        """Record the opt-out and redirect back to the contact portal.
+
+        Args:
+            request: Incoming HTTP request.
+            token: The contact's magic-link token.
+            scope: One of ``SafetyContactOptOutScope`` values.
+
+        Returns:
+            Redirect back to the contact portal, or 404 if the token or scope is invalid.
+        """
+        if SafetyContactOptOutScope.invalid(scope):
+            raise Http404
+        contact = get_object_or_404(SafetyCheckinContact, token=token)
+        record_contact_opt_out(contact, SafetyContactOptOutScope(scope))
+        messages.success(request, "You won't receive further notifications about this trip.")
         return redirect("safety.contact.portal", token=token)
 
 

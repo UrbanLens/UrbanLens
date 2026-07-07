@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, Secur
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+from urbanlens.dashboard.services.safety import notify_contacts_of_update
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -252,6 +253,8 @@ class MarkupView(LoginRequiredMixin, View):
                 editor=profile,
                 changes={"markup_added": {"from": None, "to": item.label or item.markup_type}},
             )
+        if isinstance(owner, SafetyCheckin):
+            notify_contacts_of_update(owner, "added an annotation to the route map")
         return JsonResponse({"ok": True, "uuid": str(item.uuid)})
 
 
@@ -306,6 +309,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         item.save()
         if item.security_indicator and isinstance(owner, (Pin, Location)):
             _apply_security_indicator(owner, item.security_indicator)
+        if isinstance(owner, SafetyCheckin):
+            notify_contacts_of_update(owner, "updated an annotation on the route map")
         return JsonResponse({"ok": True})
 
     def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None, safety_checkin_uuid=None):
@@ -331,4 +336,6 @@ class MarkupEditView(LoginRequiredMixin, View):
                 editor=profile,
                 changes={"markup_removed": {"from": label, "to": None}},
             )
+        if isinstance(owner, SafetyCheckin):
+            notify_contacts_of_update(owner, "removed an annotation from the route map")
         return HttpResponse("", status=200)

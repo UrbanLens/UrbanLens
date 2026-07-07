@@ -59,6 +59,13 @@ so it's always available by the time this script runs - no typeof guard needed.
     var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     setTimeout(function () { map.invalidateSize(); }, 300);
+    // _markup_toolbar_script.html (included below when markup is enabled) renders
+    // every line/arrow/shape into a 'markupPane' - on the pin detail / Location
+    // wiki maps that pane is created by _map_annotations_script.html, but this
+    // page never includes that file, so it must create the pane itself or
+    // Leaflet throws when adding a shape to a nonexistent pane (the shape never
+    // renders - it looks like it "vanishes" the instant a draw gesture finishes).
+    map.createPane('markupPane').style.zIndex = 550;
 
     var readonly = {{ readonly|yesno:"true,false" }};
     var destLat = {{ destination_lat|default:"null" }};
@@ -101,6 +108,14 @@ so it's always available by the time this script runs - no typeof guard needed.
         var lngInput = document.getElementById('safety-destination-lng');
         if (latInput) latInput.value = lat.toFixed(6);
         if (lngInput) lngInput.value = lng.toFixed(6);
+        if (latInput) {
+            // The check-in detail page's own autosave script listens for 'change' bubbling up
+            // to the form - dispatching it here (after both hidden inputs are updated) is all
+            // that's needed to persist a moved/placed destination with no separate Save button,
+            // the same way contactschange already works for the contact picker. No-op (event
+            // fizzles unheard) on pages with no such listener, e.g. the read-only contact portal.
+            latInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         if (marker) {
             marker.setLatLng([lat, lng]);
         } else {

@@ -38,6 +38,12 @@ DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 # also tightening send_due_checkin_reminders/escalate_overdue_checkins.
 FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
 
+# How often the owner editing the trip plan, destination, or route markup after contacts have
+# already been notified is allowed to trigger another "plan updated" notification - keeps rapid,
+# incremental edits (e.g. drawing several map annotations in a row) from spamming contacts with
+# one email per change.
+PLAN_UPDATE_NOTIFICATION_COOLDOWN = timedelta(minutes=15)
+
 DEFAULT_CONTACT_MESSAGE = (
     "Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, "
     "I haven't checked in by my expected time - please try to reach me, and if you can't, take a look "
@@ -205,6 +211,8 @@ class SafetyCheckin(abstract.HasSlug):
         final_warning_sent_at: When the owner's last "check in now" warning was sent, if at all.
         escalated_at: When emergency contacts were notified, if at all.
         resolved_at: When the check-in concluded, if at all.
+        plan_update_notified_at: When contacts were last re-notified of a trip plan/destination/
+            route change made after escalation, if at all.
     """
 
     title = CharField(max_length=200)
@@ -221,6 +229,7 @@ class SafetyCheckin(abstract.HasSlug):
     final_warning_sent_at = DateTimeField(null=True, blank=True)
     escalated_at = DateTimeField(null=True, blank=True)
     resolved_at = DateTimeField(null=True, blank=True)
+    plan_update_notified_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     destination_location = ForeignKey(
@@ -247,6 +256,18 @@ class SafetyCheckin(abstract.HasSlug):
             True when status is checked_in, found_safe, or cancelled.
         """
         return self.status in SafetyCheckinStatus.resolved_statuses()
+
+    @property
+    def contacts_locked(self) -> bool:
+        """Whether title/message/contacts are frozen because contacts were already notified.
+
+        Returns:
+            True once ``escalated_at`` is set - the trip plan, destination, and route markup
+            stay editable after that point (editing them re-notifies contacts), but the title,
+            contact message, and contact list are locked so contacts already told to look for
+            certain information aren't sent conflicting details later.
+        """
+        return self.escalated_at is not None
 
     def _slugify_base(self) -> str:
         """Return the raw text the URL slug is derived from.
@@ -338,6 +359,68 @@ class SafetyCheckinContact(abstract.Model):
             CheckConstraint(
                 condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
                 name="db_safety_checkin_contact_exactly_one_target",
+            ),
+        ]
+
+
+class SafetyContactOptOutScope(abstract.TextChoices):
+    """How broadly a ``SafetyContactOptOut`` suppresses notifications."""
+
+    CHECKIN = "checkin", "This check-in"
+    OWNER = "owner", "All future check-ins from this person"
+    GLOBAL = "global", "All safety check-in notifications"
+
+
+class SafetyContactOptOut(abstract.Model):
+    """Records that a contact (by profile or email) no longer wants safety check-in notifications.
+
+    Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of
+    ``contact_profile``/``email``. Which of ``owner``/``checkin`` is set (if either) depends on
+    ``scope``: a ``CHECKIN``-scoped row silences one specific check-in, an ``OWNER``-scoped row
+    silences every future check-in created by that one owner, and a ``GLOBAL``-scoped row silences
+    every safety check-in notification from the site, regardless of who created the check-in.
+    """
+
+    contact_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
+    email = EmailField(null=True, blank=True)
+    scope = CharField(max_length=10, choices=SafetyContactOptOutScope.choices)
+    owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, null=True, blank=True, related_name="contact_opt_outs")
+
+    if TYPE_CHECKING:
+        contact_profile_id: int | None
+        owner_id: int | None
+        checkin_id: int | None
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this opt-out.
+
+        Returns:
+            String like "<contact> opted out (<scope>)".
+        """
+        who = self.contact_profile.username if self.contact_profile else (self.email or "Unknown contact")
+        return f"{who} opted out ({self.scope})"
+
+    class Meta(abstract.Model.Meta):
+        db_table = "dashboard_safety_contact_opt_outs"
+        indexes = [
+            Index(fields=["contact_profile"], name="idxdb_scoo_profile"),
+            Index(fields=["email"], name="idxdb_scoo_email"),
+            Index(fields=["owner"], name="idxdb_scoo_owner"),
+            Index(fields=["checkin"], name="idxdb_scoo_checkin"),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
+                name="db_safety_contact_optout_exactly_one_target",
+            ),
+            CheckConstraint(
+                condition=(
+                    (Q(scope=SafetyContactOptOutScope.CHECKIN) & Q(checkin__isnull=False) & Q(owner__isnull=True))
+                    | (Q(scope=SafetyContactOptOutScope.OWNER) & Q(owner__isnull=False) & Q(checkin__isnull=True))
+                    | (Q(scope=SafetyContactOptOutScope.GLOBAL) & Q(owner__isnull=True) & Q(checkin__isnull=True))
+                ),
+                name="db_safety_contact_optout_scope_fields_match",
             ),
         ]
 

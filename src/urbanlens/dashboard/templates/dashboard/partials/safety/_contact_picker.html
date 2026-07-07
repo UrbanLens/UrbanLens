@@ -4,7 +4,12 @@ Chip-based emergency contact picker. Friends are added as chips by clicking thei
 avatar or by typing their name into the text input (autocompleted); email addresses
 are added as chips by typing them and pressing Enter. Reused for both check-in
 defaults and individual check-ins. Context: `contacts` (existing (contact_profile,
-email, name) tuples to prefill) and `connections` (the profile's friends).
+email, name) tuples to prefill), `connections` (the profile's friends), and
+optionally `contact_status` (dict keyed by contact_profile.id or email -> {"label",
+"class"}, shown as a badge next to each chip - only passed on the check-in detail
+page, which is also the only caller that ever passes `locked=True`) and `locked`
+(drops the remove button/avatar-picker/input entirely once contacts have already
+been notified - see SafetyCheckin.contacts_locked).
 {% endcomment %}
 <div class="form-row safety-contact-picker" data-role="contact-picker">
     <label>Emergency contacts</label>
@@ -19,10 +24,15 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
             <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">{{ contact_profile.username|first|upper }}</span>
             {% endif %}
             <span class="safety-contact-chip-label">{{ contact_profile.username }}</span>
+            {% with status=contact_status|dict_get:contact_profile.id %}
+            {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
+            {% endwith %}
             <input type="hidden" name="contact_profile_ids" value="{{ contact_profile.id }}">
+            {% if not locked %}
             <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ contact_profile.username }}">
                 <i class="material-symbols-outlined">close</i>
             </button>
+            {% endif %}
         </span>
         {% elif email %}
         <span class="safety-contact-chip" data-type="email" data-email="{{ email }}">
@@ -30,15 +40,23 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
                 <i class="material-symbols-outlined">mail</i>
             </span>
             <span class="safety-contact-chip-label">{{ email }}</span>
+            {% with status=contact_status|dict_get:email %}
+            {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
+            {% endwith %}
             <input type="hidden" name="contact_emails" value="{{ email }}">
+            {% if not locked %}
             <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ email }}">
                 <i class="material-symbols-outlined">close</i>
             </button>
+            {% endif %}
         </span>
         {% endif %}
         {% endfor %}
     </div>
 
+    {% if locked %}
+    <p class="form-hint">Locked - emergency contacts have already been notified, so the contact list can't change.</p>
+    {% else %}
     {% if connections %}
     <div class="safety-contact-avatar-picker" data-role="avatar-picker">
         {% for friend in connections %}
@@ -62,7 +80,7 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
                placeholder="Type a friend's name or an email address" autocomplete="off">
         <div class="safety-contact-suggestions" data-role="suggestions" hidden></div>
     </div>
-    <p class="form-hint">Click a friend above, type their name, or enter an email address and press Enter.</p>
+    {% endif %}
 </div>
 
 <script>
@@ -102,7 +120,9 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
             });
         }
         function wireRemove(chip) {
-            chip.querySelector('[data-role="remove"]').addEventListener('click', function () {
+            var btn = chip.querySelector('[data-role="remove"]');
+            if (!btn) return;  // locked picker - chips render without a remove button
+            btn.addEventListener('click', function () {
                 chip.remove();
                 syncAvatarVisibility();
                 fireChanged();
@@ -202,6 +222,8 @@ email, name) tuples to prefill) and `connections` (the profile's friends).
                 });
             });
         }
+
+        if (!input) return;  // locked picker - no input/suggestions to wire up
 
         function renderSuggestions(query) {
             var q = query.trim().toLowerCase();

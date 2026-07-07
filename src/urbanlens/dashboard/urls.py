@@ -745,6 +745,7 @@ urlpatterns = [
                 path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
                 path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
+                path("contact/<uuid:token>/opt-out/<str:scope>/", safety.SafetyContactOptOutView.as_view(), name="safety.contact.optout"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
                 path("contact/<uuid:token>/markup/json/", markup.SafetyContactMarkupJsonView.as_view(), name="safety.contact.markup.json"),
                 path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
