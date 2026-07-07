@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.images import extract_gps_coords, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
 
@@ -25,6 +26,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
+
+
+def _wiki_for_location(location: Location | None) -> Wiki | None:
+    """Return the community Wiki for a Location, creating it lazily (or None)."""
+    if location is None:
+        return None
+    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    return wiki
 
 
 # -- Pin gallery --------------------------------------------------------------
@@ -55,7 +64,7 @@ class PinGalleryView(LoginRequiredMixin, View):
         img = Image.objects.create(
             image=image_file,
             pin=pin,
-            location=pin.location,
+            wiki=_wiki_for_location(pin.location),
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
         )
@@ -113,14 +122,15 @@ class PinImageView(LoginRequiredMixin, View):
 
 
 class WikiGalleryView(LoginRequiredMixin, View):
-    """HTML gallery panel for the location wiki page."""
+    """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).order_by("-created")
+        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
-        return {"location": location, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
+        return {"location": location, "wiki": wiki, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)
@@ -128,6 +138,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -135,7 +146,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
         img = Image.objects.create(
             image=image_file,
-            location=location,
+            wiki=wiki,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
         )
@@ -151,17 +162,18 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
+        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
 
 class WikiImageView(LoginRequiredMixin, View):
-    """Reposition or delete a single image on a location wiki."""
+    """Reposition or delete a single image on a wiki."""
 
     def _get_image(self, image_id: int, location_slug: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, location__slug=location_slug)
+        return get_object_or_404(Image, pk=image_id, wiki__location__slug=location_slug)
 
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
         img = self._get_image(image_id, location_slug)

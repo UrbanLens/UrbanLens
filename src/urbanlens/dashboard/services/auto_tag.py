@@ -1,10 +1,10 @@
-"""Auto-tagging service: keyword and AI-based badge suggestion for pins and locations.
+"""Auto-tagging service: keyword and AI-based badge suggestion for pins and wikis.
 
 Pipeline per badge kind:
   1. Keyword match - badge name patterns (CATEGORY_PATTERNS) + badge.keywords field.
   2. AI match     - remaining eligible badges sent to LLM as a constrained list.
 
-Callers use AutoTagService.suggest_for_pin / suggest_for_location; both return
+Callers use AutoTagService.suggest_for_pin / suggest_for_wiki; both return
 the matched Badge instances and optionally apply them immediately.
 """
 
@@ -17,9 +17,9 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.badges.model import Badge
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +94,14 @@ class AutoTagService:
             results.extend(matched)
         return results
 
-    def suggest_for_location(self, location: Location, *, apply: bool = False) -> list[Badge]:
-        """Suggest (and optionally apply) badges for a Location.
+    def suggest_for_wiki(self, wiki: Wiki, *, apply: bool = False) -> list[Badge]:
+        """Suggest (and optionally apply) badges for a community Wiki.
 
-        Location is shared/global, so only global badges (``profile=None``) are
+        A Wiki is shared/global, so only global badges (``profile=None``) are
         considered and no user preference check is performed.
 
         Args:
-            location: Target Location instance.
+            wiki: Target Wiki instance.
             apply: When True, attach all matched badges before returning.
 
         Returns:
@@ -110,9 +110,9 @@ class AutoTagService:
         results: list[Badge] = []
         for kind in self.kinds:
             eligible = self._eligible_badges(kind, profile=None)
-            matched = self._match(location, eligible, kind)
+            matched = self._match(wiki, eligible, kind)
             if apply and matched:
-                location.badges.add(*matched)
+                wiki.badges.add(*matched)
             results.extend(matched)
         return results
 
@@ -164,7 +164,7 @@ class AutoTagService:
 
     def _match(
         self,
-        target: Pin | Location,
+        target: Pin | Wiki,
         eligible: list[Badge],
         kind: str,
     ) -> list[Badge]:
@@ -202,14 +202,14 @@ class AutoTagService:
     # -- keyword matching ------------------------------------------------------
 
     @staticmethod
-    def _build_keyword_text(target: Pin | Location) -> str:
+    def _build_keyword_text(target: Pin | Wiki) -> str:
         """Build the text corpus for keyword matching (name + place name only).
 
         Addresses are intentionally excluded to avoid false positives such as
         "Church Street" matching the Church category.
 
         Args:
-            target: Pin or Location instance.
+            target: Pin or Wiki instance.
 
         Returns:
             Space-joined text of relevant name fields.
@@ -225,6 +225,12 @@ class AutoTagService:
                 name = raw
         if name:
             parts.append(name)
+        # A community Wiki also carries an editable name distinct from official_name.
+        # (Pin.name is a personal label and is intentionally excluded here.)
+        if type(target).__name__ == "Wiki":
+            community_name = getattr(target, "name", None)
+            if community_name and is_meaningful_name(community_name) and community_name not in parts:
+                parts.append(community_name)
         return " ".join(parts)
 
     @staticmethod
@@ -294,7 +300,7 @@ class AutoTagService:
 
     def _ai_match(
         self,
-        target: Pin | Location,
+        target: Pin | Wiki,
         eligible: list[Badge],
         kind: str,
     ) -> list[Badge]:
@@ -354,7 +360,7 @@ class AutoTagService:
         return f"Identify the {kind}(s) that best describe this urbex location. Examples: {_FALLBACK_EXAMPLES}. Wrap each answer: <ANSWER>Factory</ANSWER>. Return only well-fitting entries."
 
     @staticmethod
-    def _build_prompt(target: Pin | Location) -> str:
+    def _build_prompt(target: Pin | Wiki) -> str:
         """Build the location-context prompt to send to the AI.
 
         Includes address, place name, LocationCache data (for Pin targets), and

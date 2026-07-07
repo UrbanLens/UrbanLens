@@ -99,29 +99,29 @@ class CommentQuerySetForPinTests(TestCase):
         self.assertNotIn(self.other_comment, qs)
 
 
-class CommentQuerySetForLocationTests(TestCase):
-    """for_location() returns top-level comments for a specific location."""
+class CommentQuerySetForWikiTests(TestCase):
+    """for_wiki() returns top-level comments for a specific wiki."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
-        self.loc1 = baker.make("dashboard.Location", latitude=42.0, longitude=-72.0)
-        self.loc2 = baker.make("dashboard.Location", latitude=43.0, longitude=-71.0)
+        self.wiki1 = baker.make("dashboard.Wiki")
+        self.wiki2 = baker.make("dashboard.Wiki")
         self.c1 = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.loc1,
+            wiki=self.wiki1,
             parent=None,
         )
         self.c2 = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.loc2,
+            wiki=self.wiki2,
             parent=None,
         )
 
-    def test_for_location_returns_matching_comment(self) -> None:
+    def test_for_wiki_returns_matching_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
-        qs = Comment.objects.for_location(self.loc1)
+        qs = Comment.objects.for_wiki(self.wiki1)
         self.assertIn(self.c1, qs)
         self.assertNotIn(self.c2, qs)
 

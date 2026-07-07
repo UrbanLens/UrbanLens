@@ -945,9 +945,9 @@ def _pin_member_ids(pin: Pin) -> set[int]:
     return set(pin.badges.values_list("id", flat=True))
 
 
-def _location_member_ids(location: Location) -> set[int]:
-    """Return badge IDs assigned to a location."""
-    return set(location.badges.values_list("id", flat=True))
+def _wiki_member_ids(wiki) -> set[int]:
+    """Return badge IDs assigned to a community wiki."""
+    return set(wiki.badges.values_list("id", flat=True))
 
 
 _MEMBERSHIP_PANEL = "dashboard/partials/badges/badge_membership_panel.html"
@@ -1046,19 +1046,26 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
 
 
 class BadgeLocationMembershipView(LoginRequiredMixin, View):
-    """Add or remove badges on a location (HTMX panel on wiki page)."""
+    """Add or remove badges on a community wiki (HTMX panel on wiki page)."""
+
+    def _resolve_wiki(self, location_slug: str):
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        location = get_object_or_404(Location, slug=location_slug)
+        wiki, _created = Wiki.objects.get_or_create_for_location(location)
+        return wiki
 
     def get(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        location = get_object_or_404(Location, slug=location_slug)
+        wiki = self._resolve_wiki(location_slug)
         profile = _request_profile(request)
         return render(
             request,
             _MEMBERSHIP_PANEL,
             _membership_panel_ctx(
                 profile,
-                _location_member_ids(location),
+                _wiki_member_ids(wiki),
                 panel_id="category-location-panel",
                 dialog_id_prefix="category-loc-dialog-",
                 dialog_id_suffix=location_slug,
@@ -1072,21 +1079,21 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        location = get_object_or_404(Location, slug=location_slug)
+        wiki = self._resolve_wiki(location_slug)
         profile = _request_profile(request)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
-            location.badges.add(badge)
+            wiki.badges.add(badge)
         elif action == "remove":
-            location.badges.remove(badge)
+            wiki.badges.remove(badge)
         return render(
             request,
             _MEMBERSHIP_PANEL,
             _membership_panel_ctx(
                 profile,
-                _location_member_ids(location),
+                _wiki_member_ids(wiki),
                 panel_id="category-location-panel",
                 dialog_id_prefix="category-loc-dialog-",
                 dialog_id_suffix=location_slug,

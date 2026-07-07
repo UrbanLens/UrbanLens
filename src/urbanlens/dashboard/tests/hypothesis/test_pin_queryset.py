@@ -32,20 +32,21 @@ class PinQuerySetStructureTests(TestCase):
     def setUp(self):
         self.profile = baker.make("auth.User").profile
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        # Root: no parent_pin, no parent_location
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
+        # Root: no parent_pin, no parent_wiki
         self.root = baker.make(
             Pin, profile=self.profile, location=self.location,
-            parent_pin=None, parent_location=None,
+            parent_pin=None, parent_wiki=None,
         )
         # Detail: parent_pin set
         self.detail = baker.make(
             Pin, profile=self.profile, location=self.location,
-            parent_pin=self.root, parent_location=None,
+            parent_pin=self.root, parent_wiki=None,
         )
-        # Location-detail: parent_location set, no parent_pin
+        # Community wiki detail: parent_wiki set, no parent_pin
         self.loc_detail = baker.make(
             Pin, profile=self.profile, location=self.location,
-            parent_location=self.location, parent_pin=None,
+            parent_wiki=self.wiki, parent_pin=None,
         )
 
     def _qs(self):
@@ -70,13 +71,13 @@ class PinQuerySetStructureTests(TestCase):
         self.assertNotIn(self.loc_detail, self._qs().detail_pins())
 
     def test_location_detail_pins_includes_loc_detail(self) -> None:
-        self.assertIn(self.loc_detail, self._qs().location_detail_pins())
+        self.assertIn(self.loc_detail, self._qs().wiki_detail_pins())
 
     def test_location_detail_pins_excludes_root(self) -> None:
-        self.assertNotIn(self.root, self._qs().location_detail_pins())
+        self.assertNotIn(self.root, self._qs().wiki_detail_pins())
 
     def test_location_detail_pins_excludes_detail_pin(self) -> None:
-        self.assertNotIn(self.detail, self._qs().location_detail_pins())
+        self.assertNotIn(self.detail, self._qs().wiki_detail_pins())
 
 
 # -- never_visited -------------------------------------------------------------

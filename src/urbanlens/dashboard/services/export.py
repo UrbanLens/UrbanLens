@@ -202,11 +202,12 @@ def _run_export_steps(
 
 
 def _resolve_target(obj: Any) -> tuple[str, str]:
-    """Return (target_type, target_name) for an object with a pin or location FK."""
+    """Return (target_type, target_name) for an object with a pin or wiki FK."""
     if obj.pin:
         return "pin", obj.pin.effective_name
-    if obj.location:
-        return "location", obj.location.name
+    wiki = getattr(obj, "wiki", None)
+    if wiki:
+        return "location", wiki.name
     return "", ""
 
 

@@ -385,7 +385,7 @@ class GoogleMapsGateway(Gateway):
                             pin_data.setdefault("latitude", location.latitude)
                             pin_data.setdefault("longitude", location.longitude)
 
-                        pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
+                        pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.display_name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:

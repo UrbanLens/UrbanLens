@@ -1,4 +1,4 @@
-﻿"""Tests for MapController.view_map and MapController.map_pins_meta.
+"""Tests for MapController.view_map and MapController.map_pins_meta.
 
 Invariants verified:
   - view_map requires authentication; unauthenticated requests are redirected.
@@ -75,7 +75,7 @@ class ViewMapContextTests(TestCase):
         self.assertEqual(resp.context["pin_count"], 3)
 
     def test_pin_count_excludes_child_pins(self) -> None:
-        parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
+        parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_wiki=None)
         baker.make(Pin, profile=self.profile, parent_pin=parent)  # child pin
         resp = self.client.get(_MAP_URL)
         # Only the root pin counts.
@@ -170,7 +170,7 @@ class ViewMapContextTests(TestCase):
         # class transaction.  Re-login here so each example has a valid session.
         self.client.force_login(self.user)
         for _ in range(n):
-            baker.make(Pin, profile=self.profile, parent_pin=None, parent_location=None)
+            baker.make(Pin, profile=self.profile, parent_pin=None, parent_wiki=None)
         resp = self.client.get(_MAP_URL)
         self.assertEqual(resp.context["pin_count"], n)
 

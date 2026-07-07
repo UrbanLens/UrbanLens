@@ -4,9 +4,9 @@ from django.urls import reverse
 
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
 
 @admin.register(ApiRateLimit)
@@ -120,7 +120,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 def _delete_unedited_community_pins(modeladmin, request: HttpRequest, queryset) -> None:
     """Delete community detail pins that have never been edited after their initial creation.
 
-    A community detail pin is a Pin with ``parent_location`` set and ``parent_pin``
+    A community detail pin is a Pin with ``parent_wiki`` set and ``parent_pin``
     null.  "Unedited" is detected by comparing the ``updated`` and ``created``
     timestamps: if they differ by less than 10 seconds, the pin was never saved
     again after its initial INSERT, meaning no user has moved, renamed, or changed
@@ -134,7 +134,7 @@ def _delete_unedited_community_pins(modeladmin, request: HttpRequest, queryset) 
 
     from django.db.models import DurationField, ExpressionWrapper, F
 
-    community_pins = queryset.location_detail_pins()
+    community_pins = queryset.wiki_detail_pins()
     never_edited = community_pins.annotate(
         age_since_update=ExpressionWrapper(F("updated") - F("created"), output_field=DurationField()),
     ).filter(age_since_update__lt=timedelta(seconds=10))
@@ -154,8 +154,19 @@ _delete_unedited_community_pins.short_description = "Delete unedited community d
 class PinAdmin(admin.ModelAdmin):
     """Admin for Pin - primarily useful for bulk operations on community pins."""
 
-    list_display = ["__str__", "profile", "location", "parent_location", "created"]
+    list_display = ["__str__", "profile", "location", "parent_wiki", "created"]
     list_filter = ["profile"]
-    search_fields = ["name", "location__name"]
+    search_fields = ["name", "location__official_name"]
     readonly_fields = ["uuid", "slug", "created", "updated"]
     actions = [_delete_unedited_community_pins]
+
+
+@admin.register(WikiEdit)
+class WikiEditAdmin(admin.ModelAdmin):
+    """Admin for WikiEdit - community wiki edit history."""
+
+    list_display = ["__str__", "wiki", "editor", "reverted", "created"]
+    list_filter = ["reverted"]
+    search_fields = ["wiki__name"]
+    readonly_fields = ["created", "updated"]
+    ordering = ["-created"]

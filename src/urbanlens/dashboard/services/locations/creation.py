@@ -32,7 +32,7 @@ class LocationCreationService:
 
     def create_for_pin(self, pin_id: int) -> Location | None:
         pin = Pin.objects.select_related("location").filter(pk=pin_id).first()
-        if pin is None or pin.location_id or pin.is_private or pin.parent_pin_id or pin.parent_location_id:
+        if pin is None or pin.location_id or pin.is_private or pin.parent_pin_id or pin.parent_wiki_id:
             return pin.location if pin and pin.location_id else None
 
         latitude = float(pin.effective_latitude)

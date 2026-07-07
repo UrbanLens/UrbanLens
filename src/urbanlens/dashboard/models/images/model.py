@@ -1,4 +1,4 @@
-"""Image model for pin and location photo uploads."""
+"""Image model for pin and wiki photo uploads."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.images.queryset import ImageManager
 
 
 class Image(abstract.FrontendDashboardModel):
-    """A photo uploaded by a user, attached to a pin, shared location, or safety check-in."""
+    """A photo uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to="pin_images/")
     pin = ForeignKey(
@@ -22,8 +22,8 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    location = ForeignKey(
-        "dashboard.Location",
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=SET_NULL,
         related_name="images",
         null=True,
@@ -38,7 +38,7 @@ class Image(abstract.FrontendDashboardModel):
     )
     # The specific visit this photo documents, if the user attached it to one.
     # SET_NULL (not CASCADE) so deleting a visit record leaves the photo in the
-    # pin/location gallery - it just loses its visit association.
+    # pin/wiki gallery - it just loses its visit association.
     visit = ForeignKey(
         "dashboard.PinVisit",
         on_delete=SET_NULL,
@@ -69,7 +69,7 @@ class Image(abstract.FrontendDashboardModel):
 
     if TYPE_CHECKING:
         pin_id: int | None
-        location_id: int | None
+        wiki_id: int | None
         safety_checkin_id: int | None
         visit_id: int | None
         profile_id: int | None

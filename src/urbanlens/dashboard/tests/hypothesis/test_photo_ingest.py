@@ -85,7 +85,7 @@ class SuggestForUnfiledPhotoTests(TestCase):
         return baker.make(
             "dashboard.Image",
             pin=None,
-            location=None,
+            wiki=None,
             profile=self.profile,
             latitude=None if lat is None else Decimal(str(lat)),
             longitude=None if lng is None else Decimal(str(lng)),
@@ -123,14 +123,15 @@ class SuggestForUnfiledPhotoTests(TestCase):
 
         self.assertEqual(VisitSuggestion.objects.filter(suggested_to=self.profile).count(), 1)
 
-    def test_photo_attached_to_location_is_not_treated_as_unfiled(self):
-        # A wiki/location-gallery upload (location set, no pin) must not raise a
+    def test_photo_attached_to_wiki_is_not_treated_as_unfiled(self):
+        # A wiki-gallery upload (wiki set, no pin) must not raise a
         # visit suggestion - it isn't an unfiled Memories upload.
         taken_at = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        wiki = baker.make("dashboard.Wiki", location=self.location)
         photo = baker.make(
             "dashboard.Image",
             pin=None,
-            location=self.location,
+            wiki=wiki,
             profile=self.profile,
             latitude=Decimal(str(_PIN_LAT + 0.0003)),
             longitude=Decimal(str(_PIN_LNG + 0.0003)),

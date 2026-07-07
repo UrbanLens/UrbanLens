@@ -55,9 +55,14 @@ def _make_pin(**kwargs: Any) -> Pin:
 
 
 def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = None) -> MagicMock:
-    """Return a lightweight mock that quacks like a Location."""
+    """Return a lightweight mock that quacks like a Location.
+
+    ``display_name`` is what Pin.effective_name reads (the community wiki name,
+    falling back to official_name); the mock exposes it directly.
+    """
     loc = MagicMock()
-    loc.name = name
+    loc.display_name = name
+    loc.official_name = name
     loc.latitude = lat if lat is not None else Decimal("42.0")
     loc.longitude = lon if lon is not None else Decimal("-73.0")
     return loc

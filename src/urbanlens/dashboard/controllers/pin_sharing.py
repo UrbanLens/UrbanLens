@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.connections import are_connections, get_connec
 
 
 def _recipient_has_pin(profile: Profile, source: Pin) -> bool:
-    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_location__isnull=True)
+    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_wiki__isnull=True)
     if source.location_id and qs.filter(location_id=source.location_id).exists():
         return True
     lat, lng = source.effective_latitude, source.effective_longitude

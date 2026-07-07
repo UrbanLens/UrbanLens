@@ -20,7 +20,7 @@
             <span class="wiki-badge">
                 <i class="material-symbols-outlined">public</i> Community Wiki
             </span>
-            <h1 class="wiki-title">{{ location.name }}</h1>
+            <h1 class="wiki-title">{{ wiki.name }}</h1>
             {% if location.address %}
             <p class="wiki-address">
                 <i class="material-symbols-outlined">place</i>
@@ -62,7 +62,7 @@
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.name }}</a>
+                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.display_name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
@@ -90,39 +90,39 @@
     <div class="wiki-body">
 
         {# -- Description / dates (if any) --------------------------------- #}
-        {% if location.description or location.date_abandoned or location.effective_date_last_active %}
+        {% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
             <div class="card-header">
                 <i class="material-symbols-outlined">info</i>
                 <h2>About</h2>
             </div>
             <div class="card__body wiki-meta-body">
-                {% if location.description %}
-                <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
+                {% if wiki.description %}
+                <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
                 {% endif %}
-                {% if location.date_abandoned or location.effective_date_last_active %}
+                {% if wiki.date_abandoned or wiki.effective_date_last_active %}
                 <div class="wiki-meta-dates">
-                    {% if location.date_abandoned %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
+                    {% if wiki.date_abandoned %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
                     {% endif %}
-                    {% if location.effective_date_last_active %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
+                    {% if wiki.effective_date_last_active %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ wiki.effective_date_last_active|date:"M j, Y" }}</span>
                     {% endif %}
                 </div>
                 {% endif %}
                 {# Security indicators - only shown when at least one is non-unknown #}
-                {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
+                {% if wiki.fences != "unknown" or wiki.alarms != "unknown" or wiki.cameras != "unknown" or wiki.security != "unknown" or wiki.signs != "unknown" or wiki.vps != "unknown" or wiki.plywood != "unknown" or wiki.locked != "unknown" %}
                 <div class="security-indicators">
                     <span class="security-indicators-label">Security</span>
                     <div class="security-chips">
-                        {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
-                        {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
-                        {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
-                        {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
-                        {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
-                        {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
-                        {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
-                        {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+                        {% if wiki.fences != "unknown" %}<span class="security-chip security-chip--{{ wiki.fences }}">Fences: {{ wiki.get_fences_display }}</span>{% endif %}
+                        {% if wiki.alarms != "unknown" %}<span class="security-chip security-chip--{{ wiki.alarms }}">Alarms: {{ wiki.get_alarms_display }}</span>{% endif %}
+                        {% if wiki.cameras != "unknown" %}<span class="security-chip security-chip--{{ wiki.cameras }}">Cameras: {{ wiki.get_cameras_display }}</span>{% endif %}
+                        {% if wiki.security != "unknown" %}<span class="security-chip security-chip--{{ wiki.security }}">Security: {{ wiki.get_security_display }}</span>{% endif %}
+                        {% if wiki.signs != "unknown" %}<span class="security-chip security-chip--{{ wiki.signs }}">Signs: {{ wiki.get_signs_display }}</span>{% endif %}
+                        {% if wiki.vps != "unknown" %}<span class="security-chip security-chip--{{ wiki.vps }}">VPS: {{ wiki.get_vps_display }}</span>{% endif %}
+                        {% if wiki.plywood != "unknown" %}<span class="security-chip security-chip--{{ wiki.plywood }}">Plywood: {{ wiki.get_plywood_display }}</span>{% endif %}
+                        {% if wiki.locked != "unknown" %}<span class="security-chip security-chip--{{ wiki.locked }}">Locked: {{ wiki.get_locked_display }}</span>{% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -234,11 +234,11 @@
             {% csrf_token %}
             <div class="form-row">
                 <label for="wiki-name">Name</label>
-                <input type="text" id="wiki-name" name="name" value="{{ location.name }}" required>
+                <input type="text" id="wiki-name" name="name" value="{{ wiki.name }}" required>
             </div>
             <div class="form-row">
                 <label for="wiki-description">Description</label>
-                <textarea id="wiki-description" name="description" rows="4">{{ location.description|default:"" }}</textarea>
+                <textarea id="wiki-description" name="description" rows="4">{{ wiki.description|default:"" }}</textarea>
             </div>
             <div class="form-row">
                 <label for="wiki-latitude">Latitude</label>
@@ -254,12 +254,12 @@
                 <div>
                     <label for="wiki-date-abandoned">Date Abandoned</label>
                     <input type="date" id="wiki-date-abandoned" name="date_abandoned"
-                           value="{{ location.date_abandoned|date:'Y-m-d'|default:'' }}">
+                           value="{{ wiki.date_abandoned|date:'Y-m-d'|default:'' }}">
                 </div>
                 <div>
                     <label for="wiki-date-last-active">Date Last Active</label>
                     <input type="date" id="wiki-date-last-active" name="date_last_active"
-                           value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
+                           value="{{ wiki.date_last_active|date:'Y-m-d'|default:'' }}">
                 </div>
             </div>
             <details class="form-section-details" open>

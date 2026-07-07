@@ -316,50 +316,54 @@ class LocationManagerGetNearbyOrCreateTests(TestCase):
 
 
 class LocationExternalNameRefreshTests(TestCase):
-    """External API data can replace placeholder location names."""
+    """External API data refreshes Location.official_name and the wiki's name/aliases."""
 
-    def test_google_place_name_replaces_unnamed_location(self) -> None:
+    def test_google_place_name_replaces_unnamed_wiki(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
         google_place = _google_place("Grand Central Terminal")
         loc: Location = baker.make(
             Location,
-            name="Unnamed Location",
             latitude="40.752700",
             longitude="-73.977200",
             google_place=google_place,
         )
+        wiki = baker.make("dashboard.Wiki", location=loc, name="Unnamed Location")
 
         self.assertTrue(update_location_name_from_external_sources(loc))
         loc.refresh_from_db()
-        self.assertEqual(loc.name, "Grand Central Terminal")
+        wiki.refresh_from_db()
+        self.assertEqual(loc.official_name, "Grand Central Terminal")
+        self.assertEqual(wiki.name, "Grand Central Terminal")
 
-    def test_meaningful_location_name_is_preserved(self) -> None:
+    def test_meaningful_wiki_name_is_preserved(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
         google_place = _google_place("External Name")
         loc: Location = baker.make(
             Location,
-            name="User Curated Name",
             latitude="40.752701",
             longitude="-73.977201",
             google_place=google_place,
         )
+        wiki = baker.make("dashboard.Wiki", location=loc, name="User Curated Name")
 
         self.assertTrue(update_location_name_from_external_sources(loc))
         loc.refresh_from_db()
-        self.assertEqual(loc.name, "User Curated Name")
-        self.assertEqual(list(loc.aliases.values_list("name", flat=True)), ["External Name"])
+        wiki.refresh_from_db()
+        self.assertEqual(loc.official_name, "External Name")
+        self.assertEqual(wiki.name, "User Curated Name")
+        self.assertEqual(list(wiki.aliases.values_list("name", flat=True)), ["External Name"])
 
-    def test_external_names_are_added_as_location_aliases(self) -> None:
+    def test_external_names_are_added_as_wiki_aliases(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
         loc: Location = baker.make(
             Location,
-            name="Curated Mill",
             latitude="40.752702",
             longitude="-73.977202",
         )
+        wiki = baker.make("dashboard.Wiki", location=loc, name="Curated Mill")
 
         self.assertTrue(
             update_location_name_from_external_sources(
@@ -367,18 +371,19 @@ class LocationExternalNameRefreshTests(TestCase):
                 extra_candidates=[("wikipedia", "Old Mill"), ("nps", "Historic Mill")],
             ),
         )
-        self.assertEqual(loc.name, "Curated Mill")
-        self.assertCountEqual(list(loc.aliases.values_list("name", flat=True)), ["Old Mill", "Historic Mill"])
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Curated Mill")
+        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Old Mill", "Historic Mill"])
 
-    def test_promoted_external_name_is_not_duplicated_as_location_alias(self) -> None:
+    def test_promoted_external_name_is_not_duplicated_as_wiki_alias(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
         loc: Location = baker.make(
             Location,
-            name="Unnamed Location",
             latitude="40.752703",
             longitude="-73.977203",
         )
+        wiki = baker.make("dashboard.Wiki", location=loc, name="Unnamed Location")
 
         self.assertTrue(
             update_location_name_from_external_sources(
@@ -387,5 +392,7 @@ class LocationExternalNameRefreshTests(TestCase):
             ),
         )
         loc.refresh_from_db()
-        self.assertEqual(loc.name, "Grand Hall")
-        self.assertCountEqual(list(loc.aliases.values_list("name", flat=True)), ["Grand Hall Museum"])
+        wiki.refresh_from_db()
+        self.assertEqual(loc.official_name, "Grand Hall")
+        self.assertEqual(wiki.name, "Grand Hall")
+        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Grand Hall Museum"])

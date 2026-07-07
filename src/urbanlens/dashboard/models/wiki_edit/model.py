@@ -1,4 +1,4 @@
-"""LocationEdit model - community edit history for Location wiki fields."""
+"""WikiEdit model - community edit history for Wiki fields."""
 
 from __future__ import annotations
 
@@ -7,22 +7,24 @@ import logging
 from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.location_edit.queryset import LocationEditManager
+from urbanlens.dashboard.models.wiki_edit.queryset import WikiEditManager
 
 logger = logging.getLogger(__name__)
 
 
-class LocationEdit(abstract.DashboardModel):
-    """A single community edit applied to a Location's wiki-editable fields.
+class WikiEdit(abstract.DashboardModel):
+    """A single community edit applied to a Wiki's editable fields.
 
     Each edit stores the set of field changes as a JSON diff:
         {"name": {"from": "Old Name", "to": "New Name"}, ...}
 
-    Reverts are implemented as new LocationEdit rows (so they appear in history)
+    Reverts are implemented as new WikiEdit rows (so they appear in history)
     that carry the inverted diff, with ``reverted_by`` pointing at the edit being
     undone.
 
-    Wiki-editable fields: name, description, latitude, longitude.
+    Editable fields: name, description, security levels, dates. A coordinate/
+    address change is recorded here too (as latitude/longitude) even though it
+    repoints the Wiki to a different Location rather than mutating one.
     Bounding-box changes are stored as WKT strings under the key "bounding_box".
     """
 
@@ -31,8 +33,8 @@ class LocationEdit(abstract.DashboardModel):
     # True when this edit has been superseded by a revert.
     reverted = BooleanField(default=False)
 
-    location = ForeignKey(
-        "dashboard.Location",
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=CASCADE,
         related_name="edits",
     )
@@ -41,7 +43,7 @@ class LocationEdit(abstract.DashboardModel):
         on_delete=SET_NULL,
         null=True,
         blank=True,
-        related_name="location_edits",
+        related_name="wiki_edits",
     )
     # The edit that reverted this one (filled in on the *target* edit when someone reverts it).
     reverted_by = ForeignKey(
@@ -52,13 +54,13 @@ class LocationEdit(abstract.DashboardModel):
         related_name="reverts",
     )
 
-    objects = LocationEditManager()
+    objects = WikiEditManager()
 
     class Meta(abstract.DashboardModel.Meta):
-        db_table = "dashboard_location_edits"
+        db_table = "dashboard_wiki_edits"
         ordering = ["-created"]
         get_latest_by = "created"
         indexes = [
-            Index(fields=["location"], name="idxdb_le_location"),
-            Index(fields=["location", "created"], name="idxdb_le_created"),
+            Index(fields=["wiki"], name="idxdb_we_wiki"),
+            Index(fields=["wiki", "created"], name="idxdb_we_created"),
         ]

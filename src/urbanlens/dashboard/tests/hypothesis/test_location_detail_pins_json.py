@@ -25,15 +25,22 @@ def _make_location() -> Location:
 
 def _make_community_pin(location: Location, user: User, **kwargs) -> Pin:
     profile = user.profile
+    wiki, _ = _wiki_for(location)
     return baker.make(
         Pin,
         profile=profile,
         location=location,
-        parent_location=location,
+        parent_wiki=wiki,
         parent_pin=None,
         latitude=kwargs.get("latitude", 40.0),
         longitude=kwargs.get("longitude", -74.0),
     )
+
+
+def _wiki_for(location: Location):
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    return Wiki.objects.get_or_create_for_location(location)
 
 
 class LocationDetailPinJsonIsMineTests(TestCase):

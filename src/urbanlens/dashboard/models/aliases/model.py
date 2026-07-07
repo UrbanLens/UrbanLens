@@ -1,4 +1,4 @@
-"""Alias models - alternate names for Pins (personal) and Locations (shared)."""
+"""Alias models - alternate names for Pins (personal) and Wikis (shared)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class AliasType(TextChoices):
     """
     The type of alias.
-    * NICKNAME: A user-defined nickname for the pin or location. 
+    * NICKNAME: A user-defined nickname for the pin or wiki.
                 Created by checking the "nickname" checkbox when adding an alias.
     * OFFICIAL: An official name for the pin or location.
                 Created by the system when the pin or location is created, or queried from an external API source.
@@ -43,7 +43,7 @@ class _AliasBase(abstract.DashboardModel):
 
     name = CharField(max_length=255)
     kind = CharField(max_length=10, choices=AliasType.choices, default=AliasType.ALTERNATE)
-    source = CharField(max_length=10, choices=AliasSource.choices, default=AliasSource.USER)
+    source = CharField(max_length=15, choices=AliasSource.choices, default=AliasSource.USER)
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True
@@ -77,15 +77,15 @@ class PinAlias(_AliasBase):
         ]
 
 
-class LocationAlias(_AliasBase):
-    """An alternate name for a Location, visible to all users who have it pinned.
+class WikiAlias(_AliasBase):
+    """An alternate name for a Wiki, visible to all users who have its place pinned.
 
     ``created_by`` is optional attribution only - deleting a profile does not
     cascade-delete the alias.
     """
 
-    location = ForeignKey(
-        "dashboard.Location",
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=CASCADE,
         related_name="aliases",
     )
@@ -94,19 +94,19 @@ class LocationAlias(_AliasBase):
         on_delete=SET_NULL,
         null=True,
         blank=True,
-        related_name="location_aliases_created",
+        related_name="wiki_aliases_created",
     )
 
     def __str__(self) -> str:
-        return f"{self.name} (location alias)"
+        return f"{self.name} (wiki alias)"
 
     class Meta(_AliasBase.Meta):
-        db_table = "dashboard_location_aliases"
+        db_table = "dashboard_wiki_aliases"
         indexes = [
-            Index(fields=["location"], name="idxdb_lalias_loc"),
-            Index(fields=["location", "kind"], name="idxdb_lalias_loc_kind"),
-            Index(fields=["location", "source"], name="idxdb_lalias_loc_source"),
+            Index(fields=["wiki"], name="idxdb_walias_wiki"),
+            Index(fields=["wiki", "kind"], name="idxdb_walias_wiki_kind"),
+            Index(fields=["wiki", "source"], name="idxdb_walias_wiki_source"),
         ]
         constraints = [
-            UniqueConstraint(fields=["location", "name"], name="db_lalias_unique"),
+            UniqueConstraint(fields=["wiki", "name"], name="db_walias_unique"),
         ]

@@ -1,4 +1,4 @@
-"""Comment and Reaction controllers for Pin and Location (wiki) pages."""
+"""Comment and Reaction controllers for Pin and Wiki pages."""
 
 from __future__ import annotations
 
@@ -156,32 +156,40 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
 
-# -- Wiki (Location) comments --------------------------------------------------
+# -- Wiki comments -------------------------------------------------------------
+
+
+def _resolve_wiki(location_slug):
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    return location, wiki
 
 
 class WikiCommentsView(LoginRequiredMixin, View):
-    """GET/POST comment panel for a Location wiki."""
+    """GET/POST comment panel for a wiki."""
 
-    def _get_location_and_profile(self, request, location_slug):
-        from urbanlens.dashboard.models.location.model import Location
+    def _get_wiki_and_profile(self, request, location_slug):
         from urbanlens.dashboard.models.pin.model import Pin
 
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = _profile(request)
-        # Must have this location pinned to comment on its wiki
+        # Must have this place pinned to comment on its wiki.
         if not Pin.objects.filter(profile=profile, location=location).exists():
-            return None, None, location
-        return profile, location, location
+            return None, None
+        return profile, wiki
 
     def get(self, request, location_slug):
-        profile, location, _loc = self._get_location_and_profile(request, location_slug)
+        profile, wiki = self._get_wiki_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
-        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
-        profile, location, _loc = self._get_location_and_profile(request, location_slug)
+        profile, wiki = self._get_wiki_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to leave a comment.", status=403)
         text = request.POST.get("text", "").strip()
@@ -192,9 +200,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, location=location)
+            parent = get_object_or_404(Comment, id=parent_id, wiki=wiki)
         comment = Comment.objects.create(
-            location=location,
+            wiki=wiki,
             profile=profile,
             text=text,
             parent=parent,
@@ -205,19 +213,17 @@ class WikiCommentsView(LoginRequiredMixin, View):
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, context_type="wiki")
         return _render_comments(request, ctx)
 
 
 class WikiCommentDeleteView(LoginRequiredMixin, View):
-    """DELETE /location/<uuid>/wiki/comments/<int>/delete/"""
+    """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
-        from urbanlens.dashboard.models.location.model import Location
-
-        location = get_object_or_404(Location, slug=location_slug)
+        _location, wiki = _resolve_wiki(location_slug)
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id, location=location)
+        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         comment.delete()
@@ -360,10 +366,10 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
 
         profile = _profile(request)
         q = request.GET.get("q", "").strip().lower()
-        pins = Pin.objects.filter(profile=profile).exclude(location__isnull=True).select_related("location")[:50]
+        pins = Pin.objects.filter(profile=profile).exclude(location__isnull=True).select_related("location__wiki")[:50]
         results = []
         for pin in pins:
-            name = pin.location.name or ""
+            name = pin.location.display_name or ""
             if not q or q in name.lower():
                 results.append({"uuid": str(pin.location.uuid), "name": name})
         return HttpResponse(json.dumps(results), content_type="application/json")
@@ -380,8 +386,8 @@ def _comment_url(comment) -> str:
             return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
         if hasattr(comment, "pin_id") and comment.pin_id:
             return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
-        if hasattr(comment, "location_id") and comment.location_id:
-            return reverse("location.wiki", kwargs={"location_slug": comment.location.slug or str(comment.location.uuid)}) + anchor
+        if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:
+            return reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug or str(comment.wiki.location.uuid)}) + anchor
     except NoReverseMatch:
         logger.warning("Could not build comment URL for comment %s", comment.id)
     return ""

@@ -472,7 +472,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             query = query.filter_by_criteria(criteria)
 
-        query = query.order_by(Lower(Coalesce("name", "location__name")))
+        query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
         page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
         return render(
             request,
@@ -970,8 +970,8 @@ def _safe_positive_int(value: str | None) -> int | None:
 def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:
     """Create a new Location using its canonical Google place name.
 
-    The user's custom pin name must never be used as a Location name because
-    Location.name is shared across all users and visible on the community wiki.
+    The user's custom pin name must never be used as a Location's official_name
+    because it is shared across all users and seeds the community wiki title.
     We ask Google for the real place name and fall back to "Unnamed Location"
     when geocoding is unavailable or returns nothing useful.
 
@@ -1010,7 +1010,6 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     official_name = canonical_name if is_meaningful_name(canonical_name) else None
 
     return Location.objects.create(
-        name=canonical_name,
         official_name=official_name,
         latitude=lat,
         longitude=lon,

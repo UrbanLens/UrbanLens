@@ -205,19 +205,19 @@ def _candidate_names(extra_candidates: list[tuple[str, Any]] | None = None) -> l
     return names
 
 
-def _add_location_aliases(location: Location, names: list[tuple[str, str]]) -> bool:
-    """Append external names as LocationAlias rows without duplicating the canonical name."""
-    if not getattr(location, "pk", None):
+def _add_wiki_aliases(wiki, names: list[tuple[str, str]]) -> bool:
+    """Append external names as WikiAlias rows without duplicating the canonical name."""
+    if wiki is None or not getattr(wiki, "pk", None):
         return False
-    from urbanlens.dashboard.models.aliases.model import LocationAlias
+    from urbanlens.dashboard.models.aliases.model import WikiAlias
 
-    canonical = (location.name or "").strip().casefold()
+    canonical = (wiki.name or "").strip().casefold()
     changed = False
     for _source, name in names:
         if name.casefold() == canonical:
             continue
         try:
-            _alias, created = LocationAlias.objects.get_or_create(location=location, name=name)
+            _alias, created = WikiAlias.objects.get_or_create(wiki=wiki, name=name)
         except IntegrityError:
             created = False
         changed = changed or created
@@ -273,28 +273,39 @@ def update_location_name_from_external_sources(
     extra_candidates: list[tuple[str, Any]] | None = None,
     save: bool = True,
 ) -> bool:
-    """Replace a meaningless Location.name with the best externally loaded name."""
+    """Refresh a Location's official_name (and its wiki's name/aliases) from external sources.
+
+    The place-identity name lives on ``Location.official_name``; the
+    community-editable name and alias list live on the linked ``Wiki`` (updated
+    only when one already exists, honouring lazy wiki creation).
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
     resolved = best_external_name_for_location(location, extra_candidates=extra_candidates)
-    original_name = location.name
     changed_fields: set[str] = set()
+    try:
+        wiki = location.wiki
+    except ObjectDoesNotExist:
+        wiki = None
+    wiki_changed = False
     if resolved is not None:
         name, _source = resolved
         if location.official_name != name:
             location.official_name = name
             changed_fields.add("official_name")
-        if not is_meaningful_name(location.name) and location.name != name:
-            location.name = name
-            changed_fields.add("name")
         if changed_fields and save and location.pk:
             location.save(update_fields=[*sorted(changed_fields), "updated"])
+        # Refresh the community name only when it is not yet meaningful, so a
+        # community-edited wiki name is never overwritten.
+        if wiki is not None and not is_meaningful_name(wiki.name) and wiki.name != name:
+            wiki.name = name
+            wiki_changed = True
+            if save and wiki.pk:
+                wiki.save(update_fields=["name", "updated"])
 
     alias_names = _candidate_names(external_name_candidates_for_location(location, extra_candidates=extra_candidates))
-    changed = _add_location_aliases(location, alias_names)
-    if changed_fields:
-        return True
-    if original_name == location.name and resolved is None:
-        return changed
-    return changed
+    aliases_changed = _add_wiki_aliases(wiki, alias_names)
+    return bool(changed_fields) or wiki_changed or aliases_changed
 
 
 def update_pin_name_from_external_sources(

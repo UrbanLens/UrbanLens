@@ -46,8 +46,6 @@ if TYPE_CHECKING:
         GooglePlace,
         Image,
         Location,
-        LocationAlias,
-        LocationEdit,
         NotificationLog,
         NotificationPreference,
         Pin,
@@ -62,6 +60,9 @@ if TYPE_CHECKING:
         Trip,
         TripActivity,
         TripComment,
+        Wiki,
+        WikiAlias,
+        WikiEdit,
     )
     from urbanlens.dashboard.models.trips.model import TripActivityVote, TripMembership
 
@@ -93,9 +94,16 @@ user: Recipe[User] = Recipe(
 
 location: Recipe[Location] = Recipe(
     "dashboard.Location",
-    name=seq("Location "),
+    official_name=seq("Location "),
     latitude=seq(Decimal("40.001"), increment_by=Decimal("0.001")),
     longitude=seq(Decimal("-74.001"), increment_by=Decimal("0.001")),
+)
+
+# Community wiki page for a location.
+wiki: Recipe[Wiki] = Recipe(
+    "dashboard.Wiki",
+    name=seq("Wiki "),
+    location=foreign_key("dashboard.location"),
 )
 
 # -- Badges --------------------------------------------------------------------
@@ -143,7 +151,7 @@ pin: Recipe[Pin] = Recipe(
     profile=_make_profile,
     location=foreign_key("dashboard.location"),
     parent_pin=None,
-    parent_location=None,
+    parent_wiki=None,
 )
 
 # A pin nested under another pin (detail/sub-pin).
@@ -182,9 +190,9 @@ pin_alias: Recipe[PinAlias] = Recipe(
     name=seq("alias_"),
 )
 
-location_alias: Recipe[LocationAlias] = Recipe(
-    "dashboard.LocationAlias",
-    location=foreign_key("dashboard.location"),
+location_alias: Recipe[WikiAlias] = Recipe(
+    "dashboard.WikiAlias",
+    wiki=foreign_key("dashboard.wiki"),
     name=seq("loc_alias_"),
     created_by=_make_profile,
 )
@@ -218,19 +226,19 @@ comment: Recipe[Comment] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=foreign_key("dashboard.pin"),
-    location=None,
+    wiki=None,
     parent=None,
     text="A test comment.",
 )
 
-# Location / wiki comment.
+# Wiki (community) comment.
 location_comment: Recipe[Comment] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=None,
-    location=foreign_key("dashboard.location"),
+    wiki=foreign_key("dashboard.wiki"),
     parent=None,
-    text="A test location comment.",
+    text="A test wiki comment.",
 )
 
 reaction: Recipe[Reaction] = Recipe(
@@ -368,9 +376,9 @@ social_link: Recipe[SocialLink] = Recipe(
 
 # -- Location Edit History -----------------------------------------------------
 
-location_edit: Recipe[LocationEdit] = Recipe(
-    "dashboard.LocationEdit",
-    location=foreign_key("dashboard.location"),
+location_edit: Recipe[WikiEdit] = Recipe(
+    "dashboard.WikiEdit",
+    wiki=foreign_key("dashboard.wiki"),
     editor=_make_profile,
     changes={"name": {"old": "Old Name", "new": "New Name"}},
     reverted=False,

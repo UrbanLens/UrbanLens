@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
     """Return the pin if it belongs to the requesting user, 403 if forbidden, 404 if not found."""
+    if not request.user.is_authenticated or not request.user.profile:
+        return HttpResponse("Forbidden", status=403)
     try:
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug)
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug, profile=request.user.profile)
     except Http404:
         return HttpResponse(status=404)
-    if pin.profile.user != request.user:
-        return HttpResponse("Forbidden", status=403)
     return pin
 
 
@@ -545,9 +545,9 @@ class PinRelinkView(LoginRequiredMixin, View):
             # that is personal data and must not become a community wiki title.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
-            if pin.location and pin.location.name and pin.location.name != "Unnamed Location":
+            if pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
                 location = Location.objects.create(
-                    name=pin.location.name,
+                    official_name=pin.location.official_name,
                     latitude=lat,
                     longitude=lng,
                 )

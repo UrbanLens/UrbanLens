@@ -242,7 +242,7 @@ class TripActivity(abstract.DashboardModel):
             if pin_label:
                 return pin_label
         if self.location:
-            name = self.location.name
+            name = self.location.display_name
             if is_meaningful_name(name):
                 return name
             if self.location.address:

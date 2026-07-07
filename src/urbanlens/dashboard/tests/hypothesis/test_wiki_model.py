@@ -1,0 +1,105 @@
+"""Tests for the Wiki model and the Location/Wiki split.
+
+Covers the core invariants of the community-wiki extraction:
+- Wiki holds the community name; Location keeps only address/official_name.
+- ``Location.display_name`` / ``Pin.effective_name`` resolve through the wiki.
+- ``Wiki.objects.get_or_create_for_location`` is lazy and idempotent.
+- A wiki coordinate edit find-or-creates a *different* Location (Location is
+  immutable) rather than mutating the shared row.
+- Comments are pin-XOR-wiki; community aliases/edits/detail-pins live on Wiki.
+"""
+
+from __future__ import annotations
+
+from model_bakery import baker
+
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.wiki.model import Wiki
+
+
+class WikiLocationRelationTests(TestCase):
+    """Wiki links 1:1 to a Location and proxies its address."""
+
+    def test_get_or_create_is_lazy_and_idempotent(self) -> None:
+        loc = baker.make(Location, official_name="Old Mill", latitude="40.0", longitude="-74.0")
+        wiki1, created1 = Wiki.objects.get_or_create_for_location(loc)
+        wiki2, created2 = Wiki.objects.get_or_create_for_location(loc)
+        self.assertTrue(created1)
+        self.assertFalse(created2)
+        self.assertEqual(wiki1.pk, wiki2.pk)
+        # Name seeds from the location's official_name.
+        self.assertEqual(wiki1.name, "Old Mill")
+
+    def test_wiki_proxies_location_coordinates(self) -> None:
+        loc = baker.make(Location, latitude="41.5", longitude="-72.25")
+        wiki = baker.make(Wiki, location=loc, name="Ruin")
+        self.assertEqual(float(wiki.latitude), 41.5)
+        self.assertEqual(float(wiki.longitude), -72.25)
+
+    def test_reverse_accessor(self) -> None:
+        loc = baker.make(Location, latitude="42.0", longitude="-71.0")
+        wiki = baker.make(Wiki, location=loc, name="Place")
+        loc.refresh_from_db()
+        self.assertEqual(loc.wiki.pk, wiki.pk)
+
+
+class DisplayNameResolutionTests(TestCase):
+    """Location.display_name and Pin.effective_name resolve through the wiki."""
+
+    def test_display_name_prefers_wiki_name(self) -> None:
+        loc = baker.make(Location, official_name="Official", latitude="40.1", longitude="-74.1")
+        baker.make(Wiki, location=loc, name="Community Name")
+        loc.refresh_from_db()
+        self.assertEqual(loc.display_name, "Community Name")
+
+    def test_display_name_falls_back_to_official_name(self) -> None:
+        loc = baker.make(Location, official_name="Official Only", latitude="40.2", longitude="-74.2")
+        self.assertEqual(loc.display_name, "Official Only")
+
+    def test_pin_effective_name_uses_wiki_name(self) -> None:
+        loc = baker.make(Location, official_name="Official", latitude="40.3", longitude="-74.3")
+        baker.make(Wiki, location=loc, name="Wiki Title")
+        profile = baker.make("auth.User").profile
+        pin = baker.make(Pin, profile=profile, location=loc, name=None)
+        self.assertEqual(pin.effective_name, "Wiki Title")
+
+    def test_pin_own_name_wins(self) -> None:
+        loc = baker.make(Location, official_name="Official", latitude="40.4", longitude="-74.4")
+        baker.make(Wiki, location=loc, name="Wiki Title")
+        profile = baker.make("auth.User").profile
+        pin = baker.make(Pin, profile=profile, location=loc, name="My Label")
+        self.assertEqual(pin.effective_name, "My Label")
+
+
+class WikiCoordinateEditTests(TestCase):
+    """Editing a wiki's coordinates repoints it to a different Location."""
+
+    def test_coordinate_change_finds_or_creates_new_location(self) -> None:
+        from urbanlens.dashboard.controllers.location_wiki import _apply_coordinate_change
+
+        loc = baker.make(Location, official_name="Start", latitude="40.0", longitude="-74.0")
+        wiki = baker.make(Wiki, location=loc, name="Moving Place")
+
+        error = _apply_coordinate_change(wiki, {"latitude": 45.0, "longitude": -80.0})
+        wiki.save()
+
+        self.assertIsNone(error)
+        # The original Location is untouched (immutable) ...
+        loc.refresh_from_db()
+        self.assertEqual(float(loc.latitude), 40.0)
+        # ... and the wiki now points at a different Location at the new point.
+        self.assertNotEqual(wiki.location_id, loc.pk)
+        self.assertEqual(float(wiki.location.latitude), 45.0)
+
+
+class WikiCommentConstraintTests(TestCase):
+    """Comments attach to exactly one of pin / wiki."""
+
+    def test_wiki_comment(self) -> None:
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        wiki = baker.make(Wiki, name="W")
+        comment = baker.make(Comment, wiki=wiki, pin=None, parent=None, text="hi")
+        self.assertEqual(list(Comment.objects.for_wiki(wiki)), [comment])

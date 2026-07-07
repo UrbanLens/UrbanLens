@@ -16,7 +16,7 @@
                 <span class="pin-wiki-box-label">Community Wiki</span>
                 <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
                    data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
-                    {{ pin.location.name }}
+                    {{ pin.location.display_name }}
                     <i class="material-symbols-outlined">open_in_new</i>
                 </a>
             </div>

@@ -11,9 +11,9 @@ from urbanlens.dashboard.models.comments.queryset import CommentManager
 
 
 class Comment(abstract.FrontendDashboardModel):
-    """A user comment on a Pin or a Location wiki page.
+    """A user comment on a Pin or a Wiki (community) page.
 
-    Exactly one of ``pin`` or ``location`` must be non-null.
+    Exactly one of ``pin`` or ``wiki`` must be non-null.
     ``parent`` is set only for replies (depth-1 threading).
     """
 
@@ -24,8 +24,8 @@ class Comment(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    location = models.ForeignKey(
-        "dashboard.Location",
+    wiki = models.ForeignKey(
+        "dashboard.Wiki",
         on_delete=models.CASCADE,
         related_name="comments",
         null=True,

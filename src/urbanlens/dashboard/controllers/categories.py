@@ -484,9 +484,9 @@ def _pin_member_ids(pin: Pin) -> set[int]:
     return set(pin.badges.values_list("id", flat=True))
 
 
-def _location_member_ids(location: Location) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a location."""
-    return set(location.badges.values_list("id", flat=True))
+def _wiki_member_ids(wiki) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a community wiki."""
+    return set(wiki.badges.values_list("id", flat=True))
 
 
 def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
@@ -497,12 +497,20 @@ def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
         pin.badges.remove(badge)
 
 
-def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
-    """Add or remove a badge from a location."""
+def _apply_badge_to_wiki(wiki, badge: Badge, action: str) -> None:
+    """Add or remove a badge from a community wiki."""
     if action == "add":
-        location.badges.add(badge)
+        wiki.badges.add(badge)
     elif action == "remove":
-        location.badges.remove(badge)
+        wiki.badges.remove(badge)
+
+
+def _resolve_wiki(location_slug: str):
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    return location, wiki
 
 
 class CategoryPinMembershipView(LoginRequiredMixin, View):
@@ -570,20 +578,21 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = request.user.profile
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
+                "wiki": wiki,
                 "all_categories": _all_badges(profile),
-                "member_ids": _location_member_ids(location),
+                "member_ids": _wiki_member_ids(wiki),
             },
         )
 
     def post(self, request, location_slug, *args, **kwargs):
-        """Add or remove a badge from a location.
+        """Add or remove a badge from a community wiki.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
@@ -592,19 +601,20 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
-        _apply_badge_to_location(location, badge, action)
+        _apply_badge_to_wiki(wiki, badge, action)
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
+                "wiki": wiki,
                 "all_categories": _all_badges(profile),
-                "member_ids": _location_member_ids(location),
+                "member_ids": _wiki_member_ids(wiki),
             },
         )
 

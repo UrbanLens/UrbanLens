@@ -79,7 +79,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
     )
 
-    # User's custom label. None = show location.name instead (see effective_name).
+    # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
     # External-source name for this pin. User edits must never write this field.
     official_name = CharField(max_length=255, null=True, blank=True)
@@ -135,19 +135,19 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="detail_pins",
     )
-    # Community detail pin - attached directly to a Location (wiki-level, shared).
-    parent_location = ForeignKey(
-        "dashboard.Location",
+    # Community detail pin - attached directly to a Wiki (community-level, shared).
+    parent_wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=CASCADE,
         null=True,
         blank=True,
-        related_name="location_detail_pins",
+        related_name="wiki_detail_pins",
     )
 
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
-        parent_location_id: int | None
+        parent_wiki_id: int | None
         parent_pin_id: int | None
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
@@ -298,9 +298,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return None
 
     @property
+    def wiki(self):
+        """Community Wiki for this pin's Location, if one exists.
+
+        Prefetch with ``select_related("location__wiki")`` in bulk to avoid a
+        query per pin.
+        """
+        if not self.location_id:
+            return None
+        try:
+            return self.location.wiki
+        except ObjectDoesNotExist:
+            return None
+
+    @property
     def effective_name(self) -> str:
-        """User's custom name, or the location's canonical name."""
-        return self.name or (self.location.name if self.location else "")
+        """User's custom name, or the place's community/official name."""
+        return self.name or (self.location.display_name if self.location else "")
 
     @property
     def effective_official_name(self) -> str:
@@ -486,12 +500,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
             Index(fields=["latitude", "longitude"], name="idxdb_pin_lat_long"),
             Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
-            Index(fields=["parent_location"], name="idxdb_pin_parent_loc"),
+            Index(fields=["parent_wiki"], name="idxdb_pin_parent_wiki"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["latitude", "longitude", "profile"],
-                condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
+                condition=Q(parent_pin__isnull=True, parent_wiki__isnull=True),
                 name="db_pin_unique_location_per_profile",
             ),
             UniqueConstraint(

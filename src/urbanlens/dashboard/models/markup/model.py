@@ -25,16 +25,16 @@ logger = logging.getLogger(__name__)
 
 
 class PinMarkup(abstract.FrontendDashboardModel):
-    """A map annotation attached to a user's Pin, or shared on a Location's wiki.
+    """A map annotation attached to a user's Pin, or shared on a Wiki page.
 
     Markup items let users annotate a map view with lines, arrows, text
     labels, and geometric shapes (squares, circles, free polygons).
 
-    Exactly one of ``parent_pin`` / ``parent_location`` / ``parent_safety_checkin``
+    Exactly one of ``parent_pin`` / ``parent_wiki`` / ``parent_safety_checkin``
     is set, mirroring how ``Pin`` itself distinguishes a personal detail pin
-    (``parent_pin`` set) from a community detail pin (``parent_location`` set).
+    (``parent_pin`` set) from a community detail pin (``parent_wiki`` set).
     Pin-scoped markup is personal (only the owning profile can see/edit it,
-    rendered on the "Markup" layer in the pin detail map); Location-scoped
+    rendered on the "Markup" layer in the pin detail map); Wiki-scoped
     markup is shared community data, editable by any signed-in user, rendered
     on the wiki map; safety-checkin-scoped markup is the personal route/plan
     drawing shown on that check-in's detail page and contact portal.
@@ -42,7 +42,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
     Attributes:
         uuid: Stable public identifier (used in URLs).
         parent_pin: The Pin whose detail map shows this annotation, if personal.
-        parent_location: The Location whose wiki map shows this annotation, if shared.
+        parent_wiki: The Wiki whose map shows this annotation, if shared.
         parent_safety_checkin: The SafetyCheckin whose plan map shows this annotation, if a check-in route.
         profile: The user who created this annotation.
         markup_type: One of line / arrow / text / square / circle / polygon.
@@ -84,8 +84,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
         blank=True,
         related_name="markup_items",
     )
-    parent_location = ForeignKey(
-        "dashboard.Location",
+    parent_wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=CASCADE,
         null=True,
         blank=True,
@@ -106,7 +106,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     if TYPE_CHECKING:
         parent_pin_id: int | None
-        parent_location_id: int | None
+        parent_wiki_id: int | None
         parent_safety_checkin_id: int | None
         profile_id: int
 
@@ -135,8 +135,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
     def __str__(self) -> str:
         if self.parent_pin_id:
             owner = f"pin={self.parent_pin_id}"
-        elif self.parent_location_id:
-            owner = f"location={self.parent_location_id}"
+        elif self.parent_wiki_id:
+            owner = f"wiki={self.parent_wiki_id}"
         else:
             owner = f"safety_checkin={self.parent_safety_checkin_id}"
         return f"{self.markup_type}: {self.label or '(unlabelled)'} [{owner}]"
@@ -146,6 +146,6 @@ class PinMarkup(abstract.FrontendDashboardModel):
         ordering = ["created"]
         indexes = [
             Index(fields=["parent_pin"], name="idxdb_pm_pin"),
-            Index(fields=["parent_location"], name="idxdb_pm_location"),
+            Index(fields=["parent_wiki"], name="idxdb_pm_wiki"),
             Index(fields=["profile"], name="idxdb_pm_profile"),
         ]

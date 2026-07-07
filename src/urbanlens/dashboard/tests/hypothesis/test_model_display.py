@@ -17,7 +17,7 @@ from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.aliases.model import LocationAlias, PinAlias
+from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 
@@ -234,23 +234,23 @@ class PinAliasStrTests(TestCase):
         self.assertIn("pin alias", str(alias))
 
 
-class LocationAliasStrTests(TestCase):
-    """LocationAlias.__str__ includes the alias name and 'location alias'."""
+class WikiAliasStrTests(TestCase):
+    """WikiAlias.__str__ includes the alias name and 'wiki alias'."""
 
     def test_str_contains_name(self) -> None:
-        location = baker.make("dashboard.Location", latitude="44.0", longitude="-70.0")
-        alias = baker.make("dashboard.LocationAlias", location=location, name="The Ruin")
+        wiki = baker.make("dashboard.Wiki")
+        alias = baker.make("dashboard.WikiAlias", wiki=wiki, name="The Ruin")
         self.assertIn("The Ruin", str(alias))
 
-    def test_str_contains_location_alias(self) -> None:
-        location = baker.make("dashboard.Location", latitude="45.0", longitude="-69.0")
-        alias = baker.make("dashboard.LocationAlias", location=location, name="Forgotten Mill")
-        self.assertIn("location alias", str(alias))
+    def test_str_contains_wiki_alias(self) -> None:
+        wiki = baker.make("dashboard.Wiki")
+        alias = baker.make("dashboard.WikiAlias", wiki=wiki, name="Forgotten Mill")
+        self.assertIn("wiki alias", str(alias))
 
     def test_created_by_is_optional(self) -> None:
-        """LocationAlias can be created without a profile (created_by=None)."""
-        location = baker.make("dashboard.Location", latitude="46.0", longitude="-68.0")
-        alias = baker.make("dashboard.LocationAlias", location=location, name="Anonymous", created_by=None)
+        """WikiAlias can be created without a profile (created_by=None)."""
+        wiki = baker.make("dashboard.Wiki")
+        alias = baker.make("dashboard.WikiAlias", wiki=wiki, name="Anonymous", created_by=None)
         self.assertIsNone(alias.created_by)
         self.assertIn("Anonymous", str(alias))
 

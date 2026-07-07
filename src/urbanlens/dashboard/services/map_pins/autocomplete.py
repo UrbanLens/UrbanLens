@@ -52,7 +52,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     - Pin personal notes / description
     - Badge / tag names assigned to the pin
     - Location canonical name
-    - Location aliases (LocationAlias / community wiki aliases)
+    - Wiki aliases (WikiAlias / community wiki aliases)
     - Location description
 
     Args:
@@ -64,8 +64,8 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     """
     from django.db.models import Q
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
     results: list[AutocompleteResult] = []
     q = query.strip()
@@ -80,10 +80,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     pin_qs = (
         Pin.objects.filter(profile=profile)
         .root_pins()
-        .select_related("location")
-        .prefetch_related("badges", "aliases", "location__aliases")
+        .select_related("location__wiki")
+        .prefetch_related("badges", "aliases", "location__wiki__aliases")
         .filter(
-            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | Q(badges__name__icontains=q) | Q(location__name__icontains=q) | Q(location__aliases__name__icontains=q) | Q(location__description__icontains=q),
+            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | Q(badges__name__icontains=q) | Q(location__official_name__icontains=q) | Q(location__wiki__name__icontains=q) | Q(location__wiki__aliases__name__icontains=q) | Q(location__wiki__description__icontains=q),
         )
         .distinct()[:12]
     )
@@ -112,30 +112,31 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             ),
         )
 
-    # -- Location search (community wiki) ----------------------------------------
-    # Only show locations the requesting user has actually pinned so results stay relevant.
-    seen_loc_ids: set[int] = set()
-    loc_qs = (
-        Location.objects.filter(
+    # -- Wiki search (community pages) -------------------------------------------
+    # Only show wikis whose place the requesting user has pinned so results stay relevant.
+    seen_wiki_ids: set[int] = set()
+    wiki_qs = (
+        Wiki.objects.filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q),
         )
-        .filter(pins__profile=profile)
+        .filter(location__pins__profile=profile)
+        .select_related("location")
         .distinct()[:5]
     )
 
-    for loc in loc_qs:
-        if loc.id in seen_loc_ids:
+    for wiki in wiki_qs:
+        if wiki.id in seen_wiki_ids:
             continue
-        seen_loc_ids.add(loc.id)
-        if loc.latitude is None or loc.longitude is None:
+        seen_wiki_ids.add(wiki.id)
+        if wiki.location is None or wiki.location.latitude is None or wiki.location.longitude is None:
             continue
         results.append(
             AutocompleteResult(
                 type="location",
-                title=loc.name,
+                title=wiki.name,
                 subtitle="Community wiki",
-                lat=float(loc.latitude),
-                lng=float(loc.longitude),
+                lat=float(wiki.location.latitude),
+                lng=float(wiki.location.longitude),
                 zoom=16,
                 icon="public",
             ),
@@ -147,11 +148,11 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 def _pin_match_subtitle(pin, q_lower: str) -> str:
     """Return a one-line subtitle that explains why *pin* matched *q_lower*."""
     pin_name = (pin.name or "").lower()
-    loc_name = (pin.location.name if pin.location else "").lower()
+    loc_name = (pin.location.display_name if pin.location else "").lower()
 
     # Direct name match - use location as context
     if q_lower in pin_name:
-        return pin.location.name if pin.location else "Your pin"
+        return pin.location.display_name if pin.location else "Your pin"
 
     # Alias match
     for alias in pin.aliases.all():
@@ -177,15 +178,15 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
 
     # Location name match
     if q_lower in loc_name:
-        return pin.location.name
+        return pin.location.display_name
 
-    # Location alias match
-    if pin.location:
-        for alias in pin.location.aliases.all():
+    # Wiki alias match
+    if pin.wiki:
+        for alias in pin.wiki.aliases.all():
             if q_lower in alias.name.lower():
                 return f'Location alias: "{alias.name}"'
 
-    return pin.location.name if pin.location else "Your pin"
+    return pin.location.display_name if pin.location else "Your pin"
 
 
 def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:

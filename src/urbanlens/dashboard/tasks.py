@@ -109,18 +109,18 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def suggest_location_category(self, location_id: int) -> list[str]:
-    """Suggest and attach badges for a Location outside model signals."""
-    from urbanlens.dashboard.models.location import Location
+def suggest_wiki_category(self, wiki_id: int) -> list[str]:
+    """Suggest and attach badges for a community Wiki outside model signals."""
+    from urbanlens.dashboard.models.wiki import Wiki
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
-    update_task_progress(self, current=0, total=1, message="Suggesting location category...")
-    location = Location.objects.filter(pk=location_id).first()
-    if location is None:
-        logger.info("Location %s no longer exists; skipping auto-tagging", location_id)
+    update_task_progress(self, current=0, total=1, message="Suggesting wiki category...")
+    wiki = Wiki.objects.filter(pk=wiki_id).select_related("location").first()
+    if wiki is None:
+        logger.info("Wiki %s no longer exists; skipping auto-tagging", wiki_id)
         return []
-    badges = AutoTagService().suggest_for_location(location, apply=True)
-    update_task_progress(self, current=1, total=1, message="Location auto-tagging complete")
+    badges = AutoTagService().suggest_for_wiki(wiki, apply=True)
+    update_task_progress(self, current=1, total=1, message="Wiki auto-tagging complete")
     return [b.name for b in badges]
 
 
@@ -179,7 +179,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 "street_number": location.street_number or "",
                 "administrative_area_level_1": location.administrative_area_level_1 or "",
             }
-            name = location.official_name or location.name or ""
+            name = location.official_name or location.display_name or ""
             article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
             LocationCache.set(location, "wikipedia", article or {}, query_key=name)
             update_location_name_from_external_sources(

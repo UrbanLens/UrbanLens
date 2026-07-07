@@ -23,21 +23,21 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for Pin - the user-specific half of the place model.
 
     Filters here operate on per-user data (profile, visit history, status, priority).
-    For filtering by place attributes (address, CID, canonical name) use LocationQuerySet
-    or join through the location FK: Pin.objects.filter(location__name__icontains=...).
+    For filtering by place attributes (address, CID, official name) use LocationQuerySet
+    or join through the location FK: Pin.objects.filter(location__official_name__icontains=...).
     """
 
     def root_pins(self) -> Self:
         """Return only top-level pins (excludes both personal and community detail pins)."""
-        return self.filter(parent_pin__isnull=True, parent_location__isnull=True)
+        return self.filter(parent_pin__isnull=True, parent_wiki__isnull=True)
 
     def detail_pins(self) -> Self:
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
         return self.filter(parent_pin__isnull=False)
 
-    def location_detail_pins(self) -> Self:
-        """Return only community detail pins (attached directly to a Location for the wiki)."""
-        return self.filter(parent_location__isnull=False, parent_pin__isnull=True)
+    def wiki_detail_pins(self) -> Self:
+        """Return only community detail pins (attached directly to a Wiki)."""
+        return self.filter(parent_wiki__isnull=False, parent_pin__isnull=True)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
@@ -144,7 +144,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(name__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
+                Q(name__icontains=name) | Q(location__official_name__icontains=name) | Q(location__wiki__name__icontains=name) | Q(aliases__name__icontains=name),
             )
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(badges__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])

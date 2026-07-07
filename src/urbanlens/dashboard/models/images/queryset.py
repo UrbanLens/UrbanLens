@@ -203,8 +203,8 @@ class ImageQuerySet(QuerySet):
         These are photos the user uploaded that are not yet tied to a visit and
         have not been dismissed - the pool the Memories "needs attention" queue
         surfaces so they can be confirmed, pinned, or manually logged. Photos
-        uploaded directly to a pin/location gallery are excluded; only bare
-        Memories-page uploads (no pin, no location) qualify.
+        uploaded directly to a pin/wiki gallery are excluded; only bare
+        Memories-page uploads (no pin, no wiki) qualify.
 
         Args:
             profile: The uploader whose unfiled photos to return.
@@ -217,7 +217,7 @@ class ImageQuerySet(QuerySet):
             visit__isnull=True,
             organize_dismissed=False,
             pin__isnull=True,
-            location__isnull=True,
+            wiki__isnull=True,
         ).order_by("-created")
 
 

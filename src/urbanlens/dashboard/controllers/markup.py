@@ -1,4 +1,4 @@
-"""Markup views - lines, arrows, and text labels shared on a pin's or a location's map."""
+"""Markup views - lines, arrows, and text labels shared on a pin's or a wiki's map."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 
 if TYPE_CHECKING:
@@ -42,10 +43,10 @@ _INDICATOR_TO_FIELD: dict[str, str] = {
 }
 
 
-def _apply_security_indicator(owner: Pin | Location, indicator: str) -> None:
+def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     """Upgrade the matching security field on *owner* to at least 'some'.
 
-    *owner* is either a Pin or a Location - both expose the same security
+    *owner* is either a Pin or a Wiki - both expose the same security
     fields via ``abstract.SecurityModel``. Only upgrades from unknown/no;
     never downgrades an existing value.
     """
@@ -96,17 +97,18 @@ def _resolve_owner(
     pin_slug: str | None,
     location_slug: str | None,
     safety_checkin_uuid: str | None = None,
-) -> tuple[Pin | Location | SafetyCheckin, QuerySet[PinMarkup]]:
-    """Resolve the markup owner (Pin, Location, or SafetyCheckin) from URL kwargs.
+) -> tuple[Pin | Wiki | SafetyCheckin, QuerySet[PinMarkup]]:
+    """Resolve the markup owner (Pin, Wiki, or SafetyCheckin) from URL kwargs.
 
     Exactly one of *pin_slug* / *location_slug* / *safety_checkin_uuid* is
     expected to be set, matching the three URL patterns these views are
     mounted under - personal markup under a pin's own map, shared/community
-    markup on a Location's wiki map, or a personal route/plan drawing on a
+    markup on a wiki map, or a personal route/plan drawing on a
     safety check-in. Pin-scoped and check-in-scoped markup both require the
-    caller to own the parent; Location-scoped markup is shared data any
+    caller to own the parent; Wiki-scoped markup is shared data any
     signed-in user may edit, matching the existing community detail-pin
-    permission model.
+    permission model. The community route is keyed by the Location slug and
+    resolves (get-or-creates) that Location's Wiki.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -124,7 +126,8 @@ def _resolve_owner(
         checkin = get_object_or_404(SafetyCheckin, uuid=safety_checkin_uuid, profile__user=request.user)
         return checkin, PinMarkup.objects.for_safety_checkin(checkin)
     location = get_object_or_404(Location, slug=location_slug)
-    return location, PinMarkup.objects.for_location(location)
+    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
 class MarkupJsonView(LoginRequiredMixin, View):
@@ -230,7 +233,7 @@ class MarkupView(LoginRequiredMixin, View):
         elif safety_checkin_uuid is not None:
             owner_kwargs = {"parent_safety_checkin": owner}
         else:
-            owner_kwargs = {"parent_location": owner}
+            owner_kwargs = {"parent_wiki": owner}
         item = PinMarkup.objects.create(
             profile=profile,
             markup_type=markup_type,
@@ -244,12 +247,12 @@ class MarkupView(LoginRequiredMixin, View):
             security_indicator=security_indicator,
             **owner_kwargs,
         )
-        if security_indicator and isinstance(owner, (Pin, Location)):
+        if security_indicator and isinstance(owner, (Pin, Wiki)):
             _apply_security_indicator(owner, security_indicator)
 
         if location_slug is not None:
-            LocationEdit.objects.create(
-                location=owner,
+            WikiEdit.objects.create(
+                wiki=owner,
                 editor=profile,
                 changes={"markup_added": {"from": None, "to": item.label or item.markup_type}},
             )
@@ -265,7 +268,7 @@ class MarkupEditView(LoginRequiredMixin, View):
     POST/DELETE /location/<location_slug>/wiki/markup/<markup_uuid>/
     """
 
-    def _get_item(self, request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid=None) -> tuple[Pin | Location | SafetyCheckin, PinMarkup]:
+    def _get_item(self, request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid=None) -> tuple[Pin | Wiki | SafetyCheckin, PinMarkup]:
         """Resolve a markup item, ensuring the caller may access its owner."""
         owner, qs = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
         return owner, get_object_or_404(qs, uuid=markup_uuid)
@@ -307,7 +310,7 @@ class MarkupEditView(LoginRequiredMixin, View):
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
         item.save()
-        if item.security_indicator and isinstance(owner, (Pin, Location)):
+        if item.security_indicator and isinstance(owner, (Pin, Wiki)):
             _apply_security_indicator(owner, item.security_indicator)
         if isinstance(owner, SafetyCheckin):
             notify_contacts_of_update(owner, "updated an annotation on the route map")
@@ -331,8 +334,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         item.delete()
         if location_slug is not None:
             profile, _ = Profile.objects.get_or_create(user=request.user)
-            LocationEdit.objects.create(
-                location=owner,
+            WikiEdit.objects.create(
+                wiki=owner,
                 editor=profile,
                 changes={"markup_removed": {"from": label, "to": None}},
             )

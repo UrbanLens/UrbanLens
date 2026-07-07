@@ -23,12 +23,6 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
     For per-user filtering (by profile, visit status, priority) use PinQuerySet.
     """
 
-    def by_category(self, category):
-        return self.filter(badges__name=category, badges__kind="category")
-
-    def by_priority(self, priority):
-        return self.filter(priority=priority)
-
     def by_latitude(self, latitude):
         return self.filter(latitude=latitude)
 
@@ -38,8 +32,8 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
     def by_cid(self, cid: int):
         return self.filter(google_place__cid=cid)
 
-    def by_name(self, name):
-        return self.filter(name__icontains=name)
+    def by_official_name(self, name):
+        return self.filter(official_name__icontains=name)
 
     def by_created_year(self, year):
         return self.filter(created__year=year)
@@ -106,10 +100,6 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         query = Q()
         if criteria.get("date_added"):
             query &= Q(created__date=criteria["date_added"])
-        if criteria.get("tags"):
-            tags = criteria["tags"].split(",")
-            for tag in tags:
-                query &= Q(badges__name__in=[tag], badges__kind="tag")
         return self.filter(query)
 
 

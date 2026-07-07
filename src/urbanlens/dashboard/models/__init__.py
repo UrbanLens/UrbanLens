@@ -2,7 +2,7 @@
 from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel, DashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet, Serializer, ViewSet
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.models.aliases import LocationAlias, PinAlias
+from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.badges import COLOR_CHOICES, ICON_CHOICES, Badge, BadgeCustomization, BadgeSerializer
@@ -16,7 +16,6 @@ from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_place import GooglePlace
 from urbanlens.dashboard.models.images import Image
 from urbanlens.dashboard.models.location import Location
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote
@@ -42,3 +41,5 @@ from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, S
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import PinVisit, VisitSource
+from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer, WikiViewSet
+from urbanlens.dashboard.models.wiki_edit import WikiEdit

@@ -351,7 +351,7 @@ class BuildActivityForecastsTests(TestCase):
         act.lng_override = lng
         act.pin = None
         act.location = MagicMock()
-        act.location.name = "Test Location"
+        act.location.display_name = "Test Location"
         act.title = None
         act.scheduled_at = scheduled_at
         act.status = status

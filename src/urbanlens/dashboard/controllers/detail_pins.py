@@ -1,4 +1,4 @@
-"""Detail-pin views - sub-markers placed within a pin's or location's bounding box."""
+"""Detail-pin views - sub-markers placed within a pin's or wiki's bounding box."""
 
 from __future__ import annotations
 
@@ -11,11 +11,19 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
+    """Resolve the Location for a slug and its (lazily-created) Wiki."""
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    return location, wiki
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -120,11 +128,11 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
-    """Return community detail pins for a location (wiki map overlay)."""
+    """Return community detail pins for a wiki (map overlay)."""
 
     def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
+        _location, wiki = _resolve_wiki(location_slug)
+        detail_pins = Pin.objects.filter(parent_wiki=wiki, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
         data = []
         viewer = request.user if request.user.is_authenticated else None
         for dp in detail_pins:
@@ -140,27 +148,28 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationWikiDetailPinView(LoginRequiredMixin, View):
-    """Community detail pins for a Location wiki page.
+    """Community detail pins for a wiki page.
 
     GET  → renders the (legacy, currently unused by the wiki page's own JS) panel partial.
-    POST → creates a new community detail pin, records a LocationEdit, returns JSON.
+    POST → creates a new community detail pin, records a WikiEdit, returns JSON.
     """
 
     def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
+        location, wiki = _resolve_wiki(location_slug)
+        detail_pins = Pin.objects.filter(parent_wiki=wiki, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
+                "wiki": wiki,
                 "detail_pins": detail_pins,
                 "pin_type_choices": PinType.choices,
             },
         )
 
     def post(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -187,13 +196,13 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
             detail_border_color=body.get("border_color") or None,
             detail_border_opacity=int(body.get("border_opacity") or 100),
-            parent_location=location,
+            parent_wiki=wiki,
             profile=profile,
             location=location,
         )
 
-        LocationEdit.objects.create(
-            location=location,
+        WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
             changes={"detail_pin_added": {"from": None, "to": detail_pin.effective_name}},
         )
@@ -206,12 +215,12 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 
     Both verbs share one URL (mirroring the personal-pin equivalent,
     DetailPinEditView) so the frontend can use one base URL for both.
-    Moves and deletes record a LocationEdit.
+    Moves and deletes record a WikiEdit.
     """
 
     def post(self, request, location_slug, detail_pin_uuid):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        _location, wiki = _resolve_wiki(location_slug)
+        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_wiki=wiki)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -219,7 +228,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
-        # Style/content fields update silently (no LocationEdit) - same reasoning
+        # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a
         # granular audit entry per keystroke would flood the wiki's edit history.
         for field, value in {
@@ -248,8 +257,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         detail_pin.save()
 
         if moved:
-            LocationEdit.objects.create(
-                location=location,
+            WikiEdit.objects.create(
+                wiki=wiki,
                 editor=profile,
                 changes={
                     "detail_pin_moved": {
@@ -263,16 +272,16 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, location_slug, detail_pin_uuid):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        _location, wiki = _resolve_wiki(location_slug)
+        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_wiki=wiki)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         pin_name = detail_pin.effective_name
 
         detail_pin.delete()
 
-        LocationEdit.objects.create(
-            location=location,
+        WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
             changes={"detail_pin_removed": {"from": pin_name, "to": None}},
         )
