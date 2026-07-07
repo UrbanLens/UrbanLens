@@ -5,7 +5,7 @@
             <h2>Add Location</h2>
             <form id="addPinForm" method="POST" action="{% url 'pin.add' %}" hx-post="{% url 'pin.add' %}" hx-trigger="submit" hx-target="#map" hx-swap="outerHTML">
 			    <label for="name">Name</label>
-			    <input type="text" id="name" name="name" autocomplete="name" placeholder="Location name" required><br>
+			    <input type="text" id="name" name="name" autocomplete="name" placeholder="Pin name" required><br>
 			    <label for="latitude" style="margin-top:12px">Latitude</label>
 			    <input type="text" id="latitude" name="latitude" autocomplete="latitude" pattern="^-?([1-8]?[1-9]|[1-9]0)\.{1}\d{1,6}" placeholder="" readonly><br>
 			    <label for="longitude" style="margin-top:12px">Longitude</label>

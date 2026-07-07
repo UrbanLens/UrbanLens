@@ -19,7 +19,8 @@ import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
-from django.db.models import Q
+from django.db.models import CharField, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
@@ -754,7 +755,12 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
 
             if hasattr(Loc.objects, "annotate_pin_count"):
                 top_locations = list(
-                    Loc.objects.filter(pins__isnull=False).distinct().annotate_pin_count().order_by("-pin_count")[:10].values("name", "slug", "pin_count"),
+                    Loc.objects.filter(pins__isnull=False)
+                    .distinct()
+                    .annotate_pin_count()
+                    .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
+                    .order_by("-pin_count")[:10]
+                    .values("display_name", "slug", "pin_count"),
                 )
 
         return render(

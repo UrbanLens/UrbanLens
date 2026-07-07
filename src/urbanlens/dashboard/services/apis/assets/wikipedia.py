@@ -186,7 +186,7 @@ class WikipediaGateway(Gateway):
             longitude: WGS-84 longitude of the location.
             address_components: Dict with optional keys 'locality', 'route',
                 'street_number', 'administrative_area_level_1'.
-            name: The place's own name (e.g. pin/location name), when known.
+            name: The place's own name (e.g. pin/wiki name), when known.
                 Checked against each candidate's title first, since a title
                 match is a far stronger signal than an address mention -- a
                 same-block article that happens to reference the street or

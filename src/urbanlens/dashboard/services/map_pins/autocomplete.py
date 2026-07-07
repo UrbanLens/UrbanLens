@@ -176,7 +176,7 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
         if q_lower in badge.name.lower():
             return f"Tagged: {badge.name}"
 
-    # Location name match
+    # Wiki/display name match
     if q_lower in loc_name:
         return pin.location.display_name
 
@@ -184,7 +184,7 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
     if pin.wiki:
         for alias in pin.wiki.aliases.all():
             if q_lower in alias.name.lower():
-                return f'Location alias: "{alias.name}"'
+                return f'Wiki alias: "{alias.name}"'
 
     return pin.location.display_name if pin.location else "Your pin"
 

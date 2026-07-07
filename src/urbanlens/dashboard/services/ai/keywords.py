@@ -267,7 +267,7 @@ def categorize_by_keywords(text: str) -> str | None:
     (e.g. "Church Street" → Church).
 
     Args:
-        text: Combined location name / description text to search.
+        text: Combined wiki name / description text to search.
 
     Returns:
         The matched category name, or None if no pattern matched.
