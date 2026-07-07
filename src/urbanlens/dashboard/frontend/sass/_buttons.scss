@@ -141,6 +141,25 @@
 		background: var(--secondary-color);
 		color: var(--ul-grey-9);
 	}
+	
+    &--yes {
+        background: $color-green-100;
+        color: $color-green-700;
+
+        &:hover {
+            background: $color-green-200;
+        }
+    }
+
+    &--no {
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-7);
+
+        &:hover {
+            background: var(--ul-grey-0a);
+            color: $color-red-600;
+        }
+    }
 
 	&.is-loading {
 		opacity: .78;

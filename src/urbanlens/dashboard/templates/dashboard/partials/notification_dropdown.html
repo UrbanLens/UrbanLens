@@ -27,8 +27,8 @@
         {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
         <p class="notif-item__time">{{ n.created|timesince }} ago</p>
         {% if n.source_profile_id and n.status == 'unread' %}
-        <div class="notif-friend-actions">
-          <button type="button" class="btn-notif-friend btn-notif-friend--accept"
+        <div class="notif-actions">
+          <button type="button" class="btn btn--primary btn--yes"
                   hx-post="{% url 'friend.respond' n.source_profile_id %}"
                   hx-vals='{"action": "accept"}'
                   hx-target="#notif-dropdown-wrap"
@@ -36,7 +36,7 @@
                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <i class="material-icons">check</i> Accept
           </button>
-          <button type="button" class="btn-notif-friend btn-notif-friend--decline"
+          <button type="button" class="btn btn--primary btn--no"
                   hx-post="{% url 'friend.respond' n.source_profile_id %}"
                   hx-vals='{"action": "decline"}'
                   hx-target="#notif-dropdown-wrap"

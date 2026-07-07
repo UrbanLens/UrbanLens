@@ -5,8 +5,8 @@
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
-    <div class="notif-friend-actions">
-      <a class="btn-notif-friend" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
+    <div class="notif-actions">
+      <a class="btn btn--primary" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
     </div>
     {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="pin.share.respond" respond_arg=n.pin_share.id %}
   </div>
@@ -51,11 +51,11 @@
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
-    <div class="notif-friend-actions">
-      <a class="btn-notif-friend btn-notif-friend--accept" href="{{ n.url }}" onclick="event.stopPropagation()">
+    <div class="notif-actions">
+      <a class="btn btn--primary btn--yes" href="{{ n.url }}" onclick="event.stopPropagation()">
         <i class="material-symbols-outlined">check_circle</i> Check in
       </a>
-      <a class="btn-notif-friend" href="{{ n.url|cut:'checkin/' }}" onclick="event.stopPropagation()">
+      <a class="btn btn--primary" href="{{ n.url|cut:'checkin/' }}" onclick="event.stopPropagation()">
         <i class="material-symbols-outlined">visibility</i> View check-in
       </a>
     </div>
@@ -70,18 +70,18 @@
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|timesince }} ago</p>
     {% if n.visit_suggestion.offers_merge %}
-    <div class="notif-friend-actions notif-friend-actions--triple">
-      <button type="button" class="btn-notif-friend btn-notif-friend--accept" onclick="event.stopPropagation()"
+    <div class="notif-actions notif-actions--triple">
+      <button type="button" class="btn btn--primary btn--yes" onclick="event.stopPropagation()"
               hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "add_participants"}'
               hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">group_add</i> Add to my visit
       </button>
-      <button type="button" class="btn-notif-friend" onclick="event.stopPropagation()"
+      <button type="button" class="btn btn--primary" onclick="event.stopPropagation()"
               hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "new_entry"}'
               hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">note_add</i> Log separately
       </button>
-      <button type="button" class="btn-notif-friend btn-notif-friend--decline" onclick="event.stopPropagation()"
+      <button type="button" class="btn btn--primary btn--no" onclick="event.stopPropagation()"
               hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "reject"}'
               hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">close</i> Reject
