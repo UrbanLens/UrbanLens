@@ -137,7 +137,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_api_call_log',
                 'ordering': ['-created'],
                 'abstract': False,
-                'indexes': [models.Index(fields=['service', 'created'], name='api_log_service_created_idx')],
+                'indexes': [models.Index(fields=['service', 'created'], name='idxdb_apilog_svc_cdt')],
             },
         ),
         migrations.CreateModel(
@@ -196,7 +196,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_geocoded_locations',
                 'get_latest_by': 'updated',
                 'abstract': False,
-                'indexes': [models.Index(fields=['latitude', 'longitude'], name='dashboard_g_latitud_9e6b87_idx'), models.Index(fields=['place_name'], name='dashboard_g_place_n_efe18b_idx')],
+                'indexes': [models.Index(fields=['latitude', 'longitude'], name='idxdb_geoloc_lat_lng'), models.Index(fields=['place_name'], name='idxdb_geoloc_placename')],
             },
         ),
         migrations.CreateModel(
@@ -215,7 +215,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_google_places',
                 'get_latest_by': 'updated',
                 'abstract': False,
-                'indexes': [models.Index(fields=['latitude', 'longitude'], name='dashboard_g_latitud_4cc7c1_idx'), models.Index(fields=['cid'], name='dashboard_g_cid_617a60_idx')],
+                'indexes': [models.Index(fields=['latitude', 'longitude'], name='idxdb_gplace_lat_long'), models.Index(fields=['cid'], name='idxdb_gplace_cid')],
                 'constraints': [models.UniqueConstraint(fields=('latitude', 'longitude'), name='dashboard_google_place_unique_coordinates')],
             },
         ),
@@ -942,23 +942,23 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='location',
-            index=models.Index(fields=['uuid'], name='dashboard_l_uuid_f3ca34_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_loc_uuid'),
         ),
         migrations.AddIndex(
             model_name='location',
-            index=models.Index(fields=['latitude', 'longitude'], name='dashboard_l_latitud_ce2d4e_idx'),
+            index=models.Index(fields=['latitude', 'longitude'], name='idxdb_loc_lat_long'),
         ),
         migrations.AddIndex(
             model_name='location',
-            index=models.Index(fields=['name'], name='dashboard_l_name_11ee30_idx'),
+            index=models.Index(fields=['name'], name='idxdb_loc_name'),
         ),
         migrations.AddIndex(
             model_name='location',
-            index=models.Index(fields=['official_name'], name='dashboard_l_officia_b6eaaa_idx'),
+            index=models.Index(fields=['official_name'], name='idxdb_loc_offname'),
         ),
         migrations.AddIndex(
             model_name='location',
-            index=models.Index(fields=['google_place'], name='dashboard_l_google__6d26b1_idx'),
+            index=models.Index(fields=['google_place'], name='idxdb_loc_gplace'),
         ),
         migrations.AlterUniqueTogether(
             name='location',
@@ -966,7 +966,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='locationcache',
-            index=models.Index(fields=['location', 'source'], name='dashboard_l_locatio_5f8691_idx'),
+            index=models.Index(fields=['location', 'source'], name='idxdb_loccache_source'),
         ),
         migrations.AlterUniqueTogether(
             name='locationcache',
@@ -974,7 +974,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='pinalias',
-            index=models.Index(fields=['pin'], name='dashboard_pin_alias_pin_idx'),
+            index=models.Index(fields=['pin'], name='idxdb_pin_alias_pin'),
         ),
         migrations.AddConstraint(
             model_name='pinalias',
@@ -982,31 +982,31 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='pinnote',
-            index=models.Index(fields=['pin'], name='dashboard_pn_pin_idx'),
+            index=models.Index(fields=['pin'], name='idxdb_pn_pin'),
         ),
         migrations.AddIndex(
             model_name='pinvisit',
-            index=models.Index(fields=['uuid'], name='dashboard_pv_uuid_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_pv_uuid'),
         ),
         migrations.AddIndex(
             model_name='pinvisit',
-            index=models.Index(fields=['pin'], name='dashboard_pv_pin_idx'),
+            index=models.Index(fields=['pin'], name='idxdb_pv_pin'),
         ),
         migrations.AddIndex(
             model_name='pinvisit',
-            index=models.Index(fields=['pin', 'visited_at'], name='dashboard_pv_pin_visited_idx'),
+            index=models.Index(fields=['pin', 'visited_at'], name='idxdb_pv_pin_visited'),
         ),
         migrations.AddIndex(
             model_name='profile',
-            index=models.Index(fields=['user'], name='dashboard_p_user_id_eb17ed_idx'),
+            index=models.Index(fields=['user'], name='idxdb_profile_user'),
         ),
         migrations.AddIndex(
             model_name='pinshare',
-            index=models.Index(fields=['to_profile', 'status'], name='dashboard_p_to_prof_5d03ec_idx'),
+            index=models.Index(fields=['to_profile', 'status'], name='idxdb_pinshr_to_pfl_stat'),
         ),
         migrations.AddIndex(
             model_name='pinshare',
-            index=models.Index(fields=['from_profile', 'created'], name='dashboard_p_from_pr_1593ec_idx'),
+            index=models.Index(fields=['from_profile', 'created'], name='idxdb_pinshr_f_pfl_cdt'),
         ),
         migrations.AddConstraint(
             model_name='pinshare',
@@ -1014,47 +1014,47 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='pinmarkup',
-            index=models.Index(fields=['parent_pin'], name='dashboard_pm_pin_idx'),
+            index=models.Index(fields=['parent_pin'], name='idxdb_pm_pin'),
         ),
         migrations.AddIndex(
             model_name='pinmarkup',
-            index=models.Index(fields=['parent_location'], name='dashboard_pm_location_idx'),
+            index=models.Index(fields=['parent_location'], name='idxdb_pm_location'),
         ),
         migrations.AddIndex(
             model_name='pinmarkup',
-            index=models.Index(fields=['profile'], name='dashboard_pm_profile_idx'),
+            index=models.Index(fields=['profile'], name='idxdb_pm_profile'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['uuid'], name='dashboard_u_uuid_1898a2_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_pin_uuid'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['profile'], name='dashboard_u_profile_945100_idx'),
+            index=models.Index(fields=['profile'], name='idxdb_pin_profile'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['profile', 'priority'], name='dashboard_u_profile_f747ec_idx'),
+            index=models.Index(fields=['profile', 'priority'], name='idxdb_pin_pfile_prio'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['profile', 'last_visited'], name='dashboard_u_profile_67c4a2_idx'),
+            index=models.Index(fields=['profile', 'last_visited'], name='idxdb_pin_pfile_lvisit'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['profile', 'updated'], name='dashboard_profile_update_idx'),
+            index=models.Index(fields=['profile', 'updated'], name='idxdb_profile_update'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['latitude', 'longitude'], name='dashboard_u_latitud_b6864d_idx'),
+            index=models.Index(fields=['latitude', 'longitude'], name='idxdb_pin_lat_long'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['parent_pin'], name='dashboard_u_parent__483403_idx'),
+            index=models.Index(fields=['parent_pin'], name='idxdb_pin_parent_pin'),
         ),
         migrations.AddIndex(
             model_name='pin',
-            index=models.Index(fields=['parent_location'], name='dashboard_parent_loc_idx'),
+            index=models.Index(fields=['parent_location'], name='idxdb_pin_parent_loc'),
         ),
         migrations.AddConstraint(
             model_name='pin',
@@ -1066,31 +1066,31 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='notificationlog',
-            index=models.Index(fields=['profile', 'status'], name='dashboard_n_profile_f04aa9_idx'),
+            index=models.Index(fields=['profile', 'status'], name='idxdb_notif_pfile_stat'),
         ),
         migrations.AddIndex(
             model_name='notificationlog',
-            index=models.Index(fields=['status'], name='dashboard_n_status_ff9f27_idx'),
+            index=models.Index(fields=['status'], name='idxdb_notif_status'),
         ),
         migrations.AddIndex(
             model_name='notificationlog',
-            index=models.Index(fields=['importance'], name='dashboard_n_importa_7c7684_idx'),
+            index=models.Index(fields=['importance'], name='idxdb_notif_import'),
         ),
         migrations.AddIndex(
             model_name='notificationlog',
-            index=models.Index(fields=['notification_type'], name='dashboard_n_notific_025668_idx'),
+            index=models.Index(fields=['notification_type'], name='idxdb_notif_type'),
         ),
         migrations.AddIndex(
             model_name='locationedit',
-            index=models.Index(fields=['location'], name='dashboard_le_location_idx'),
+            index=models.Index(fields=['location'], name='idxdb_le_location'),
         ),
         migrations.AddIndex(
             model_name='locationedit',
-            index=models.Index(fields=['location', 'created'], name='dashboard_le_created_idx'),
+            index=models.Index(fields=['location', 'created'], name='idxdb_le_created'),
         ),
         migrations.AddIndex(
             model_name='locationalias',
-            index=models.Index(fields=['location'], name='dashboard_loc_alias_loc_idx'),
+            index=models.Index(fields=['location'], name='idxdb_loc_alias_loc'),
         ),
         migrations.AddConstraint(
             model_name='locationalias',
@@ -1098,7 +1098,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='image',
-            index=models.Index(fields=['uuid'], name='dashboard_image_uuid_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_image_uuid'),
         ),
         migrations.AlterUniqueTogether(
             name='friendship',
@@ -1106,7 +1106,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='comment',
-            index=models.Index(fields=['uuid'], name='dashboard_comment_uuid_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_comment_uuid'),
         ),
         migrations.AddConstraint(
             model_name='campus',
@@ -1122,15 +1122,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='badge',
-            index=models.Index(fields=['uuid'], name='dashboard_badge_uuid_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_badge_uuid'),
         ),
         migrations.AddIndex(
             model_name='badge',
-            index=models.Index(fields=['profile'], name='dashboard_t_profile_1073fa_idx'),
+            index=models.Index(fields=['profile'], name='idxdb_badge_profile'),
         ),
         migrations.AddIndex(
             model_name='badge',
-            index=models.Index(fields=['profile', 'order'], name='dashboard_t_profile_a6ab65_idx'),
+            index=models.Index(fields=['profile', 'order'], name='idxdb_badge_pfile_ord'),
         ),
         migrations.AddConstraint(
             model_name='profilebadgeassignment',
@@ -1178,7 +1178,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='sociallink',
-            index=models.Index(fields=['profile'], name='dashboard_s_profile_85d0eb_idx'),
+            index=models.Index(fields=['profile'], name='idxdb_soc_link_pfile'),
         ),
         migrations.AddConstraint(
             model_name='sociallink',
@@ -1186,15 +1186,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='tripactivity',
-            index=models.Index(fields=['trip'], name='dashboard_ta_trip_idx'),
+            index=models.Index(fields=['trip'], name='idxdb_ta_trip'),
         ),
         migrations.AddIndex(
             model_name='tripactivity',
-            index=models.Index(fields=['trip', 'scheduled_at'], name='dashboard_ta_trip_dt_idx'),
+            index=models.Index(fields=['trip', 'scheduled_at'], name='idxdb_ta_trip_dt'),
         ),
         migrations.AddIndex(
             model_name='tripactivityvote',
-            index=models.Index(fields=['activity'], name='dashboard_tav_activity_idx'),
+            index=models.Index(fields=['activity'], name='idxdb_tav_activity'),
         ),
         migrations.AlterUniqueTogether(
             name='tripactivityvote',
@@ -1202,7 +1202,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='tripcomment',
-            index=models.Index(fields=['trip'], name='dashboard_tc_trip_idx'),
+            index=models.Index(fields=['trip'], name='idxdb_tc_trip'),
         ),
         migrations.AddIndex(
             model_name='reaction',
@@ -1210,7 +1210,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='reaction',
-            index=models.Index(fields=['trip_comment'], name='reaction_trip_comment_idx'),
+            index=models.Index(fields=['trip_comment'], name='idxdb_react_trcomment'),
         ),
         migrations.AddConstraint(
             model_name='reaction',
@@ -1222,7 +1222,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='tripmembership',
-            index=models.Index(fields=['trip'], name='dashboard_tm_trip_idx'),
+            index=models.Index(fields=['trip'], name='idxdb_tm_trip'),
         ),
         migrations.AlterUniqueTogether(
             name='tripmembership',
@@ -1230,15 +1230,15 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='trip',
-            index=models.Index(fields=['uuid'], name='dashboard_trip_uuid_idx'),
+            index=models.Index(fields=['uuid'], name='idxdb_trip_uuid'),
         ),
         migrations.AddIndex(
             model_name='trip',
-            index=models.Index(fields=['start_date'], name='dashboard_t_start_d_978a04_idx'),
+            index=models.Index(fields=['start_date'], name='idxdb_trip_start_date'),
         ),
         migrations.AddIndex(
             model_name='trip',
-            index=models.Index(fields=['end_date'], name='dashboard_t_end_dat_1dca64_idx'),
+            index=models.Index(fields=['end_date'], name='idxdb_trip_end_date'),
         ),
         migrations.AddConstraint(
             model_name='usersubscription',
@@ -1396,266 +1396,6 @@ class Migration(migrations.Migration):
         migrations.RemoveConstraint(
             model_name='pinshare',
             name='dashboard_pin_share_one_pending_per_pin_user',
-        ),
-        migrations.RenameIndex(
-            model_name='apicalllog',
-            new_name='idxdb_apilog_svc_cdt',
-            old_name='api_log_service_created_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='badge',
-            new_name='idxdb_badge_uuid',
-            old_name='dashboard_badge_uuid_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='badge',
-            new_name='idxdb_badge_profile',
-            old_name='dashboard_t_profile_1073fa_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='badge',
-            new_name='idxdb_badge_pfile_ord',
-            old_name='dashboard_t_profile_a6ab65_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='comment',
-            new_name='idxdb_comment_uuid',
-            old_name='dashboard_comment_uuid_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='geocodedlocation',
-            new_name='idxdb_geoloc_lat_lng',
-            old_name='dashboard_g_latitud_9e6b87_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='geocodedlocation',
-            new_name='idxdb_geoloc_placename',
-            old_name='dashboard_g_place_n_efe18b_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='googleplace',
-            new_name='idxdb_gplace_lat_long',
-            old_name='dashboard_g_latitud_4cc7c1_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='googleplace',
-            new_name='idxdb_gplace_cid',
-            old_name='dashboard_g_cid_617a60_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='image',
-            new_name='idxdb_image_uuid',
-            old_name='dashboard_image_uuid_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='location',
-            new_name='idxdb_loc_uuid',
-            old_name='dashboard_l_uuid_f3ca34_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='location',
-            new_name='idxdb_loc_lat_long',
-            old_name='dashboard_l_latitud_ce2d4e_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='location',
-            new_name='idxdb_loc_name',
-            old_name='dashboard_l_name_11ee30_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='location',
-            new_name='idxdb_loc_offname',
-            old_name='dashboard_l_officia_b6eaaa_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='location',
-            new_name='idxdb_loc_gplace',
-            old_name='dashboard_l_google__6d26b1_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='locationalias',
-            new_name='idxdb_loc_alias_loc',
-            old_name='dashboard_loc_alias_loc_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='locationcache',
-            new_name='idxdb_loccache_source',
-            old_name='dashboard_l_locatio_5f8691_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='locationedit',
-            new_name='idxdb_le_location',
-            old_name='dashboard_le_location_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='locationedit',
-            new_name='idxdb_le_created',
-            old_name='dashboard_le_created_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificationlog',
-            new_name='idxdb_notif_pfile_stat',
-            old_name='dashboard_n_profile_f04aa9_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificationlog',
-            new_name='idxdb_notif_status',
-            old_name='dashboard_n_status_ff9f27_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificationlog',
-            new_name='idxdb_notif_import',
-            old_name='dashboard_n_importa_7c7684_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='notificationlog',
-            new_name='idxdb_notif_type',
-            old_name='dashboard_n_notific_025668_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_uuid',
-            old_name='dashboard_u_uuid_1898a2_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_profile',
-            old_name='dashboard_u_profile_945100_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_pfile_prio',
-            old_name='dashboard_u_profile_f747ec_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_pfile_lvisit',
-            old_name='dashboard_u_profile_67c4a2_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_profile_update',
-            old_name='dashboard_profile_update_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_lat_long',
-            old_name='dashboard_u_latitud_b6864d_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_parent_pin',
-            old_name='dashboard_u_parent__483403_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pin',
-            new_name='idxdb_pin_parent_loc',
-            old_name='dashboard_parent_loc_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinalias',
-            new_name='idxdb_pin_alias_pin',
-            old_name='dashboard_pin_alias_pin_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinmarkup',
-            new_name='idxdb_pm_pin',
-            old_name='dashboard_pm_pin_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinmarkup',
-            new_name='idxdb_pm_location',
-            old_name='dashboard_pm_location_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinmarkup',
-            new_name='idxdb_pm_profile',
-            old_name='dashboard_pm_profile_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinnote',
-            new_name='idxdb_pn_pin',
-            old_name='dashboard_pn_pin_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinshare',
-            new_name='idxdb_pinshr_to_pfl_stat',
-            old_name='dashboard_p_to_prof_5d03ec_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinshare',
-            new_name='idxdb_pinshr_f_pfl_cdt',
-            old_name='dashboard_p_from_pr_1593ec_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinvisit',
-            new_name='idxdb_pv_uuid',
-            old_name='dashboard_pv_uuid_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinvisit',
-            new_name='idxdb_pv_pin',
-            old_name='dashboard_pv_pin_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='pinvisit',
-            new_name='idxdb_pv_pin_visited',
-            old_name='dashboard_pv_pin_visited_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='profile',
-            new_name='idxdb_profile_user',
-            old_name='dashboard_p_user_id_eb17ed_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='reaction',
-            new_name='idxdb_react_trcomment',
-            old_name='reaction_trip_comment_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='sociallink',
-            new_name='idxdb_soc_link_pfile',
-            old_name='dashboard_s_profile_85d0eb_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='trip',
-            new_name='idxdb_trip_uuid',
-            old_name='dashboard_trip_uuid_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='trip',
-            new_name='idxdb_trip_start_date',
-            old_name='dashboard_t_start_d_978a04_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='trip',
-            new_name='idxdb_trip_end_date',
-            old_name='dashboard_t_end_dat_1dca64_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='tripactivity',
-            new_name='idxdb_ta_trip',
-            old_name='dashboard_ta_trip_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='tripactivity',
-            new_name='idxdb_ta_trip_dt',
-            old_name='dashboard_ta_trip_dt_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='tripactivityvote',
-            new_name='idxdb_tav_activity',
-            old_name='dashboard_tav_activity_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='tripcomment',
-            new_name='idxdb_tc_trip',
-            old_name='dashboard_tc_trip_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='tripmembership',
-            new_name='idxdb_tm_trip',
-            old_name='dashboard_tm_trip_idx',
         ),
         migrations.AddField(
             model_name='image',
