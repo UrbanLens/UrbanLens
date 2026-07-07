@@ -294,7 +294,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The check-in whose ``checkin_by`` time has arrived.
     """
-    checkin_url = _absolute_url(reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)}))
+    checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     NotificationLog.objects.create(
         profile=checkin.profile,
         status=Status.UNREAD,
@@ -302,14 +302,14 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
         notification_type=NotificationType.SAFETY_CHECKIN_DUE,
         title="Time to check in",
         message=f'"{checkin.title}" is due for a check-in.',
-        url=checkin_url,
+        url=checkin_path,
     )
     if checkin.profile.user and checkin.profile.user.email:
         _send_email(
             to=checkin.profile.user.email,
             subject=f'Check in for "{checkin.title}"',
             template="dashboard/email/safety_checkin_reminder.html",
-            context={"checkin": checkin, "checkin_url": checkin_url},
+            context={"checkin": checkin, "checkin_url": _absolute_url(checkin_path)},
         )
     checkin.status = SafetyCheckinStatus.AWAITING_CHECKIN
     checkin.reminder_sent_at = timezone.now()
@@ -339,7 +339,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
         checkin: The overdue check-in.
     """
     for contact in checkin.contacts.all():
-        portal_url = _absolute_url(reverse("safety.contact.portal", kwargs={"token": contact.token}))
+        portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
         if contact.contact_profile_id:
             NotificationLog.objects.create(
                 profile=contact.contact_profile,
@@ -349,14 +349,14 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
                 notification_type=NotificationType.SAFETY_CHECKIN_OVERDUE,
                 title=f"{checkin.profile.username} hasn't checked in",
                 message=f'"{checkin.title}" is overdue. Take a look and let them know if you find them.',
-                url=portal_url,
+                url=portal_path,
             )
         contact_email = contact.contact_profile.user.email if contact.contact_profile and contact.contact_profile.user else contact.email
         _send_email(
             to=contact_email or "",
             subject=f"{checkin.profile.username} hasn't checked in",
             template="dashboard/email/safety_checkin_overdue.html",
-            context={"checkin": checkin, "contact": contact, "portal_url": portal_url},
+            context={"checkin": checkin, "contact": contact, "portal_url": _absolute_url(portal_path)},
         )
         contact.notified_at = timezone.now()
         contact.save(update_fields=["notified_at", "updated"])
@@ -390,7 +390,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
 
-    checkin_url = _absolute_url(reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)}))
+    checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     NotificationLog.objects.create(
         profile=checkin.profile,
         status=Status.UNREAD,
@@ -398,18 +398,18 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
         title=f"{contact.display_name} found you",
         message=f'{contact.display_name} marked you safe for "{checkin.title}".',
-        url=checkin_url,
+        url=checkin_path,
     )
     if checkin.profile.user and checkin.profile.user.email:
         _send_email(
             to=checkin.profile.user.email,
             subject=f'You were marked safe for "{checkin.title}"',
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "contact": contact, "checkin_url": checkin_url},
+            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(checkin_path)},
         )
 
     for other in checkin.contacts.exclude(pk=contact.pk):
-        portal_url = _absolute_url(reverse("safety.contact.portal", kwargs={"token": other.token}))
+        portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
         if other.contact_profile:
             NotificationLog.objects.create(
                 profile=other.contact_profile,
@@ -418,7 +418,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
                 notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
                 title=f"{checkin.profile.username} has been found",
                 message=f"{contact.display_name} marked {checkin.profile.username} safe.",
-                url=portal_url,
+                url=portal_path,
             )
             other_email = other.contact_profile.user.email if other.contact_profile and other.contact_profile.user else other.email
         else:
@@ -428,7 +428,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "contact": contact, "checkin_url": portal_url},
+            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(portal_path)},
         )
 
     _conclude_checkin(checkin)

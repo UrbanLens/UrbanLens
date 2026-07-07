@@ -85,6 +85,14 @@ urlpatterns = [
         ),
         name="about",
     ),
+    path(
+        "values/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/values/index.html",
+            extra_context={"page_name": "values"},
+        ),
+        name="values",
+    ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
         "help/import-pins/",

@@ -296,6 +296,17 @@
         margin: 0;
     }
 
+    .about-values-footnote {
+        font-size: .9rem;
+        color: var(--ul-grey-6);
+        margin: 2.5rem 0 0;
+
+        a {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+    }
+
     // -- Feature rows ----------------------------------------------------------
     .about-features-list {
         margin-top: 2.5rem;

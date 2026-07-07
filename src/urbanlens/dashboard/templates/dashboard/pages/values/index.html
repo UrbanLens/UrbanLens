@@ -1,0 +1,175 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="values-hero">
+    <div class="values-hero-inner">
+        <p class="values-eyebrow">Our Ethos</p>
+        <h1 class="values-title">Principles worth<br><em>building around.</em></h1>
+        <p class="values-subtitle">
+            UrbanLens exists to help people explore responsibly. These are the values
+            that shape every feature we build, and every decision we make along the way -
+            for the people using the site, and for the people building it.
+        </p>
+        <p>
+            If you want to contribute code to this project, we expect that code to 
+            adhere to these principles, in addition to adhering to our contribution guidelines.
+        </p>
+    </div>
+</section>
+
+{# -- How to read this list -------------------------------------------------- #}
+<section class="values-section">
+    <div class="values-section-inner">
+        <div class="values-section-label">How to read this list</div>
+        <h2 class="values-section-title">Order matters.</h2>
+        <p class="values-section-body">
+            These principles are ranked by priority, not by chronology. When two of them pull in
+            different directions, the higher priority wins; consent comes before privacy,
+            privacy comes before convenience, and responsibility comes before growth.
+        </p>
+        <p class="values-section-body">
+            This isn't just a promise to the people who use UrbanLens. It's also a checklist for
+            anyone building it: if a new feature can't be squared with the principles above it,
+            the feature changes - not the principle.
+        </p>
+    </div>
+</section>
+
+{# -- Principles ------------------------------------------------------------- #}
+<section class="values-list-section">
+    <div class="values-section-inner">
+
+        <div class="values-item">
+            <div class="values-item-num">01</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Consent</h3>
+                <p class="values-item-principle">
+                    When something is unclear, we ask before we act.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> Importing pins is ambiguous by nature - a new user
+                    can't know in advance which pins will be imported or who will see them.
+                    So the import flow shows every pin for review before anything is saved,
+                    and never makes a pin public on its own. This results in an extra step for users, 
+                    but it prioritizes consent over convenience.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">02</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Privacy</h3>
+                <p class="values-item-principle">
+                    We do not collect or store data a user doesn't want to share, without exception.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> By design, no user on the site can discover other users
+                    on the site until that user takes an action to make themselves visible. Even
+                    friend requests do not reveal whether a user even exists on the site until after
+                    that user accepts the friend request.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">03</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Transparency</h3>
+                <p class="values-item-principle">
+                    Users should know what data is shared and stored, so they can
+                    make informed decisions.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> Any data we store about a user is visible to that
+                    user on their own profile page. No other user data exists on our site that is 
+                    not displayed.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">04</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Security</h3>
+                <p class="values-item-principle">
+                    We work to keep data from leaking, and design every feature to limit 
+                    the harm a data breach could cause.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> We never store a user's IP address, even though this 
+                    information is necessary for analytics. We opt out of analytics to ensure
+                    a future data breach can't possibly expose this information.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">05</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Responsibility</h3>
+                <p class="values-item-principle">
+                    We encourage behavior that protects people, locations, and the community - even
+                    when a less responsible option would be more popular.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> We discourage large-scale pin sharing, even though it
+                    would help promote well-known locations that aren't vulnerable to harm. We encourage
+                    small-scale information sharing, since it encourages responsible and safe exploring.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">06</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Reliability</h3>
+                <p class="values-item-principle">
+                    Research data should be trustworthy, because it shapes the
+                    decisions people make in the field.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> We prioritize up-to-date search results, so a user
+                    doesn't rely on stale information. We attempt to filter out unrelated information,
+                    and we attempt to provide information from as many sources as possible, so 
+                    ommissions from one source aren't missed.
+                </p>
+            </div>
+        </div>
+
+        <div class="values-item">
+            <div class="values-item-num">07</div>
+            <div class="values-item-body">
+                <h3 class="values-item-title">Functionality</h3>
+                <p class="values-item-principle">
+                    By including many tools in one place, we encourage good habits
+                    around research, exploration, and safety.
+                </p>
+                <p class="values-item-example">
+                    <strong>Example:</strong> A full set of research tools lives in one place, so
+                    researching a place before visiting it isn't a chore. Chores often get skipped,
+                    resulting in explorers making unsafe decisions.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# -- CTA ------------------------------------------------------------------ #}
+<section class="values-cta-section">
+    <div class="values-cta-inner">
+        <h2 class="values-cta-title">This is a living document.</h2>
+        <p class="values-cta-body">
+            As UrbanLens grows, we measure new features against these principles - not the
+            other way around.
+        </p>
+        <a href="{% url 'about' %}" class="values-btn btn btn--primary btn--lg">
+            <i class="material-symbols-outlined">arrow_back</i> Back to About
+        </a>
+    </div>
+</section>
+
+{% endblock %}
