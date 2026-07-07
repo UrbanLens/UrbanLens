@@ -382,9 +382,8 @@ class GoogleMapsGateway(Gateway):
                         location = Location.objects.by_cid(cid).first() if cid is not None else None
                         if location:
                             pin_data["location"] = location
-                            # Clear the coordinate override - pin inherits location's coords.
-                            pin_data.pop("latitude", None)
-                            pin_data.pop("longitude", None)
+                            pin_data.setdefault("latitude", location.latitude)
+                            pin_data.setdefault("longitude", location.longitude)
 
                         pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)

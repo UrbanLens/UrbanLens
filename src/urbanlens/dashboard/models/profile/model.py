@@ -250,20 +250,9 @@ class Profile(abstract.PublicDashboardModel):
             (latitude, longitude) as floats, or None if the user has no pins
             with resolvable coordinates.
         """
-        from django.db.models import F
-        from django.db.models.functions import Coalesce
-
         from urbanlens.dashboard.models.pin.model import Pin
 
-        rows = list(
-            Pin.objects.filter(profile=self)
-            .annotate(
-                eff_lat=Coalesce(F("latitude"), F("location__latitude")),
-                eff_lng=Coalesce(F("longitude"), F("location__longitude")),
-            )
-            .filter(eff_lat__isnull=False, eff_lng__isnull=False)
-            .values_list("eff_lat", "eff_lng"),
-        )
+        rows = list(Pin.objects.filter(profile=self).values_list("latitude", "longitude"))
         if not rows:
             return None
 
