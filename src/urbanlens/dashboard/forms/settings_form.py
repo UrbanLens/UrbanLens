@@ -125,6 +125,21 @@ class ContactSettingsForm(forms.Form):
         ),
     )
 
+    def __init__(self, *args, exclude_user_id: int | None = None, **kwargs):
+        self._exclude_user_id = exclude_user_id
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self) -> str:
+        """Reject email addresses already claimed by another account (normalized comparison)."""
+        from django.core.exceptions import ValidationError
+
+        from urbanlens.dashboard.services.email_normalization import is_email_taken
+
+        email = self.cleaned_data["email"].strip().lower()
+        if is_email_taken(email, exclude_user_id=self._exclude_user_id):
+            raise ValidationError("Another account already uses this email address.")
+        return email
+
 
 class StyleSettingsForm(forms.ModelForm):
     """Site-wide appearance - color theme, map dark mode, and in-app help."""

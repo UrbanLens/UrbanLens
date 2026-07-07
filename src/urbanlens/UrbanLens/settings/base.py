@@ -86,7 +86,7 @@ MIDDLEWARE = [
 AUTHENTICATION_BACKENDS = [
     "social_core.backends.google.GoogleOAuth2",
     "social_core.backends.discord.DiscordOAuth2",
-    "django.contrib.auth.backends.ModelBackend",
+    "urbanlens.dashboard.services.auth_backend.EmailOrUsernameModelBackend",
 ]
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"

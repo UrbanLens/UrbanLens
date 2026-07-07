@@ -93,6 +93,11 @@ class Profile(abstract.HasSlug):
         help_text=("When you share one of your pins as a trip activity, who can see the actual location? Members outside this setting will only see the pin name."),
     )
 
+    # Cached normalized form of user.email (kept in sync by a User post_save
+    # signal) so email-match lookups (friend invites, dup checks, login) are a
+    # single indexed query instead of a full-table Python scan.
+    primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
+
     # Contact information and its visibility
     phone_number = CharField(max_length=30, blank=True, default="")
     signal_username = CharField(max_length=100, blank=True, default="")

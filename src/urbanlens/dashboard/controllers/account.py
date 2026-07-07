@@ -120,9 +120,11 @@ class RegistrationForm(UserCreationForm):
         self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
 
     def clean_email(self) -> str:
-        """Reject duplicate email addresses (case-insensitive)."""
+        """Reject email addresses already in use (normalized comparison)."""
+        from urbanlens.dashboard.services.email_normalization import is_email_taken
+
         email = self.cleaned_data["email"].strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
+        if is_email_taken(email):
             raise ValidationError("An account with this email address already exists.")
         return email
 
@@ -376,9 +378,14 @@ class CustomLoginView(LoginView):
                     )
                     return super().form_invalid(form)
 
-            # Check for unverified account.
+            # Check for unverified account (username or email login).
             try:
                 user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                from urbanlens.dashboard.services.email_normalization import find_user_by_email
+
+                user = find_user_by_email(username, active_only=False) if "@" in username else None
+            if user is not None:
                 if not user.is_active and hasattr(user, "email_verification"):
                     resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"
                     form.errors["__all__"] = form.error_class(
@@ -389,8 +396,6 @@ class CustomLoginView(LoginView):
                             ),
                         ],
                     )
-            except User.DoesNotExist:
-                pass
         return super().form_invalid(form)
 
 

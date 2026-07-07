@@ -1,0 +1,64 @@
+{# Partial: secondary-email list + add/remove forms. Re-rendered via HTMX after every change. #}
+<div id="profile-emails-content">
+
+    {% if secondary_emails %}
+    <ul class="edit-links-list">
+        {% for secondary_email in secondary_emails %}
+        <li class="edit-link-row">
+            <i class="material-symbols-outlined edit-link-icon">{% if secondary_email.is_verified %}mail{% else %}schedule{% endif %}</i>
+            <span class="edit-link-handle">{{ secondary_email.email }}</span>
+            <span class="edit-link-platform">{% if secondary_email.is_verified %}Verified{% else %}Pending verification{% endif %}</span>
+            {% if not secondary_email.is_verified %}
+            <form class="edit-link-remove-form"
+                  hx-post="{% url 'profile.edit' %}"
+                  hx-target="#profile-emails-content"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="resend_email_verification">
+                <input type="hidden" name="email_id" value="{{ secondary_email.pk }}">
+                <button type="submit" class="edit-link-remove-btn" title="Resend verification email">
+                    <i class="material-symbols-outlined">refresh</i>
+                </button>
+            </form>
+            {% endif %}
+            <form class="edit-link-remove-form"
+                  hx-post="{% url 'profile.edit' %}"
+                  hx-target="#profile-emails-content"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove_email">
+                <input type="hidden" name="email_id" value="{{ secondary_email.pk }}">
+                <button type="submit" class="edit-link-remove-btn" title="Remove">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form class="edit-add-link-form"
+          hx-post="{% url 'profile.edit' %}"
+          hx-target="#profile-emails-content"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){ this.querySelector('[name=email_input]').value=''; }">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_email">
+        <div class="edit-add-link-row">
+            <input type="email" name="email_input"
+                   class="edit-add-link-input{% if email_error %} edit-add-link-input--error{% endif %}"
+                   placeholder="another@email.com">
+            <button type="submit" class="edit-add-link-btn">Add</button>
+        </div>
+        {% if email_error %}
+        <p class="edit-error edit-error--link">{{ email_error }}</p>
+        {% endif %}
+        {% if email_status %}
+        <p class="edit-field-hint">{{ email_status }}</p>
+        {% endif %}
+    </form>
+
+    <p class="edit-supported-platforms">
+        Other users can find you via any verified email when sending a friend invite. Verified emails can also be used to log in.
+    </p>
+</div>

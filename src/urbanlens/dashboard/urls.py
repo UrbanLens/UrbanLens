@@ -402,6 +402,11 @@ urlpatterns = [
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
+                path(
+                    "edit/emails/verify/<uuid:token>/",
+                    userprofile.ProfileEmailVerifyView.as_view(),
+                    name="profile.email.verify",
+                ),
                 path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
                 path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
                 path(

@@ -23,10 +23,10 @@
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
     <div class="auth-field">
-        <label for="id_username">Username</label>
+        <label for="id_username">Username or Email</label>
         <input type="text" id="id_username" name="username"
                autocomplete="username" autofocus
-               placeholder="Your username"
+               placeholder="Your username or email"
                value="{{ form.username.value|default:'' }}">
         {% if form.username.errors %}
         <ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>

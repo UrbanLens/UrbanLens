@@ -75,7 +75,7 @@ class SettingsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = {
             "privacy_form": PrivacySettingsForm(instance=profile),
-            "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
+            "contact_form": ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk),
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
@@ -94,7 +94,7 @@ class SettingsView(LoginRequiredMixin, View):
         section = request.POST.get("section")
 
         privacy_form = PrivacySettingsForm(instance=profile)
-        contact_form = ContactSettingsForm(initial={"email": request.user.email})
+        contact_form = ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk)
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
@@ -133,7 +133,7 @@ class SettingsView(LoginRequiredMixin, View):
                 return redirect("settings.view")
 
         elif section == "contact":
-            contact_form = ContactSettingsForm(request.POST)
+            contact_form = ContactSettingsForm(request.POST, exclude_user_id=request.user.pk)
             if contact_form.is_valid():
                 request.user.email = contact_form.cleaned_data["email"]
                 request.user.save(update_fields=["email"])

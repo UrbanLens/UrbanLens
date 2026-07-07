@@ -7,9 +7,15 @@ from django.dispatch import receiver
 
 @receiver(post_save, sender=User, dispatch_uid="profile_create_user_profile")
 def create_user_profile(sender: type[User], instance: User, created: bool, **kwargs) -> None:
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.email_normalization import normalize_email
+
+    normalized = normalize_email(instance.email) if instance.email else ""
+
     if created:
-        from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.services.site_admin import promote_first_user_if_needed
 
-        Profile.objects.get_or_create(user=instance)
+        Profile.objects.get_or_create(user=instance, defaults={"primary_email_normalized": normalized})
         promote_first_user_if_needed(instance)
+    else:
+        Profile.objects.filter(user=instance).exclude(primary_email_normalized=normalized).update(primary_email_normalized=normalized)

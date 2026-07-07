@@ -455,9 +455,15 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.
 
-        If the email belongs to an existing user, send them a friend request
-        directly.  Otherwise create a FriendInvitation and email the address
-        with a join link; on sign-up the pending request is auto-accepted.
+        If the email belongs to an existing account (primary or verified
+        secondary email), send that account a friend request. Otherwise
+        create a FriendInvitation and email the address with a join link; on
+        sign-up the pending request is auto-accepted.
+
+        The response is identical in every case - it never reveals the
+        target's username or whether the email belongs to a registered
+        account, since that would let a caller enumerate site membership by
+        trying addresses one at a time.
         """
         import smtplib
 
@@ -468,6 +474,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         from django.template.loader import render_to_string
 
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+        from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
 
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
@@ -479,6 +486,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Please enter a valid email address.", status=400)
 
         inviter = request.user.profile
+        if normalize_email(email) == normalize_email(inviter.email):
+            return HttpResponse("That's your own email address.", status=400)
+
         subscription_role_slug = request.POST.get("subscription_role", "").strip()
         subscription_duration = request.POST.get("subscription_duration", "")
         subscription_role = None
@@ -488,78 +498,54 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
 
-        # Check if a registered user already has this email
-        existing_user = User.objects.filter(email__iexact=email, is_active=True).select_related("profile").first()
+        existing_user = find_user_by_email(email)
         if existing_user:
             to_profile = existing_user.profile
-            if to_profile == inviter:
-                return HttpResponse("That's your own email address.", status=400)
+            # Respect visibility settings silently - no error, no distinguishable response.
+            if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
+                friendship = request_or_accept_friendship(inviter, to_profile)
+                if friendship and subscription_role is not None:
+                    from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
+                    from urbanlens.dashboard.models.subscriptions import grant_subscription
 
-            # Send a normal friend request (respects visibility settings)
-            visibility = to_profile.friend_request_visibility
-            if visibility == VisibilityChoice.NO_ONE:
-                return HttpResponse(
-                    f"{to_profile.username} is not accepting friend requests.",
-                    status=403,
+                    grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
+        else:
+            # No registered account - create an invitation token and send email.
+            # Avoid duplicate pending invitations from the same inviter.
+            FriendInvitation.objects.filter(
+                inviter=inviter,
+                email=email,
+                accepted_at__isnull=True,
+            ).delete()
+
+            invitation = FriendInvitation(inviter=inviter, email=email)
+            invitation.save()
+            if subscription_role is not None:
+                from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
+
+                PendingSubscriptionGrant.objects.create(
+                    invitation=invitation,
+                    role=subscription_role,
+                    granted_by=request.user,
+                    duration_months="" if subscription_duration == "indefinite" else subscription_duration,
                 )
 
-            friendship = request_or_accept_friendship(inviter, to_profile)
-            if not friendship:
-                return HttpResponse("Could not send friend request.", status=400)
-
-            if subscription_role is not None:
-                from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
-                from urbanlens.dashboard.models.subscriptions import grant_subscription
-
-                grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
-
-            result = "friend_added" if friendship.status == FriendshipStatus.ACCEPTED else "request_sent"
-            return render(
-                request,
-                "dashboard/partials/profile/invite_result.html",
-                {"result": result, "username": to_profile.username},
+            signup_url = request.build_absolute_uri(
+                f"/signup/?invite={invitation.token}",
             )
+            context = {
+                "inviter": inviter,
+                "signup_url": signup_url,
+            }
+            subject = f"{inviter.username} invited you to join UrbanLens"
+            text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+            html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
-        # No registered user - create an invitation token and send email
-        # Avoid duplicate pending invitations from the same inviter
-        FriendInvitation.objects.filter(
-            inviter=inviter,
-            email=email,
-            accepted_at__isnull=True,
-        ).delete()
+            try:
+                msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+                msg.attach_alternative(html_body, "text/html")
+                msg.send()
+            except (smtplib.SMTPException, OSError):
+                logger.exception("Failed to send friend invitation to %s", email)
 
-        invitation = FriendInvitation(inviter=inviter, email=email)
-        invitation.save()
-        if subscription_role is not None:
-            from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
-
-            PendingSubscriptionGrant.objects.create(
-                invitation=invitation,
-                role=subscription_role,
-                granted_by=request.user,
-                duration_months="" if subscription_duration == "indefinite" else subscription_duration,
-            )
-
-        signup_url = request.build_absolute_uri(
-            f"/signup/?invite={invitation.token}",
-        )
-        context = {
-            "inviter": inviter,
-            "signup_url": signup_url,
-        }
-        subject = f"{inviter.username} invited you to join UrbanLens"
-        text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-        html_body = render_to_string("dashboard/email/friend_invite.html", context)
-
-        try:
-            msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
-            msg.attach_alternative(html_body, "text/html")
-            msg.send()
-        except (smtplib.SMTPException, OSError):
-            logger.exception("Failed to send friend invitation to %s", email)
-
-        return render(
-            request,
-            "dashboard/partials/profile/invite_result.html",
-            {"result": "invite_sent", "email": email},
-        )
+        return render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})

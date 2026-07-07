@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.notifications import NotificationLog, Notificati
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.reactions import Reaction
