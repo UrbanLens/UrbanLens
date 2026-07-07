@@ -11,7 +11,7 @@
     {% for loc in locations %}
     <div class="pin-loc-option {% if pin.location and loc.slug == pin.location.slug %}pin-loc-option--current{% endif %}">
         <div class="pin-loc-option-info">
-            <span class="pin-loc-option-name">{{ loc.name }}</span>
+            <span class="pin-loc-option-name">{{ loc.display_name }}</span>
             {% if pin.location and loc.slug == pin.location.slug %}
             <span class="pin-loc-option-badge">Current</span>
             {% endif %}

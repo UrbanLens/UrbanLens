@@ -192,7 +192,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         shared_visited_ids = their_visited_ids & my_visited_ids
 
         context["common_pin_count"] = len(common_ids)
-        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).order_by("name") if shared_visited_ids else Location.objects.none()
+        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship
         from urbanlens.dashboard.models.friendship.model import Friendship

@@ -67,7 +67,7 @@ class NPSGateway(Gateway):
         Search NPS parks by name query and/or US state code.
 
         Args:
-            query: Free-text search term (location name, etc.).
+            query: Free-text search term (wiki/place name, etc.).
             state_code: Two-letter US state abbreviation (e.g. "NY").
             limit: Maximum number of parks to return.
 

@@ -9,7 +9,8 @@ import re
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import CharField, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.html import escape
@@ -1049,9 +1050,11 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         ]
 
         db_rows = list(
-            Location.objects.filter(name__icontains=q).values(
+            Location.objects.filter(Q(wiki__name__icontains=q) | Q(official_name__icontains=q))
+            .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
+            .values(
                 "uuid",
-                "name",
+                "display_name",
                 "locality",
                 "administrative_area_level_1",
             )[:5],
@@ -1059,7 +1062,8 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         db_results = [
             {
                 "uuid": str(row["uuid"]),
-                "name": row["name"],
+                "name": row["display_name"] or "Unnamed location",
+                "display_name": row["display_name"] or "Unnamed location",
                 "locality": row["locality"],
                 "administrative_area_level_1": row["administrative_area_level_1"],
                 "type": "db",

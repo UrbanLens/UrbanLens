@@ -58,7 +58,7 @@ class WikimediaGateway(MediaProvider):
         Search Commons for images matching *query* and return thumbnail info.
 
         Args:
-            query: Human-readable location name used as the search term.
+            query: Human-readable wiki/place name used as the search term.
 
         Returns:
             List of dicts with keys ``title``, ``url``, ``thumb``,

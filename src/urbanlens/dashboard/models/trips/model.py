@@ -232,7 +232,7 @@ class TripActivity(abstract.DashboardModel):
 
     @property
     def effective_title(self) -> str:
-        """Display label: custom title, linked pin name/address, location name/address, or fallback."""
+        """Display label: custom title, linked pin name/address, wiki display name/address, or fallback."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         if self.title:

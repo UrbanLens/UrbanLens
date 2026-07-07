@@ -210,8 +210,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if not is_private:
                 # Link to an existing Location whose bounding box contains this point,
                 # or create a new one. This keeps all pins for the same place connected.
-                # The Location name must be the canonical place name - never the user's
-                # custom label, which stays on Pin.name only.
+                # The shared wiki/display name must come from canonical place data -
+                # never the user's custom label, which stays on Pin.name only.
                 all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
                 if all_locations:
                     location = all_locations[0]
@@ -302,7 +302,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     {
                         "uuid": str(loc.uuid),
                         "slug": loc.slug or str(loc.uuid),
-                        "name": loc.name,
+                        "name": loc.display_name,  # Back-compat for existing JS consumers.
+                        "display_name": loc.display_name,
                         "is_current": loc.pk == location.pk,
                         "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }

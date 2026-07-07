@@ -933,6 +933,7 @@ window.tripToggleShowCompleted = function () {
                     var shownHeaders = {};
 
                     results.forEach(function (loc) {
+                        var displayName = loc.display_name || loc.name;
                         if (!shownHeaders[loc.type]) {
                             var header = document.createElement('li');
                             header.className = 'location-suggestion-header';
@@ -946,9 +947,9 @@ window.tripToggleShowCompleted = function () {
                             ((loc.type === 'geocoded' || loc.type === 'coordinates') ? ' location-suggestion-geocoded' : '');
 
                         if (loc.type === 'geocoded' || loc.type === 'coordinates') {
-                            li.textContent = loc.name;
+                            li.textContent = displayName;
                         } else {
-                            li.textContent = loc.name +
+                            li.textContent = displayName +
                                 (loc.locality ? ', ' + loc.locality : '') +
                                 (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
                         }
@@ -959,7 +960,7 @@ window.tripToggleShowCompleted = function () {
                                 uuidInput.value = '';
                                 if (latInput)  latInput.value  = loc.lat;
                                 if (lngInput)  lngInput.value  = loc.lng;
-                                if (nameInput) nameInput.value = loc.name;
+                                if (nameInput) nameInput.value = displayName;
                             } else if (loc.type === 'pin') {
                                 uuidInput.value = '';
                                 if (pinInput) pinInput.value = loc.uuid;
@@ -972,7 +973,7 @@ window.tripToggleShowCompleted = function () {
                                 if (lngInput)  lngInput.value  = '';
                                 if (nameInput) nameInput.value = '';
                             }
-                            display.textContent = loc.name;
+                            display.textContent = displayName;
                             searchInput.value = '';
                             suggestions.innerHTML = '';
                             suggestions.hidden = true;

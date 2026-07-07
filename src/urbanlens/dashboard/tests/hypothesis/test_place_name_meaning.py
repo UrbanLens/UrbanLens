@@ -1,4 +1,4 @@
-"""Tests for is_meaningful_name - filtering placeholder pin/location names."""
+"""Tests for is_meaningful_name - filtering placeholder pin/wiki names."""
 
 from __future__ import annotations
 

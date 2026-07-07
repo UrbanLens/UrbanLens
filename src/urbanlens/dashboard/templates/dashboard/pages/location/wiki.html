@@ -69,8 +69,8 @@
                             hx-target="#pin-overview-stub"
                             hx-swap="none"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
-                            title="Switch your pin to {{ other.name }}">
+                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.display_name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
+                            title="Switch your pin to {{ other.display_name }}">
                         Switch
                     </button>
                     {% endif %}
