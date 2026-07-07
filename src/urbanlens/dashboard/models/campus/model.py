@@ -77,6 +77,7 @@ class Campus(abstract.DashboardModel):
         blank=True,
         related_name="campuses",
     )
+    
     objects = CampusManager()
 
     if TYPE_CHECKING:

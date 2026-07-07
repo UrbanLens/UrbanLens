@@ -44,6 +44,7 @@ class AddressableModel(DashboardModel):
     zipcode = CharField(max_length=10, null=True, blank=True)
     zipcode_suffix = CharField(max_length=10, null=True, blank=True)
     point = PointField(geography=True, default=Point(0, 0))
+    
     google_place = ForeignKey(
         "dashboard.GooglePlace",
         on_delete=SET_NULL,
