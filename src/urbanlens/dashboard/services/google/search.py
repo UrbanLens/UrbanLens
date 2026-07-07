@@ -27,7 +27,7 @@ def _mask_secret(value: str | None) -> str:
         return "<missing>"
     if len(value) <= 8:
         return "<redacted>"
-    return f"{value[:2]}...{value[-2:]}"
+    return f"{value[:1]}...{value[-1:]}"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

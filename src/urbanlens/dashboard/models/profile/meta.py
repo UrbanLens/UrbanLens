@@ -32,6 +32,13 @@ class ThemeChoice(TextChoices):
     DARK = "dark", "Dark"
 
 
+class DistanceUnit(TextChoices):
+    """Preferred unit for displaying distances and travel statistics."""
+
+    KILOMETERS = "km", "Kilometers"
+    MILES = "mi", "Miles"
+
+
 class GuidanceLevel(TextChoices):
     """How in-app help is shown: walkthrough cards and/or hover hints."""
 

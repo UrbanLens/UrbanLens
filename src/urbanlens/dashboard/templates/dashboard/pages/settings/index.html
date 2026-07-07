@@ -213,6 +213,17 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field">
+                <label class="settings-label" for="{{ style_form.distance_units.id_for_label }}">
+                    {{ style_form.distance_units.label }}
+                </label>
+                <p class="settings-help">{{ style_form.distance_units.help_text }}</p>
+                {{ style_form.distance_units }}
+                {% if style_form.distance_units.errors %}
+                <p class="settings-error">{{ style_form.distance_units.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>

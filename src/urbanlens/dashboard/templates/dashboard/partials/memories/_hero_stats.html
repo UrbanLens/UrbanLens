@@ -2,8 +2,8 @@
     <div class="memories-stat-tile">
         <div class="memories-stat-icon"><i class="material-symbols-outlined">route</i></div>
         <div>
-            <div class="memories-stat-value">{{ hero_stats.total_distance_km|floatformat:1 }} km</div>
-            <div class="memories-stat-label">Distance traveled</div>
+            <div class="memories-stat-value">{{ hero_stats.total_distance|floatformat:1 }} {{ hero_stats.distance_unit }}</div>
+            <div class="memories-stat-label" title="Recorded routes plus the distance between each of your visits, in order.">Distance traveled</div>
         </div>
     </div>
     <div class="memories-stat-tile">

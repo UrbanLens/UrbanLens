@@ -3,6 +3,7 @@
 from django import forms
 
 from urbanlens.dashboard.models.profile.model import (
+    DistanceUnit,
     GuidanceLevel,
     MapCenterMode,
     MapViewChoice,
@@ -162,10 +163,22 @@ class StyleSettingsForm(forms.ModelForm):
         label="In-app Help",
         help_text="Choose how UrbanLens introduces features as you explore.",
     )
+    distance_units = forms.ChoiceField(
+        choices=DistanceUnit.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Distance Units",
+        help_text="Units for distances and travel stats. Defaults to your region.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["theme_mode", "map_dark_mode", "guidance_level"]
+        fields = ["theme_mode", "map_dark_mode", "guidance_level", "distance_units"]
+
+    def __init__(self, *args, **kwargs):
+        """Preselect the region-inferred unit when the user has not chosen one yet."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and self.instance.pk and not self.instance.distance_units:
+            self.initial["distance_units"] = self.instance.effective_distance_units
 
 
 class ContactMethodsForm(forms.ModelForm):

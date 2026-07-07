@@ -111,6 +111,30 @@ def add_page_name(request: HttpRequest) -> dict[str, str]:
     return {"page_name": page_name}
 
 
+def add_distance_units(request: HttpRequest) -> dict[str, str]:
+    """Expose the viewer's effective distance unit to every template.
+
+    Templates render distances (stored internally in kilometres) in this unit via
+    the ``distance`` filter, e.g. ``{{ value_km|distance:distance_units }}``.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``distance_units`` ("km" or "mi"), defaulting to "km" for
+        anonymous users or when the profile is unavailable.
+    """
+    from urbanlens.dashboard.models.profile.meta import DistanceUnit
+
+    units = DistanceUnit.KILOMETERS.value
+    if isinstance(request.user, User):
+        try:
+            units = request.user.profile.effective_distance_units
+        except (AttributeError, DatabaseError):
+            units = DistanceUnit.KILOMETERS.value
+    return {"distance_units": units}
+
+
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     """Expose subscription-gated feature visibility to templates."""
     try:

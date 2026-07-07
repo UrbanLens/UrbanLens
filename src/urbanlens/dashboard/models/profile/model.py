@@ -21,7 +21,7 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.profile.meta import GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
 
 if TYPE_CHECKING:
@@ -45,6 +45,32 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     dlat, dlng = lat2 - lat1, lng2 - lng1
     a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
     return 6_371.0 * 2 * math.asin(math.sqrt(a))
+
+
+# Rough lat/lng bounding boxes for the regions that use miles for everyday road
+# distances. Used only to pick a sensible *default* distance unit when the user
+# has not chosen one explicitly; a false negative just falls back to kilometres.
+# Each entry is (min_lat, max_lat, min_lng, max_lng).
+_MILES_REGION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
+    (24.0, 50.0, -125.0, -66.0),   # Contiguous United States
+    (51.0, 72.0, -170.0, -129.0),  # Alaska
+    (18.0, 23.0, -161.0, -154.0),  # Hawaii
+    (49.5, 61.0, -8.7, 2.0),       # United Kingdom
+    (4.0, 9.0, -12.0, -7.0),       # Liberia
+    (9.0, 29.0, 92.0, 102.0),      # Myanmar
+)
+
+
+def _units_for_point(lat: float, lng: float) -> str:
+    """Return the default distance unit for a geographic point.
+
+    Points inside a miles-using region resolve to miles; everything else
+    (and any point that cannot be classified) defaults to kilometres.
+    """
+    for min_lat, max_lat, min_lng, max_lng in _MILES_REGION_BBOXES:
+        if min_lat <= lat <= max_lat and min_lng <= lng <= max_lng:
+            return DistanceUnit.MILES
+    return DistanceUnit.KILOMETERS
 
 
 class Profile(abstract.PublicDashboardModel):
@@ -123,6 +149,16 @@ class Profile(abstract.PublicDashboardModel):
         choices=GuidanceLevel.choices,
         default=GuidanceLevel.ALL,
         help_text="Whether to show feature walkthroughs, and hover hints.",
+    )
+    # Preferred unit for displayed distances. Null means "not chosen yet" - the
+    # effective unit is then inferred from the user's location (see
+    # effective_distance_units), defaulting to kilometres.
+    distance_units = CharField(
+        max_length=4,
+        choices=DistanceUnit.choices,
+        null=True,
+        blank=True,
+        help_text="Unit used for distances and travel stats. Defaults to your region.",
     )
     map_dark_mode = CharField(
         max_length=10,
@@ -207,6 +243,43 @@ class Profile(abstract.PublicDashboardModel):
     def show_hover_tooltips(self) -> bool:
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
+
+    def _best_known_point(self) -> tuple[float, float] | None:
+        """Return a representative (lat, lng) for this profile without extra computation.
+
+        Uses already-persisted coordinates only - the explicit custom center, the
+        cached pin centroid, or the last remembered map position - so it is cheap
+        and side-effect free (it never triggers the O(n²) centroid computation).
+
+        Returns:
+            A (latitude, longitude) tuple, or None if no coordinate is on record.
+        """
+        for lat, lng in (
+            (self.map_custom_latitude, self.map_custom_longitude),
+            (self.map_center_latitude, self.map_center_longitude),
+            (self.remembered_map_lat, self.remembered_map_lng),
+        ):
+            if lat is not None and lng is not None:
+                return float(lat), float(lng)
+        return None
+
+    @property
+    def effective_distance_units(self) -> str:
+        """Return the distance unit to display for this profile.
+
+        An explicit ``distance_units`` choice always wins. Otherwise the unit is
+        inferred from the profile's known location, defaulting to kilometres when
+        the location is unknown or not in a miles-using region.
+
+        Returns:
+            A ``DistanceUnit`` value ("km" or "mi").
+        """
+        if self.distance_units:
+            return self.distance_units
+        point = self._best_known_point()
+        if point is not None:
+            return _units_for_point(*point)
+        return DistanceUnit.KILOMETERS
 
     @property
     def username(self):

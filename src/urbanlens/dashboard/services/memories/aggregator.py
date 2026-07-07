@@ -74,7 +74,9 @@ def _date_to_datetime(value: date) -> datetime:
 def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Route that started within the given range."""
     from urbanlens.dashboard.models.routes.model import Route
+    from urbanlens.dashboard.services.units import format_distance
 
+    units = profile.effective_distance_units
     routes = Route.objects.for_profile(profile).in_date_range(start, end)
     if bbox is not None:
         routes = routes.intersecting_bbox(bbox.min_lat, bbox.min_lng, bbox.max_lat, bbox.max_lng)
@@ -87,7 +89,7 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             occurred_at=route.started_at,
             ended_at=route.ended_at,
             title=route.name or route.get_source_display(),
-            subtitle=f"{distance_km:.1f} km",
+            subtitle=format_distance(distance_km, units),
             latitude=start_lat,
             longitude=start_lng,
             url="",

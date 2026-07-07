@@ -72,6 +72,7 @@ TEMPLATES = [
                 'urbanlens.dashboard.context_processors.add_page_name',
                 'urbanlens.dashboard.context_processors.add_site_settings',
                 'urbanlens.dashboard.context_processors.add_dev_toolbar',
+                'urbanlens.dashboard.context_processors.add_distance_units',
             ],
         },
     },

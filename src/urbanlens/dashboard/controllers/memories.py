@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import DateField, Min, Sum
+from django.db.models import DateField, Min
 from django.db.models.functions import Cast, Coalesce
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -20,6 +20,8 @@ from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
+from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
+from urbanlens.dashboard.services.units import km_to_display, unit_label
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -102,9 +104,10 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        routes = Route.objects.for_profile(profile)
-        total_distance_m = routes.aggregate(total=Sum("distance_meters"))["total"] or 0.0
-        route_count = routes.count()
+        route_count = Route.objects.for_profile(profile).count()
+        # Distance traveled = recorded route length + travel between consecutive visits.
+        total_distance_km = total_travel_distance_km(profile)
+        units = profile.effective_distance_units
         places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
         photo_count = Image.objects.filter(profile=profile).count()
         trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
@@ -121,7 +124,8 @@ class MemoriesView(LoginRequiredMixin, View):
                 "page_name": "memories",
                 "has_memory_data": has_memory_data,
                 "hero_stats": {
-                    "total_distance_km": round(total_distance_m / 1000, 1),
+                    "total_distance": round(km_to_display(total_distance_km, units), 1),
+                    "distance_unit": unit_label(units),
                     "places_visited": places_visited,
                     "photo_count": photo_count,
                     "trip_count": trip_count,

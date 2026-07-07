@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
@@ -76,6 +77,31 @@ class Location(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.A
 
     objects = LocationManager()
 
+    @property
+    def categories(self):
+        """Badges of kind "category" attached to this location."""
+        return self.badges.all().categories()
+
+    @property
+    def tags(self):
+        """Badges of kind "tag" attached to this location."""
+        return self.badges.all().tags()
+
+    @property
+    def statuses(self):
+        """Badges of kind "status" attached to this location."""
+        return self.badges.all().statuses()
+
+    @property
+    def effective_date_last_active(self):
+        """Date the place was last active, inferred from date_abandoned if not set explicitly."""
+
+        if self.date_last_active is not None:
+            return self.date_last_active
+        if self.date_abandoned is not None:
+            return self.date_abandoned - timedelta(days=1)
+        return None
+
     def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
         """Name to use when searching for this location in external APIs."""
         name = self.official_name
@@ -95,35 +121,10 @@ class Location(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.A
         if include_country and self.country:
             parts.append(self.country)
         return " ".join(parts)
-
-    @property
-    def categories(self):
-        """Badges of kind "category" attached to this location."""
-        return self.badges.all().categories()
-
-    @property
-    def tags(self):
-        """Badges of kind "tag" attached to this location."""
-        return self.badges.all().tags()
-
-    @property
-    def statuses(self):
-        """Badges of kind "status" attached to this location."""
-        return self.badges.all().statuses()
-
-    @property
-    def effective_date_last_active(self):
-        """Date the place was last active, inferred from date_abandoned if not set explicitly."""
-        from datetime import timedelta
-
-        if self.date_last_active is not None:
-            return self.date_last_active
-        if self.date_abandoned is not None:
-            return self.date_abandoned - timedelta(days=1)
-        return None
-
+    
     def add_category(self, category_name: str, save: bool = True) -> Badge | None:
         from urbanlens.dashboard.models.badges.model import Badge
+        # TODO: Assess whether this method is still used. It should be deprecated judging by its semantic name.
 
         category_name = category_name.lower()
         try:

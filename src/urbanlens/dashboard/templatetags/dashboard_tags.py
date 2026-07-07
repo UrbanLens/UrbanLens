@@ -64,6 +64,33 @@ def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
 
 
 @register.filter
+def distance(distance_km: Any, units: str = "km") -> str:
+    """Format a kilometre distance in the viewer's preferred unit.
+
+    Distances are stored/computed internally in kilometres; this renders them in
+    the unit from ``distance_units`` (exposed globally by the
+    ``add_distance_units`` context processor), converting to miles when asked.
+
+    Usage: {{ route.distance_km|distance:distance_units }}
+
+    Args:
+        distance_km: A numeric distance in kilometres (``None``/invalid -> "").
+        units: A ``DistanceUnit`` value ("km" or "mi"); defaults to kilometres.
+
+    Returns:
+        A formatted string like ``"12.3 km"`` or ``"7.6 mi"``, or "" if the
+        input is not a number.
+    """
+    from urbanlens.dashboard.services.units import format_distance
+
+    try:
+        value = float(distance_km)
+    except (TypeError, ValueError):
+        return ""
+    return format_distance(value, units or "km")
+
+
+@register.filter
 def human_timesince(value: datetime.datetime | datetime.date) -> str:
     """Return a human-friendly relative time string.
 
