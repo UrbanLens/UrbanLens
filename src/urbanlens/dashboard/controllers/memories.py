@@ -54,6 +54,35 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
     return BBox(min_lat, min_lng, max_lat, max_lng)
 
 
+def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[int, str]:
+    """Describe how long a profile has been active in the largest sensible time unit.
+
+    Picks the coarsest unit (years, months, weeks, days) that still yields a
+    count of at least one, so a brand-new account whose only memory is a few
+    months old reads "3 months active" instead of a misleading "1 years active".
+
+    Args:
+        earliest: The earliest date across the profile's memories, or None if it has none.
+        today: The current date to measure against.
+
+    Returns:
+        A ``(count, unit)`` tuple, e.g. ``(3, "Months")``. The unit is singular
+        when ``count`` is 1 (e.g. ``(1, "Day")``).
+    """
+    if earliest is None:
+        return (0, "Days")
+    days = max((today - earliest).days, 0)
+    if days >= 365:
+        count, unit = days // 365, "Year"
+    elif days >= 60:
+        count, unit = days // 30, "Month"
+    elif days >= 14:
+        count, unit = days // 7, "Week"
+    else:
+        count, unit = max(days, 1), "Day"
+    return (count, unit if count == 1 else f"{unit}s")
+
+
 def _earliest_memory_date(profile: Profile) -> datetime.date | None:
     """Return the earliest date across all of a profile's memory sources, for scrubber bounds."""
     candidates: list[datetime.date] = []
@@ -115,6 +144,7 @@ class MemoriesView(LoginRequiredMixin, View):
 
         today = timezone.now().date()
         earliest = _earliest_memory_date(profile)
+        active_count, active_unit = _active_span(earliest, today)
 
         return render(
             request,
@@ -129,7 +159,8 @@ class MemoriesView(LoginRequiredMixin, View):
                     "places_visited": places_visited,
                     "photo_count": photo_count,
                     "trip_count": trip_count,
-                    "years_active": (today.year - earliest.year + 1) if earliest else 0,
+                    "active_count": active_count,
+                    "active_unit": active_unit,
                 },
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
                 "today": today.isoformat(),
