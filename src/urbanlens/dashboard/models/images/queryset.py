@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Manager, Q, QuerySet
+from django.db.models import Q
+
+from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
-class ImageQuerySet(QuerySet):
+class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
 
@@ -221,5 +223,5 @@ class ImageQuerySet(QuerySet):
         ).order_by("-created")
 
 
-class ImageManager(Manager.from_queryset(ImageQuerySet)):
+class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
     pass

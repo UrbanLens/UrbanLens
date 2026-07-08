@@ -46,27 +46,42 @@ def maybe_suggest_photo_visit(image: Image) -> VisitSuggestion | None:
         return None
     if image.pin_id and image.pin:
         return _suggest_for_pinned_photo(image)
-    if image.profile_id and not image.location_id:
+    if image.profile_id and not image.wiki_id:
         return _suggest_for_unfiled_photo(image)
     return None
 
 
 def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
-    """Raise a visit suggestion for a photo uploaded directly to one of the user's pins."""
+    """Create a visit suggestion for a photo uploaded directly to one of the user's pins."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.services.visits import create_visit_suggestion
 
-    pin: Pin = image.pin
-
-    photo_point = Point(float(image.longitude), float(image.latitude), srid=4326)
-    within_range = Pin.objects.filter(
-        pk=pin.pk,
-        point__distance_lte=(photo_point, D(m=PHOTO_VISIT_MATCH_RADIUS_M)),
-    ).exists()
-    if not within_range:
-        logger.debug("Photo %s GPS too far from pin %s, skipping visit suggestion.", image.pk, pin.pk)
+    # We can't create date-required suggestions if the image has no capture time.
+    if not image.taken_at:
         return None
+
+    if not image.pin:
+        logger.warning("_suggest_for_pinned_photo: Image %s has no pin", image.pk)
+        return None
+    
+    profile = image.profile or image.pin.profile
+    if not profile:
+        logger.warning("_suggest_for_pinned_photo: Image %s has no profile", image.pk)
+        return None
+    
+    pin: Pin = image.pin
+    
+    # If the image has a lat/lng, then ensure it's within the pin's radius.
+    if image.longitude is not None and image.latitude is not None:
+        photo_point = Point(float(image.longitude), float(image.latitude), srid=4326)
+        within_range = Pin.objects.filter(
+            pk=pin.pk,
+            point__distance_lte=(photo_point, D(m=PHOTO_VISIT_MATCH_RADIUS_M)),
+        ).exists()
+        if not within_range:
+            logger.debug("Photo %s GPS too far from pin %s, skipping visit suggestion.", image.pk, pin.pk)
+            return None
 
     lat = pin.effective_latitude
     lng = pin.effective_longitude
@@ -85,7 +100,7 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
         return None
 
     return create_visit_suggestion(
-        suggested_to=pin.profile,
+        suggested_to=profile,
         suggested_by=None,
         visited_at=image.taken_at,
         location=pin.location,

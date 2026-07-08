@@ -76,7 +76,7 @@ class Image(abstract.FrontendDashboardModel):
 
     objects = ImageManager()
 
-    class Meta(abstract.DashboardModel.Meta):
+    class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_images"
         get_latest_by = "updated"
         indexes = [Index(fields=["uuid"], name="idxdb_image_uuid")]
