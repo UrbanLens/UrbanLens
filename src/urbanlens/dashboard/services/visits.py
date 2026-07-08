@@ -405,6 +405,25 @@ def add_visited_status(pin: Pin) -> None:
         pin.badges.add(visited_badge)
 
 
+def remove_visited_status(pin: Pin) -> None:
+    """Clear a pin's "Visited" marking - the profile's status badge and last_visited.
+
+    Used when a pin was marked visited by mistake (e.g. a stray status badge or
+    an import glitch) and the user doesn't want to log a dated visit for it, so
+    it should stop being surfaced in the Memories "log your visits" queue.
+
+    Args:
+        pin: Pin instance to update in-place.
+    """
+    from urbanlens.dashboard.models.badges.model import Badge
+
+    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_badge:
+        pin.badges.remove(visited_badge)
+    pin.last_visited = None
+    pin.save(update_fields=["last_visited"])
+
+
 def sync_last_visited(pin: Pin) -> None:
     """Recompute pin.last_visited from the most recent PinVisit row.
 

@@ -84,6 +84,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     vulnerability = IntegerField(default=0)
     danger = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
+    # Set when the user dismisses this pin from the Memories "log your visits"
+    # queue without logging a visit or clearing its visited status - keeps that
+    # queue finite without affecting whether the pin counts as visited elsewhere.
+    unlogged_visit_dismissed = BooleanField(default=False)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
 

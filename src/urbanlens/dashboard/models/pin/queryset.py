@@ -50,13 +50,14 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         ``has_visits`` filter used elsewhere. Such a pin can still lack any
         ``PinVisit`` row (e.g. imported pins, or a status set by hand), leaving a
         gap the Memories page surfaces so the user can log a concrete, dated visit.
+        Pins the user dismissed from that queue are excluded.
 
         Returns:
             Distinct top-level pins that are marked visited but have zero rows in
             their ``visit_history``.
         """
         visited_q = Q(last_visited__isnull=False) | Q(badges__name="Visited", badges__kind="status")
-        return self.root_pins().filter(visited_q).filter(visit_history__isnull=True).distinct()
+        return self.root_pins().filter(visited_q).filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
     def not_visited_this_year(self):
         return self.filter(last_visited__year__lt=timezone.now().year)
