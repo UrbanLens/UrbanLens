@@ -125,8 +125,17 @@ Context:
   var _dragDepth = 0;
   var _overlay   = document.getElementById('gallery-drop-overlay');
 
+  // Drags that originate inside the page (photo thumbnails, panel items, etc.)
+  // must never open the drop-to-upload overlay - browsers attach the image file
+  // to such drags, so treating them as uploads would re-upload an existing
+  // photo. OS file drags never fire dragstart inside the page, which is what
+  // distinguishes them.
+  var _internalDrag = false;
+  document.addEventListener('dragstart', function () { _internalDrag = true; });
+  document.addEventListener('dragend', function () { _internalDrag = false; });
+
   function _isFilesDrag(e) {
-    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    return !_internalDrag && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
   }
 
   document.addEventListener('dragenter', function (e) {
@@ -144,6 +153,7 @@ Context:
   // Drop anywhere outside the overlay hides it without uploading
   document.addEventListener('drop', function (e) {
     _dragDepth = 0;
+    _internalDrag = false;
     if (_overlay) _overlay.hidden = true;
   });
 
@@ -155,12 +165,14 @@ Context:
     }
   });
 
-  // Drop ON the overlay uploads the files
+  // Drop ON the overlay uploads the files (never for an in-page drag - the
+  // overlay shouldn't be visible then, but guard against races anyway).
   window._galleryOverlayDrop = function (e) {
     e.preventDefault();
     e.stopPropagation();
     _dragDepth = 0;
     if (_overlay) _overlay.hidden = true;
+    if (_internalDrag) { _internalDrag = false; return; }
     galleryHandleFiles(e.dataTransfer.files);
   };
 
@@ -173,29 +185,39 @@ Context:
     var total = files.length;
     var done = 0;
 
+    function _finishOne() {
+      done++;
+      if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+      if (done === total) {
+        setTimeout(function () {
+          if (progress) progress.hidden = true;
+          if (bar) bar.style.width = '0';
+        }, 800);
+      }
+    }
+
     Array.from(files).forEach(function (file) {
       var fd = new FormData();
       fd.append('image', file);
       fd.append('csrfmiddlewaretoken', CSRF_TOKEN);
 
       fetch(UPLOAD_URL, { method: 'POST', body: fd })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          // Surface server-side rejections (e.g. 409 duplicate photo) as errors.
+          return r.json().catch(function () { return {}; }).then(function (data) {
+            if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+          });
+        })
         .then(function (img) {
-          done++;
-          if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+          _finishOne();
           _addItemToGrid(img);
           if (window._galleryAddMarker) window._galleryAddMarker(img);
-          if (done === total) {
-            setTimeout(function () {
-              if (progress) progress.hidden = true;
-              if (bar) bar.style.width = '0';
-            }, 800);
-          }
           var empty = document.getElementById('gallery-empty');
           if (empty) empty.remove();
         })
         .catch(function (err) {
-          done++;
+          _finishOne();
           if (window.toastr) toastr.error('Upload failed: ' + (err.message || 'unknown error'));
         });
     });
@@ -259,9 +281,19 @@ Context:
   };
 
   // -- Lightbox ---------------------------------------------------------------
-  window.galleryOpenLightbox = function (imgId) {
+  // `fallback` ({url, caption}) covers photos not on the currently rendered
+  // (paginated) gallery page - e.g. opened from a map thumbnail marker.
+  window.galleryOpenLightbox = function (imgId, fallback) {
     _lightboxIdx = _items.findIndex(function (i) { return i.id === imgId; });
-    if (_lightboxIdx < 0) _lightboxIdx = 0;
+    if (_lightboxIdx < 0) {
+      _lightboxIdx = 0;
+      if (fallback && fallback.url) {
+        document.getElementById('lightbox-img').src = fallback.url;
+        document.getElementById('lightbox-caption').textContent = fallback.caption || '';
+        document.getElementById('gallery-lightbox').showModal();
+        return;
+      }
+    }
     _showLightbox();
     document.getElementById('gallery-lightbox').showModal();
   };

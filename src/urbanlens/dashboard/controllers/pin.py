@@ -851,8 +851,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: National Park Service information for the pin's location.
 
-        Looks for a national park whose centre is within 50 km of the pin and
-        whose data was retrieved from the NPS API.  Requires an NPS API key.
+        Shows the NPS unit whose boundary *contains* the pin's coordinates, if
+        any -- the panel is about the pinned place being inside a national park,
+        not merely near one. Requires an NPS API key.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
@@ -872,9 +873,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
-        state_code = location.administrative_area_level_1 or ""
-        if not lat or not lng or not state_code:
-            logger.debug("nps_info: pin %s missing lat/lng or state_code, skipping", pin_slug)
+        if not lat or not lng:
+            logger.debug("nps_info: pin %s missing lat/lng, skipping", pin_slug)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "nps")
@@ -883,7 +883,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         data = cached.data or None
 
         if not data:
-            logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
+            logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
         context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}

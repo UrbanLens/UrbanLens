@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.visits import accept_visit_suggestion, reject_visit_suggestion
@@ -50,7 +50,7 @@ def _attention_cards(profile: Profile) -> list[dict]:
         capped at ``_ATTENTION_LIMIT``. Only actionable states are included
         (``filed`` photos are dropped).
     """
-    images = list(Image.objects.needs_attention(profile)[:_ATTENTION_LIMIT])
+    images = list(Image.objects.needs_attention(profile).select_related("location")[:_ATTENTION_LIMIT])
     pending = {
         s.origin_image_id: s
         for s in VisitSuggestion.objects.filter(
@@ -66,7 +66,7 @@ def _attention_cards(profile: Profile) -> list[dict]:
         suggestion = pending.get(image.pk)
         if suggestion is not None:
             state = "suggested"
-        elif image.latitude is not None and image.longitude is not None:
+        elif image.effective_latitude is not None and image.effective_longitude is not None:
             state = "needs_pin"
         else:
             state = "needs_location"
@@ -214,7 +214,11 @@ class PhotoUploadView(LoginRequiredMixin, View):
         if not (image_file.content_type or "").startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
 
-        img = Image.objects.create(image=image_file, profile=profile)
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+
+        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -265,8 +269,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         lat = _parse_float(request.POST.get("latitude"))
         lng = _parse_float(request.POST.get("longitude"))
         if lat is None or lng is None:
-            lat = float(image.latitude) if image.latitude is not None else None
-            lng = float(image.longitude) if image.longitude is not None else None
+            lat = float(image.effective_latitude) if image.effective_latitude is not None else None
+            lng = float(image.effective_longitude) if image.effective_longitude is not None else None
         if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
         # TODO: We must sanitize the name to prevent XSS attacks.
@@ -370,7 +374,7 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
             viewer's or has no coordinates to place a marker at.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        image = get_object_or_404(Image, pk=image_id)
-        if image.profile_id != profile.pk or image.latitude is None or image.longitude is None:
+        image = get_object_or_404(Image.objects.select_related("location"), pk=image_id)
+        if image.profile_id != profile.pk or image.effective_latitude is None or image.effective_longitude is None:
             raise Http404
         return render(request, "dashboard/partials/memories/_photo_pin_confirm.html", {"image": image})

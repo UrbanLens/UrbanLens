@@ -411,6 +411,12 @@ markup_border_color, markup_border_opacity.
         });
         marker.on('mouseover', function () { window._galleryHighlightMarker(imgId, true); });
         marker.on('mouseout',  function () { window._galleryHighlightMarker(imgId, false); });
+        // Open the photo in the gallery lightbox. The url is passed as a
+        // fallback because the gallery grid is paginated - this photo may not
+        // be on the currently rendered gallery page.
+        marker.on('click', function () {
+            if (window.galleryOpenLightbox) window.galleryOpenLightbox(imgId, { url: url });
+        });
         marker.addTo(_photoLayer);
         _photoMarkers[imgId] = { marker, url, lat, lng };
     }
@@ -468,15 +474,14 @@ markup_border_color, markup_border_opacity.
             li.className = 'photo-panel-item';
             li.dataset.id = img.id;
             li.draggable = true;
-            li.title = hasCoords ? 'Drag to reposition · click to view' : 'Drag onto map to set location · click to view';
+            li.title = 'Click to view';
             li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
-                    <img src="${img.url}" class="photo-panel-thumb" alt="">
-                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS - drag to map'}">
+                    <img src="${img.url}" class="photo-panel-thumb" alt="" draggable="false">
+                    <span class="photo-panel-coord-badge ${hasCoords ? 'has-gps' : 'no-gps'}" title="${hasCoords ? 'Has GPS' : 'No GPS'}">
                         <i class="material-icons">${hasCoords ? 'place' : 'location_off'}</i>
                     </span>
-                </div>
-                <span class="photo-panel-hint">${hasCoords ? 'Drag to move' : 'Drag to map'}</span>`;
+                </div>`;
             li.addEventListener('mouseenter', () => window._galleryHighlightMarker(img.id, true));
             li.addEventListener('mouseleave', () => window._galleryHighlightMarker(img.id, false));
             li.addEventListener('dragstart', e => {
@@ -487,7 +492,7 @@ markup_border_color, markup_border_opacity.
             li.addEventListener('dragend', () => li.classList.remove('is-dragging'));
             li.addEventListener('click', () => {
                 if (hasCoords) map.panTo([img.lat, img.lng]);
-                if (window.galleryOpenLightbox) window.galleryOpenLightbox(img.id);
+                if (window.galleryOpenLightbox) window.galleryOpenLightbox(img.id, { url: img.url });
             });
             ul.appendChild(li);
         });

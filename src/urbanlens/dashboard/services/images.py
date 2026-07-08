@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
+import hashlib
 import logging
 from typing import IO, TYPE_CHECKING, Any
 
@@ -98,6 +99,27 @@ def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
         logger.debug("Unparseable EXIF DateTimeOriginal value: %s", raw_value)
         return None
     return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
+
+
+def compute_checksum(image_file: IO[bytes]) -> str:
+    """Compute the SHA-256 hex digest of an uploaded image file.
+
+    Used to detect duplicate uploads: two files with the same digest are the
+    same photo. The file position is rewound before and after hashing so the
+    file can still be saved afterwards.
+
+    Args:
+        image_file: The file to hash (an UploadedFile or an opened FieldFile).
+
+    Returns:
+        The 64-character lowercase hex digest.
+    """
+    image_file.seek(0)
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
+        digest.update(chunk)
+    image_file.seek(0)
+    return digest.hexdigest()
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:

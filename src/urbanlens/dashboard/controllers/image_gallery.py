@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.images import extract_gps_coords, image_to_gallery_json
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
 
 if TYPE_CHECKING:
@@ -54,19 +54,25 @@ class PinGalleryView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
-        """Upload an image to a pin."""
+        """Upload an image to a pin. Rejects a file the uploader already has on this pin."""
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
+
         img = Image.objects.create(
             image=image_file,
             pin=pin,
             wiki=_wiki_for_location(pin.location),
+            location=pin.location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
+            checksum=checksum,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -137,6 +143,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
         location = get_object_or_404(Location, slug=location_slug)
         wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -144,11 +151,17 @@ class WikiGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
+
         img = Image.objects.create(
             image=image_file,
             wiki=wiki,
+            location=location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
+            checksum=checksum,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

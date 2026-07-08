@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from celery import shared_task
 
 from urbanlens.dashboard.services.celery import update_task_progress
 from urbanlens.dashboard.services.locations.creation import LocationCreationService
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +25,11 @@ def create_location_for_pin(self, pin_id: int) -> int | None:
     location = LocationCreationService().create_for_pin(pin_id)
     update_task_progress(self, current=1, total=1, message="Location ready")
     if location:
+        # Photos attached to the pin before its Location existed (e.g. the
+        # Memories create-pin-from-photo flow) inherit it now.
+        from urbanlens.dashboard.models.images.model import Image
+
+        Image.objects.filter(pin_id=pin_id, location__isnull=True).update(location_id=location.pk)
         logger.info("Created/linked location %s for pin %s", location.pk, pin_id)
         return location.pk
     logger.info("No location created for pin %s", pin_id)
@@ -190,16 +200,16 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
 
-    # NPS (US locations only)
+    # NPS: caches the park the location sits inside, if any. Non-US coordinates
+    # are filtered out (before any network call) by find_park_containing_location.
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-    state_code = location.administrative_area_level_1 or ""
-    if state_code and app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
+    if app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
         try:
             from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
-            park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.official_name or "")
-            LocationCache.set(location, "nps", park or {}, query_key=state_code)
+            park = NPSGateway().find_park_containing_location(lat, lng)
+            LocationCache.set(location, "nps", park or {}, query_key=f"{lat:.5f},{lng:.5f}")
             update_location_name_from_external_sources(
                 location,
                 extra_candidates=[("nps", (park or {}).get("fullName") or (park or {}).get("name"))],
@@ -236,21 +246,28 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def process_image_upload(self, image_id: int) -> bool:
-    """Extract image metadata after upload and update the Image row."""
+    """Extract image metadata after upload and update the Image row.
+
+    Besides EXIF GPS/capture time, this backfills two derived fields when
+    missing: the duplicate-detection ``checksum`` (rows predating that field)
+    and the shared ``location`` link - taken from the pin/wiki the photo is
+    attached to, or resolved from its GPS via ``get_nearby_or_create``.
+    """
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.images import extract_gps_coords, extract_taken_at
+    from urbanlens.dashboard.services.images import compute_checksum, extract_gps_coords, extract_taken_at
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
-    image = Image.objects.filter(pk=image_id).select_related("pin").first()
+    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location").first()
     if image is None or not image.image:
         return False
     try:
         with image.image.open("rb") as image_file:
             coords = extract_gps_coords(image_file)
             taken_at = extract_taken_at(image_file)
+            checksum = compute_checksum(image_file) if not image.checksum else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
@@ -265,6 +282,16 @@ def process_image_upload(self, image_id: int) -> bool:
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at
+    if checksum:
+        image.checksum = checksum
+        update_fields["checksum"] = checksum
+
+    if image.location_id is None:
+        location = _resolve_image_location(image, coords)
+        if location is not None:
+            image.location = location
+            update_fields["location"] = location
+
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
 
@@ -272,6 +299,32 @@ def process_image_upload(self, image_id: int) -> bool:
 
     update_task_progress(self, current=1, total=1, message="Image metadata processed")
     return True
+
+
+def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:
+    """Resolve the shared Location an image belongs to, if determinable.
+
+    Prefers the Location of the pin or wiki the photo is attached to; otherwise
+    falls back to matching/creating a Location at the photo's GPS coordinates.
+
+    Args:
+        image: The Image needing a location link.
+        coords: (latitude, longitude) extracted from EXIF, or None.
+
+    Returns:
+        The resolved Location, or None when nothing places the photo.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    if image.pin is not None and image.pin.location_id is not None:
+        return image.pin.location
+    if image.wiki is not None and image.wiki.location_id is not None:
+        return image.wiki.location
+    if coords:
+        lat, lng = coords
+        location, _created = Location.objects.get_nearby_or_create(lat, lng)
+        return location
+    return None
 
 
 def _run_database_backup(task=None) -> bool:

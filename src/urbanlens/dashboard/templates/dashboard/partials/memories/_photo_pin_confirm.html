@@ -8,12 +8,13 @@ buttons both POST and swap the card by id; the enclosing dialog closes itself on
 any successful POST (see #photo-pin-confirm-dialog in photos.html).
 
 Context:
-  image - the geotagged Image a pin is being created for (has latitude/longitude)
+  image - the Image a pin is being created for (has effective coordinates from
+          its own GPS or its linked Location)
 {% endcomment %}
 <div id="photo-pin-confirm"
      data-image-id="{{ image.pk }}"
-     data-lat="{{ image.latitude|stringformat:'f' }}"
-     data-lng="{{ image.longitude|stringformat:'f' }}"
+     data-lat="{{ image.effective_latitude|stringformat:'f' }}"
+     data-lng="{{ image.effective_longitude|stringformat:'f' }}"
      data-places-url="{% url 'map.autocomplete.places' %}"
      data-resolve-url="{% url 'map.resolve_place' %}">
 
@@ -35,8 +36,8 @@ Context:
           hx-target="#photo-card-{{ image.pk }}"
           hx-swap="outerHTML">
         {% csrf_token %}
-        <input type="hidden" name="latitude" id="photo-pin-confirm-lat" value="{{ image.latitude|stringformat:'f' }}">
-        <input type="hidden" name="longitude" id="photo-pin-confirm-lng" value="{{ image.longitude|stringformat:'f' }}">
+        <input type="hidden" name="latitude" id="photo-pin-confirm-lat" value="{{ image.effective_latitude|stringformat:'f' }}">
+        <input type="hidden" name="longitude" id="photo-pin-confirm-lng" value="{{ image.effective_longitude|stringformat:'f' }}">
         <div class="form-row">
             <label for="photo-pin-confirm-name">Pin name <small>(optional)</small></label>
             <input type="text" name="name" id="photo-pin-confirm-name"

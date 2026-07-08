@@ -624,11 +624,18 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
+        from urbanlens.dashboard.services.images import compute_checksum
+
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
+            return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
         img = Image.objects.create(
             image=image_file,
             safety_checkin=checkin,
+            location=checkin.destination_location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
+            checksum=checksum,
         )
         return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 

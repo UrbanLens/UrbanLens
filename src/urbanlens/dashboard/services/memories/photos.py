@@ -76,7 +76,7 @@ def classify_photo(image: Image) -> PhotoState:
         return "filed"
     if VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).exists():
         return "suggested"
-    if image.latitude is not None and image.longitude is not None:
+    if image.effective_latitude is not None and image.effective_longitude is not None:
         return "needs_pin"
     return "needs_location"
 
@@ -122,8 +122,8 @@ def create_pin_and_log_visit(
     Raises:
         ValueError: If neither an override nor the image supplies coordinates.
     """
-    lat = latitude if latitude is not None else image.latitude
-    lng = longitude if longitude is not None else image.longitude
+    lat = latitude if latitude is not None else image.effective_latitude
+    lng = longitude if longitude is not None else image.effective_longitude
     if lat is None or lng is None:
         raise ValueError("create_pin_and_log_visit requires coordinates (from the image or overrides)")
 
@@ -140,6 +140,8 @@ def create_pin_and_log_visit(
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO)
     image.pin = pin
     image.visit = visit
+    # The pin's shared Location is resolved by create_location_for_pin in the
+    # background, which also backfills image.location for the pin's photos.
     image.save(update_fields=["pin", "visit", "updated"])
     sync_last_visited(pin)
     add_visited_status(pin)
@@ -165,6 +167,9 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit:
     update_fields = ["pin", "visit", "updated"]
     image.pin = pin
     image.visit = visit
+    if image.location_id is None and pin.location_id is not None:
+        image.location = pin.location
+        update_fields.append("location")
     if image.latitude is None or image.longitude is None:
         image.latitude = pin.location.latitude
         image.longitude = pin.location.longitude

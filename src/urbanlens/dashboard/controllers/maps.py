@@ -475,9 +475,30 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
     def upload_image(self, request, pin_slug, *args, **kwargs):
+        """Attach an uploaded image to a pin.
+
+        Args:
+            request: Incoming request carrying an ``image`` file.
+            pin_slug: Slug of the target pin.
+
+        Returns:
+            An empty 200 response, 400 if no file was given, or 409 if the
+            uploader already has this exact file on the pin.
+        """
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.tasks import process_image_upload
+
         image = request.FILES.get("image")
+        if not image:
+            return HttpResponse("No image provided.", status=400)
         pin = Pin.objects.get(slug=pin_slug)
-        Image.objects.create(image=image, pin=pin)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checksum = compute_checksum(image)
+        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+            return HttpResponse("You already uploaded this photo to this pin.", status=409)
+        img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum)
+        safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 
     def change_category(self, request, pin_slug, *args, **kwargs):

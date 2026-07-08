@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -28,23 +29,26 @@ logger = logging.getLogger(__name__)
 _VISITS_PAGE_SIZE = 6
 
 
-def _visit_dialog_context(pin: Pin) -> dict[str, object]:
+def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, object]:
     """Build the shared context the add/edit visit dialogs need.
 
     Args:
         pin: Pin the dialog operates on.
+        visit: The visit being edited, if any - its own photos stay in the
+            picker; photos attached to *other* visits are always excluded.
 
     Returns:
         Context dict with ``pin``, the owner's ``pin_images`` (offered in the
         existing-photo picker), and taggable ``connections``.
     """
+    # The pin owner's own photos already on this pin, offered in the visit
+    # dialog so they can attach existing gallery photos to the visit. Photos
+    # already documenting a different visit are not offered.
+    pin_images = Image.objects.filter(pin=pin, profile=pin.profile)
+    pin_images = pin_images.filter(Q(visit__isnull=True) | Q(visit=visit)) if visit else pin_images.filter(visit__isnull=True)
     return {
         "pin": pin,
-        # The pin owner's own photos already on this pin, offered in the visit
-        # dialog so they can attach existing gallery photos to the visit.
-        "pin_images": list(
-            Image.objects.filter(pin=pin, profile=pin.profile).order_by("-created")[:60],
-        ),
+        "pin_images": list(pin_images.order_by("-created")[:60]),
         "connections": get_connections(pin.profile),
     }
 
@@ -87,8 +91,11 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
 
     - New files (POST ``photos``) are created as ``Image`` rows tied to the pin,
       its location, the owner, and this visit, then queued for EXIF processing.
+      A file the owner already uploaded to this pin (same checksum) is not
+      duplicated - the existing photo is attached to this visit instead.
     - Selected existing photos (POST ``existing_photo_ids``) - already in the pin
-      gallery - have their ``visit`` FK pointed at this visit.
+      gallery - have their ``visit`` FK pointed at this visit. Photos already
+      documenting a different visit are never reassigned.
     - Any gallery photo previously attached to this visit but no longer selected
       is detached (its ``visit`` FK is cleared). Freshly uploaded photos are
       never detached. Only the owner's own photos are ever touched.
@@ -103,26 +110,40 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
         gallery), False otherwise.
     """
     from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.images import compute_checksum
     from urbanlens.dashboard.tasks import process_image_upload
 
+    owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
+
     uploaded_pks: list[int] = []
+    reattached_pks: list[int] = []
     for image_file in request.FILES.getlist("photos"):
+        checksum = compute_checksum(image_file)
+        existing = owner_gallery.filter(checksum=checksum).first()
+        if existing is not None:
+            # Same file already in this pin's gallery - link it instead of
+            # storing a second copy.
+            reattached_pks.append(existing.pk)
+            continue
         img = Image.objects.create(
             image=image_file,
             pin=pin,
             location=pin.location,
             profile=pin.profile,
             visit=visit,
+            checksum=checksum,
         )
         safely_enqueue_task(process_image_upload, img.pk)
         uploaded_pks.append(img.pk)
 
     selected_ids = {int(pid) for pid in request.POST.getlist("existing_photo_ids") if pid.strip().isdigit()}
-    owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
-    if selected_ids:
-        owner_gallery.filter(pk__in=selected_ids).update(visit=visit)
+    attach_ids = selected_ids | set(reattached_pks)
+    if attach_ids:
+        # Only unattached photos (or ones already on this visit) may be linked -
+        # the picker doesn't offer other visits' photos, so enforce that here too.
+        owner_gallery.filter(pk__in=attach_ids).filter(Q(visit__isnull=True) | Q(visit=visit)).update(visit=visit)
     # Detach gallery photos that were on this visit but are no longer selected.
-    keep = selected_ids | set(uploaded_pks)
+    keep = attach_ids | set(uploaded_pks)
     owner_gallery.filter(visit=visit).exclude(pk__in=keep).update(visit=None)
 
     return bool(uploaded_pks)
@@ -274,7 +295,7 @@ class VisitEditView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/pins/_visit_form.html",
             {
-                **_visit_dialog_context(pin),
+                **_visit_dialog_context(pin, visit=visit),
                 "visit": visit,
                 "dialog_id": f"visit-edit-dialog-{pin.slug}",
             },

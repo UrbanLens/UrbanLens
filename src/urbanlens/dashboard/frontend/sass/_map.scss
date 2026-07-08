@@ -464,15 +464,6 @@
     }
 }
 
-.photo-panel-hint {
-    display: block;
-    padding: .18rem .3rem;
-    font-size: .62rem;
-    color: var(--ul-grey-6);
-    @include truncate;
-    background: rgba(255, 255, 255, .85);
-}
-
 .photo-panel-empty {
     grid-column: 1 / -1;
     display: flex;

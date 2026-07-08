@@ -23,20 +23,21 @@ class NpsPanelSource(LocationCachePanelSource):
     title = "National Park Service"
 
     def fetch(self, pin: Pin) -> None:
-        """Find a nearby national park via the NPS API and cache the result."""
+        """Cache NPS details for the park the pin sits inside, if any.
+
+        The panel is about the pinned place *being in* a national park, so the
+        result comes from a boundary-containment check -- not a proximity
+        search. When the pin falls outside every NPS unit an empty result is
+        cached, which keeps the panel hidden.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
         location = pin.location
-        state_code = location.administrative_area_level_1 or ""
-        location_name = pin.meaningful_official_name or pin.meaningful_name or ""
-        park = NPSGateway().find_park_near_location(
-            float(pin.effective_latitude or 0),
-            float(pin.effective_longitude or 0),
-            state_code=state_code,
-            location_name=location_name,
-        )
-        query_key = f"{location_name} ({state_code})" if location_name else state_code
+        lat = float(pin.effective_latitude or 0)
+        lng = float(pin.effective_longitude or 0)
+        park = NPSGateway().find_park_containing_location(lat, lng)
+        query_key = f"{lat:.5f},{lng:.5f}"
         LocationCache.set(location, self.cache_source, park or {}, query_key=query_key)
 
 

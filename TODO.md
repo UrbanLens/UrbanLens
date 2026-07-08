@@ -280,6 +280,7 @@ Features planned for future releases.
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,868: INFO/MainProcess] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] received
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,893: INFO/ForkPoolWorker-2] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] succeeded in 0.036874303594231606s: 0
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,907: INFO/ForkPoolWorker-1] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] succeeded in 0.037884799763560295s: 0
+* On Pin details page: When dragging a photo to reposition it... if an error is encountered, it should snap back to its original coordinates (which are presumably still the correct coordinates per the backend server)
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
