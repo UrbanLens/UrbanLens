@@ -55,8 +55,8 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
         # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
 
-    def wiki_badges(self) -> Self:
-        """Return only items with kind='wiki'."""
+    def location_badges(self) -> Self:
+        """Return only items without kind='user'."""
         # TODO: Don't hardcode 'user' string
         return self.exclude(kind="user")
 

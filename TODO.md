@@ -40,6 +40,8 @@ Features planned for this release.
 * Pin details page: Plus buttons don't look good again. [UL-275]
 * On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
+* In import pins dialog, unchecking "Create category X" does not remove the sample badge.
+* Satellite view seems to be unable to zoom in as much as I'd expect.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]

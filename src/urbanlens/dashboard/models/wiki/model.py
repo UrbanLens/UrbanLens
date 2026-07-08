@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel):
+class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
     """Community-editable page describing a shared, real-world place.
 
     Wiki is the *community* half of the place model:
@@ -123,75 +123,6 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel):
         return None
 
     # ------------------------------------------------------------------
-    # Address / coordinate proxies (delegate to the linked Location)
-    # ------------------------------------------------------------------
-
-    @property
-    def latitude(self) -> Decimal | None:
-        """Latitude of the linked Location, if any."""
-        return self.location.latitude if self.location_id else None
-
-    @property
-    def longitude(self) -> Decimal | None:
-        """Longitude of the linked Location, if any."""
-        return self.location.longitude if self.location_id else None
-
-    @property
-    def point(self):
-        """PostGIS point of the linked Location, if any."""
-        return self.location.point if self.location_id else None
-
-    @property
-    def official_name(self) -> str | None:
-        """External-source name from the linked Location."""
-        return self.location.official_name if self.location_id else None
-
-    @property
-    def address(self) -> str | None:
-        """Full address string from the linked Location."""
-        return self.location.address if self.location_id else None
-
-    @property
-    def address_basic(self) -> str | None:
-        """Street number and route from the linked Location."""
-        return self.location.address_basic if self.location_id else None
-
-    @property
-    def address_extended(self) -> str | None:
-        """Street address with city from the linked Location."""
-        return self.location.address_extended if self.location_id else None
-
-    @property
-    def city(self) -> str | None:
-        return self.location.city if self.location_id else None
-
-    @property
-    def county(self) -> str | None:
-        return self.location.county if self.location_id else None
-
-    @property
-    def state(self) -> str | None:
-        return self.location.state if self.location_id else None
-
-    @property
-    def country(self) -> str | None:
-        return self.location.country if self.location_id else None
-
-    @property
-    def zipcode(self) -> str | None:
-        return self.location.zipcode if self.location_id else None
-
-    @property
-    def place_name(self) -> str | None:
-        """Google place name from the linked Location."""
-        return self.location.place_name if self.location_id else None
-
-    @property
-    def cid(self) -> Decimal | None:
-        """Google Maps CID from the linked Location."""
-        return self.location.cid if self.location_id else None
-
-    # ------------------------------------------------------------------
     # Derived values
     # ------------------------------------------------------------------
 
@@ -258,7 +189,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel):
             self.slug = self._generate_slug()
         super().save(*args, **kwargs)
 
-    class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_wikis"
         get_latest_by = "updated"
         indexes = [

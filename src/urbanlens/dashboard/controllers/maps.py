@@ -204,36 +204,21 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lat_f = float(latitude)
             lon_f = float(longitude)
 
-            location = None
-            all_locations: list[Location] = []
-
-            if not is_private:
-                # Link to an existing Location whose bounding box contains this point,
-                # or create a new one. This keeps all pins for the same place connected.
-                # The shared wiki/display name must come from canonical place data -
-                # never the user's custom label, which stays on Pin.name only.
-                all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
-                if all_locations:
-                    location = all_locations[0]
-                else:
-                    location = _create_location_with_canonical_name(lat_f, lon_f, place_name=place_canonical_name)
-
+            location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
+            
             pin = Pin.objects.create(
                 name=name,
                 name_is_user_provided=bool((name or "").strip()),
                 location=location,
-                latitude=lat_f,
-                longitude=lon_f,
                 icon=icon,
                 custom_icon=custom_icon,
                 color=color,
                 is_private=is_private,
                 profile=request.user.profile,
             )
-            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
-
+            
             if badge_ids:
-                pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
+                pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
             else:
                 if tag_ids:
                     pin.badges.remove(*pin.badges.filter(kind="tag"))
@@ -241,6 +226,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if category_ids:
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
+                    
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
             pin.slug = pin.ensure_slug()

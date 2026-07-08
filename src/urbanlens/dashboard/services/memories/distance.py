@@ -49,13 +49,8 @@ def inter_visit_distance_km(profile: Profile) -> float:
     """
     coords = (
         PinVisit.objects.filter(pin__profile=profile)
-        .annotate(
-            _eff_lat=Coalesce("pin__latitude", "pin__location__latitude"),
-            _eff_lng=Coalesce("pin__longitude", "pin__location__longitude"),
-        )
-        .filter(_eff_lat__isnull=False, _eff_lng__isnull=False)
         .order_by("visited_at")
-        .values_list("_eff_lat", "_eff_lng")
+        .values_list("pin__location__latitude", "pin__location__longitude")
     )
 
     total_km = 0.0

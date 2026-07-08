@@ -249,7 +249,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
         location, wiki = _resolve_wiki(location_slug)
         campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
         if campus.polygon is None:
-            campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.display_name)
+            campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=wiki.name)
             campus.save(update_fields=["polygon", "updated"])
         return JsonResponse({"polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
@@ -264,7 +264,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not polygon_geojson:
-            geom = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.display_name)
+            geom = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=wiki.name)
         else:
             try:
                 geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)

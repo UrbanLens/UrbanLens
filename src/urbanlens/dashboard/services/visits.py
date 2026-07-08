@@ -46,7 +46,7 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
         fallback when no usable name or city/state is available from either source.
     """
     official_name = location.official_name if location else kwargs.get("official_name")
-    canonical_name = location.display_name if location else kwargs.get("canonical_name")
+    canonical_name = location.wiki.name if location and location.wiki else kwargs.get("canonical_name")
     city = location.city if location else kwargs.get("city")
     state = location.state if location else kwargs.get("state")
 

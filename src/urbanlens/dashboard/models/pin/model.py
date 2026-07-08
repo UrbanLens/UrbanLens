@@ -77,8 +77,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
-    # External-source name for this pin. User edits must never write this field.
-    official_name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
     # User's personal notes. Unrelated to Location.description (place-level info).
     description = TextField(null=True, blank=True)
@@ -160,16 +158,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
-
-    @property
-    def latitude(self) -> float:
-        """Pin marker latitude."""
-        return float(self.location.latitude)
-    
-    @property
-    def longitude(self) -> float:
-        """Pin marker longitude."""
-        return float(self.location.longitude)
 
     def display_badge(self) -> Badge | None:
         """Badge supplying the map icon, when the icon is inherited from a badge."""
