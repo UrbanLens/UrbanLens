@@ -124,6 +124,9 @@ def _suggest_for_unfiled_photo(image: Image) -> VisitSuggestion | None:
     from urbanlens.dashboard.services.memories.photos import find_matching_pin
     from urbanlens.dashboard.services.visits import create_visit_suggestion
 
+    if not image.latitude or not image.longitude or not image.profile or not image.taken_at:
+        return None
+
     profile = image.profile
     pin = find_matching_pin(profile, image.latitude, image.longitude)
     if pin is None:

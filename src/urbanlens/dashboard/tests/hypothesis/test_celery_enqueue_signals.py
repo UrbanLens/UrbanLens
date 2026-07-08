@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.location.signals import suggest_and_add_categories
+from urbanlens.dashboard.models.wiki.signals import suggest_and_add_categories
 from urbanlens.dashboard.models.pin.signals import enqueue_location_creation
 
 

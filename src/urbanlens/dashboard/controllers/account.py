@@ -379,12 +379,13 @@ class CustomLoginView(LoginView):
                     return super().form_invalid(form)
 
             # Check for unverified account (username or email login).
+            user : User | None = None
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
                 from urbanlens.dashboard.services.email_normalization import find_user_by_email
-
                 user = find_user_by_email(username, active_only=False) if "@" in username else None
+                
             if user is not None:
                 if not user.is_active and hasattr(user, "email_verification"):
                     resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"

@@ -117,7 +117,7 @@ class GooglePlaceService:
         Returns:
             Linked GooglePlace, or None when coordinates are invalid.
         """
-        if location.google_place_id is not None:
+        if location.google_place is not None:
             return location.google_place
         
         google_place = self.get_or_create_for_coordinates(location.latitude, location.longitude)
@@ -140,7 +140,6 @@ class GooglePlaceService:
         google_place = self.ensure_linked(location)
         if google_place.cid is None:
             google_place.cid = cid
-            location.google_place.cid = cid
             location.save(update_fields=["google_place"])
         return google_place
 

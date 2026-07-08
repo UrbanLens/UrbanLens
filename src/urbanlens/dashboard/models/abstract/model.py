@@ -140,7 +140,7 @@ class PublicDashboardModel(FrontendDashboardModel):
             The instance slug (never empty).
         """
         if not self.slug:
-            self.regenerate_slug()
+            return self.regenerate_slug()
         return self.slug
 
     def regenerate_slug(self) -> str:
@@ -163,6 +163,8 @@ class PublicDashboardModel(FrontendDashboardModel):
                 if "duplicate key value violates unique constraint" in str(e):
                     continue
                 raise
+        if not self.slug:
+            raise ValueError("Failed to generate a unique slug after 20 attempts")
         return self.slug
     
     def save(self, *args, **kwargs) -> None:
