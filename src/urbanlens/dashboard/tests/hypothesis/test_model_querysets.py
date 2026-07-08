@@ -32,16 +32,17 @@ class CommentQuerySetTopLevelTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.top = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.location,
+            wiki=self.wiki,
             parent=None,
         )
         self.reply = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.location,
+            wiki=self.wiki,
             parent=self.top,
         )
 
@@ -73,8 +74,9 @@ class CommentQuerySetForPinTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=41.0, longitude=-73.0)
+        self.other_location = baker.make("dashboard.Location", latitude=41.1, longitude=-73.1)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.other_location)
         self.comment = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
@@ -165,7 +167,7 @@ class PinMarkupQuerySetTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=44.0, longitude=-70.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
         self.markup = baker.make(
             "dashboard.PinMarkup",
             parent_pin=self.pin,
@@ -205,7 +207,7 @@ class VisitQuerySetTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=45.0, longitude=-69.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
         ts = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
         self.manual_visit = baker.make(
             "dashboard.PinVisit",

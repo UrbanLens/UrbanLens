@@ -32,8 +32,6 @@ def _make_community_pin(location: Location, user: User, **kwargs) -> Pin:
         location=location,
         parent_wiki=wiki,
         parent_pin=None,
-        latitude=kwargs.get("latitude", 40.0),
-        longitude=kwargs.get("longitude", -74.0),
     )
 
 

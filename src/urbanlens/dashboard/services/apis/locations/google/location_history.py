@@ -117,7 +117,7 @@ def _nearest_pin(lat: float, lon: float, profile: Profile, radius_m: int) -> Pin
     from urbanlens.dashboard.models.pin.model import Pin
 
     point = Point(lon, lat, srid=4326)
-    return Pin.objects.filter(point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("point").first()
+    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("location__point").first()
 
 
 def import_location_history_streaming(

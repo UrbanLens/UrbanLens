@@ -25,6 +25,7 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -37,6 +38,12 @@ _db_settings = settings(
 
 _MAP_URL = "/dashboard/map/"
 _MAP_META_URL = "/dashboard/map/pins/meta/"
+
+
+def _pin_at(profile: Profile, lat: float, lng: float, **kwargs) -> Pin:
+    """Create a Pin whose linked Location sits at the given coordinates."""
+    location = baker.make(Location, latitude=lat, longitude=lng)
+    return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
 class ViewMapAuthTests(TestCase):
@@ -115,7 +122,7 @@ class ViewMapContextTests(TestCase):
 
     def test_gps_mode_with_pins_provides_gps_fallback(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.GPS)
-        baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)
+        _pin_at(self.profile, 40.7, -74.0)
         resp = self.client.get(_MAP_URL)
         self.assertIsNotNone(resp.context["gps_fallback_lat"])
         self.assertIsNotNone(resp.context["gps_fallback_lng"])
@@ -134,7 +141,7 @@ class ViewMapContextTests(TestCase):
         self.assertAlmostEqual(resp.context["gps_fallback_lng"], -0.1, places=2)
 
     def test_non_gps_mode_does_not_set_gps_fallback(self) -> None:
-        baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)
+        _pin_at(self.profile, 40.7, -74.0)
         for mode in (MapCenterMode.AUTO, MapCenterMode.CUSTOM):
             with self.subTest(mode=mode):
                 Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=mode)

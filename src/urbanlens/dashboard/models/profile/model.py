@@ -320,11 +320,11 @@ class Profile(abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.pin.model import Pin
 
-        rows = list(Pin.objects.filter(profile=self).values_list("latitude", "longitude"))
-        if not rows:
+        # A Pin's coordinates live on its linked Location (see AddressableModel).
+        rows = list(Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude"))
+        pts = [(float(lat), float(lng)) for lat, lng in rows if lat is not None and lng is not None]
+        if not pts:
             return None
-
-        pts = [(float(lat), float(lng)) for lat, lng in rows]
 
         # For each point count how many other points fall within the cluster radius.
         # The point with the highest count is the cluster seed.

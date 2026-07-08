@@ -77,7 +77,7 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
         photo_point = Point(float(image.longitude), float(image.latitude), srid=4326)
         within_range = Pin.objects.filter(
             pk=pin.pk,
-            point__distance_lte=(photo_point, D(m=PHOTO_VISIT_MATCH_RADIUS_M)),
+            location__point__distance_lte=(photo_point, D(m=PHOTO_VISIT_MATCH_RADIUS_M)),
         ).exists()
         if not within_range:
             logger.debug("Photo %s GPS too far from pin %s, skipping visit suggestion.", image.pk, pin.pk)

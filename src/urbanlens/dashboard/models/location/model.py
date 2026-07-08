@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Location(abstract.DashboardModel):
+class Location(abstract.PublicDashboardModel):
     """Shared, immutable address/coordinate record for a physical place.
 
     Location is the *address* third of the place model:
@@ -50,7 +50,14 @@ class Location(abstract.DashboardModel):
     - Security indicators, badges, dates -> Wiki
     - Aliases, comments, edit history, photos -> Wiki
     A user's personal label/notes/visit history belong on Pin.
+
+    ``slug``/``uuid`` are inherited from PublicDashboardModel: the community wiki
+    is routed by the Location slug (``/location/<slug>/wiki/``) and location
+    UUIDs anchor the @mention system.
     """
+    # Stable URL routing token (each place resolves its wiki via this slug).
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
+
     # External-source name for this place (e.g. from Google). User edits never
     # write this field; the community-editable name lives on Wiki.name.
     official_name = CharField(max_length=255, null=True, blank=True)
@@ -253,13 +260,19 @@ class Location(abstract.DashboardModel):
             "longitude": float(self.longitude),
         }
 
+    def _slugify_base(self) -> str:
+        # The community-facing name lives on Wiki; a Location slug is only a
+        # stable URL routing token, so fall back to the uuid to stay unique and
+        # avoid churn when many locations share a blank official_name.
+        return self.official_name or str(self.uuid)
+
     def save(self, *args, **kwargs) -> None:
-        """Auto-generate a routing slug and sync the PostGIS point before saving."""
+        """Sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
         if self.latitude is not None and self.longitude is not None:
             lon = float(self.longitude)
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
-        
+
         super().save(*args, **kwargs)
 
     def __setattr__(self, name: str, value) -> None:
@@ -280,7 +293,7 @@ class Location(abstract.DashboardModel):
                 return
         super().__setattr__(name, value)
         
-    class Meta(abstract.DashboardModel.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"
         indexes = [

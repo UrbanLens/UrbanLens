@@ -38,7 +38,8 @@ class PinMarkupForPinTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
 
         self.pin_a = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
-        self.pin_b = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        # A profile may hold only one root pin per Location, so pin_b gets its own.
+        self.pin_b = baker.make("dashboard.Pin", profile=self.profile)
 
         self.markup_a = _make_markup(self.pin_a, self.profile)
         self.markup_b = _make_markup(self.pin_b, self.profile)
@@ -56,7 +57,7 @@ class PinMarkupForPinTests(TestCase):
         self.assertIn(self.markup_b, qs)
 
     def test_pin_with_no_markup_returns_empty_queryset(self):
-        pin_c = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        pin_c = baker.make("dashboard.Pin", profile=self.profile)
         qs = PinMarkup.objects.for_pin(pin_c)
         self.assertFalse(qs.exists())
 

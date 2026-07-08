@@ -305,16 +305,16 @@ class CanViewContactInfoCommonPinTests(TestCase):
     def test_viewer_sharing_a_location_can_see(self) -> None:
         shared_location = baker.make(Location, latitude="40.000000", longitude="-74.000000")
         viewer = _profile()
-        baker.make("dashboard.Pin", profile=self.profile, location=shared_location, latitude=None, longitude=None)
-        baker.make("dashboard.Pin", profile=viewer, location=shared_location, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=self.profile, location=shared_location)
+        baker.make("dashboard.Pin", profile=viewer, location=shared_location)
         self.assertTrue(self.profile.can_view_contact_info(viewer))
 
     def test_viewer_with_different_pins_cannot_see(self) -> None:
         loc_a = baker.make(Location, latitude="40.000000", longitude="-74.000000")
         loc_b = baker.make(Location, latitude="51.500000", longitude="-0.120000")
         viewer = _profile()
-        baker.make("dashboard.Pin", profile=self.profile, location=loc_a, latitude=None, longitude=None)
-        baker.make("dashboard.Pin", profile=viewer, location=loc_b, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=self.profile, location=loc_a)
+        baker.make("dashboard.Pin", profile=viewer, location=loc_b)
         self.assertFalse(self.profile.can_view_contact_info(viewer))
 
     def test_anonymous_cannot_see_regardless_of_pins(self) -> None:

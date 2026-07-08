@@ -268,9 +268,10 @@ class PinAliasUniquenessTests(TestCase):
 
     def test_same_name_on_different_pins_is_allowed(self) -> None:
         user = baker.make("auth.User")
-        location = baker.make("dashboard.Location", latitude="48.0", longitude="-66.0")
-        pin_a = baker.make("dashboard.Pin", profile=user.profile, location=location)
-        pin_b = baker.make("dashboard.Pin", profile=user.profile, location=location)
+        location_a = baker.make("dashboard.Location", latitude="48.0", longitude="-66.0")
+        location_b = baker.make("dashboard.Location", latitude="48.500000", longitude="-66.500000")
+        pin_a = baker.make("dashboard.Pin", profile=user.profile, location=location_a)
+        pin_b = baker.make("dashboard.Pin", profile=user.profile, location=location_b)
         baker.make("dashboard.PinAlias", pin=pin_a, name="Side Door")
         alias_b = baker.make("dashboard.PinAlias", pin=pin_b, name="Side Door")
         self.assertEqual(alias_b.name, "Side Door")

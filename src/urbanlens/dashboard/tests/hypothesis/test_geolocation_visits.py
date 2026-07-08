@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 
-from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -37,9 +37,6 @@ class RecordGeolocationPinVisitsTests(TestCase):
             "dashboard.Pin",
             profile=self.profile,
             location=self.location,
-            latitude=None,
-            longitude=None,
-            point=Point(-74.0, 40.0, srid=4326),
         )
         baker.make(
             "dashboard.Campus",

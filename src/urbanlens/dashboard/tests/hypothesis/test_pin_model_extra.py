@@ -243,7 +243,7 @@ class PinToJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", name="Steel Mill",
+            "dashboard.Location", official_name="Steel Mill",
             latitude="40.000000", longitude="-74.000000",
         )
         self.pin = baker.make(
@@ -339,7 +339,8 @@ class PinExternalNameRefreshTests(TestCase):
         from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
 
         user = baker.make("auth.User")
-        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False, location=None)
+        location = baker.make("dashboard.Location", latitude="43.500000", longitude="-71.500000")
+        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False, location=location)
 
         self.assertTrue(
             update_pin_name_from_external_sources(

@@ -205,7 +205,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lon_f = float(longitude)
 
             location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
-            
+
+            # Locations whose bounding box also covers this point - when more than
+            # one matches, the client offers the user a choice (see below).
+            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
+
             pin = Pin.objects.create(
                 name=name,
                 name_is_user_provided=bool((name or "").strip()),
@@ -514,7 +518,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     south, west, north, east = parts
                     bbox_poly = Polygon.from_bbox((west, south, east, north))
                     bbox_poly.srid = 4326
-                    query = query.filter(point__within=bbox_poly)
+                    query = query.filter(location__point__within=bbox_poly)
             except (ValueError, TypeError) as e:
                 logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
 
@@ -624,12 +628,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if name is not None:
             pin.name = name or None
             pin.name_is_user_provided = bool(name.strip())
-        if latitude is not None:
-            with contextlib.suppress(ValueError):
-                pin.latitude = float(latitude)
-        if longitude is not None:
-            with contextlib.suppress(ValueError):
-                pin.longitude = float(longitude)
+        # Coordinates live on the Location; a move repoints the pin to a
+        # find-or-created Location at the new point rather than mutating a shared row.
+        if latitude is not None and longitude is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                pin.location, _ = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
         if icon is not None:
             pin.icon = icon or None
         if color is not None:

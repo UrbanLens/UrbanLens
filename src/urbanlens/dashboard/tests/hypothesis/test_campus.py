@@ -124,9 +124,7 @@ class CampusQuerySetDefaultsTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.user = baker.make("auth.User")
         self.pin = baker.make(
-            "dashboard.Pin", profile=self.user.profile, location=self.location,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.user.profile, location=self.location)
         self.default_campus = baker.make(
             "dashboard.Campus", location=self.location, profile=None, pin=None,
         )
@@ -152,9 +150,7 @@ class CampusQuerySetForProfileTests(TestCase):
         self.u2 = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="41.0", longitude="-73.0")
         self.pin1 = baker.make(
-            "dashboard.Pin", profile=self.u1.profile, location=self.location,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.u1.profile, location=self.location)
         self.c1 = baker.make(
             "dashboard.Campus", location=self.location,
             profile=self.u1.profile, pin=self.pin1,
@@ -166,9 +162,7 @@ class CampusQuerySetForProfileTests(TestCase):
     def test_excludes_other_users_campus(self) -> None:
         loc2 = baker.make("dashboard.Location", latitude="42.0", longitude="-72.0")
         pin2 = baker.make(
-            "dashboard.Pin", profile=self.u2.profile, location=loc2,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.u2.profile, location=loc2)
         baker.make("dashboard.Campus", location=loc2, profile=self.u2.profile, pin=pin2)
         for campus in Campus.objects.for_profile(self.u1.profile):
             self.assertEqual(campus.profile_id, self.u1.profile.pk)
@@ -203,9 +197,7 @@ class CampusQuerySetForPinTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin = baker.make(
-            "dashboard.Pin", profile=self.user.profile, location=self.location,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.user.profile, location=self.location)
         self.campus = baker.make(
             "dashboard.Campus", location=self.location,
             profile=self.user.profile, pin=self.pin,
@@ -259,13 +251,9 @@ class CampusManagerEffectiveForPinTests(TestCase):
         self.user = baker.make("auth.User")
         self.other = baker.make("auth.User")
         self.pin = baker.make(
-            "dashboard.Pin", profile=self.user.profile, location=self.location,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.user.profile, location=self.location)
         self.other_pin = baker.make(
-            "dashboard.Pin", profile=self.other.profile, location=self.location,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.other.profile, location=self.location)
         self.location_default = baker.make(
             "dashboard.Campus", location=self.location, profile=None, pin=None,
         )
@@ -287,9 +275,7 @@ class CampusManagerEffectiveForPinTests(TestCase):
     def test_returns_none_when_no_campus_at_all(self) -> None:
         empty_loc = baker.make("dashboard.Location", latitude="50.0", longitude="-80.0")
         empty_pin = baker.make(
-            "dashboard.Pin", profile=self.user.profile, location=empty_loc,
-            latitude=None, longitude=None,
-        )
+            "dashboard.Pin", profile=self.user.profile, location=empty_loc)
         self.assertIsNone(Campus.objects.effective_for_pin(empty_pin))
 
 
@@ -356,8 +342,6 @@ class CampusControllerBoundaryTests(TestCase):
             profile=self.user.profile,
             location=self.location,
             slug="test-pin-campus",
-            latitude=None,
-            longitude=None,
         )
         # Location-default campus (wiki).
         self.location_campus = baker.make(

@@ -215,7 +215,7 @@ class ProfileComputeMapCenterTests(TestCase):
     def test_single_pin_returns_its_coords(self) -> None:
         user: User = baker.make(User)
         location: Location = baker.make(Location, latitude="41.000000", longitude="-74.000000")
-        baker.make("dashboard.Pin", profile=user.profile, location=location, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=user.profile, location=location)
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
         assert result is not None  # nosec B101
@@ -226,8 +226,8 @@ class ProfileComputeMapCenterTests(TestCase):
         user: User = baker.make(User)
         loc1: Location = baker.make(Location, latitude="40.000000", longitude="-74.000000")
         loc2: Location = baker.make(Location, latitude="42.000000", longitude="-72.000000")
-        baker.make("dashboard.Pin", profile=user.profile, location=loc1, latitude=None, longitude=None)
-        baker.make("dashboard.Pin", profile=user.profile, location=loc2, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=user.profile, location=loc1)
+        baker.make("dashboard.Pin", profile=user.profile, location=loc2)
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
         lat, lng = result
@@ -239,7 +239,7 @@ class ProfileComputeMapCenterTests(TestCase):
     def test_result_is_cached_on_profile(self) -> None:
         user: User = baker.make(User)
         location: Location = baker.make(Location, latitude="39.000000", longitude="-77.000000")
-        baker.make("dashboard.Pin", profile=user.profile, location=location, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=user.profile, location=location)
         user.profile.compute_map_center()
         user.profile.refresh_from_db()
         self.assertIsNotNone(user.profile.map_center_latitude)
@@ -256,10 +256,10 @@ class ProfileComputeMapCenterTests(TestCase):
         ]
         for lat, lng in europe_coords:
             loc = baker.make(Location, latitude=lat, longitude=lng)
-            baker.make("dashboard.Pin", profile=user.profile, location=loc, latitude=None, longitude=None)
+            baker.make("dashboard.Pin", profile=user.profile, location=loc)
         # One outlier in North America.
         na_loc = baker.make(Location, latitude="40.710000", longitude="-74.000000")
-        baker.make("dashboard.Pin", profile=user.profile, location=na_loc, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=user.profile, location=na_loc)
 
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
@@ -271,17 +271,12 @@ class ProfileComputeMapCenterTests(TestCase):
         self.assertGreater(lng, -10.0)
         self.assertLess(lng, 20.0)
 
-    def test_pin_with_coordinate_override_uses_override(self) -> None:
-        # Pin.latitude/longitude override the location coords in compute_map_center.
+    def test_pin_coordinates_come_from_its_location(self) -> None:
+        # A Pin has no coordinate fields of its own; compute_map_center reads the
+        # coordinates of the Location it references.
         user: User = baker.make(User)
-        loc = baker.make(Location, latitude="0.000000", longitude="0.000000")
-        baker.make(
-            "dashboard.Pin",
-            profile=user.profile,
-            location=loc,
-            latitude="50.000000",
-            longitude="10.000000",
-        )
+        loc = baker.make(Location, latitude="50.000000", longitude="10.000000")
+        baker.make("dashboard.Pin", profile=user.profile, location=loc)
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
         lat, lng = result
@@ -291,7 +286,7 @@ class ProfileComputeMapCenterTests(TestCase):
     def test_compute_map_center_returns_tuple_of_two_floats(self) -> None:
         user: User = baker.make(User)
         loc = baker.make(Location, latitude="45.000000", longitude="9.000000")
-        baker.make("dashboard.Pin", profile=user.profile, location=loc, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=user.profile, location=loc)
         result = user.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertIsInstance(result, tuple)

@@ -1,9 +1,8 @@
 """Tests for the unfiled-photo ingestion path: find_matching_pin and _suggest_for_unfiled_photo.
 
 These cover Memories-page uploads (no pin attached): the photo's GPS is matched
-against the uploader's own pins to raise a self-directed VisitSuggestion. Pin.point
-is set explicitly on fixtures because it is never auto-synced from latitude/longitude
-in Python (see test_memories_visits).
+against the uploader's own pins to raise a self-directed VisitSuggestion. A Pin's
+coordinates live on its linked Location, whose PostGIS point is auto-synced on save.
 """
 
 from __future__ import annotations
@@ -11,7 +10,6 @@ from __future__ import annotations
 import datetime
 from decimal import Decimal
 
-from django.contrib.gis.geos import Point
 from django.utils import timezone
 from model_bakery import baker
 
@@ -35,9 +33,6 @@ class FindMatchingPinTests(TestCase):
             "dashboard.Pin",
             profile=self.profile,
             location=self.location,
-            latitude=None,
-            longitude=None,
-            point=Point(_PIN_LNG, _PIN_LAT, srid=4326),
         )
 
     def test_matches_pin_within_radius(self):
@@ -54,13 +49,12 @@ class FindMatchingPinTests(TestCase):
         self.assertIsNone(find_matching_pin(other, _PIN_LAT, _PIN_LNG))
 
     def test_returns_nearest_of_several(self):
-        near = baker.make(
-            "dashboard.Pin",
-            profile=self.profile,
+        near_loc = baker.make(
+            "dashboard.Location",
             latitude=Decimal(str(_PIN_LAT + 0.0001)),
             longitude=Decimal(str(_PIN_LNG + 0.0001)),
-            point=Point(_PIN_LNG + 0.0001, _PIN_LAT + 0.0001, srid=4326),
         )
+        near = baker.make("dashboard.Pin", profile=self.profile, location=near_loc)
         match = find_matching_pin(self.profile, _PIN_LAT + 0.00012, _PIN_LNG + 0.00012)
         self.assertEqual(match, near)
 
@@ -76,9 +70,6 @@ class SuggestForUnfiledPhotoTests(TestCase):
             "dashboard.Pin",
             profile=self.profile,
             location=self.location,
-            latitude=None,
-            longitude=None,
-            point=Point(_PIN_LNG, _PIN_LAT, srid=4326),
         )
 
     def _unfiled_photo(self, lat, lng, taken_at):

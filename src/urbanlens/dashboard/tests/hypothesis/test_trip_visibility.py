@@ -61,7 +61,7 @@ class NoOneVisibilityTests(TestCase):
         super().setUp()
         _, self.viewer = _make_user_with_profile()
         _, self.adder = _make_user_with_profile()
-        self.location = baker.make(Location, name="Secret Spot")
+        self.location = baker.make(Location, official_name="Secret Spot")
         self.trip = Trip.objects.create(name="Test Trip", creator=self.adder)
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
@@ -104,7 +104,7 @@ class FriendsVisibilityTests(TestCase):
         super().setUp()
         _, self.viewer = _make_user_with_profile()
         _, self.adder = _make_user_with_profile()
-        self.location = baker.make(Location, name="Abandoned Mill")
+        self.location = baker.make(Location, official_name="Abandoned Mill")
         self.trip = Trip.objects.create(name="Friends Trip", creator=self.adder)
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
@@ -156,7 +156,7 @@ class CommonPinVisibilityTests(TestCase):
         super().setUp()
         _, self.viewer = _make_user_with_profile()
         _, self.adder = _make_user_with_profile()
-        self.location = baker.make(Location, name="The Factory", latitude=10.0, longitude=20.0)
+        self.location = baker.make(Location, official_name="The Factory", latitude=10.0, longitude=20.0)
         self.trip = Trip.objects.create(name="Pin Trip", creator=self.adder)
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
@@ -183,7 +183,7 @@ class CommonPinVisibilityTests(TestCase):
         self.assertNotIn(act.id, hidden)
 
     def test_viewer_with_different_pin_cannot_see(self):
-        other_location = baker.make(Location, name="Other Spot")
+        other_location = baker.make(Location, official_name="Other Spot")
         Pin.objects.create(
             profile=self.viewer,
             location=other_location,
@@ -206,7 +206,7 @@ class CommonFriendVisibilityTests(TestCase):
         _, self.viewer = _make_user_with_profile()
         _, self.adder = _make_user_with_profile()
         _, self.mutual_friend = _make_user_with_profile()
-        self.location = baker.make(Location, name="Shared Spot")
+        self.location = baker.make(Location, official_name="Shared Spot")
         self.trip = Trip.objects.create(name="CFriend Trip", creator=self.adder)
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
@@ -248,7 +248,7 @@ class MultipleActivitiesVisibilityTests(TestCase):
         _, self.adder_no_one = _make_user_with_profile()
         _, self.adder_friends = _make_user_with_profile()
         _, self.adder_common_pin = _make_user_with_profile()
-        self.location = baker.make(Location, name="Multi Spot", latitude=5.0, longitude=10.0)
+        self.location = baker.make(Location, official_name="Multi Spot", latitude=5.0, longitude=10.0)
         self.trip = Trip.objects.create(name="Multi Trip", creator=self.adder_no_one)
         for p in (self.viewer, self.adder_friends, self.adder_common_pin):
             TripMembership.objects.create(trip=self.trip, profile=p)

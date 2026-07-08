@@ -326,12 +326,8 @@ def update_pin_name_from_external_sources(
             if name := _clean_candidate(value):
                 official_candidate = name
                 break
-    if not pin.name_is_user_provided and official_candidate and pin.official_name != official_candidate:
-        pin.official_name = official_candidate
-        if save and pin.pk:
-            pin.save(update_fields=["official_name", "updated"])
-        name_changed = True
-
+    # official_name is address-derived and lives on Location (refreshed above via
+    # update_location_name_from_external_sources); a Pin only carries a personal name.
     if not pin.name_is_user_provided and not is_meaningful_name(pin.name) and official_candidate:
         pin.name = official_candidate
         if save and pin.pk:

@@ -455,24 +455,9 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             qs = qs.exclude(pk=self.pk)
         return qs
 
-    def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug and keep ``point`` synced to the effective coordinates.
-
-        ``point`` (not latitude/longitude) is what distance-based queries filter on, so
-        it must always reflect the pin's own coordinates. Forcing
-        ``point`` into ``update_fields`` (when given) guards against callers that save a
-        partial update after reassigning ``location`` without also refreshing ``point``.
-        """
-
-        latitude = self.effective_latitude
-        longitude = self.effective_longitude
-        self.point = Point(longitude, latitude, srid=4326)
-        
-        update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
-            kwargs["update_fields"] = {*update_fields, "point"}
-
-        super().save(*args, **kwargs)
+    # A Pin no longer stores its own coordinates or ``point``; they are read from
+    # the linked Location (see AddressableModel). Slug generation is handled by
+    # PublicDashboardModel.save, so no custom save() is needed here.
 
     class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"

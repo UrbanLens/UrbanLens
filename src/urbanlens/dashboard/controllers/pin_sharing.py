@@ -19,11 +19,15 @@ from urbanlens.dashboard.services.connections import are_connections, get_connec
 
 
 def _recipient_has_pin(profile: Profile, source: Pin) -> bool:
-    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_wiki__isnull=True)
-    if source.location_id and qs.filter(location_id=source.location_id).exists():
-        return True
-    lat, lng = source.effective_latitude, source.effective_longitude
-    return lat is not None and lng is not None and qs.filter(latitude=lat, longitude=lng).exists()
+    # A Pin's coordinates live on its Location, so "same place" == same Location.
+    if not source.location_id:
+        return False
+    return Pin.objects.filter(
+        profile=profile,
+        parent_pin__isnull=True,
+        parent_wiki__isnull=True,
+        location_id=source.location_id,
+    ).exists()
 
 
 def _create_pin_from_share(share: PinShare) -> Pin:
@@ -31,8 +35,6 @@ def _create_pin_from_share(share: PinShare) -> Pin:
     new_pin = Pin.objects.create(
         profile=share.to_profile,
         location=source.location,
-        latitude=source.latitude,
-        longitude=source.longitude,
         is_private=source.is_private,
         name=source.name,
         name_is_user_provided=source.name_is_user_provided,

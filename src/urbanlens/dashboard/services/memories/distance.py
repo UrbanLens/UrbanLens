@@ -36,10 +36,10 @@ def recorded_route_distance_km(profile: Profile) -> float:
 def inter_visit_distance_km(profile: Profile) -> float:
     """Return the summed great-circle distance between consecutive visits, in km.
 
-    Visits are ordered by ``visited_at`` and use each pin's effective coordinates
-    (the pin's own override, falling back to its location). Visits without any
-    resolvable coordinate are skipped, and the leg is measured between the two
-    nearest coordinate-bearing visits so a single gap does not break the chain.
+    Visits are ordered by ``visited_at`` and use each pin's coordinates (read from
+    its linked Location). Any visit without a resolvable coordinate is skipped, and
+    the leg is measured between the two nearest coordinate-bearing visits so a
+    single gap does not break the chain.
 
     Args:
         profile: The profile whose visit history to measure.
@@ -56,6 +56,8 @@ def inter_visit_distance_km(profile: Profile) -> float:
     total_km = 0.0
     previous: tuple[float, float] | None = None
     for lat, lng in coords:
+        if lat is None or lng is None:
+            continue
         current = (float(lat), float(lng))
         if previous is not None:
             total_km += _haversine_km(previous, current)

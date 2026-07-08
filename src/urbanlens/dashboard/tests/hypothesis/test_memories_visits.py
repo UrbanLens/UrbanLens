@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime
 from decimal import Decimal
 
-from django.contrib.gis.geos import Point
 from django.utils import timezone
 from model_bakery import baker
 
@@ -34,9 +33,6 @@ class MaybeSuggestPhotoVisitTests(TestCase):
             "dashboard.Pin",
             profile=self.profile,
             location=self.location,
-            latitude=None,
-            longitude=None,
-            point=Point(_PIN_LNG, _PIN_LAT, srid=4326),
         )
 
     def _photo(self, lat: float | None, lng: float | None, taken_at, *, pin="__default__"):

@@ -206,8 +206,8 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
     candidate_pins = list(
         Pin.objects.filter(
             profile=profile,
-            point__distance_lte=(route.path, D(m=DWELL_RADIUS_M)),
-        ).only("id", "point"),
+            location__point__distance_lte=(route.path, D(m=DWELL_RADIUS_M)),
+        ).select_related("location"),
     )
     if not candidate_pins:
         return 0

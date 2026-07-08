@@ -26,6 +26,17 @@ def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
     return location, wiki
 
 
+def _location_for_coords(latitude, longitude) -> Location:
+    """Find-or-create the shared Location a detail pin sits at.
+
+    A detail pin has its own coordinates (distinct from its parent's), and a Pin
+    reads its coordinates from its Location, so each detail pin needs its own
+    Location row at its point.
+    """
+    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
+    return location
+
+
 class DetailPinPanelView(LoginRequiredMixin, View):
     """HTMX partial: list of personal detail pins for a single user pin."""
 
@@ -60,8 +71,6 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             name=detail_name,
             name_is_user_provided=bool((detail_name or "").strip()),
             description=body.get("description") or None,
-            latitude=float(lat),
-            longitude=float(lon),
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
@@ -71,7 +80,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_pin=parent,
             profile=parent.profile,
-            location=parent.location,
+            location=_location_for_coords(lat, lon),
         )
         return JsonResponse({"ok": True, "uuid": str(detail_pin.uuid)})
 
@@ -108,11 +117,10 @@ class DetailPinEditView(LoginRequiredMixin, View):
             
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
-        if new_latitude or new_longitude:
-            # Create a new Location at these coordinates if one doesn't exist
-            location = Location.objects.get_or_create(latitude=new_latitude, longitude=new_longitude)
-            detail_pin.location = location
-            
+        if new_latitude and new_longitude:
+            # A move repoints the detail pin to a Location at the new coordinates.
+            detail_pin.location = _location_for_coords(new_latitude, new_longitude)
+
         detail_pin.save()
         return JsonResponse({"ok": True})
 
@@ -173,7 +181,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
 
     def post(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        _location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -191,8 +199,6 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             name=pin_name,
             name_is_user_provided=bool((pin_name or "").strip()),
             description=body.get("description") or None,
-            latitude=float(lat),
-            longitude=float(lon),
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
@@ -202,7 +208,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_wiki=wiki,
             profile=profile,
-            location=location,
+            location=_location_for_coords(lat, lon),
         )
 
         WikiEdit.objects.create(
@@ -254,8 +260,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
         old_lat, old_lon = detail_pin.location.latitude, detail_pin.location.longitude
-        if moved := (new_latitude or new_longitude):
-            detail_pin.location = Location.objects.get_or_create(latitude=new_latitude, longitude=new_longitude)
+        if moved := bool(new_latitude and new_longitude):
+            detail_pin.location = _location_for_coords(new_latitude, new_longitude)
         detail_pin.save()
 
         if moved:

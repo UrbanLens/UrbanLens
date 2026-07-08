@@ -11,6 +11,8 @@ Covers the core invariants of the community-wiki extraction:
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -103,3 +105,38 @@ class WikiCommentConstraintTests(TestCase):
         wiki = baker.make(Wiki, name="W")
         comment = baker.make(Comment, wiki=wiki, pin=None, parent=None, text="hi")
         self.assertEqual(list(Comment.objects.for_wiki(wiki)), [comment])
+
+
+class WikiEffectiveDateLastActiveTests(TestCase):
+    """effective_date_last_active returns date_last_active, infers from abandoned, or None.
+
+    The community "last active"/"abandoned" dates moved from Location to Wiki in
+    the wiki split; these are pure-property tests on unsaved Wiki instances.
+    """
+
+    def _wiki(self, **kwargs) -> Wiki:
+        wiki = Wiki()
+        wiki.date_last_active = None
+        wiki.date_abandoned = None
+        for key, value in kwargs.items():
+            setattr(wiki, key, value)
+        return wiki
+
+    def test_returns_date_last_active_when_set(self) -> None:
+        d = date(2022, 6, 15)
+        self.assertEqual(self._wiki(date_last_active=d).effective_date_last_active, d)
+
+    def test_infers_one_day_before_abandoned(self) -> None:
+        self.assertEqual(
+            self._wiki(date_abandoned=date(2021, 3, 20)).effective_date_last_active,
+            date(2021, 3, 20) - timedelta(days=1),
+        )
+
+    def test_returns_none_when_both_fields_are_none(self) -> None:
+        self.assertIsNone(self._wiki().effective_date_last_active)
+
+    def test_date_last_active_takes_priority_over_abandoned(self) -> None:
+        self.assertEqual(
+            self._wiki(date_last_active=date(2020, 1, 10), date_abandoned=date(2020, 5, 1)).effective_date_last_active,
+            date(2020, 1, 10),
+        )

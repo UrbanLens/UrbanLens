@@ -5,17 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.db.models import PointField
-from django.contrib.gis.geos import Point
-from django.db.models import SET_NULL, ForeignKey
-from django.db.models.fields import CharField, DecimalField
-
 from urbanlens.dashboard.models.abstract.model import DashboardModel
 
 if TYPE_CHECKING:
     from decimal import Decimal
 
-    from urbanlens.dashboard.models.google_place.model import GooglePlace
+    from django.db.models import ForeignKey
+
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)

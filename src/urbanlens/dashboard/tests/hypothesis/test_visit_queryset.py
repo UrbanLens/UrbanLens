@@ -32,7 +32,8 @@ class VisitQuerySetForPinTests(TestCase):
         self.profile = baker.make("auth.User").profile
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin_a = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
-        self.pin_b = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        # A profile may hold only one root pin per Location, so pin_b gets its own.
+        self.pin_b = baker.make("dashboard.Pin", profile=self.profile)
 
         self.visit_a = _make_visit(self.pin_a)
         self.visit_b = _make_visit(self.pin_b)
@@ -132,7 +133,7 @@ class VisitQuerySetFromTakeoutTests(TestCase):
         self.assertEqual(qs.count(), 1)
 
     def test_no_takeout_visits_returns_empty(self):
-        pin2 = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        pin2 = baker.make("dashboard.Pin", profile=self.profile)
         _make_visit(pin2, source=VisitSource.MANUAL)
         qs = PinVisit.objects.for_pin(pin2.pk).from_takeout()
         self.assertFalse(qs.exists())

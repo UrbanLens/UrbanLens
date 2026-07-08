@@ -161,7 +161,6 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.profile.model import Profile
         loc = baker.make(
             Location,
-            name="Test Location",
             official_name="Official Test Location",
             latitude=41.0,
             longitude=-81.5,

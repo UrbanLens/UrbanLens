@@ -18,14 +18,9 @@ class Migration(migrations.Migration):
             model_name="pin",
             name="idxdb_pin_lat_long",
         ),
-        migrations.RemoveField(
-            model_name="location",
-            name="slug",
-        ),
-        migrations.RemoveField(
-            model_name="location",
-            name="uuid",
-        ),
+        # NOTE: Location retains its slug + uuid - the community wiki is routed by
+        # the Location slug (/location/<slug>/wiki/) and location UUIDs anchor the
+        # @mention system. (An earlier draft removed them here, which broke routing.)
         migrations.AddIndex(
             model_name="pin",
             index=models.Index(fields=["location"], name="idxdb_pin_location"),

@@ -49,8 +49,8 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
     return (
         Pin.objects.filter(profile=profile)
         .root_pins()
-        .filter(point__distance_lte=(point, D(m=PHOTO_PIN_MATCH_RADIUS_M)))
-        .annotate(_photo_distance=Distance("point", point))
+        .filter(location__point__distance_lte=(point, D(m=PHOTO_PIN_MATCH_RADIUS_M)))
+        .annotate(_photo_distance=Distance("location__point", point))
         .select_related("location")
         .order_by("_photo_distance")
         .first()

@@ -52,10 +52,11 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(priority=priority)
 
     def by_latitude(self, latitude):
-        return self.filter(latitude=latitude)
+        # A Pin's coordinates live on its Location.
+        return self.filter(location__latitude=latitude)
 
     def by_longitude(self, longitude):
-        return self.filter(longitude=longitude)
+        return self.filter(location__longitude=longitude)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)
@@ -77,8 +78,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)
         lon1 = radians(longitude)
-        lat2 = radians(F("latitude"))
-        lon2 = radians(F("longitude"))
+        lat2 = radians(F("location__latitude"))
+        lon2 = radians(F("location__longitude"))
         dlon = lon2 - lon1
         dlat = lat2 - lat1
         a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
@@ -270,27 +271,28 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
 
         latitude, longitude = lat_f, lon_f
 
-        point = Point(float(longitude), float(latitude), srid=4326)
+        # A Pin no longer stores its own coordinates: it references a shared
+        # Location (deduped by coordinates). Resolve/create that Location, then
+        # find-or-create the profile's root pin for it.
+        from urbanlens.dashboard.models.location.model import Location
 
-        # Find existing pins within the threshold distance
-        existing_pins = self.filter(
-            point__distance_lte=(point, D(m=threshold_meters)),
+        location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
+
+        defaults = dict(defaults or {})
+        # Coordinates live on the Location; drop any legacy coord kwargs.
+        for legacy in ("latitude", "longitude", "point"):
+            defaults.pop(legacy, None)
+
+        existing_pin = self.filter(
+            location=location,
             profile=profile,
-        )
+            parent_pin__isnull=True,
+            parent_wiki__isnull=True,
+        ).first()
+        if existing_pin is not None:
+            return existing_pin, False
 
-        if existing_pins.exists():
-            # Return the first close enough pin and False for 'created'
-            return existing_pins.first(), False
-
-        # No existing pin found within the threshold, create a new one
-        pin_data = {
-            "latitude": latitude,
-            "longitude": longitude,
-            "profile": profile,
-            "point": point,
-            **(defaults or {}),
-        }
-        pin = self.create(**pin_data)
+        pin = self.create(location=location, profile=profile, **defaults)
 
         # Return the new pin and True for 'created'
         return pin, True

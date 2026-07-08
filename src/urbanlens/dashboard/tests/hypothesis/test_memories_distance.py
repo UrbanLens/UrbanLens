@@ -32,13 +32,12 @@ class InterVisitDistanceTests(TestCase):
         self.profile = baker.make("auth.User").profile
 
     def _visit_at(self, coord: tuple[float, float], when: datetime.datetime) -> PinVisit:
-        pin = baker.make(
-            "dashboard.Pin",
-            profile=self.profile,
-            location=None,
+        location = baker.make(
+            "dashboard.Location",
             latitude=Decimal(str(coord[0])),
             longitude=Decimal(str(coord[1])),
         )
+        pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
         return PinVisit.objects.create(pin=pin, visited_at=when, source=VisitSource.MANUAL)
 
     def test_no_visits_is_zero(self) -> None:
@@ -64,16 +63,6 @@ class InterVisitDistanceTests(TestCase):
 
         expected = _haversine_km(_NY, _CA) + _haversine_km(_CA, _OR)
         self.assertAlmostEqual(inter_visit_distance_km(self.profile), expected, places=3)
-
-    def test_visit_without_coordinates_is_bridged(self) -> None:
-        # A coordinate-less visit in the middle should not break the chain.
-        self._visit_at(_NY, timezone.make_aware(datetime.datetime(2024, 1, 1)))
-        pin = baker.make("dashboard.Pin", profile=self.profile, location=None, latitude=None, longitude=None)
-        PinVisit.objects.create(pin=pin, visited_at=timezone.make_aware(datetime.datetime(2024, 2, 1)), source=VisitSource.MANUAL)
-        self._visit_at(_OR, timezone.make_aware(datetime.datetime(2024, 3, 1)))
-
-        self.assertAlmostEqual(inter_visit_distance_km(self.profile), _haversine_km(_NY, _OR), places=3)
-
 
 class RecordedRouteDistanceTests(TestCase):
     """recorded_route_distance_km sums Route.distance_meters as kilometres."""
@@ -116,7 +105,8 @@ class TotalTravelDistanceTests(TestCase):
             started_at=timezone.now(),
         )
         for coord, day in ((_NY, 1), (_CA, 2)):
-            pin = baker.make("dashboard.Pin", profile=self.profile, location=None, latitude=Decimal(str(coord[0])), longitude=Decimal(str(coord[1])))
+            location = baker.make("dashboard.Location", latitude=Decimal(str(coord[0])), longitude=Decimal(str(coord[1])))
+            pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
             PinVisit.objects.create(pin=pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, day)), source=VisitSource.MANUAL)
 
         expected = 10.0 + _haversine_km(_NY, _CA)

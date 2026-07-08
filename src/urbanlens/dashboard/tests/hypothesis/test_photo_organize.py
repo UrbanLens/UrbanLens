@@ -6,7 +6,6 @@ import datetime
 from decimal import Decimal
 from unittest import mock
 
-from django.contrib.gis.geos import Point
 from django.utils import timezone
 from model_bakery import baker
 
@@ -31,7 +30,7 @@ class ClassifyPhotoTests(TestCase):
             "dashboard.Image",
             profile=self.profile,
             pin=None,
-            location=None,
+            wiki=None,
             visit=visit,
             organize_dismissed=dismissed,
             latitude=lat if lat is None else Decimal(str(lat)),
@@ -45,7 +44,8 @@ class ClassifyPhotoTests(TestCase):
         self.assertEqual(classify_photo(self._photo(lat=_LAT, lng=_LNG)), "needs_pin")
 
     def test_filed_when_attached_to_visit(self):
-        pin = baker.make("dashboard.Pin", profile=self.profile, latitude=Decimal(str(_LAT)), longitude=Decimal(str(_LNG)), point=Point(_LNG, _LAT, srid=4326))
+        location = baker.make("dashboard.Location", latitude=Decimal(str(_LAT)), longitude=Decimal(str(_LNG)))
+        pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
         visit = baker.make("dashboard.PinVisit", pin=pin, visited_at=timezone.now())
         self.assertEqual(classify_photo(self._photo(lat=_LAT, lng=_LNG, visit=visit)), "filed")
 
@@ -79,7 +79,7 @@ class CreatePinAndLogVisitTests(TestCase):
             "dashboard.Image",
             profile=self.profile,
             pin=None,
-            location=None,
+            wiki=None,
             latitude=Decimal(str(_LAT)),
             longitude=Decimal(str(_LNG)),
             taken_at=self.taken_at,
@@ -113,13 +113,8 @@ class LogVisitOnPinTests(TestCase):
     def setUp(self):
         super().setUp()
         self.profile = baker.make("auth.User").profile
-        self.pin = baker.make(
-            "dashboard.Pin",
-            profile=self.profile,
-            latitude=Decimal(str(_LAT)),
-            longitude=Decimal(str(_LNG)),
-            point=Point(_LNG, _LAT, srid=4326),
-        )
+        location = baker.make("dashboard.Location", latitude=Decimal(str(_LAT)), longitude=Decimal(str(_LNG)))
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
 
     def test_logs_visit_and_backfills_coords(self):
         photo = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
@@ -138,7 +133,7 @@ class LogVisitOnPinTests(TestCase):
             "dashboard.Image",
             profile=self.profile,
             pin=None,
-            location=None,
+            wiki=None,
             latitude=Decimal("10.0"),
             longitude=Decimal("20.0"),
         )

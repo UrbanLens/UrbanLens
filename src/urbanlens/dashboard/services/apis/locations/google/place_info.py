@@ -140,7 +140,7 @@ class GooglePlaceService:
         google_place = self.ensure_linked(location)
         if google_place.cid is None:
             google_place.cid = cid
-            location.save(update_fields=["google_place"])
+            google_place.save(update_fields=["cid"])
         return google_place
 
     def ensure_linked_by_place_id(self, location : Location, place_id: str) -> GooglePlace | None:

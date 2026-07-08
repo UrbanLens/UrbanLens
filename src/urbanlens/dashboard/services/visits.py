@@ -79,7 +79,8 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
         if pin:
             return pin
     if latitude is not None and longitude is not None:
-        return qs.filter(latitude=latitude, longitude=longitude).first()
+        # A Pin's coordinates live on its Location.
+        return qs.filter(location__latitude=latitude, location__longitude=longitude).first()
     return None
 
 
@@ -441,7 +442,7 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         if campus is not None:
             contains_point = campus.effective_polygon.contains(point)
         else:
-            contains_point = Pin.objects.filter(pk=pin.pk, point__distance_lte=(point, D(m=50))).exists()
+            contains_point = Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
 
         if not contains_point:
             continue
