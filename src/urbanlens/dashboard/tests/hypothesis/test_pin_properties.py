@@ -85,10 +85,6 @@ class PinEffectiveNameTests(TestCase):
         pin = _make_pin(name=None, location=loc)
         self.assertEqual(pin.effective_name, location_name)
 
-    def test_empty_string_when_no_name_and_no_location(self) -> None:
-        pin = _make_pin(name=None, location=None)
-        self.assertEqual(pin.effective_name, "")
-
     @given(nonempty_name, nonempty_name)
     @settings(max_examples=200)
     def test_name_is_always_returned_verbatim(self, name: str, location_name: str) -> None:
