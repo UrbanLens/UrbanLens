@@ -256,6 +256,19 @@ Features planned for future releases.
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
 * Audit for XSS risks related to badge names, and all other fields, etc
 * On PinVisit entries, show avatar for other participants, instead of username.
+* Cleanup TODO file (This file). Remove completed, verify features, etc.
+* Jinja templates (or html partials??) for emails.
+* Extract javascript into TS files (this may already be a TODO item elsewhere in this file).
+* Investigate: smaller css file for mobile to reduce mobile data usage.
+* Better css minification broadly (will surely require more packaging/compiling steps)
+* More unit tests specifically aiming at security / injection / etc
+* Integration tests
+* Property-based hypothesis tests everywhere. In addition to: coverage report for non-hypothesis tests only. That way, unit tests can be separated out into buckets: AI-generated tests, hypothesis tests, human-written tests. Coverage reports for each can be generated. This ensures that all fn/methods are fully property tested, AI-generated tests can attempt to cover the entire codebase, but that bad AI-generated tests and/or property tests don't report coverage of features that a human has not actually reviewed to be sure they are properly covered.
+* Cleanup old/deprecated assets (old images, icons, etc)
+* Safety-checkins page after the checkin was missed: it's great (and necessary) that contacts can view the page without having an account. However, this creates a certain gap in controlling access to the site. Review how we're doing it, especially with respect to: 2 browsers open the page using the same token, user tries opening the page with the wrong token, or with a right token prior to emails going out (this shouldn't be possible), etc. Also, ensure we are fully communicating to the primary user who created the checkin exactly what information will be shown, and when (perhaps encourage them to view the page as their contacts will see it after they create the checkin?) In the exact opposite direction, consider how to provide more information to emergency contacts, perhaps on a time delay. For instance: X hours after the emails go out, update the page with more information about the user's last known location, other pins they have in the area, etc? We'd have to be very careful about handling all this appropriately and communicating it to the user, with privacy controls.
+* Investigate: import pin data into google my maps. (If not: then consider other services)
+* Email export data to the user feature, so that data can be persisted even without the server online. (Alternatively: dropbox, meta, etc)
+* Celery tasks for external APIs which are rate limited could be queued for later.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -269,6 +282,7 @@ Features planned for future releases.
 * Reduce reliance on javascript further by migrating more of it to HTMX. [UL-80]
 * "Demolition Alert" feature. I'm not sure if this is practically possible, since regularly searching for every pin is out of the question. Allow subscribed users to set alerts on specific pins. [UL-81]
 * Discord Bot (for known demolition updates? "note: the location you're discussing recently had security updates"? actions: "@bot plan trip")
+* API for CRIS
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]
@@ -301,6 +315,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In order to consider the maximum benefit, it may be useful to calculate the time required to brute force gps coordinates, which it turns out is surprisingly small. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
 * Considerations about avoiding storing identifying user data. Given SSO, and a need to email the user, I'm not certain that this is solvable. 1-way hashing combined with a "verify your email before..." dialog could help address it, but that would only allow us to hash the email, not avoid storing it altogether, which would still make it crackable via brute force. In addition, it would interfere with our ability to email notifications. Users can give themselves full anonymity already by registering a new email address and choosing not to provide SSO or personal details during account creation. Providing those kinds of instructions might be helpful somewhere, and we could possibly provide a button on the profile page to allow them to anonymize their existing account in that way if they originally created their account the "wrong" way and want full anonymity going forward. [UL-103]
 * Sync with google maps. Google maps does not allow labelling pins, or adding them to lists via a programmatic interface, and the only way to export data is through the google takeout system. The only way to mimic this would be through web scraping, which would be extremely fragile, and require users to grant way too many permissions to our app. Theoretically, this limitation could change in the future, depending entirely on google. [UL-104]
+* Consider: Share with partner feature. I'm undecided on this... it would allow 1 user (or X users?) to share a large number of their pins. This probably encourages the wrong kind of behavior, but alternatively: it's a thing most explorers do in practice, and this would make that technical painpoint a lot easier. I'm leaning towards feeling that this isn't achievable in a responsible way. A half-measure could be to allow more sharing with "close friends", but that may also suffer from the same consequences (maybe even moreso).
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]

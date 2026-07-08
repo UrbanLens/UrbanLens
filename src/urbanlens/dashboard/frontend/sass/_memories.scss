@@ -350,9 +350,17 @@
 
 // -- Memories sub-nav tabs (Timeline | Photos) ------------------------------
 
+// Materialize paints every bare <nav> as a 56px salmon (#ee6e73) bar and forces
+// `nav i` icons to display:block/56px. This is a plain sub-nav, so reset all of
+// that back to a normal underline tab strip.
 .memories-tabs {
     display: flex;
     gap: .25rem;
+    width: auto;
+    height: auto;
+    line-height: normal;
+    background-color: transparent;
+    color: inherit;
     margin-bottom: 1.25rem;
     border-bottom: 1px solid var(--ul-grey-1a);
 }
@@ -368,14 +376,27 @@
     text-decoration: none;
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
+    transition: color .15s ease, border-color .15s ease;
 
-    .material-symbols-outlined { font-size: 1.2rem; }
+    // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.
+    .material-symbols-outlined {
+        display: inline-flex;
+        align-items: center;
+        height: auto;
+        line-height: 1;
+        font-size: 1.2rem;
+    }
 
-    &:hover { color: var(--ul-grey-8); }
+    &:hover {
+        color: var(--ul-grey-8);
+        border-bottom-color: var(--ul-grey-2);
+    }
 
     &.is-active {
         color: $color-deep-purple-500;
         border-bottom-color: $color-deep-purple-500;
+
+        .material-symbols-outlined { color: $color-deep-purple-500; }
     }
 }
 
