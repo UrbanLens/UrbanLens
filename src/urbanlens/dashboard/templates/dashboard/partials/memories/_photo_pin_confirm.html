@@ -1,0 +1,58 @@
+{% comment %}
+Body of the "confirm where this pin goes" dialog, loaded into #photo-pin-confirm-body.
+
+Lets the user see and drag the marker for a pin about to be created from a
+geotagged photo, search for a different place, name it, or change their mind and
+file the photo onto an existing pin instead. The create form and the existing-pin
+buttons both POST and swap the card by id; the enclosing dialog closes itself on
+any successful POST (see #photo-pin-confirm-dialog in photos.html).
+
+Context:
+  image - the geotagged Image a pin is being created for (has latitude/longitude)
+{% endcomment %}
+<div id="photo-pin-confirm"
+     data-image-id="{{ image.pk }}"
+     data-lat="{{ image.latitude|stringformat:'f' }}"
+     data-lng="{{ image.longitude|stringformat:'f' }}"
+     data-places-url="{% url 'map.autocomplete.places' %}"
+     data-resolve-url="{% url 'map.resolve_place' %}">
+
+    <p class="photo-pin-confirm-intro">
+        We'll drop a pin where this photo was taken. Drag the marker or search for a place to adjust it, then give it a name.
+    </p>
+
+    <div class="photo-pin-confirm-search">
+        <i class="material-symbols-outlined">search</i>
+        <input type="search" id="photo-pin-place-q" autocomplete="off"
+               placeholder="Search for a different place…" aria-label="Search for a place">
+        <div id="photo-pin-place-results" class="photo-pin-place-results" role="listbox"></div>
+    </div>
+
+    <div id="photo-pin-confirm-map" class="photo-pin-confirm-map"></div>
+
+    <form class="photo-pin-confirm-form"
+          hx-post="{% url 'memories.photos.action' image.pk 'create-pin' %}"
+          hx-target="#photo-card-{{ image.pk }}"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="latitude" id="photo-pin-confirm-lat" value="{{ image.latitude|stringformat:'f' }}">
+        <input type="hidden" name="longitude" id="photo-pin-confirm-lng" value="{{ image.longitude|stringformat:'f' }}">
+        <div class="form-row">
+            <label for="photo-pin-confirm-name">Pin name <small>(optional)</small></label>
+            <input type="text" name="name" id="photo-pin-confirm-name"
+                   placeholder="Leave blank to use the place's name">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit">
+                <i class="material-symbols-outlined">add_location_alt</i> Create pin here
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="document.getElementById('photo-pin-confirm-dialog').close()">Cancel</button>
+        </div>
+    </form>
+
+    <details class="photo-pin-confirm-existing">
+        <summary>Use one of your existing pins instead</summary>
+        {% include "dashboard/partials/memories/_photo_card_search.html" %}
+    </details>
+</div>

@@ -225,19 +225,21 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Args:
             request: The current request (its path doubles as the poll URL).
             pin: The pin whose panel data is being fetched.
-            source_key: An ``external_data.PANEL_SOURCES`` key.
+            source_key: An ``external_data.panel_sources()`` key.
 
         Returns:
             The self-polling placeholder fragment, or a 204 when the source is
             suppressed or the poll budget is exhausted (the page's existing
             htmx 204 handler removes the section quietly).
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, PANEL_SOURCES, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
             return HttpResponse(status=204)
-        source = PANEL_SOURCES[source_key]
+        source = get_panel_source(source_key)
+        if source is None:
+            return HttpResponse(status=204)
         return render(
             request,
             "dashboard/partials/pins/panel_pending.html",
@@ -267,7 +269,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Args:
             request: The current request (its path doubles as the poll URL).
             pin: The pin whose media is being fetched.
-            source_key: One of the media ``PANEL_SOURCES`` keys.
+            source_key: One of the media ``panel_sources()`` keys.
 
         Returns:
             The self-polling loader fragment, or a 204 when the source is
@@ -306,10 +308,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
-        from urbanlens.dashboard.services.external_data import PANEL_SOURCES, MediaPanelSource
+        from urbanlens.dashboard.services.external_data import MediaPanelSource, get_panel_source
         from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
 
-        panel = PANEL_SOURCES.get(source)
+        panel = get_panel_source(source)
         if not isinstance(panel, MediaPanelSource):
             return HttpResponse(status=404)
 
@@ -460,7 +462,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Bing Maps Aerial (current, high-res) - fetched server-side
         - OpenAerialMap community imagery - browser-loaded thumbnails
         """
-        from urbanlens.dashboard.services.external_data import PANEL_SOURCES, collect_satellite_slides
+        from urbanlens.dashboard.services.external_data import collect_satellite_slides, panel_sources
         from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
@@ -480,7 +482,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # First visit for these coordinates: warm every provider's slide cache
         # in a Celery task and let the placeholder poll -- the provider chain
         # is six sequential upstreams and must never run on the request path.
-        if not PANEL_SOURCES["satellite"].is_ready(pin):
+        if not panel_sources()["satellite"].is_ready(pin):
             return self._pending_panel(request, pin, "satellite")
 
         # Ready: the same collector now runs against warm per-provider caches,
@@ -515,7 +517,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
-        from urbanlens.dashboard.services.external_data import PANEL_SOURCES, collect_street_view_slides
+        from urbanlens.dashboard.services.external_data import collect_street_view_slides, panel_sources
         from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
@@ -530,7 +532,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         # See satellite_view_carousell: warm provider caches in Celery on first
         # visit, then render from those caches with a deadline safety net.
-        if not PANEL_SOURCES["street_view"].is_ready(pin):
+        if not panel_sources()["street_view"].is_ready(pin):
             return self._pending_panel(request, pin, "street_view")
 
         coord_query = f"{lat:.5f}, {lng:.5f}"

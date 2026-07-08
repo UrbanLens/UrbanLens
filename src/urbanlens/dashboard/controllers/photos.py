@@ -29,6 +29,16 @@ _GALLERY_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
 
 
+def _parse_float(value: str | None) -> float | None:
+    """Parse a POSTed coordinate string to float, or None if missing/malformed."""
+    if value is None or not value.strip():
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _attention_cards(profile: Profile) -> list[dict]:
     """Build the render context for each photo in the "needs attention" queue.
 
@@ -246,10 +256,21 @@ class PhotoActionView(LoginRequiredMixin, View):
         return _toast("Suggestion dismissed.", "info")
 
     def create_pin(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
-        """Create a pin at the photo's coordinates and log a visit there."""
-        if image.latitude is None or image.longitude is None:
+        """Create a pin and log a visit, honouring the confirmation dialog's placement.
+
+        The confirmation dialog posts the (possibly dragged) ``latitude``/``longitude``
+        and an optional ``name``. When those are absent - e.g. a legacy one-click
+        request - the photo's own coordinates are used.
+        """
+        lat = _parse_float(request.POST.get("latitude"))
+        lng = _parse_float(request.POST.get("longitude"))
+        if lat is None or lng is None:
+            lat = float(image.latitude) if image.latitude is not None else None
+            lng = float(image.longitude) if image.longitude is not None else None
+        if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
-        create_pin_and_log_visit(profile, image)
+        # TODO: We must sanitize the name to prevent XSS attacks.
+        create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
         return _toast("Pin created and visit logged.")
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
@@ -325,3 +346,31 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
             "dashboard/partials/memories/_pin_search_results.html",
             {"results": results, "image_id": image_id, "query": query},
         )
+
+
+class PhotoPinConfirmView(LoginRequiredMixin, View):
+    """Render the "confirm where this pin goes" dialog body for a geotagged photo.
+
+    GET /memories/photos/<image_id>/confirm-pin/
+
+    Shown before creating a pin from a photo that matches none of the user's
+    existing pins, so they can see the location, drag the marker, name it, or
+    change their mind and file the photo onto a different pin/place instead.
+    """
+
+    def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
+        """Render the placement/naming form for the photo's pin.
+
+        Args:
+            request: The HTTP request.
+            image_id: PK of the geotagged photo a pin is being created for.
+
+        Returns:
+            The rendered confirmation partial, or 404 if the photo isn't the
+            viewer's or has no coordinates to place a marker at.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        image = get_object_or_404(Image, pk=image_id)
+        if image.profile_id != profile.pk or image.latitude is None or image.longitude is None:
+            raise Http404
+        return render(request, "dashboard/partials/memories/_photo_pin_confirm.html", {"image": image})

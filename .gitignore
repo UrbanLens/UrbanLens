@@ -46,3 +46,4 @@ src/urbanlens/frontend/static/dashboard/images/
 .cursor/
 src/urbanlens/frontend/static/icons/unused/
 .claude/*.json
+sample_data/*.jpg

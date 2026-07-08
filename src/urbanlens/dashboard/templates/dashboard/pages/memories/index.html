@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block header %}
-{% if has_memory_data %}
+{% if has_memory_data or unlogged_visits %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -17,25 +17,13 @@
 {% block content %}
 <div id="memories-page"
      data-feed-url="{% url 'memories.data' %}"
+     data-visit-url-base="{% url 'memories.view' %}visit/"
      data-earliest-date="{{ earliest_date }}"
      data-today="{{ today }}"
      data-map-lat="{{ map_center_lat|default:'null' }}"
      data-map-lng="{{ map_center_lng|default:'null' }}">
 
-    {% if not has_memory_data %}
-    <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" %}
-        <div class="memories-empty-state">
-            <div class="memories-empty-state-icon"><i class="material-symbols-outlined">auto_awesome_motion</i></div>
-            <h2>No memory data yet</h2>
-            <p>Import routes, location history, visits, trips, or photos to start building your Memories timeline.</p>
-            <button type="button" class="btn btn--primary"
-                    hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
-                <i class="material-symbols-outlined">upload</i> Import routes &amp; history
-            </button>
-        </div>
-    </div>
-    {% else %}
+    {% if has_memory_data %}
     <div class="memories-header">
         <div>
             <h1 class="memories-title"><i class="material-symbols-outlined">auto_awesome_motion</i> Memories</h1>
@@ -46,9 +34,25 @@
             <i class="material-symbols-outlined">upload</i> Import routes &amp; history
         </button>
     </div>
+    {% endif %}
 
     <div class="page-inner">
         {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" %}
+        {% include "dashboard/partials/memories/_unlogged_visits.html" %}
+
+        {% if not has_memory_data %}
+        {% if not unlogged_visits %}
+        <div class="memories-empty-state">
+            <div class="memories-empty-state-icon"><i class="material-symbols-outlined">auto_awesome_motion</i></div>
+            <h2>No memory data yet</h2>
+            <p>Import routes, location history, visits, trips, or photos to start building your Memories timeline.</p>
+            <button type="button" class="btn btn--primary"
+                    hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-symbols-outlined">upload</i> Import routes &amp; history
+            </button>
+        </div>
+        {% endif %}
+        {% else %}
         {% include 'dashboard/partials/memories/_hero_stats.html' %}
 
         <div id="memories-on-this-day"
@@ -89,11 +93,42 @@
         </div>
 
         <div id="memories-timeline"></div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <div id="importPinsModal"></div>
+
+{% if has_memory_data or unlogged_visits %}
+{# -- Shared visit dialog: log a visit or add details to any visit memory ----- #}
+<dialog id="memories-visit-dialog" class="visit-add-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Visit details" %}
+    <div id="memories-visit-dialog-body" class="visit-edit-body">
+        <p class="visit-edit-loading">Loading&hellip;</p>
+    </div>
+</dialog>
+<script>
+(function () {
+    // Load the visit form for a pin (add) or existing visit (edit) into the shared
+    // dialog and open it. Used by the unlogged-visits band and, once the timeline
+    // renders, by the "Add details" button on each visit card.
+    window.memoriesOpenVisitDialog = function (url) {
+        var dlg = document.getElementById('memories-visit-dialog');
+        var body = document.getElementById('memories-visit-dialog-body');
+        if (!dlg || !body || typeof htmx === 'undefined') { return; }
+        body.innerHTML = '<p class="visit-edit-loading">Loading&hellip;</p>';
+        htmx.ajax('GET', url, { target: '#memories-visit-dialog-body', swap: 'innerHTML' })
+            .then(function () { dlg.showModal(); });
+    };
+
+    // A saved visit fires memoriesFeedRefresh; reload the timeline so the new/edited
+    // visit appears there too. No-op in the empty state (no feed yet).
+    document.body.addEventListener('memoriesFeedRefresh', function () {
+        if (typeof window.memoriesRefreshFeed === 'function') { window.memoriesRefreshFeed(); }
+    });
+}());
+</script>
+{% endif %}
 
 {% if has_memory_data %}
 {# -- Photo lightbox (opened from timeline photo cards) ----------------------- #}
@@ -118,6 +153,7 @@
     var root = document.getElementById('memories-page');
     var feedUrl = root.dataset.feedUrl;
     var today = root.dataset.today;
+    var visitUrlBase = root.dataset.visitUrlBase;
     var earliest = root.dataset.earliestDate;
     var mapLat = parseFloat(root.dataset.mapLat);
     var mapLng = parseFloat(root.dataset.mapLng);
@@ -262,6 +298,24 @@
                     '<div class="memories-card-title">' + escapeHtml(event.title) + '</div>' +
                     '<div class="memories-card-subtitle">' + escapeHtml(event.subtitle) + '</div>' +
                     '</div>';
+
+                // Visit memories can be enriched in place: an "Add details" button
+                // opens the shared visit dialog (photos, map, notes, people) without
+                // leaving the timeline.
+                if (event.type === 'visit' && event.extra && event.extra.visit_id && event.extra.pin_slug) {
+                    var detailsBtn = document.createElement('button');
+                    detailsBtn.type = 'button';
+                    detailsBtn.className = 'memories-card-details-btn';
+                    detailsBtn.title = 'Add photos, a map, or notes';
+                    detailsBtn.innerHTML = '<i class="material-symbols-outlined">add_photo_alternate</i>';
+                    detailsBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var url = visitUrlBase + event.extra.pin_slug + '/' + event.extra.visit_id + '/';
+                        if (window.memoriesOpenVisitDialog) { window.memoriesOpenVisitDialog(url); }
+                    });
+                    card.appendChild(detailsBtn);
+                }
                 grid.appendChild(card);
             });
             container.appendChild(grid);
@@ -342,6 +396,12 @@
         endInput.value = endStr;
         fetchMemories(startStr, endStr);
     }
+
+    // Re-fetch the current range after a visit is logged/edited via the shared
+    // dialog, so the timeline and map reflect it immediately.
+    window.memoriesRefreshFeed = function () {
+        if (startInput.value && endInput.value) { fetchMemories(startInput.value, endInput.value); }
+    };
 
     document.getElementById('memories-apply-range').addEventListener('click', function () {
         if (startInput.value && endInput.value) { fetchMemories(startInput.value, endInput.value); }

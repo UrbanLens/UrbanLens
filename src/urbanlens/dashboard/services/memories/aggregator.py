@@ -192,7 +192,7 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             thumbnail_url=None,
             icon="pin_drop",
             color="#4CAF50",
-            extra={"source": visit.source, "pin_slug": pin.slug},
+            extra={"source": visit.source, "pin_slug": pin.slug, "visit_id": visit.pk},
         )
 
 

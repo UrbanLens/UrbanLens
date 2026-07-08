@@ -25,10 +25,13 @@ This module moves all of that off the request path:
   degrades to an immediate 204 (quietly absent) instead of re-polling every
   page load; the source resumes automatically when the marker expires.
 
-Adding a new panel means writing one ``PanelSource`` subclass, registering it
-in :data:`PANEL_SOURCES`, and pointing a template fragment at a controller
-that follows the ready-render-or-schedule pattern -- the task plumbing,
-deduplication, and failure handling are shared.
+Adding a new panel means writing one ``PanelSource`` subclass inside a
+plugin (see :mod:`urbanlens.dashboard.plugins`), returning it from the
+plugin's ``get_panel_sources``, and pointing a template fragment at a
+controller that follows the ready-render-or-schedule pattern -- the task
+plumbing, deduplication, and failure handling are shared. The satellite and
+street-view carousels similarly assemble their provider chains from plugins'
+``get_satellite_providers``/``get_street_view_providers`` contributions.
 """
 
 from __future__ import annotations
@@ -41,16 +44,7 @@ from typing import TYPE_CHECKING, ClassVar
 from django.core.cache import cache
 from django.utils import timezone
 
-from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
-from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
-from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
-from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
-from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
-from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
-from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -187,152 +181,6 @@ class LocationCachePanelSource(PanelSource, ABC):
         return LocationCache.get_fresh(pin.location, self.cache_source) is not None
 
 
-class WikipediaPanelSource(LocationCachePanelSource):
-    """Wikipedia article summary for the pin's location."""
-
-    key = "wikipedia"
-    cache_source = "wikipedia"
-    section_id = "wikipedia-section"
-    icon = "menu_book"
-    title = "Wikipedia"
-
-    def fetch(self, pin: Pin) -> None:
-        """Find and cache the best-matching Wikipedia article."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
-
-        location = pin.location
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        address_components = {
-            "locality": location.locality or "",
-            "route": location.route or "",
-            "street_number": location.street_number or "",
-            "administrative_area_level_1": location.administrative_area_level_1 or "",
-        }
-        name = pin.meaningful_official_name or pin.meaningful_name or ""
-        address_bits = ", ".join(
-            filter(
-                None,
-                [
-                    " ".join(filter(None, [location.street_number, location.route])),
-                    location.locality,
-                    location.administrative_area_level_1,
-                ],
-            )
-        )
-        query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
-        article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
-        LocationCache.set(location, self.cache_source, article or {}, query_key=query_key)
-
-
-class NominatimPanelSource(LocationCachePanelSource):
-    """OpenStreetMap Nominatim place metadata for the pin's location."""
-
-    key = "nominatim"
-    cache_source = "nominatim"
-    section_id = "nominatim-section"
-    icon = "map"
-    title = "OpenStreetMap"
-
-    def fetch(self, pin: Pin) -> None:
-        """Reverse-geocode the pin's coordinates and cache the place metadata."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
-
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        place = NominatimGateway().reverse_geocode(lat, lng)
-        LocationCache.set(pin.location, self.cache_source, place or {}, query_key=f"{lat},{lng}")
-
-
-class UsgsTopoPanelSource(LocationCachePanelSource):
-    """USGS Historical Topographic Map Collection maps near the pin."""
-
-    key = "usgs_topo"
-    cache_source = "usgs_topo"
-    section_id = "usgs-topo-section"
-    icon = "terrain"
-    title = "USGS Historical Topo Maps"
-
-    def fetch(self, pin: Pin) -> None:
-        """Query the TNM API for historical topo maps and cache the result."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
-
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        result = UsgsGateway().historical_topo_maps_for_coordinates(lat, lng, delta=0.01)
-        LocationCache.set(pin.location, self.cache_source, result or {}, query_key=f"{lat:.4f},{lng:.4f}")
-
-
-class NpsPanelSource(LocationCachePanelSource):
-    """National Park Service information for the pin's location."""
-
-    key = "nps"
-    cache_source = "nps"
-    section_id = "nps-section"
-    icon = "park"
-    title = "National Park Service"
-
-    def fetch(self, pin: Pin) -> None:
-        """Find a nearby national park via the NPS API and cache the result."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
-
-        location = pin.location
-        state_code = location.administrative_area_level_1 or ""
-        location_name = pin.meaningful_official_name or pin.meaningful_name or ""
-        park = NPSGateway().find_park_near_location(
-            float(pin.effective_latitude or 0),
-            float(pin.effective_longitude or 0),
-            state_code=state_code,
-            location_name=location_name,
-        )
-        query_key = f"{location_name} ({state_code})" if location_name else state_code
-        LocationCache.set(location, self.cache_source, park or {}, query_key=query_key)
-
-
-class LoopnetPanelSource(LocationCachePanelSource):
-    """LoopNet commercial real-estate listings for the pin's address."""
-
-    key = "loopnet"
-    cache_source = "loopnet"
-    section_id = "loopnet-section"
-    icon = "business_center"
-    title = "LoopNet Listings"
-
-    @staticmethod
-    def address(pin: Pin) -> str:
-        """Street + city + state search address, or ``""`` when insufficient.
-
-        Args:
-            pin: The pin whose location's address should be assembled.
-
-        Returns:
-            A comma-joined address string; empty when the location lacks a
-            street route (LoopNet needs at least street-level precision).
-        """
-        location = pin.location
-        if not location or not location.route:
-            return ""
-        parts = [
-            " ".join(filter(None, [location.street_number, location.route])),
-            location.locality or "",
-            location.administrative_area_level_1 or "",
-        ]
-        return ", ".join(p for p in parts if p).strip(", ")
-
-    def fetch(self, pin: Pin) -> None:
-        """Search LoopNet for the pin's address and cache the listings."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.real_estate.loopnet import LoopNetGateway
-
-        address = self.address(pin)
-        result = LoopNetGateway().search(address) if address else None
-        LocationCache.set(pin.location, self.cache_source, result or {}, query_key=address)
-
-
 class MediaPanelSource(LocationCachePanelSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC).
 
@@ -435,24 +283,17 @@ class CampusBoundaryPanelSource(PanelSource):
 
 
 def _satellite_gateways() -> list[SatelliteViewProvider]:
-    """The satellite imagery provider chain, in display order."""
-    return [
-        GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
-        EsriGateway(),
-        NasaGibsGateway(),
-        MapboxGateway(),
-        BingMapsGateway(),
-        OpenAerialMapGateway(),
-    ]
+    """The plugin-contributed satellite imagery provider chain, in display order."""
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    return plugin_registry.satellite_providers()
 
 
 def _street_view_gateways() -> list[StreetViewProvider]:
-    """The street-level imagery provider chain, in display order."""
-    return [
-        GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
-        MapillaryGateway(),
-        KartaViewGateway(),
-    ]
+    """The plugin-contributed street-level imagery provider chain, in display order."""
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    return plugin_registry.street_view_providers()
 
 
 def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlide], list[ProviderFetchResult]]:
@@ -582,51 +423,67 @@ class StreetViewPanelSource(SlidesPanelSource):
         return collect_street_view_slides(lat, lng)
 
 
-def _media_sources() -> list[MediaPanelSource]:
-    """Build the three media-gallery provider sources."""
-    from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
-    from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-    from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
-
-    return [
-        MediaPanelSource("smithsonian", SmithsonianGateway.service_key, lambda: SmithsonianGateway(api_key=settings.smithsonian_api_key or "")),
-        MediaPanelSource("wikimedia", WikimediaGateway.service_key, WikimediaGateway),
-        MediaPanelSource("loc", LOCJsonGateway.service_key, LOCJsonGateway),
-    ]
+#: Panels that belong to the core application rather than any one plugin:
+#: the campus boundary and the two imagery carousels (which aggregate
+#: plugin-contributed providers but are themselves core features).
+_CORE_PANEL_SOURCES: tuple[PanelSource, ...] = (
+    CampusBoundaryPanelSource(),
+    SatellitePanelSource(),
+    StreetViewPanelSource(),
+)
 
 
-#: Registry of every panel source, keyed by the source key used in URLs,
-#: Celery task arguments, and cache keys.
-PANEL_SOURCES: dict[str, PanelSource] = {
-    source.key: source
-    for source in [
-        WikipediaPanelSource(),
-        NominatimPanelSource(),
-        UsgsTopoPanelSource(),
-        NpsPanelSource(),
-        LoopnetPanelSource(),
-        CampusBoundaryPanelSource(),
-        SatellitePanelSource(),
-        StreetViewPanelSource(),
-        *_media_sources(),
-    ]
-}
+def panel_sources() -> dict[str, PanelSource]:
+    """Every registered panel source, keyed by the source key used in URLs,
+    Celery task arguments, and cache keys.
+
+    Combines the core sources with the contributions of every enabled plugin.
+    A plugin source whose key collides with an existing one is logged and
+    skipped.
+
+    Returns:
+        Mapping of source key to its :class:`PanelSource`.
+    """
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    sources: dict[str, PanelSource] = {source.key: source for source in _CORE_PANEL_SOURCES}
+    for source in plugin_registry.panel_sources():
+        if source.key in sources:
+            logger.warning("Ignoring duplicate panel source '%s' from plugins", source.key)
+            continue
+        sources[source.key] = source
+    return sources
+
+
+def get_panel_source(source_key: str) -> PanelSource | None:
+    """Look up one panel source by key.
+
+    Args:
+        source_key: A :func:`panel_sources` key.
+
+    Returns:
+        The panel source, or None when no core panel or enabled plugin
+        provides that key.
+    """
+    return panel_sources().get(source_key)
 
 
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """Ensure a background fetch is in flight for this panel, single-flight.
 
     Args:
-        source_key: A :data:`PANEL_SOURCES` key.
+        source_key: A :func:`panel_sources` key.
         pin: The pin whose panel data should be fetched.
 
     Returns:
         True when a fetch is in flight (newly scheduled or already running) --
         the caller should return a polling placeholder. False when the source
-        is currently suppressed after a failure or disable -- the caller
-        should give up quietly (204).
+        is unknown (e.g. its plugin was disabled) or currently suppressed
+        after a failure or disable -- the caller should give up quietly (204).
     """
-    source = PANEL_SOURCES[source_key]
+    source = get_panel_source(source_key)
+    if source is None:
+        return False
     if cache.get(source.skip_key(pin)):
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
@@ -650,10 +507,13 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
       every page load's poll cycle.
 
     Args:
-        source_key: A :data:`PANEL_SOURCES` key.
+        source_key: A :func:`panel_sources` key.
         pin: The pin whose panel data should be fetched.
     """
-    source = PANEL_SOURCES[source_key]
+    source = get_panel_source(source_key)
+    if source is None:
+        logger.warning("Panel fetch for unknown source '%s' skipped (plugin removed or disabled?)", source_key)
+        return
     try:
         source.fetch(pin)
     except (RateLimitExceededError, ServiceDisabledError) as exc:

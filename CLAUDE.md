@@ -196,7 +196,9 @@ dashboard/
 
 ### API Integrations
 
-The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions - add them as service classes following the existing pattern.
+The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions.
+
+External integrations are wired into the app through the **plugin system** (`dashboard/plugins/`, see `docs/plugins.md`): the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
 
 When calling any API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
 

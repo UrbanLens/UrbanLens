@@ -3,25 +3,37 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import DateField, Min
 from django.db.models.functions import Cast, Coalesce
-from django.http import JsonResponse
-from django.shortcuts import render
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
+from urbanlens.dashboard.controllers.visits import (
+    _parse_visited_at,
+    _resolve_participants,
+    _sync_visit_photos,
+    _visit_dialog_context,
+)
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.map_snapshot import parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
+from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, sync_last_visited
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -30,6 +42,22 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
+
+
+def _unlogged_band_context(profile: Profile) -> dict[str, object]:
+    """Build the context the unlogged-visits band needs, shared by every view that renders it.
+
+    Args:
+        profile: The viewing profile whose visited-but-unlogged pins to surface.
+
+    Returns:
+        Context dict with ``unlogged_visits`` (the pins) and ``today`` (an ISO
+        date string used to bound and prefill the quick-log date inputs).
+    """
+    return {
+        "unlogged_visits": unlogged_visited_pins(profile),
+        "today": timezone.now().date().isoformat(),
+    }
 
 
 def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
@@ -163,7 +191,7 @@ class MemoriesView(LoginRequiredMixin, View):
                     "active_unit": active_unit,
                 },
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
-                "today": today.isoformat(),
+                **_unlogged_band_context(profile),
                 **profile.get_map_center_template_context(),
             },
         )
@@ -255,3 +283,130 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
             "dashboard/partials/memories/_on_this_day.html",
             {"visits": visits, "routes": routes, "photos": photos, "today": today},
         )
+
+
+class MemoriesVisitView(LoginRequiredMixin, View):
+    """Log a dated visit for a marked-but-unlogged pin, or add details to an existing one.
+
+    GET  /memories/visit/<pin_slug>/                 → render the add-visit form (dialog body)
+    GET  /memories/visit/<pin_slug>/<visit_id>/      → render the edit-visit form for an existing visit
+    POST /memories/visit/<pin_slug>/                 → create a new dated PinVisit
+    POST /memories/visit/<pin_slug>/<visit_id>/      → update an existing PinVisit
+
+    Both POST variants reuse the pin-detail visit form's field handling (date,
+    notes, photos, map snapshot, participants) and return the refreshed
+    unlogged-visits band plus an ``HX-Trigger`` that toasts and reloads the
+    timeline feed.
+    """
+
+    def _get_pin(self, request: HttpRequest, pin_slug: str) -> tuple[Pin, Profile]:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile=profile)
+        return pin, profile
+
+    def get(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
+        """Render the visit form for the shared Memories dialog.
+
+        Args:
+            request: The HTTP request.
+            pin_slug: Slug of the pin the visit belongs to.
+            visit_id: PK of an existing visit to edit, or None to add a new one.
+
+        Returns:
+            The rendered ``_visit_form.html`` partial, wired to post back to this
+            view and swap the unlogged-visits band.
+        """
+        pin, _ = self._get_pin(request, pin_slug)
+        visit = get_object_or_404(PinVisit.objects.prefetch_related("participants", "images"), id=visit_id, pin=pin) if visit_id else None
+
+        context = _visit_dialog_context(pin)
+        context.update(
+            {
+                "visit": visit,
+                "dialog_id": "memories-visit-dialog",
+                "form_action": reverse("memories.visit.edit", args=[pin.slug, visit.id]) if visit else reverse("memories.visit", args=[pin.slug]),
+                "form_target": "#memories-unlogged-band",
+                "form_swap": "outerHTML",
+                # New visits default their date to when the pin was marked visited,
+                # falling back to today, so the common case is a single click.
+                "default_date": "" if visit else (pin.last_visited or timezone.now()).date().isoformat(),
+            },
+        )
+        return render(request, "dashboard/partials/pins/_visit_form.html", context)
+
+    def post(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
+        """Create or update a dated PinVisit and return the refreshed band.
+
+        Args:
+            request: The HTTP request. The body carries ``visited_date`` (required)
+                and optional ``visited_time``, ``notes``, ``map_data``, ``photos``,
+                ``existing_photo_ids``, and ``participant_ids``.
+            pin_slug: Slug of the pin the visit belongs to.
+            visit_id: PK of the visit to update, or None to create a new one.
+
+        Returns:
+            The re-rendered unlogged-visits band, or a 400 on a missing/invalid date.
+        """
+        pin, profile = self._get_pin(request, pin_slug)
+
+        visited_at = _parse_visited_at(request)
+        if visited_at is None:
+            return HttpResponse("A valid date is required.", status=400)
+
+        notes = request.POST.get("notes", "").strip() or None
+        map_data = parse_map_data(request)
+
+        if visit_id:
+            visit = get_object_or_404(PinVisit, id=visit_id, pin=pin)
+            visit.visited_at = visited_at
+            visit.notes = notes
+            visit.map_data = map_data
+            visit.save()
+            created = False
+        else:
+            visit = PinVisit.objects.create(
+                pin=pin,
+                visited_at=visited_at,
+                notes=notes,
+                source=VisitSource.MANUAL,
+                map_data=map_data,
+            )
+            add_visited_status(pin)
+            created = True
+
+        sync_last_visited(pin)
+        _sync_visit_photos(request, pin, visit)
+
+        participants = _resolve_participants(request, pin)
+        visit.participants.set(participants)
+
+        # On a brand-new visit, offer the tagged connections their own suggestion,
+        # mirroring the pin-detail "log a visit" flow.
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if created and participants and lat is not None and lng is not None:
+            for participant in participants:
+                others = [p for p in participants if p.pk != participant.pk]
+                create_visit_suggestion(
+                    suggested_to=participant,
+                    suggested_by=profile,
+                    visited_at=visited_at,
+                    location=pin.location,
+                    latitude=lat,
+                    longitude=lng,
+                    candidate_profiles=others,
+                    origin_visit=visit,
+                    origin_pin=pin,
+                )
+
+        response = render(
+            request,
+            "dashboard/partials/memories/_unlogged_visits.html",
+            _unlogged_band_context(profile),
+        )
+        response["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {"message": "Visit logged." if created else "Details saved.", "level": "success"},
+                "memoriesFeedRefresh": True,
+            },
+        )
+        return response

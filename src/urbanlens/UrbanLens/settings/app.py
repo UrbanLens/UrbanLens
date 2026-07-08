@@ -65,6 +65,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
     allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=_default_allowed_hosts, description="The allowed hosts")
+    plugin_modules: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Dotted module paths of additional UrbanLens plugins to load (comma-separated)")
+    disabled_plugins: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Names of discovered UrbanLens plugins to disable for this install (comma-separated)")
     language_code: str = Field(default="en-us", description="The language code")
     time_zone: str = Field(default="EST", description="The time zone")
     use_i18n: bool = Field(default=True, description="Whether or not to use i18n")
@@ -214,12 +216,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", mode="before")
     @classmethod
-    def _split_allowed_hosts(cls, value: Any) -> Any:
-        """Allow ALLOWED_HOSTS to be provided as a comma-separated string via env vars."""
+    def _split_comma_separated(cls, value: Any) -> Any:
+        """Allow list-valued settings to be provided as comma-separated strings via env vars."""
         if isinstance(value, str):
-            return [host.strip() for host in value.split(",") if host.strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
     @model_validator(mode="after")

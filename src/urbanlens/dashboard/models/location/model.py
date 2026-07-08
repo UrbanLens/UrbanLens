@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import logging
 from typing import TYPE_CHECKING
 
@@ -16,8 +17,6 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
 
 if TYPE_CHECKING:
-    from decimal import Decimal
-
     from django.db.models import Manager as DjangoManager
 
     from urbanlens.dashboard.models.google_place.model import GooglePlace
@@ -92,6 +91,20 @@ class Location(abstract.PublicDashboardModel):
         markup_items: DjangoManager[PinMarkup]
 
     objects = LocationManager()
+
+    # Coordinates are this Location's identity: rows are deduplicated by
+    # (latitude, longitude), and when a pin's/wiki's coordinates change we
+    # get-or-create a *different* Location rather than mutating an existing one.
+    # These are frozen after insert. Address components are deliberately NOT
+    # frozen - they are metadata geocoded *from* the coordinates and are
+    # backfilled onto empty rows after creation (see pin_edit reverse-geocoding).
+    # Cache/routing fields (``google_place``, ``slug``, ``point``, ``updated``)
+    # also stay writable. Enforced here in ``save()`` and, as an unbypassable
+    # floor, by a DB trigger (see migration 0009).
+    IMMUTABLE_FIELDS: tuple[str, ...] = (
+        "latitude",
+        "longitude",
+    )
 
     @property
     def address(self) -> str | None:
@@ -267,8 +280,81 @@ class Location(abstract.PublicDashboardModel):
         # avoid churn when many locations share a blank official_name.
         return self.official_name or str(self.uuid)
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        """Stash the loaded identity-field values so ``save()`` can detect mutation.
+
+        Capturing the originals here means the immutability check normally costs
+        nothing extra - it compares against these instead of re-querying. Deferred
+        (unloaded) fields are simply skipped.
+
+        Args:
+            db: The database alias the row was loaded from.
+            field_names: The field names present in ``values``.
+            values: The row values, positionally aligned with ``field_names``.
+
+        Returns:
+            The reconstructed Location instance.
+        """
+        instance = super().from_db(db, field_names, values)
+        instance._immutable_originals = {name: values[field_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in field_names}  # noqa: SLF001
+        return instance
+
+    @staticmethod
+    def _identity_values_differ(old, new) -> bool:
+        """Compare two identity-field values, treating equal numbers as unchanged.
+
+        Coordinates are ``Decimal`` columns; a caller may assign a ``float``.
+        Normalising both through ``Decimal`` avoids a spurious mismatch (e.g.
+        ``Decimal('40.000000')`` vs ``40.0``).
+        """
+
+        if isinstance(old, float) or isinstance(new, float):
+            try:
+                return Decimal(str(old)) != Decimal(str(new))
+            except (InvalidOperation, ValueError, TypeError):
+                return old != new
+        return old != new
+
+    def _assert_identity_unchanged(self, update_fields) -> None:
+        """Raise if this save would alter any immutable identity field.
+
+        Args:
+            update_fields: The ``update_fields`` passed to ``save()`` (or ``None``
+                for a full save). When given, only fields actually being written
+                are checked.
+
+        Raises:
+            ValueError: If one or more identity fields differ from the persisted row.
+        """
+        fields = self.IMMUTABLE_FIELDS
+        if update_fields is not None:
+            update_set = set(update_fields)
+            fields = tuple(name for name in fields if name in update_set)
+            if not fields:
+                return
+
+        originals = getattr(self, "_immutable_originals", None)
+        if originals is None:
+            # Instance wasn't loaded via from_db (e.g. created, then re-saved):
+            # fall back to a single lookup of the current row.
+            originals = type(self).objects.filter(pk=self.pk).values(*self.IMMUTABLE_FIELDS).first()
+            if originals is None:
+                return  # Row no longer exists; let the normal save path handle it.
+
+        changed = [name for name in fields if name in originals and self._identity_values_differ(originals[name], getattr(self, name))]
+        if changed:
+            raise ValueError(
+                f"Location(pk={self.pk}) is immutable; refusing to change identity field(s) {changed}. "
+                "Location rows are deduplicated by coordinates - use Location.objects.get_nearby_or_create() "
+                "for the new coordinates instead of mutating an existing row.",
+            )
+
     def save(self, *args, **kwargs) -> None:
         """Sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        if self.pk is not None:
+            self._assert_identity_unchanged(kwargs.get("update_fields"))
+
         if self.latitude is not None and self.longitude is not None:
             lon = float(self.longitude)
             lat = float(self.latitude)

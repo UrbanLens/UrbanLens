@@ -226,7 +226,8 @@ Features planned for future releases.
 * Reorganize api services [UL-291]
 * Reorganize template partials [UL-292]
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]
-* Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them) [UL-294]
+* ~~Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them)~~ Framework in `dashboard/plugins/` (see docs/plugins.md); pin-detail panels, media archives, and imagery providers converted. [UL-294]
+* Convert remaining external services to plugins (weather, geocoding, search providers, routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth, openhistoricalmap) [UL-294]
 * Automatically mark nearby PD, public parking, etc. [UL-295]
 * On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated") [UL-296]
 * Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/ [UL-297]
@@ -269,6 +270,16 @@ Features planned for future releases.
 * Investigate: import pin data into google my maps. (If not: then consider other services)
 * Email export data to the user feature, so that data can be persisted even without the server online. (Alternatively: dropbox, meta, etc)
 * Celery tasks for external APIs which are rate limited could be queued for later.
+* Check for duplicate photos on photo upload.
+* Cap maximum storage space for photos.
+* Production server app log is noisy. e.g.: 
+  * 127.0.0.1:54708 - - [08/Jul/2026:20:16:09] "GET /health/" 200 5
+  * [2026-07-08 20:17:40,851: INFO/MainProcess] Scheduler: Sending due task safety-checkin-escalation (urbanlens.dashboard.tasks.escalate_overdue_checkins)
+    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,855: INFO/MainProcess] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] received
+    urbanlens_production_celery_beat    | [2026-07-08 20:17:40,866: INFO/MainProcess] Scheduler: Sending due task safety-checkin-due-reminders (urbanlens.dashboard.tasks.send_due_checkin_reminders)
+    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,868: INFO/MainProcess] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] received
+    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,893: INFO/ForkPoolWorker-2] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] succeeded in 0.036874303594231606s: 0
+    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,907: INFO/ForkPoolWorker-1] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] succeeded in 0.037884799763560295s: 0
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

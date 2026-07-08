@@ -86,31 +86,55 @@ def _visit_time(image: Image):
     return image.taken_at or image.created
 
 
-def create_pin_and_log_visit(profile: Profile, image: Image) -> tuple[Pin, PinVisit]:
-    """Create a pin at a geotagged photo's coordinates and log a visit there in one step.
+def create_pin_and_log_visit(
+    profile: Profile,
+    image: Image,
+    *,
+    latitude: Decimal | float | None = None,
+    longitude: Decimal | float | None = None,
+    name: str | None = None,
+) -> tuple[Pin, PinVisit]:
+    """Create a pin for a geotagged photo and log a visit there in one step.
 
     Used for a photo that has GPS but matches none of the user's existing pins.
     A minimal pin is created (copying nothing private) and a background task
     resolves its shared Location/address; a photo-sourced PinVisit is logged and
     the photo is attached to both the new pin and that visit.
 
+    The caller may override where the pin is placed and give it a name - the
+    Memories confirmation dialog lets the user drag the marker and name the pin
+    before committing, rather than silently dropping it at the raw photo GPS. The
+    photo keeps its own coordinates (where it was taken); only the pin/Location is
+    placed at the confirmed point.
+
     Args:
         profile: The owner the new pin and visit belong to.
-        image: The geotagged photo (must have latitude/longitude).
+        image: The geotagged photo. Its coordinates are used unless ``latitude``
+            and ``longitude`` are supplied.
+        latitude: Optional latitude to place the pin at (defaults to the photo's).
+        longitude: Optional longitude to place the pin at (defaults to the photo's).
+        name: Optional user-provided pin name; left unset to fall back to the
+            Location's canonical name via ``Pin.effective_name``.
 
     Returns:
         The newly created Pin and PinVisit.
 
     Raises:
-        ValueError: If the image has no coordinates.
+        ValueError: If neither an override nor the image supplies coordinates.
     """
-    if image.latitude is None or image.longitude is None:
-        raise ValueError("create_pin_and_log_visit requires the image to have coordinates")
+    lat = latitude if latitude is not None else image.latitude
+    lng = longitude if longitude is not None else image.longitude
+    if lat is None or lng is None:
+        raise ValueError("create_pin_and_log_visit requires coordinates (from the image or overrides)")
 
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import create_location_for_pin
 
-    pin = create_minimal_pin(profile, location=None, latitude=image.latitude, longitude=image.longitude)
+    pin = create_minimal_pin(profile, location=None, latitude=lat, longitude=lng)
+    if name and name.strip():
+        pin.name = name.strip()
+        pin.name_is_user_provided = True
+        pin.save(update_fields=["name", "name_is_user_provided", "updated"])
     safely_enqueue_task(create_location_for_pin, pin.pk)
 
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO)

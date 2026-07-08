@@ -29,6 +29,13 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    location = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
     safety_checkin = ForeignKey(
         "dashboard.SafetyCheckin",
         on_delete=SET_NULL,

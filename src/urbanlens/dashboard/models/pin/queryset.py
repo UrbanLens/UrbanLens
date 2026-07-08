@@ -42,6 +42,22 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
 
+    def visited_without_record(self) -> Self:
+        """Return top-level pins marked visited that have no dated PinVisit record.
+
+        A pin counts as "visited" when it either has a ``last_visited`` timestamp
+        or carries the profile's "Visited" status badge - mirroring the
+        ``has_visits`` filter used elsewhere. Such a pin can still lack any
+        ``PinVisit`` row (e.g. imported pins, or a status set by hand), leaving a
+        gap the Memories page surfaces so the user can log a concrete, dated visit.
+
+        Returns:
+            Distinct top-level pins that are marked visited but have zero rows in
+            their ``visit_history``.
+        """
+        visited_q = Q(last_visited__isnull=False) | Q(badges__name="Visited", badges__kind="status")
+        return self.root_pins().filter(visited_q).filter(visit_history__isnull=True).distinct()
+
     def not_visited_this_year(self):
         return self.filter(last_visited__year__lt=timezone.now().year)
 

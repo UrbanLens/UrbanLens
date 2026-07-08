@@ -1,6 +1,13 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 
+{% block header %}
+{# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block title %}Photos{% endblock %}
 
 {% block content %}
@@ -13,9 +20,6 @@
             <h1 class="memories-title"><i class="material-symbols-outlined">photo_library</i> Photos</h1>
             <p class="memories-subtitle">Every photo you've added, and a quick way to turn them into visits.</p>
         </div>
-        <button type="button" class="btn btn--primary" onclick="document.getElementById('photos-file-input').click()">
-            <i class="material-symbols-outlined">add_photo_alternate</i> Upload photos
-        </button>
     </div>
 
     <div class="page-inner">
@@ -86,6 +90,115 @@
         <p>Drop photos to upload</p>
     </div>
 </div>
+
+{# -- Confirm-pin dialog: preview/move/name a pin before creating it from a photo -- #}
+{# Closes itself on any successful POST inside it (create-pin, or filing onto an     #}
+{# existing pin); GET searches (place + your-pins autocomplete) leave it open.       #}
+<dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
+        hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}
+    <div id="photo-pin-confirm-body" class="photo-pin-confirm-body">
+        <p class="photo-pin-confirm-loading">Loading&hellip;</p>
+    </div>
+</dialog>
+
+<script>
+(function () {
+    // The confirm-pin dialog: shared across cards, its body is (re)loaded per photo.
+    var confirmMap = null;
+    var searchTimer = null;
+
+    window.photosLoadPinConfirm = function (url) {
+        var body = document.getElementById('photo-pin-confirm-body');
+        var dlg = document.getElementById('photo-pin-confirm-dialog');
+        if (!body || !dlg || typeof htmx === 'undefined') { return; }
+        body.innerHTML = '<p class="photo-pin-confirm-loading">Loading&hellip;</p>';
+        htmx.ajax('GET', url, { target: '#photo-pin-confirm-body', swap: 'innerHTML' }).then(function () {
+            dlg.showModal();
+            _initConfirm();
+        });
+    };
+
+    function _initConfirm() {
+        var root = document.getElementById('photo-pin-confirm');
+        var mapEl = document.getElementById('photo-pin-confirm-map');
+        if (!root || !mapEl || typeof L === 'undefined') { return; }
+        var lat = parseFloat(root.dataset.lat), lng = parseFloat(root.dataset.lng);
+        if (isNaN(lat) || isNaN(lng)) { return; }
+
+        if (confirmMap) { confirmMap.remove(); confirmMap = null; }
+        confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(confirmMap);
+        var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
+
+        var latInput = document.getElementById('photo-pin-confirm-lat');
+        var lngInput = document.getElementById('photo-pin-confirm-lng');
+        function commit(ll) { latInput.value = ll.lat.toFixed(6); lngInput.value = ll.lng.toFixed(6); }
+        marker.on('dragend', function () { commit(marker.getLatLng()); });
+        confirmMap.on('click', function (e) { marker.setLatLng(e.latlng); commit(e.latlng); });
+
+        // The dialog was display:none until showModal(), so Leaflet measured a
+        // zero-size container; remeasure now that it's visible.
+        setTimeout(function () { if (confirmMap) { confirmMap.invalidateSize(); } }, 60);
+
+        _wirePlaceSearch(root, marker);
+    }
+
+    function _wirePlaceSearch(root, marker) {
+        var input = document.getElementById('photo-pin-place-q');
+        var results = document.getElementById('photo-pin-place-results');
+        if (!input || !results) { return; }
+        var placesUrl = root.dataset.placesUrl, resolveUrl = root.dataset.resolveUrl;
+
+        input.addEventListener('input', function () {
+            var q = input.value.trim();
+            clearTimeout(searchTimer);
+            if (q.length < 2) { results.innerHTML = ''; return; }
+            searchTimer = setTimeout(function () {
+                fetch(placesUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) { _renderResults(data.results || [], resolveUrl, marker); })
+                    .catch(function () { results.innerHTML = ''; });
+            }, 300);
+        });
+    }
+
+    function _renderResults(list, resolveUrl, marker) {
+        var results = document.getElementById('photo-pin-place-results');
+        results.innerHTML = '';
+        list.forEach(function (item) {
+            if (!item.place_id) { return; }
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'photo-pin-place-result';
+            btn.innerHTML = '<i class="material-symbols-outlined">place</i><span>' + _esc(item.title) +
+                (item.subtitle ? '<small>' + _esc(item.subtitle) + '</small>' : '') + '</span>';
+            btn.addEventListener('click', function () { _selectPlace(item, resolveUrl, marker); });
+            results.appendChild(btn);
+        });
+    }
+
+    function _selectPlace(item, resolveUrl, marker) {
+        fetch(resolveUrl + '?place_id=' + encodeURIComponent(item.place_id))
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+            .then(function (data) {
+                if (data.lat == null || data.lng == null) { return; }
+                var ll = L.latLng(data.lat, data.lng);
+                marker.setLatLng(ll);
+                if (confirmMap) { confirmMap.setView(ll, 16); }
+                document.getElementById('photo-pin-confirm-lat').value = data.lat.toFixed(6);
+                document.getElementById('photo-pin-confirm-lng').value = data.lng.toFixed(6);
+                var nameInput = document.getElementById('photo-pin-confirm-name');
+                if (nameInput && !nameInput.value.trim()) { nameInput.value = data.name || item.title || ''; }
+                document.getElementById('photo-pin-place-results').innerHTML = '';
+                document.getElementById('photo-pin-place-q').value = data.name || item.title || '';
+            })
+            .catch(function () { if (window.toastr) { toastr.error('Could not load that place.'); } });
+    }
+
+    function _esc(v) { var d = document.createElement('div'); d.textContent = v || ''; return d.innerHTML; }
+}());
+</script>
 
 <script>
 (function () {

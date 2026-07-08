@@ -104,11 +104,77 @@ class CreatePinAndLogVisitTests(TestCase):
         # A background task is enqueued to resolve the pin's Location.
         self.assertTrue(mock_enqueue.called)
 
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_places_pin_at_override_coords_with_name(self, _mock_enqueue, _mock_resolve_name):
+        # The confirmation dialog can move the marker and name the pin; the pin
+        # lands at the override coords while the photo keeps its own capture coords.
+        pin, _visit = create_pin_and_log_visit(self.profile, self.photo, latitude=42.25, longitude=-71.75, name="Old Water Tower")
+
+        self.assertEqual(Decimal(str(pin.location.latitude)), Decimal("42.25"))
+        self.assertEqual(Decimal(str(pin.location.longitude)), Decimal("-71.75"))
+        self.assertEqual(pin.name, "Old Water Tower")
+        self.assertTrue(pin.name_is_user_provided)
+        # The photo's own coordinates are untouched (that's where it was taken).
+        self.photo.refresh_from_db()
+        self.assertEqual(Decimal(str(self.photo.latitude)), Decimal(str(_LAT)))
+
     @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
     def test_raises_without_coordinates(self, _mock_enqueue):
         photo = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
         with self.assertRaises(ValueError):
             create_pin_and_log_visit(self.profile, photo)
+
+
+class PhotoPinConfirmViewTests(TestCase):
+    """The confirm-pin dialog GET, and the create-pin POST honouring its placement."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.photo = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            latitude=Decimal(str(_LAT)),
+            longitude=Decimal(str(_LNG)),
+            taken_at=timezone.make_aware(datetime.datetime(2024, 5, 4, 9, 0, 0)),
+        )
+
+    def test_confirm_dialog_renders_map_seeded_with_photo_coords(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("memories.photos.pin_confirm", args=[self.photo.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "photo-pin-confirm-map")
+        self.assertContains(response, 'data-lat="41.500000"')
+
+    def test_confirm_dialog_404_for_photo_without_coords(self):
+        from django.urls import reverse
+
+        no_coords = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
+        response = self.client.get(reverse("memories.photos.pin_confirm", args=[no_coords.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_create_pin_post_uses_confirmed_placement(self, _mock_enqueue, _mock_resolve_name):
+        from django.urls import reverse
+
+        response = self.client.post(
+            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            {"latitude": "42.250000", "longitude": "-71.750000", "name": "Ridge Overlook"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.photo.refresh_from_db()
+        self.assertIsNotNone(self.photo.pin_id)
+        self.assertEqual(self.photo.pin.name, "Ridge Overlook")
+        self.assertEqual(Decimal(str(self.photo.pin.location.latitude)), Decimal("42.25"))
 
 
 class LogVisitOnPinTests(TestCase):

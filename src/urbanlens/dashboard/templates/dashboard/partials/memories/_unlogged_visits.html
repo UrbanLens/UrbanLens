@@ -1,0 +1,32 @@
+{% comment %}
+The Memories "log your visits" band - pins the user flagged as visited (via
+last_visited or a "Visited" status badge) that have no dated PinVisit record yet.
+
+Each card lets the user log a concrete, dated visit - either a one-click quick
+log or, via "Add details", the full visit form (photos, map, notes, people).
+Actions post to memories.visit and swap this whole band by id, so a logged pin
+drops out without a full reload. The id is present in both branches so the swap
+target always exists, even once the list empties.
+
+Context:
+  unlogged_visits - list of Pin objects to log
+  today           - ISO date string, bounding/prefilling the quick-log inputs
+{% endcomment %}
+{% if unlogged_visits %}
+<section class="memories-unlogged" id="memories-unlogged-band" aria-label="Places to log">
+    <div class="memories-unlogged-head">
+        <h2><i class="material-symbols-outlined">where_to_vote</i> Log your visits</h2>
+        <span class="badge">{{ unlogged_visits|length }}</span>
+    </div>
+    <p class="memories-unlogged-sub">
+        These places are marked visited but don't have a dated visit yet. Add a date to log them - and photos, a map, or notes if you like.
+    </p>
+    <div class="memories-unlogged-scroll">
+        {% for pin in unlogged_visits %}
+        {% include "dashboard/partials/memories/_unlogged_visit_card.html" with pin=pin today=today %}
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="memories-unlogged memories-unlogged--empty" id="memories-unlogged-band" aria-hidden="true" hidden></section>
+{% endif %}

@@ -8,18 +8,26 @@ Context:
   connections- profiles that can be tagged as participants
   visit      - PinVisit being edited, or absent/None for the add form
   dialog_id  - id of the enclosing <dialog>, closed on a successful save
+  form_action- override post URL (defaults to the pin-detail visit endpoints)
+  form_target- override hx-target (defaults to "#visit-history-panel")
+  form_swap  - override hx-swap (defaults to "outerHTML")
+  default_date- ISO date to prefill the add form's date field with (optional)
 
 The action URL, submit label, and pre-filled state are all derived from
 whether `visit` is present, so both dialogs can share this single template.
+The Memories page reuses it with its own action/target to log visits for
+pins that were marked visited but never had a dated record.
 {% endcomment %}
+{% if not form_action %}
 {% if visit %}
 {% url 'pin.visit.edit' pin.slug visit.id as form_action %}
 {% else %}
 {% url 'pin.visits' pin.slug as form_action %}
 {% endif %}
+{% endif %}
 <form hx-post="{{ form_action }}"
-      hx-target="#visit-history-panel"
-      hx-swap="outerHTML"
+      hx-target="{{ form_target|default:'#visit-history-panel' }}"
+      hx-swap="{{ form_swap|default:'outerHTML' }}"
       hx-encoding="multipart/form-data"
       hx-on::after-request="if(event.detail.successful){document.getElementById('{{ dialog_id }}').close()}"
       class="visit-add-form"
@@ -31,7 +39,7 @@ whether `visit` is present, so both dialogs can share this single template.
     <div class="form-row">
         <label for="visited_date_{{ pin.slug }}">Date</label>
         <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required
-               value="{{ visit.visited_at|date:'Y-m-d' }}">
+               value="{{ visit.visited_at|date:'Y-m-d'|default:default_date }}">
     </div>
     <div class="form-row">
         <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>

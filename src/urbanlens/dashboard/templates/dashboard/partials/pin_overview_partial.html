@@ -27,12 +27,6 @@
             </div>
             {% endif %}
             <div class="pin-stats">
-                {% if pin.place_name and pin.place_name != "No Information Available" %}
-                <div class="pin-stat-item pin-stat-item--place">
-                    <span class="field-label">Place Name</span>
-                    <span class="field-value">{{ pin.place_name }}</span>
-                </div>
-                {% endif %}
                 <div class="pin-stat-item">
                     <span class="field-label">
                         {% include "dashboard/partials/_tooltip_label.html" with label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." %}
@@ -115,6 +109,12 @@
                     </span>
                 </div>
             </div>
+            {% if pin.place_name and pin.place_name != "No Information Available" %}
+            <div class="detail-row">
+                <span class="field-label">Place Name</span>
+                <span class="field-value">{{ pin.place_name }}</span>
+            </div>
+            {% endif %}
             {% if pin.address_basic %}
             <div class="detail-row">
                 <span class="field-label">Address</span>

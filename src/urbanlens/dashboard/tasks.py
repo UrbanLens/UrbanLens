@@ -399,7 +399,7 @@ def fetch_panel_source(source_key: str, pin_id: int) -> None:
     result (LocationCache row, Campus boundary column, or warmed slide caches).
 
     Args:
-        source_key: An ``external_data.PANEL_SOURCES`` key.
+        source_key: An ``external_data.panel_sources()`` key.
         pin_id: PK of the pin whose panel data should be fetched.
     """
     from urbanlens.dashboard.models.pin.model import Pin

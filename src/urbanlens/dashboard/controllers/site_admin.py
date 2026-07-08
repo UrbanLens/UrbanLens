@@ -511,9 +511,9 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def _get_all_configs(self):
         """Return ApiRateLimit rows for every known service, creating missing ones."""
-        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY, get_limit_config
+        from urbanlens.dashboard.services.rate_limiter import all_service_defaults, get_limit_config
 
-        return [get_limit_config(key) for key in sorted(SERVICE_REGISTRY)]
+        return [get_limit_config(key) for key in sorted(all_service_defaults())]
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.api_call_log import ApiCallLog
@@ -593,6 +593,67 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             return response
 
         return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=1")
+
+
+class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Read-only listing of every discovered UrbanLens plugin.
+
+    GET /site-admin/plugins/ → plugin inventory page
+
+    Shows each plugin's metadata, discovery source, contributions, and the
+    enabled state of the services it declares. Per-service runtime toggles
+    live on the API limits page; install-level plugin disabling is done via
+    the ``UL_DISABLED_PLUGINS`` env setting.
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+    request: HttpRequest
+
+    def handle_no_permission(self) -> HttpResponseRedirect:
+        """Send anonymous users to login; return 403 for authenticated users without permission."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request: HttpRequest):
+        from urbanlens.dashboard.plugins import plugin_registry
+        from urbanlens.dashboard.services.rate_limiter import get_limit_config
+
+        entries = []
+        for info in plugin_registry.plugins():
+            plugin = info.plugin
+            plugin_enabled = plugin_registry.is_enabled(plugin.name)
+            services = []
+            if plugin_enabled:
+                for service_key in sorted(plugin.get_service_defaults()):
+                    config = get_limit_config(service_key)
+                    services.append({"key": service_key, "enabled": config.enabled})
+            entries.append(
+                {
+                    "plugin": plugin,
+                    "source": info.source,
+                    "module": info.module,
+                    "enabled": plugin_enabled,
+                    "services": services,
+                    "panel_count": len(plugin.get_panel_sources()) if plugin_enabled else 0,
+                    "satellite_count": len(plugin.get_satellite_providers()) if plugin_enabled else 0,
+                    "street_count": len(plugin.get_street_view_providers()) if plugin_enabled else 0,
+                }
+            )
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_plugins.html",
+            {
+                "page_name": "site-admin-plugins",
+                "plugins": entries,
+            },
+        )
 
 
 class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):

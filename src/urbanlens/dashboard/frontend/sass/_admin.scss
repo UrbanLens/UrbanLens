@@ -205,6 +205,45 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
+.plugin-card {
+    margin-bottom: 0 !important;
+
+    &.is-disabled {
+        opacity: .52;
+
+        .api-state-icon {
+            color: var(--ul-grey-5) !important;
+        }
+    }
+
+    &:not(.is-disabled) .api-state-icon {
+        color: var(--primary-color);
+    }
+
+    .plugin-card__description {
+        margin: 0;
+        padding: 0 1rem .5rem;
+        font-size: .85rem;
+        color: var(--text-muted, var(--ul-grey-5));
+    }
+
+    .plugin-card__services {
+        a {
+            text-decoration: none;
+        }
+    }
+
+    .plugin-card__module {
+        display: block;
+        padding: .4rem 1rem .7rem;
+        font-size: .72rem;
+        opacity: .6;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
 .api-limit-card {
     margin-bottom: 0 !important;
     transition: border-color .2s, opacity .2s, box-shadow .15s;
