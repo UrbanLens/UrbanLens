@@ -42,6 +42,13 @@ Features planned for this release.
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
 * In import pins dialog, unchecking "Create category X" does not remove the sample badge.
 * Satellite view seems to be unable to zoom in as much as I'd expect.
+* On the map list: Everything says "United States"
+* Badge bulk edit does not update the custom icon. 
+* Organize page: Bulk edit bar shows up after selecting just one thing (good). But then clicking "edit" opens the bulk edit dialog, instead of the single edit dialog (not as good).
+* Bulk edit dialog: I'm not certain that shared properties are showing up (i.e. selecting 2 rows with the same icon, the icon should show up in the dialog)
+* Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.
+* Rate limit on google places causes an ugly error page.
+* Wikipedia not showing up for some HRSH buildings.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
@@ -242,6 +249,7 @@ Features planned for future releases.
 * Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
 * Audit for XSS risks related to badge names, and all other fields, etc
+* On PinVisit entries, show avatar for other participants, instead of username.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

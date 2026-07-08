@@ -245,7 +245,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     )
 
                     gp_service = GooglePlaceService()
-                    gp_service.ensure_linked_by_place_id(pin, google_place_id)
+                    gp_service.ensure_linked_by_place_id(pin.location, google_place_id)
                     if location:
                         gp_service.ensure_linked_by_place_id(location, google_place_id)
                     update_location_name_from_external_sources(location)

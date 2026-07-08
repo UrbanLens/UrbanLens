@@ -307,6 +307,7 @@ class Profile(abstract.PublicDashboardModel):
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a unique slug from the username if not already set."""
         self.ensure_slug()
+        # TODO: This could result in 2 saves
         super().save(*args, **kwargs)
 
     def compute_map_center(self) -> tuple[float, float] | None:

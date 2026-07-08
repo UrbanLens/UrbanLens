@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import logging
+import random
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 # Django Imports
-from django.db import models as django_models, transaction
+from django.db import IntegrityError, models as django_models, transaction
 from django.db.models import UUIDField
 from django.db.models.fields import SlugField
 from django.utils.text import slugify
@@ -115,17 +116,16 @@ class PublicDashboardModel(FrontendDashboardModel):
         max_len = self._slug_max_length()
         raw_base = slugify(self._slugify_base()) or "item"
 
-        with transaction.atomic():
-            qs = self._slugify_qs()
-            # Reserve room for the longest suffix we might need.
-            # Start with the full (possibly truncated) base and walk up.
-            base = raw_base[:max_len]
-            candidate = base
-            n = 2
-            while qs.filter(slug=candidate).exists():
-                suffix = f"-{n}"
-                candidate = raw_base[: max_len - len(suffix)] + suffix
-                n += 1
+        qs = self._slugify_qs()
+        # Reserve room for the longest suffix we might need.
+        # Start with the full (possibly truncated) base and walk up.
+        base = raw_base[:max_len]
+        candidate = base
+        while qs.filter(slug=candidate).exists():
+            # Not used for cryptographic purposes
+            n = random.randint(2, 90_000) # noqa: S311
+            suffix = f"-{n}"
+            candidate = raw_base[: max_len - len(suffix)] + suffix
 
         return candidate
 
@@ -140,9 +140,7 @@ class PublicDashboardModel(FrontendDashboardModel):
             The instance slug (never empty).
         """
         if not self.slug:
-            self.slug = self._generate_slug()
-            if self.pk:
-                self.save(update_fields=["slug"])
+            self.regenerate_slug()
         return self.slug
 
     def regenerate_slug(self) -> str:
@@ -154,10 +152,24 @@ class PublicDashboardModel(FrontendDashboardModel):
         Returns:
             The new slug.
         """
-        self.slug = self._generate_slug()
-        if self.pk:
-            self.save(update_fields=["slug"])
+        # Handle race condition for slug creation
+        for _ in range(20):
+            try:
+                self.slug = self._generate_slug()
+                if self.pk:
+                    self.save(update_fields=["slug"])
+                break
+            except IntegrityError as e:
+                if "duplicate key value violates unique constraint" in str(e):
+                    continue
+                raise
         return self.slug
+    
+    def save(self, *args, **kwargs) -> None:
+        """Auto-generate a unique slug from the username if not already set."""
+        self.ensure_slug()
+        # TODO: This could result in 2 saves
+        super().save(*args, **kwargs)
 
     class Meta(FrontendDashboardModel.Meta):
         abstract = True

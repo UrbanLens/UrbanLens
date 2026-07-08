@@ -75,7 +75,7 @@ class LocationCreationService:
         if location.google_place_id is None:
             service.ensure_linked(location)
         if pin.google_place_id is None:
-            service.ensure_linked(pin)
+            service.ensure_linked(pin.location)
 
         # This bypasses Pin.save() via .update(), so point (unchanged here since pin's
         # own effective coordinates - the point it was created from - don't change by

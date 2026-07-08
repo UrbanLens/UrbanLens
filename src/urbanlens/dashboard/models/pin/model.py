@@ -463,13 +463,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         ``point`` into ``update_fields`` (when given) guards against callers that save a
         partial update after reassigning ``location`` without also refreshing ``point``.
         """
-        if not self.slug:
-            self.slug = self._generate_slug()
 
         latitude = self.effective_latitude
         longitude = self.effective_longitude
         self.point = Point(longitude, latitude, srid=4326)
-
+        self.ensure_slug()
+        # TODO: This could result in 2 saves
+        
         update_fields = kwargs.get("update_fields")
         if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
             kwargs["update_fields"] = {*update_fields, "point"}

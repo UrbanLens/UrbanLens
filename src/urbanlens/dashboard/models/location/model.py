@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
 from django.db.models import SET_NULL, ForeignKey, Index
 from django.db.models.fields import CharField, DecimalField, SlugField
 
@@ -172,7 +173,6 @@ class Location(abstract.DashboardModel):
         )
         if self.pk:
             self.__class__.objects.filter(pk=self.pk).update(google_place_id=google_place.pk)
-        self.google_place_id = google_place.pk
         self.google_place = google_place
 
     @property
@@ -255,12 +255,11 @@ class Location(abstract.DashboardModel):
 
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a routing slug and sync the PostGIS point before saving."""
-        if not self.slug:
-            self.slug = self._generate_slug()
         if self.latitude is not None and self.longitude is not None:
             lon = float(self.longitude)
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
+        
         super().save(*args, **kwargs)
 
     def __setattr__(self, name: str, value) -> None:
