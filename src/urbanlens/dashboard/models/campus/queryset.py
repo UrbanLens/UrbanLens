@@ -59,11 +59,7 @@ class CampusManager(abstract.DashboardManager.from_queryset(CampusQuerySet)):
         Returns:
             Campus | None
         """
-        return (
-            self.filter(wiki=wiki, profile__isnull=True, pin__isnull=True)
-            .with_coordinate_location()
-            .first()
-        )
+        return self.filter(wiki=wiki, profile__isnull=True, pin__isnull=True).with_coordinate_location().first()
 
     def effective_for(self, location, profile=None):
         """Return the wiki-default Campus for a location's community page.
@@ -81,7 +77,7 @@ class CampusManager(abstract.DashboardManager.from_queryset(CampusQuerySet)):
             wiki, _created = Wiki.objects.get_or_create_for_location(location)
         return self.effective_for_wiki(wiki, profile=profile)
 
-    def get_or_create_default_for_wiki(self, wiki : Wiki, *, location: Location | None = None, defaults: dict[str, Any] | None = None):
+    def get_or_create_default_for_wiki(self, wiki: Wiki, *, location: Location | None = None, defaults: dict[str, Any] | None = None):
         """Get or create the wiki-default campus row for a community page."""
         lookup = {"wiki": wiki, "profile": None, "pin": None}
         create_defaults = dict(defaults or {})

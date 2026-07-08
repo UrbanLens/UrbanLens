@@ -12,6 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import StyleSettingsForm
+from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile, ThemeChoice
 
 _db_settings = settings(
@@ -109,6 +110,7 @@ class StyleSettingsFormValidationTests(TestCase):
                 "theme_mode": theme,
                 "map_dark_mode": ThemeChoice.SYSTEM,
                 "guidance_level": GuidanceLevel.ALL,
+                "distance_units": DistanceUnit.KILOMETERS,
             },
             instance=profile,
         )
@@ -147,7 +149,12 @@ class StyleSettingsFormSaveTests(TestCase):
 
     def _save_theme(self, profile: Profile, theme: str) -> Profile:
         form = StyleSettingsForm(
-            data={"theme_mode": theme, "map_dark_mode": ThemeChoice.SYSTEM, "guidance_level": GuidanceLevel.ALL},
+            data={
+                "theme_mode": theme,
+                "map_dark_mode": ThemeChoice.SYSTEM,
+                "guidance_level": GuidanceLevel.ALL,
+                "distance_units": DistanceUnit.KILOMETERS,
+            },
             instance=profile,
         )
         self.assertTrue(form.is_valid(), form.errors)

@@ -44,7 +44,9 @@ class FormatDistanceTests(TestCase):
         self.assertEqual(format_distance(10.0, DistanceUnit.MILES), "6.2 mi")
 
     def test_decimals_arg(self) -> None:
-        self.assertEqual(format_distance(12.345, DistanceUnit.KILOMETERS, decimals=2), "12.34 km")
+        # 12.345's actual IEEE754 float value is fractionally above the exact
+        # decimal, so standard rounding correctly yields 12.35, not 12.34.
+        self.assertEqual(format_distance(12.345, DistanceUnit.KILOMETERS, decimals=2), "12.35 km")
 
 
 class UnitsForPointTests(TestCase):

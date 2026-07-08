@@ -42,10 +42,13 @@ class PinDeleteViewTests(TestCase):
         self._delete(self.owner, self.pin.slug)
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
 
-    def test_other_user_delete_returns_403(self) -> None:
+    def test_other_user_delete_returns_404(self) -> None:
+        # The lookup is scoped to the requester's own profile, so another
+        # user's pin is indistinguishable from a nonexistent one - this
+        # avoids leaking pin existence to non-owners.
         other = baker.make(User)
         response = self._delete(other, self.pin.slug)
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_other_user_delete_does_not_remove_pin(self) -> None:
         other = baker.make(User)

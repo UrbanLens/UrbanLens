@@ -29,6 +29,9 @@ from urbanlens.UrbanLens.settings.app import settings
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
+    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
+    from urbanlens.dashboard.services.external_data import ProviderFetchResult
+
 logger = logging.getLogger(__name__)
 
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
@@ -64,7 +67,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     {"pin_slug": kwargs.get("pin_slug")},
                     status=404,
                 )
-                
+
         # Backfill slug for legacy pins created before slug generation was automatic.
         if pin.wiki and not pin.wiki.slug:
             pin.wiki.ensure_slug()
@@ -485,10 +488,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # an individual provider's entry was evicted before the ready marker
         # expired -- bounded staleness beats an unbounded inline refetch.
         coord_query = f"{lat:.5f}, {lng:.5f}"
+        satellite_default: tuple[list[SatelliteSlide], list[ProviderFetchResult]] = ([], [])
         slides, provider_results = call_with_deadline(
             lambda: collect_satellite_slides(float(lat), float(lng)),
             timeout=EXTERNAL_CALL_DEADLINE,
-            default=([], []),
+            default=satellite_default,
             name="satellite-replay",
         )
         # Failures surface as count=0 entries, matching the old inline behaviour.
@@ -530,10 +534,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_panel(request, pin, "street_view")
 
         coord_query = f"{lat:.5f}, {lng:.5f}"
+        street_view_default: tuple[list[StreetViewSlide], list[ProviderFetchResult]] = ([], [])
         slides, provider_results = call_with_deadline(
             lambda: collect_street_view_slides(float(lat), float(lng)),
             timeout=EXTERNAL_CALL_DEADLINE,
-            default=([], []),
+            default=street_view_default,
             name="street-view-replay",
         )
         debug_entries = []

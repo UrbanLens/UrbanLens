@@ -104,6 +104,6 @@ class NotificationPreference(abstract.DashboardModel):
         on_delete=models.CASCADE,
         related_name="notification_preferences",
     )
-    
+
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notification_preferences"

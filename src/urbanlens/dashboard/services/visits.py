@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
@@ -46,7 +48,15 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
         fallback when no usable name or city/state is available from either source.
     """
     official_name = location.official_name if location else kwargs.get("official_name")
-    canonical_name = location.wiki.name if location and location.wiki else kwargs.get("canonical_name")
+    canonical_name = kwargs.get("canonical_name")
+    if location is not None:
+        # A Location's wiki is a reverse OneToOne accessor - it raises
+        # Wiki.DoesNotExist rather than evaluating falsy when unset.
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            wiki = None
+        canonical_name = wiki.name if wiki is not None else None
     city = location.city if location else kwargs.get("city")
     state = location.state if location else kwargs.get("state")
 

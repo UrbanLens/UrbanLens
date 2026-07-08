@@ -55,6 +55,7 @@ class Location(abstract.PublicDashboardModel):
     is routed by the Location slug (``/location/<slug>/wiki/``) and location
     UUIDs anchor the @mention system.
     """
+
     # Stable URL routing token (each place resolves its wiki via this slug).
     slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
@@ -75,7 +76,7 @@ class Location(abstract.PublicDashboardModel):
     zipcode = CharField(max_length=10, null=True, blank=True)
     zipcode_suffix = CharField(max_length=10, null=True, blank=True)
     point = PointField(geography=True, default=Point(0, 0))
-    
+
     google_place = ForeignKey(
         "dashboard.GooglePlace",
         on_delete=SET_NULL,
@@ -210,7 +211,7 @@ class Location(abstract.PublicDashboardModel):
 
         Reads the linked Wiki when present (prefetch with
         ``select_related("wiki")`` in bulk to avoid an extra query per row).
-        
+
         # TODO: This should be assessed for deletion.
         """
         try:
@@ -220,7 +221,7 @@ class Location(abstract.PublicDashboardModel):
         if wiki is not None and wiki.name:
             return wiki.name
         return self.official_name or "Unnamed Location"
-    
+
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace."""
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
@@ -292,7 +293,7 @@ class Location(abstract.PublicDashboardModel):
                 self.__dict__["google_place_id"] = getattr(value, "pk", None)
                 return
         super().__setattr__(name, value)
-        
+
     class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_locations"
         get_latest_by = "updated"

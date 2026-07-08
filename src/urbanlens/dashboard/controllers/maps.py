@@ -220,7 +220,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 is_private=is_private,
                 profile=request.user.profile,
             )
-            
+
             if badge_ids:
                 pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
             else:
@@ -230,7 +230,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if category_ids:
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
-                    
+
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
             pin.slug = pin.ensure_slug()

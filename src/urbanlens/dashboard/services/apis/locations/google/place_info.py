@@ -119,12 +119,12 @@ class GooglePlaceService:
         """
         if location.google_place is not None:
             return location.google_place
-        
+
         google_place = self.get_or_create_for_coordinates(location.latitude, location.longitude)
         if location.google_place_id != google_place.pk:
             location.google_place = google_place
             location.save(update_fields=["google_place"])
-            
+
         return google_place
 
     def set_cid_for_entity(self, location: Location, cid: int | Decimal) -> GooglePlace:
@@ -143,7 +143,7 @@ class GooglePlaceService:
             google_place.save(update_fields=["cid"])
         return google_place
 
-    def ensure_linked_by_place_id(self, location : Location, place_id: str) -> GooglePlace | None:
+    def ensure_linked_by_place_id(self, location: Location, place_id: str) -> GooglePlace | None:
         """Attach entity.google_place using a Google Place ID string.
 
         Stores the ``place_id`` on the shared GooglePlace row and links the entity,

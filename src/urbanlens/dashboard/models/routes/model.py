@@ -87,7 +87,7 @@ class Route(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="routes",
     )
-    
+
     objects = RouteManager()
 
     if TYPE_CHECKING:

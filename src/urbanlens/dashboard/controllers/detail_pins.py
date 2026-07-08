@@ -114,7 +114,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.detail_bg_opacity = int(body["bg_opacity"])
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = int(body["border_opacity"])
-            
+
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
         if new_latitude and new_longitude:

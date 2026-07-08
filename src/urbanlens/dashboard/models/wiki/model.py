@@ -182,7 +182,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
     def _slugify_base(self) -> str:
         return self.name or "wiki"
-    
+
     class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_wikis"
         get_latest_by = "updated"

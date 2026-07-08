@@ -86,8 +86,6 @@ class NoOneVisibilityTests(TestCase):
         Pin.objects.create(
             profile=self.viewer,
             location=self.location,
-            latitude=10.0,
-            longitude=20.0,
         )
         act = _make_activity_for(
             self.trip, self.adder, self.location, VisibilityChoice.NO_ONE
@@ -172,8 +170,6 @@ class CommonPinVisibilityTests(TestCase):
         Pin.objects.create(
             profile=self.viewer,
             location=self.location,
-            latitude=10.0,
-            longitude=20.0,
         )
         act = _make_activity_for(
             self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN
@@ -187,8 +183,6 @@ class CommonPinVisibilityTests(TestCase):
         Pin.objects.create(
             profile=self.viewer,
             location=other_location,
-            latitude=11.0,
-            longitude=21.0,
         )
         act = _make_activity_for(
             self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN
@@ -254,7 +248,7 @@ class MultipleActivitiesVisibilityTests(TestCase):
             TripMembership.objects.create(trip=self.trip, profile=p)
 
         # Viewer has the pin for common_pin test
-        Pin.objects.create(profile=self.viewer, location=self.location, latitude=5.0, longitude=10.0)
+        Pin.objects.create(profile=self.viewer, location=self.location)
 
     def test_no_one_hidden_friends_hidden_common_pin_visible(self):
         act_no_one = _make_activity_for(self.trip, self.adder_no_one, self.location, VisibilityChoice.NO_ONE)

@@ -60,7 +60,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     specific to that one user: their custom label, notes, visit history, status,
     priority, and the marker coordinates.
     """
-    
+
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
     # data (name, description, coordinates) must not be surfaced to others

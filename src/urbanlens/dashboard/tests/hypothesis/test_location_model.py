@@ -127,10 +127,14 @@ class LocationSlugTests(TestCase):
         self.assertEqual(loc.slug, "unnamed-location")
 
     def test_duplicate_names_get_numeric_suffix(self) -> None:
+        # _generate_slug() appends a random (not sequential) numeric suffix on
+        # collision, to avoid a race between concurrent writers reading the
+        # same "next available" counter.
         first: Location = baker.make(Location, official_name="Unnamed Location", latitude="40.0", longitude="-74.0")
         second: Location = baker.make(Location, official_name="Unnamed Location", latitude="41.0", longitude="-73.0")
         self.assertEqual(first.slug, "unnamed-location")
-        self.assertEqual(second.slug, "unnamed-location-2")
+        self.assertNotEqual(second.slug, first.slug)
+        self.assertRegex(second.slug, r"^unnamed-location-\d+$")
 
     def test_ensure_slug_backfills_legacy_row(self) -> None:
         loc: Location = baker.make(Location, official_name="Old Factory", latitude="40.0", longitude="-74.0")

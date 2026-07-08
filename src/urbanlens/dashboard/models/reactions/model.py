@@ -15,7 +15,7 @@ class Reaction(abstract.DashboardModel):
     """
 
     emoji = models.CharField(max_length=10)
-    
+
     profile = models.ForeignKey(
         "dashboard.Profile",
         on_delete=models.CASCADE,

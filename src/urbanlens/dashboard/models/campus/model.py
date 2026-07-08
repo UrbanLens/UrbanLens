@@ -54,7 +54,7 @@ class Campus(abstract.DashboardModel):
 
     # TODO [UL-351]: We previously handled Pin->Location relationships differently. Now that they are
     # fully independent, these Campus relationships should be changed.
-    
+
     # When a campus is linked to a wiki. None for pin-scoped boundaries.
     wiki = ForeignKey(
         "dashboard.Wiki",

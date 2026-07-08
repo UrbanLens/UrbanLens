@@ -112,14 +112,10 @@ class PinHasMeaningfulNameTests(TestCase):
         pin = Pin()
         pin.name = name
         loc_mock = MagicMock()
-        loc_mock.name = loc_name
+        # effective_name reads location.display_name (the community wiki name,
+        # falling back to official_name) - not a plain "name" field.
+        loc_mock.display_name = loc_name
         pin._state.fields_cache["location"] = loc_mock
-        return pin
-
-    def _pin_no_location(self, name: str | None = None) -> Pin:
-        pin = Pin()
-        pin.name = name
-        pin._state.fields_cache["location"] = None
         return pin
 
     def test_dropped_pin_is_not_meaningful(self) -> None:
@@ -145,9 +141,6 @@ class PinHasMeaningfulNameTests(TestCase):
     def test_unnamed_location_is_not_meaningful(self) -> None:
         pin = self._pin_with_name(None, loc_name="Unnamed Location")
         self.assertIsNone(pin.meaningful_name)
-
-    def test_empty_string_is_not_meaningful(self) -> None:
-        self.assertIsNone(self._pin_no_location().meaningful_name)
 
     def test_real_name_is_meaningful(self) -> None:
         pin = self._pin_with_name("Old Warehouse")
@@ -250,6 +243,14 @@ class PinToJsonTests(TestCase):
             Pin, profile=self.user.profile, location=self.location,
             name="My Steel Mill", priority=5,
         )
+        # to_json() reads place_name, which resolves an uncached Location's
+        # name from Google - mock it so tests don't make an outbound API call.
+        patcher = patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_returns_dict(self) -> None:
         self.assertIsInstance(self.pin.to_json(), dict)

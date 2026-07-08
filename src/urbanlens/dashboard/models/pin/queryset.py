@@ -271,17 +271,20 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
 
         latitude, longitude = lat_f, lon_f
 
-        # A Pin no longer stores its own coordinates: it references a shared
-        # Location (deduped by coordinates). Resolve/create that Location, then
-        # find-or-create the profile's root pin for it.
-        from urbanlens.dashboard.models.location.model import Location
-
-        location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
-
         defaults = dict(defaults or {})
         # Coordinates live on the Location; drop any legacy coord kwargs.
         for legacy in ("latitude", "longitude", "point"):
             defaults.pop(legacy, None)
+
+        # A Pin no longer stores its own coordinates: it references a shared
+        # Location (deduped by coordinates). Callers may pass a specific
+        # Location via defaults; otherwise resolve/create one from the
+        # coordinates, then find-or-create the profile's root pin for it.
+        location = defaults.pop("location", None)
+        if location is None:
+            from urbanlens.dashboard.models.location.model import Location
+
+            location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
 
         existing_pin = self.filter(
             location=location,

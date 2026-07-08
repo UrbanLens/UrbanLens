@@ -336,12 +336,7 @@ def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
     Returns:
         Dict of ``optout_checkin_url``/``optout_owner_url``/``optout_global_url`` absolute URLs.
     """
-    return {
-        f"optout_{scope.value}_url": _absolute_url(
-            reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})
-        )
-        for scope in SafetyContactOptOutScope
-    }
+    return {f"optout_{scope.value}_url": _absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
 
 
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:

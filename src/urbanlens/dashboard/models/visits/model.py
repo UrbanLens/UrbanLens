@@ -31,7 +31,7 @@ class VisitSource(TextChoices):
     SAFETY_CHECKIN = "safety_checkin", "Safety Check-in"
 
 
-class PinVisit(abstract.PublicDashboardModel):
+class PinVisit(abstract.FrontendDashboardModel):
     """A single recorded visit by a user to one of their pinned locations.
 
     Multiple PinVisit rows can exist per pin. When a visit is created or deleted
@@ -87,7 +87,7 @@ class PinVisit(abstract.PublicDashboardModel):
         """
         return f"Visit to {self.pin_id} on {self.visited_at:%Y-%m-%d}"
 
-    class Meta(abstract.PublicDashboardModel.Meta):
+    class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_pin_visits"
         ordering = ["-visited_at"]
         get_latest_by = "visited_at"

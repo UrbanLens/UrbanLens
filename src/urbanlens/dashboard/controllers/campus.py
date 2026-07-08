@@ -61,7 +61,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             pin=pin,
             defaults={"profile": profile},
         )
-        if campus.wiki_id != pin.wiki_id:
+        if campus.wiki_id != pin.wiki_id or campus.location_id != pin.location_id:
             campus.wiki = pin.wiki
             campus.location = pin.location
             campus.save(update_fields=["wiki", "location", "updated"])
@@ -171,9 +171,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             )
             covered_wiki_ids = {c.wiki_id for c in pin_campuses if c.wiki_id}
             location_defaults = list(
-                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
-                .exclude(wiki_id__in=covered_wiki_ids)
-                .with_coordinate_location(),
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True).exclude(wiki_id__in=covered_wiki_ids).with_coordinate_location(),
             )
             campuses = pin_campuses + location_defaults
         else:

@@ -64,14 +64,14 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
     if not image.pin:
         logger.warning("_suggest_for_pinned_photo: Image %s has no pin", image.pk)
         return None
-    
+
     profile = image.profile or image.pin.profile
     if not profile:
         logger.warning("_suggest_for_pinned_photo: Image %s has no profile", image.pk)
         return None
-    
+
     pin: Pin = image.pin
-    
+
     # If the image has a lat/lng, then ensure it's within the pin's radius.
     if image.longitude is not None and image.latitude is not None:
         photo_point = Point(float(image.longitude), float(image.latitude), srid=4326)
@@ -89,13 +89,7 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
         return None
 
     # Collapse batch uploads from one day into a single pending suggestion.
-    already_pending = (
-        VisitSuggestion.objects.for_profile(pin.profile)
-        .pending()
-        .for_place(location=pin.location, latitude=lat, longitude=lng)
-        .filter(visited_at__date=image.taken_at.date())
-        .exists()
-    )
+    already_pending = VisitSuggestion.objects.for_profile(pin.profile).pending().for_place(location=pin.location, latitude=lat, longitude=lng).filter(visited_at__date=image.taken_at.date()).exists()
     if already_pending:
         return None
 
@@ -138,13 +132,7 @@ def _suggest_for_unfiled_photo(image: Image) -> VisitSuggestion | None:
         return None
 
     # Collapse a same-day batch upload into a single pending suggestion per place.
-    already_pending = (
-        VisitSuggestion.objects.for_profile(profile)
-        .pending()
-        .for_place(location=pin.location, latitude=lat, longitude=lng)
-        .filter(visited_at__date=image.taken_at.date())
-        .exists()
-    )
+    already_pending = VisitSuggestion.objects.for_profile(profile).pending().for_place(location=pin.location, latitude=lat, longitude=lng).filter(visited_at__date=image.taken_at.date()).exists()
     if already_pending:
         return None
 

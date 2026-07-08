@@ -22,6 +22,7 @@ from urbanlens.dashboard.forms.settings_form import (
     MapDisplayForm,
     StyleSettingsForm,
 )
+from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import GuidanceLevel, MapCenterMode, MapViewChoice, Profile, ThemeChoice
 from urbanlens.dashboard.tests.hypothesis.strategies import valid_zoom
 
@@ -261,6 +262,7 @@ class StyleSettingsFormTests(TestCase):
             "theme_mode": theme,
             "map_dark_mode": map_dark_mode,
             "guidance_level": GuidanceLevel.ALL,
+            "distance_units": DistanceUnit.KILOMETERS,
         }
 
     def test_system_theme_is_valid(self) -> None:

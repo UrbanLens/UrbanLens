@@ -310,7 +310,7 @@ class TripComment(abstract.DashboardModel):
     text = TextField()
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
     map_data = JSONField(null=True, blank=True)
-    
+
     trip = ForeignKey(
         Trip,
         on_delete=CASCADE,

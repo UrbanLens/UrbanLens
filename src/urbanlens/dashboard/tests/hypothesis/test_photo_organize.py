@@ -85,8 +85,12 @@ class CreatePinAndLogVisitTests(TestCase):
             taken_at=self.taken_at,
         )
 
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
     @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
-    def test_creates_pin_visit_and_attaches_photo(self, mock_enqueue):
+    def test_creates_pin_visit_and_attaches_photo(self, mock_enqueue, _mock_resolve_name):
+        # No Location exists yet at these coordinates, so create_minimal_pin()
+        # creates one via _create_location_with_canonical_name(), which resolves
+        # a canonical place name from Google - mock that outbound call.
         pin, visit = create_pin_and_log_visit(self.profile, self.photo)
 
         self.assertEqual(pin.profile_id, self.profile.pk)

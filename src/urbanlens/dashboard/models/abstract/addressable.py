@@ -20,16 +20,17 @@ logger = logging.getLogger(__name__)
 class AddressableModel(DashboardModel):
     """
     Abstract mixin that adds structured address fields and derived properties to a model.
-    
+
     Children must define a ForeignKey to Location. TODO: Enforce this via Metaclass.
     """
+
     if TYPE_CHECKING:
         location: ForeignKey[Location]
-    
+
     @property
     def latitude(self) -> Decimal:
         return self.location.latitude
-    
+
     @property
     def longitude(self) -> Decimal:
         return self.location.longitude
@@ -60,7 +61,7 @@ class AddressableModel(DashboardModel):
     @property
     def city(self) -> str | None:
         return self.location.city
-    
+
     @property
     def country(self) -> str | None:
         return self.location.country
@@ -79,7 +80,7 @@ class AddressableModel(DashboardModel):
     def official_name(self) -> str | None:
         """External-source name from the linked Location."""
         return self.location.official_name
-    
+
     @property
     def place_name(self) -> str | None:
         return self.location.place_name
@@ -88,10 +89,10 @@ class AddressableModel(DashboardModel):
     def point(self):
         """PostGIS point of the linked Location, if any."""
         return self.location.point
-    
+
     def has_place_name(self) -> bool:
         """True when the cached or resolved Google place name is useful for queries."""
         return self.location.has_place_name()
-    
+
     class Meta(DashboardModel.Meta):
         abstract = True

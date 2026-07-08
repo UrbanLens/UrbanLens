@@ -73,7 +73,7 @@ class UserSubscription(abstract.DashboardModel):
 
     expires_at = DateTimeField(null=True, blank=True)
     revoked_at = DateTimeField(null=True, blank=True)
-    
+
     user = ForeignKey(User, on_delete=CASCADE, related_name="subscriptions")
     role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="user_subscriptions")
     granted_by = ForeignKey(User, on_delete=CASCADE, related_name="granted_subscriptions")

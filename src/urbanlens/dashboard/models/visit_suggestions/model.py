@@ -62,7 +62,7 @@ class VisitSuggestion(abstract.DashboardModel):
     visited_at = models.DateTimeField()
     status = models.CharField(max_length=20, choices=VisitSuggestionStatus.choices, default=VisitSuggestionStatus.PENDING)
     candidate_profiles = models.ManyToManyField("dashboard.Profile", blank=True, related_name="+")
-    
+
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.SET_NULL,

@@ -52,12 +52,12 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
 # has not chosen one explicitly; a false negative just falls back to kilometres.
 # Each entry is (min_lat, max_lat, min_lng, max_lng).
 _MILES_REGION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
-    (24.0, 50.0, -125.0, -66.0),   # Contiguous United States
+    (24.0, 50.0, -125.0, -66.0),  # Contiguous United States
     (51.0, 72.0, -170.0, -129.0),  # Alaska
     (18.0, 23.0, -161.0, -154.0),  # Hawaii
-    (49.5, 61.0, -8.7, 2.0),       # United Kingdom
-    (4.0, 9.0, -12.0, -7.0),       # Liberia
-    (9.0, 29.0, 92.0, 102.0),      # Myanmar
+    (49.5, 61.0, -8.7, 2.0),  # United Kingdom
+    (4.0, 9.0, -12.0, -7.0),  # Liberia
+    (9.0, 29.0, 92.0, 102.0),  # Myanmar
 )
 
 

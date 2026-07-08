@@ -1,9 +1,8 @@
 """Tests for services.memories.visits.maybe_suggest_photo_visit().
 
-All tests require the database - Pin.point (the field distance queries run
-against) is never auto-synced from latitude/longitude in Python, so it must
-be set explicitly on the baked fixture, matching how Pin creation paths
-(e.g. Pin.objects.get_nearby_or_create) always pass `point=` explicitly.
+All tests require the database. A Pin's coordinates (the field distance
+queries run against) live on its linked Location, whose PostGIS point is
+auto-synced from latitude/longitude on save.
 """
 from __future__ import annotations
 

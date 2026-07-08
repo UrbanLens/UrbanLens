@@ -47,11 +47,7 @@ def inter_visit_distance_km(profile: Profile) -> float:
     Returns:
         Total point-to-point travel distance across the visit sequence, in km.
     """
-    coords = (
-        PinVisit.objects.filter(pin__profile=profile)
-        .order_by("visited_at")
-        .values_list("pin__location__latitude", "pin__location__longitude")
-    )
+    coords = PinVisit.objects.filter(pin__profile=profile).order_by("visited_at").values_list("pin__location__latitude", "pin__location__longitude")
 
     total_km = 0.0
     previous: tuple[float, float] | None = None

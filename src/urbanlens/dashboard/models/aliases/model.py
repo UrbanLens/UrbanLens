@@ -11,6 +11,7 @@ from urbanlens.dashboard.models import abstract
 
 logger = logging.getLogger(__name__)
 
+
 class AliasType(TextChoices):
     """
     The type of alias.
@@ -21,9 +22,11 @@ class AliasType(TextChoices):
     * ALTERNATE: An alternate name for the pin or location.
                 Created by the user when adding an alias. (without the "nickname" checkbox)
     """
+
     NICKNAME = "nickname", "Nickname"
     OFFICIAL = "official", "Official Name"
     ALTERNATE = "alternate", "Alternate Name"
+
 
 class AliasSource(TextChoices):
     """
@@ -33,11 +36,13 @@ class AliasSource(TextChoices):
     * WIKIPEDIA: An alias from Wikipedia.
     * OTHER: An alias from another external API source.
     """
+
     USER = "user", "User-defined Alias"
     GOOGLE_PLACES = "google_places", "Google Places"
     WIKIPEDIA = "wikipedia", "Wikipedia"
     OTHER = "other", "Other"
-    
+
+
 class _AliasBase(abstract.DashboardModel):
     """Shared fields for all alias types."""
 
@@ -48,6 +53,7 @@ class _AliasBase(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         abstract = True
         ordering = ["name"]
+
 
 class PinAlias(_AliasBase):
     """An alternate name for a Pin, visible only to the pin's owner.

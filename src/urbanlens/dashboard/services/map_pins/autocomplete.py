@@ -83,7 +83,14 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         .select_related("location__wiki")
         .prefetch_related("badges", "aliases", "location__wiki__aliases")
         .filter(
-            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | Q(badges__name__icontains=q) | Q(location__official_name__icontains=q) | Q(location__wiki__name__icontains=q) | Q(location__wiki__aliases__name__icontains=q) | Q(location__wiki__description__icontains=q),
+            Q(name__icontains=q)
+            | Q(aliases__name__icontains=q)
+            | Q(description__icontains=q)
+            | Q(badges__name__icontains=q)
+            | Q(location__official_name__icontains=q)
+            | Q(location__wiki__name__icontains=q)
+            | Q(location__wiki__aliases__name__icontains=q)
+            | Q(location__wiki__description__icontains=q),
         )
         .distinct()[:12]
     )

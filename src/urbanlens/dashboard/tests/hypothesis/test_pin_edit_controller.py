@@ -35,7 +35,13 @@ class PinEditCategoryUpdateTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
+        # The rendered overview partial checks pin.has_place_name, which
+        # resolves an uncached Location's place name from Google - mock it
+        # so the response render doesn't make an outbound API call.
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def _categories(self):
@@ -96,7 +102,13 @@ class PinEditNameAliasTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
+        # The rendered overview partial checks pin.has_place_name, which
+        # resolves an uncached Location's place name from Google - mock it
+        # so the response render doesn't make an outbound API call.
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def test_renaming_pin_adds_previous_name_as_alias(self) -> None:

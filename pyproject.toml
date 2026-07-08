@@ -885,7 +885,7 @@ implicit_optional = true
 disable_error_code = ['misc', 'annotation-unchecked', 'override']
 
 [tool.django-stubs]
-django_settings_module = "urbanlens.UrbanLens.settings.base"
+django_settings_module = "urbanlens.UrbanLens.settings.test"
 ignore_missing_model_attributes = true
 #strict_settings = true
 

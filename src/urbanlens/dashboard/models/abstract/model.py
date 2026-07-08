@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_SLUG_LENGTH = 255
 
+
 class DashboardModel(django_models.Model):
     """
     A base model that all other models in this app inherit from.
@@ -47,22 +48,24 @@ class DashboardModel(django_models.Model):
 
         abstract = True
         app_label = "dashboard"
-        
+
+
 class FrontendDashboardModel(DashboardModel):
     """
     A base model that has the capability of being sent to the frontend.
     """
+
     uuid = django_models.UUIDField(default=uuid4, unique=True, editable=False)
     objects: FrontendDashboardManager = FrontendDashboardManager()
 
     class Meta(DashboardModel.Meta):
         abstract = True
-        
-        
+
+
 class PublicDashboardModel(FrontendDashboardModel):
     """
     A base model that users can visit on the frontend.
-    
+
     Concrete models must implement ``_slugify_base()`` returning the raw text
     from which the slug is derived, and may override ``_slugify_qs()`` to
     scope uniqueness checks (e.g. per-user instead of globally).
@@ -77,7 +80,7 @@ class PublicDashboardModel(FrontendDashboardModel):
     slug = django_models.SlugField(max_length=_DEFAULT_MAX_SLUG_LENGTH, null=True, blank=True)
 
     objects: PublicDashboardManager = PublicDashboardManager()
-    
+
     def _slug_max_length(self) -> int:
         """Return the max_length of the slug field as declared on this model."""
         try:
@@ -123,7 +126,7 @@ class PublicDashboardModel(FrontendDashboardModel):
         candidate = base
         while qs.filter(slug=candidate).exists():
             # Not used for cryptographic purposes
-            n = random.randint(2, 90_000) # noqa: S311
+            n = random.randint(2, 90_000)  # noqa: S311 # nosec: B311 - Used for slug generation
             suffix = f"-{n}"
             candidate = raw_base[: max_len - len(suffix)] + suffix
 
@@ -157,7 +160,8 @@ class PublicDashboardModel(FrontendDashboardModel):
             try:
                 self.slug = self._generate_slug()
                 if self.pk:
-                    self.save(update_fields=["slug"])
+                    with transaction.atomic():
+                        self.save(update_fields=["slug"])
                 break
             except IntegrityError as e:
                 if "duplicate key value violates unique constraint" in str(e):
@@ -166,42 +170,29 @@ class PublicDashboardModel(FrontendDashboardModel):
         if not self.slug:
             raise ValueError("Failed to generate a unique slug after 20 attempts")
         return self.slug
-    
+
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a unique slug from the username if not already set."""
-        if not self.slug:
-            # Handle race condition for slug creation
-            for _ in range(20):
-                try:
-                    self.slug = self._generate_slug()
+        if self.slug:
+            super().save(*args, **kwargs)
+            return
+
+        # Handle the race condition where another writer claims our candidate
+        # slug between generation and insert: retry with a fresh candidate.
+        for _ in range(20):
+            self.slug = self._generate_slug()
+            try:
+                with transaction.atomic():
                     super().save(*args, **kwargs)
-                except IntegrityError as e:
-                    if "duplicate key value violates unique constraint" in str(e):
-                        continue
-                    
-                    try:
-                        # Try to reset the slug and save any other data before we bail out,
-                        # to avoid a side effect of data loss.
-                        self.slug = f"{uuid4()}-{self.slug}"[:self._slug_max_length()]
-                        super().save(*args, **kwargs)
-                        return
-                    except IntegrityError as e:
-                        logger.exception("Slug collision: Error saving %s %s due to unknown exception: %s", self.__class__.__name__, self.pk, e)
-                    
+                return
+            except IntegrityError as e:
+                if "duplicate key value violates unique constraint" not in str(e):
                     raise
-                
-            if not self.slug:
-                try:
-                    # Try to reset the slug and save any other data before we bail out,
-                    # to avoid a side effect of data loss.
-                    self.slug = f"{uuid4()}-{self.slug}"[:self._slug_max_length()]
-                    super().save(*args, **kwargs)
-                    return
-                except IntegrityError as e:
-                    logger.exception("Slug collision: Error saving %s %s after repeated attempts: %s", self.__class__.__name__, self.pk, e)
-                    return
-        
-        # We didn't save and return yet...
+                continue
+
+        # Exhausted retries: fall back to a near-certainly-unique slug rather
+        # than dropping the save (and the caller's data) entirely.
+        self.slug = f"{uuid4()}-{self.slug}"[: self._slug_max_length()]
         super().save(*args, **kwargs)
 
     class Meta(FrontendDashboardModel.Meta):

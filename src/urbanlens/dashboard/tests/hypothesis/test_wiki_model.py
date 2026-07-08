@@ -102,8 +102,12 @@ class WikiCommentConstraintTests(TestCase):
     def test_wiki_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
 
+        # Profile is auto-created via User's post_save signal - pass it
+        # explicitly rather than letting baker create a second one for the FK,
+        # which would collide on the unique constraint.
+        profile = baker.make("auth.User").profile
         wiki = baker.make(Wiki, name="W")
-        comment = baker.make(Comment, wiki=wiki, pin=None, parent=None, text="hi")
+        comment = baker.make(Comment, profile=profile, wiki=wiki, pin=None, parent=None, text="hi")
         self.assertEqual(list(Comment.objects.for_wiki(wiki)), [comment])
 
 

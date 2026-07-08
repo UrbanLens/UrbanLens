@@ -176,6 +176,9 @@ def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckin
         else:
             label, css_class = "Not yet notified", ""
         key = contact.contact_profile_id or contact.email
+        if key is None:
+            # A contact with neither a profile nor an email cannot be keyed.
+            continue
         status_map[key] = {"label": label, "class": css_class}
     return status_map
 

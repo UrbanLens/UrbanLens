@@ -23,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
-    """Return the pin if it belongs to the requesting user, 403 if forbidden, 404 if not found."""
+    """Return the pin if it belongs to the requesting user.
+
+    Returns 403 when the requester has no authenticated profile at all. Any
+    other user's pin - whether it exists or not - returns 404: the lookup is
+    scoped to the requester's own profile, so a pin owned by someone else is
+    indistinguishable from a nonexistent one and its existence is never leaked.
+    """
     if not request.user.is_authenticated or not request.user.profile:
         return HttpResponse("Forbidden", status=403)
     try:

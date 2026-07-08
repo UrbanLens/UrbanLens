@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _ModelT = TypeVar("_ModelT", bound=django_models.Model)
 
+
 class DashboardQuerySet(django_models.QuerySet[_ModelT]):
     """
     A custom queryset. All models below will use this for interacting with results from the db.
@@ -33,9 +34,11 @@ class FrontendDashboardQuerySet(DashboardQuerySet[_ModelT]):
     """
     A custom queryset. All models below will use this for interacting with results from the db.
     """
+
     def uuid(self, uuid: str) -> Self:
         return self.filter(uuid=uuid)
-    
+
+
 class FrontendDashboardManager(DashboardManager.from_queryset(FrontendDashboardQuerySet)):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.

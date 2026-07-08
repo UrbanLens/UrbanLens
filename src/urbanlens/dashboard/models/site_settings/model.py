@@ -31,7 +31,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # Regenerated each time the database is wiped or the app is redeployed from scratch.
     # Clients embed this in their local pin cache; a mismatch signals a stale cache that
     # must be cleared (avoids ghost pins appearing after a DB reset).
-    #uuid = UUIDField(default=uuid4, unique=True, editable=False)
+    # uuid = UUIDField(default=uuid4, unique=True, editable=False)
 
     # --- Trip settings ---
 

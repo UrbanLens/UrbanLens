@@ -315,6 +315,7 @@ class SafetyCheckinContact(abstract.DashboardModel):
     portal, since a contact identified only by email has no account to log
     into.
     """
+
     email = EmailField(null=True, blank=True)
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
@@ -433,8 +434,9 @@ class SafetyCheckinMessage(abstract.DashboardModel):
     as ``sender_profile``; a contact with no account posts as
     ``sender_contact`` so their display name still resolves without a login.
     """
+
     body = TextField()
-    
+
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="messages")
     sender_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     sender_contact = ForeignKey(SafetyCheckinContact, on_delete=SET_NULL, null=True, blank=True, related_name="+")

@@ -7,7 +7,7 @@ from typing import Self
 from urbanlens.dashboard.models import abstract
 
 
-class VisitQuerySet(abstract.PublicDashboardQuerySet):
+class VisitQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for PinVisit records."""
 
     def for_pin(self, pin_id: int) -> Self:
@@ -38,5 +38,5 @@ class VisitQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(source="history")
 
 
-class VisitManager(abstract.PublicDashboardManager.from_queryset(VisitQuerySet)):
+class VisitManager(abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)):
     """Manager for PinVisit."""

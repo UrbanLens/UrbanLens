@@ -32,7 +32,7 @@ class ProfileEmail(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="secondary_emails",
     )
-    
+
     if TYPE_CHECKING:
         profile_id: int
 

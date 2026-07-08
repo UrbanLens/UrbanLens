@@ -5,7 +5,8 @@ Campus defines the spatial boundary for a Location (wiki/default) or Pin.
 - is_default / __str__: testable via unsaved instances.
 - effective_polygon: tested with a saved Campus + Location (PostGIS).
 - QuerySet / Manager: DB-backed with baker.
-- CampusController: unit-tested with RequestFactory; boundary_as_multipolygon patched.
+- CampusController: unit-tested with RequestFactory; schedule_panel_fetch patched
+  (boundary generation runs in Celery, never on the request path).
 """
 from __future__ import annotations
 
@@ -176,9 +177,12 @@ class CampusQuerySetForLocationTests(TestCase):
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.5", longitude="-74.5")
         self.other_location = baker.make("dashboard.Location", latitude="41.5", longitude="-73.5")
-        self.campus = baker.make("dashboard.Campus", location=self.location, profile=None, pin=None)
+        # A wiki-default campus is keyed to the Wiki; for_location resolves it via wiki__location.
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
+        self.other_wiki = baker.make("dashboard.Wiki", location=self.other_location)
+        self.campus = baker.make("dashboard.Campus", wiki=self.wiki, location=self.location, profile=None, pin=None)
         self.other_campus = baker.make(
-            "dashboard.Campus", location=self.other_location, profile=None, pin=None,
+            "dashboard.Campus", wiki=self.other_wiki, location=self.other_location, profile=None, pin=None,
         )
 
     def test_returns_campus_for_this_location(self) -> None:
@@ -221,8 +225,10 @@ class CampusManagerEffectiveForTests(TestCase):
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.user = baker.make("auth.User")
+        # A wiki-default campus is keyed to the Wiki; effective_for resolves it via location.wiki.
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.admin_campus = baker.make(
-            "dashboard.Campus", location=self.location, profile=None, pin=None,
+            "dashboard.Campus", wiki=self.wiki, location=self.location, profile=None, pin=None,
         )
 
     def test_returns_location_default(self) -> None:
@@ -254,8 +260,10 @@ class CampusManagerEffectiveForPinTests(TestCase):
             "dashboard.Pin", profile=self.user.profile, location=self.location)
         self.other_pin = baker.make(
             "dashboard.Pin", profile=self.other.profile, location=self.location)
+        # A wiki-default campus is keyed to the Wiki; effective_for_pin falls back via wiki__location.
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.location_default = baker.make(
-            "dashboard.Campus", location=self.location, profile=None, pin=None,
+            "dashboard.Campus", wiki=self.wiki, location=self.location, profile=None, pin=None,
         )
         self.pin_campus = baker.make(
             "dashboard.Campus", location=self.location,
@@ -288,16 +296,16 @@ class CampusQuerySetWithLocationTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-71.0")
         self.campus = baker.make("dashboard.Campus", location=self.location, profile=None, pin=None)
 
-    def test_with_location_returns_campus_queryset(self) -> None:
-        self.assertEqual(Campus.objects.filter(pk=self.campus.pk).with_location().count(), 1)
+    def test_with_coordinate_location_returns_campus_queryset(self) -> None:
+        self.assertEqual(Campus.objects.filter(pk=self.campus.pk).with_coordinate_location().count(), 1)
 
-    def test_with_location_select_relates_location(self) -> None:
-        campus = Campus.objects.filter(pk=self.campus.pk).with_location().get()
+    def test_with_coordinate_location_select_relates_location(self) -> None:
+        campus = Campus.objects.filter(pk=self.campus.pk).with_coordinate_location().get()
         self.assertIsNotNone(campus.location)
         self.assertEqual(campus.location.pk, self.location.pk)
 
-    def test_with_location_allows_effective_polygon_without_extra_query(self) -> None:
-        campus = Campus.objects.filter(pk=self.campus.pk).with_location().get()
+    def test_with_coordinate_location_allows_effective_polygon_without_extra_query(self) -> None:
+        campus = Campus.objects.filter(pk=self.campus.pk).with_coordinate_location().get()
         self.assertIsNotNone(campus.effective_polygon)
 
 
@@ -387,26 +395,28 @@ class CampusControllerBoundaryTests(TestCase):
         self.assertEqual(payload["polygon"], self._json.loads(_PIN_BOUNDARY.geojson))
         self.assertNotEqual(payload["polygon"], self._json.loads(_LOCATION_BOUNDARY.geojson))
 
-    def test_get_campus_creates_pin_campus_and_caches_generated_polygon_when_missing(self) -> None:
+    def test_get_campus_schedules_background_fetch_when_generated_polygon_missing(self) -> None:
+        """Boundary generation (Overpass/shapely work) never runs on the request
+        path - it's scheduled in Celery via schedule_panel_fetch, and the
+        response reports pending=True with no polygon until the worker lands it.
+        """
         from urbanlens.dashboard.controllers.campus import CampusController
 
         self.pin_campus.delete()
 
         with patch(
-            "urbanlens.dashboard.controllers.campus.boundary_as_multipolygon",
-            return_value=_DEFAULT_BOUNDARY_MP,
-        ):
+            "urbanlens.dashboard.controllers.campus.schedule_panel_fetch",
+            return_value=True,
+        ) as mock_schedule:
             response = CampusController().get_campus(self._request(), self.pin.slug)
 
         payload = self._json.loads(response.content)
-        self.assertEqual(payload["polygon"], self._json.loads(_DEFAULT_BOUNDARY_MP.geojson))
+        self.assertIsNone(payload["polygon"])
+        self.assertTrue(payload["pending"])
+        mock_schedule.assert_called_once_with("campus", self.pin)
         # Campus is keyed by pin, not (location, profile).
         campus = Campus.objects.get(pin=self.pin)
-        self.assertEqual(
-            self._json.loads(campus.generated_polygon.geojson),
-            self._json.loads(_DEFAULT_BOUNDARY_MP.geojson),
-        )
-        # polygon (user-drawn) is None; generated_polygon holds the cached boundary.
+        self.assertIsNone(campus.generated_polygon)
         self.assertIsNone(campus.polygon)
 
     def test_save_campus_stores_user_drawing_in_polygon(self) -> None:
@@ -433,7 +443,9 @@ class CampusControllerBoundaryTests(TestCase):
         # generated_polygon is preserved so no API call is needed next time.
         self.assertIsNotNone(self.pin_campus.generated_polygon)
 
-    def test_clear_without_generated_polygon_triggers_api_and_caches_result(self) -> None:
+    def test_clear_without_generated_polygon_schedules_background_fetch(self) -> None:
+        """Clearing the user drawing with no cached generated_polygon schedules
+        a background fetch rather than calling the boundary API inline."""
         from urbanlens.dashboard.controllers.campus import CampusController
 
         self.pin_campus.generated_polygon = None
@@ -441,20 +453,18 @@ class CampusControllerBoundaryTests(TestCase):
         self.pin_campus.save(update_fields=["polygon", "generated_polygon"])
 
         with patch(
-            "urbanlens.dashboard.controllers.campus.boundary_as_multipolygon",
-            return_value=_DEFAULT_BOUNDARY_MP,
-        ):
+            "urbanlens.dashboard.controllers.campus.schedule_panel_fetch",
+            return_value=True,
+        ) as mock_schedule:
             response = CampusController().save_campus(
                 self._request("post", {"polygon": None}), self.pin.slug,
             )
 
         self.assertEqual(response.status_code, 200)
+        mock_schedule.assert_called_once_with("campus", self.pin)
         self.pin_campus.refresh_from_db()
         self.assertIsNone(self.pin_campus.polygon)
-        self.assertEqual(
-            self._json.loads(self.pin_campus.generated_polygon.geojson),
-            self._json.loads(_DEFAULT_BOUNDARY_MP.geojson),
-        )
+        self.assertIsNone(self.pin_campus.generated_polygon)
 
     def test_pin_campus_survives_location_reassignment(self) -> None:
         """Campus found by pin FK even after pin.location changes."""

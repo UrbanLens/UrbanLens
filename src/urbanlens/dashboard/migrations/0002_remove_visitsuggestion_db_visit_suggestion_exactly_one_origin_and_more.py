@@ -87,7 +87,7 @@ class Migration(migrations.Migration):
         ),
     ]
 
-    operations = [        
+    operations = [
         migrations.RunPython(backfill_pin_coordinates, migrations.RunPython.noop),
         migrations.RemoveConstraint(
             model_name="visitsuggestion",

@@ -244,7 +244,6 @@ class WebSearchViewTests(TestCase):
 
         pin = self._make_pin()
         pin.name = "User Edited Location"
-        pin.official_name = ""
         pin.location.official_name = ""
         rf = RequestFactory()
         request = rf.get("/")

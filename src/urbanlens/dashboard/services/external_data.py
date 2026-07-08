@@ -350,8 +350,8 @@ class MediaPanelSource(LocationCachePanelSource):
             gateway_factory: Zero-argument callable building the gateway.
         """
         # Per-instance rather than ClassVar: three providers share this class.
-        self.key = key  # type: ignore[misc]
-        self.cache_source = cache_source  # type: ignore[misc]
+        self.key = key
+        self.cache_source = cache_source
         self._gateway_factory = gateway_factory
 
     def make_gateway(self) -> MediaProvider:

@@ -28,7 +28,7 @@ class LocationCache(abstract.DashboardModel):
     source = models.CharField(max_length=50)
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
-    
+
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.CASCADE,
@@ -37,7 +37,7 @@ class LocationCache(abstract.DashboardModel):
 
     if TYPE_CHECKING:
         location_id: int
-        
+
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_location_cache"
         unique_together = [("location", "source")]
