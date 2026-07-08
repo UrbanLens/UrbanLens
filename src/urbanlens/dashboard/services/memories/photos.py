@@ -142,8 +142,8 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit:
     image.pin = pin
     image.visit = visit
     if image.latitude is None or image.longitude is None:
-        image.latitude = pin.latitude
-        image.longitude = pin.longitude
+        image.latitude = pin.location.latitude
+        image.longitude = pin.location.longitude
         update_fields.extend(["latitude", "longitude"])
     image.save(update_fields=update_fields)
     sync_last_visited(pin)

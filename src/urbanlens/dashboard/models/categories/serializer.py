@@ -29,12 +29,12 @@ class CategorySerializer(serializers.ModelSerializer):
         return obj.pins.count()
 
     def get_wiki_count(self, obj: Badge) -> int:
-        """Return the number of locations with this category.
+        """Return the number of community wikis with this category.
 
         Args:
             obj: The Badge instance.
 
         Returns:
-            Location count.
+            Wiki count (exposed as location_count for API compatibility).
         """
         return obj.wikis.count()

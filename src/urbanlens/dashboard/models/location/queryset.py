@@ -65,7 +65,7 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         user-editable `polygon` is excluded so a location's boundary can't be
         inflated by a community edit to capture unrelated pins.
         """
-        return Q(campuses__pin__isnull=True) & Q(campuses__generated_polygon__contains=pt)
+        return Q(wiki__campuses__pin__isnull=True) & Q(wiki__campuses__profile__isnull=True) & Q(wiki__campuses__generated_polygon__contains=pt)
 
     def _locations_without_campus_polygon(self):
         """Return locations that have no default *generated* campus polygon."""
@@ -75,8 +75,9 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
 
         with_polygon = Campus.objects.filter(
             pin__isnull=True,
+            profile__isnull=True,
             generated_polygon__isnull=False,
-        ).values("location_id")
+        ).values("wiki__location_id")
         return self.exclude(pk__in=Subquery(with_polygon))
 
     def within_bounding_box(self, latitude: float, longitude: float):

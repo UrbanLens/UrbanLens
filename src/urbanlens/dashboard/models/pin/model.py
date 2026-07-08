@@ -60,13 +60,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     specific to that one user: their custom label, notes, visit history, status,
     priority, and the marker coordinates.
     """
-
-    # TODO: Route these through the Location model exclusively.
-    # Pin marker coordinates are always stored directly on the pin. Shared
-    # Location coordinates describe the canonical place, not a fallback for pins.
-    latitude = DecimalField(max_digits=9, decimal_places=6)
-    longitude = DecimalField(max_digits=9, decimal_places=6)
-
+    
     # When True this pin is entirely personal: it will not be linked to a shared
     # Location and will never contribute to the community wiki.  User-specific
     # data (name, description, coordinates) must not be surfaced to others
@@ -94,7 +88,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     last_visited = DateTimeField(null=True, blank=True)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
-    point = PointField(geography=True, default=Point(0, 0))
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -167,6 +160,16 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
+
+    @property
+    def latitude(self) -> float:
+        """Pin marker latitude."""
+        return float(self.location.latitude)
+    
+    @property
+    def longitude(self) -> float:
+        """Pin marker longitude."""
+        return float(self.location.longitude)
 
     def display_badge(self) -> Badge | None:
         """Badge supplying the map icon, when the icon is inherited from a badge."""
@@ -328,12 +331,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     @property
     def effective_latitude(self) -> float:
         """Pin marker latitude."""
-        return float(self.latitude)
+        # TODO: Delete this.
+        return float(self.location.latitude)
 
     @property
     def effective_longitude(self) -> float:
         """Pin marker longitude."""
-        return float(self.longitude)
+        # TODO: Delete this.
+        return float(self.location.longitude)
 
     @property
     def effective_date_last_active(self):
@@ -492,13 +497,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
-            Index(fields=["latitude", "longitude"], name="idxdb_pin_lat_long"),
+            Index(fields=["location"], name="idxdb_pin_location"),
             Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
             Index(fields=["parent_wiki"], name="idxdb_pin_parent_wiki"),
         ]
         constraints = [
             UniqueConstraint(
-                fields=["latitude", "longitude", "profile"],
+                fields=["location", "profile"],
                 condition=Q(parent_pin__isnull=True, parent_wiki__isnull=True),
                 name="db_pin_unique_location_per_profile",
             ),

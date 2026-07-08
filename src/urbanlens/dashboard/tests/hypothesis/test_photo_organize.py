@@ -90,7 +90,7 @@ class CreatePinAndLogVisitTests(TestCase):
         pin, visit = create_pin_and_log_visit(self.profile, self.photo)
 
         self.assertEqual(pin.profile_id, self.profile.pk)
-        self.assertEqual(Decimal(str(pin.latitude)), Decimal(str(_LAT)))
+        self.assertEqual(Decimal(str(pin.location.latitude)), Decimal(str(_LAT)))
         self.assertEqual(visit.source, VisitSource.PHOTO)
         self.assertEqual(visit.visited_at, self.taken_at)
 

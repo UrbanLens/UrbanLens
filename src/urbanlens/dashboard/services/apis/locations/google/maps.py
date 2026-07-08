@@ -766,8 +766,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     is_private = bool(pin_dict.get("is_private", False))
 
                     try:
-                        # Private pins are never linked to a shared Location.
-                        location = None if is_private else (Location.objects.by_cid(cid).first() if cid else None)
+                        # Private pins are never linked to a shared wiki.
+                        location = Location.objects.by_cid(cid).first() if cid else None
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,

@@ -315,7 +315,16 @@ def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Loc
             if not (-90 <= lat <= 90 and -180 <= lng <= 180):
                 return None, None
             name = (body.get("geocoded_name") or body.get("title") or f"{lat:.6f}, {lng:.6f}").strip()
-            return Location.objects.create(name=name or "Activity Location", latitude=lat, longitude=lng), None
+            from urbanlens.dashboard.models.wiki.model import Wiki
+
+            location, _ = Location.objects.get_or_create(
+                latitude=lat,
+                longitude=lng,
+                defaults={"official_name": name or "Activity Location"},
+            )
+            # Trips are not-private by design, so ensure we have a wiki page for it. (TODO: What about single-person trips?)
+            Wiki.objects.get_or_create_for_location(location, defaults={"name": name or "Activity Location"})
+            return location, None
         except (ValueError, TypeError):
             pass
 

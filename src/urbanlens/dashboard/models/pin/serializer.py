@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 class PinSerializer(serializers.ModelSerializer):
     """Serializer for Pin - exposes user-specific fields only.
 
-    Address, place name, and canonical coordinates are NOT included here because
-    they live on the related Location.  If API consumers need place-level data,
-    nest a LocationSerializer or add read-only source= fields pointing through
-    the location FK (e.g. source="location.address").
+    Canonical coordinates are read from the related Location (``pin.location``).
+    ``latitude`` and ``longitude`` are accepted on write for API compatibility
+    (e.g. duplicate-pin checks) but are not stored on Pin itself.
 
-    effective_* fields are read-only compatibility aliases for pin-owned coordinates.
+    Address and place name are not included here; nest a LocationSerializer or add
+    read-only ``source="location.*"`` fields if API consumers need place-level data.
 
     categories/tags are read-only views of the pin's badges, filtered by kind.
     Badge assignment is handled by the dedicated badges controller/endpoints,
@@ -27,8 +27,19 @@ class PinSerializer(serializers.ModelSerializer):
     effective_official_name = serializers.ReadOnlyField()
     official_name = serializers.ReadOnlyField()
     effective_icon = serializers.ReadOnlyField()
-    effective_latitude = serializers.ReadOnlyField()
-    effective_longitude = serializers.ReadOnlyField()
+    latitude = serializers.DecimalField(
+        source="location.latitude",
+        max_digits=9,
+        decimal_places=6,
+        read_only=True,
+    )
+
+    longitude = serializers.DecimalField(
+        source="location.longitude",
+        max_digits=9,
+        decimal_places=6,
+        read_only=True,
+    )
     categories = BadgeSerializer(many=True, read_only=True)
     tags = BadgeSerializer(many=True, read_only=True)
     statuses = BadgeSerializer(many=True, read_only=True)
@@ -48,8 +59,6 @@ class PinSerializer(serializers.ModelSerializer):
             "last_visited",
             "latitude",
             "longitude",
-            "effective_latitude",
-            "effective_longitude",
             "is_private",
             "created",
             "updated",

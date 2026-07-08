@@ -19,7 +19,7 @@ class PinViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request:
             return Pin.objects.none()
-        return Pin.objects.all().filter(profile__user=self.request.user)
+        return Pin.objects.select_related("location").filter(profile__user=self.request.user)
 
     def create(self, request, *args, **kwargs):
         logger.info("Create request initiated by user %s", request.user.id)

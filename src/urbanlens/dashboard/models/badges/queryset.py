@@ -80,6 +80,7 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
         return self.annotate(
             pin_count=Count("pins", distinct=True),
             wiki_count=Count("wikis", distinct=True),
+            location_count=Count("wikis", distinct=True),
         ).prefetch_related(
             Prefetch(
                 "children",

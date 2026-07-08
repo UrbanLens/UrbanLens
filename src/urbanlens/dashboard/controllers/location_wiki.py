@@ -246,8 +246,8 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, _wiki = _resolve_wiki(location_slug)
-        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+        location, wiki = _resolve_wiki(location_slug)
+        campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
         if campus.polygon is None:
             campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.display_name)
             campus.save(update_fields=["polygon", "updated"])
@@ -291,7 +291,7 @@ class LocationWikiBboxView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+        campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
         old_wkt = campus.polygon.wkt if campus.polygon else None
         campus.polygon = geom
         campus.save(update_fields=["polygon", "updated"])
@@ -341,7 +341,7 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         for field, diff in target_edit.changes.items():
             old_val = diff.get("from")
             if field == "bounding_box":
-                campus, _ = Campus.objects.get_or_create(location=location, profile=None)
+                campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
                 current_val = campus.polygon.wkt if campus.polygon else None
                 revert_changes[field] = {"from": current_val, "to": old_val}
                 if old_val:

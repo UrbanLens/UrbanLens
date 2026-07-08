@@ -216,7 +216,7 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
             Route.objects.for_profile(profile).filter(started_at__month=today.month, started_at__day=today.day).exclude(started_at__year=today.year).order_by("-started_at")[:_ON_THIS_DAY_LIMIT],
         )
         photos = list(
-            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year).select_related("pin", "wiki").order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
+            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year).select_related("pin", "wiki", "wiki__location").order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
         )
 
         return render(

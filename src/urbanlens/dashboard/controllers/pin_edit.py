@@ -534,6 +534,7 @@ class PinRelinkView(LoginRequiredMixin, View):
         pin = result
 
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
             location = get_object_or_404(Location, slug=location_slug)
@@ -556,8 +557,10 @@ class PinRelinkView(LoginRequiredMixin, View):
 
                 location = _create_location_with_canonical_name(lat, lng)
 
+        wiki, _ = Wiki.objects.get_or_create_for_location(location)
         pin.location = location
-        pin.save(update_fields=["location"])
+        pin.wiki = wiki
+        pin.save(update_fields=["location", "wiki"])
         pin.refresh_from_db()
 
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))

@@ -1,4 +1,4 @@
-"""Comment model - for Pin and Location (wiki) comments."""
+"""Comment model - for Pin and Wiki comments."""
 
 from __future__ import annotations
 

@@ -121,9 +121,7 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
 def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Create a bare pin for a profile at a place, deliberately copying nothing private.
 
-    Unlike ``pin_sharing._create_pin_from_share`` (which copies a source pin's
-    private description/icon/color for explicit pin-sharing), this leaves ``name``
-    unset so ``effective_name`` falls back to the Location's own name.
+    This leaves ``name`` unset so ``effective_name`` falls back to the Location's own name.
 
     Args:
         profile: Profile the new pin belongs to.
@@ -134,7 +132,15 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
     Returns:
         The newly created Pin.
     """
-    return Pin.objects.create(profile=profile, location=location, latitude=latitude, longitude=longitude)
+    if location is None:
+        from urbanlens.dashboard.models.location.model import Location
+
+        location = Location.objects.get_for_point(float(latitude), float(longitude))
+        if location is None:
+            from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+            location = _create_location_with_canonical_name(float(latitude), float(longitude))
+    return Pin.objects.create(profile=profile, location=location)
 
 
 def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:

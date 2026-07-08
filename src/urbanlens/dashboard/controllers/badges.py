@@ -758,7 +758,7 @@ class BadgeMultiMergeView(_BadgeKindMixin, LoginRequiredMixin, View):
             for source in sources:
                 target.pins.add(*source.pins.all())
                 if self.kind == KIND_CATEGORY:
-                    target.locations.add(*source.locations.all())
+                    target.wikis.add(*source.wikis.all())
                 source.delete()
 
         return _render_rows(request, self.kind, profile)

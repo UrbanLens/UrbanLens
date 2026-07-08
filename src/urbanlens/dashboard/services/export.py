@@ -287,9 +287,9 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export all user pins as a rich JSON file (UrbanLens custom format).
 
-    Only personal Pin data is exported here - never the shared Location it may
-    be linked to. Location is community wiki data (canonical name, address,
-    description) that belongs to the instance, not to any one user's export.
+    Only personal Pin data is exported here - never the shared Location or Wiki it may
+    be linked to. Community wiki data (canonical name, address, description) belongs
+    to the instance, not to any one user's export.
     Each pin's *effective* coordinates are exported instead of its raw
     lat/lng override, so a pin that currently relies on its Location for
     placement still has somewhere to land on import. On import, pins are

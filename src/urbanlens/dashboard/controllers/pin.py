@@ -50,6 +50,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinType
+        from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
             pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
@@ -63,22 +64,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     {"pin_slug": kwargs.get("pin_slug")},
                     status=404,
                 )
-
-        # Auto-link legacy pins that pre-date the Location requirement.
-        # Private pins are intentionally unlinked - never create a wiki entry for them.
-        if not pin.is_private and pin.location is None and pin.effective_latitude and pin.effective_longitude:
-            lat, lon = pin.effective_latitude, pin.effective_longitude
-            location = Location.objects.get_for_point(lat, lon)
-            if not location:
-                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
-
-                location = _create_location_with_canonical_name(lat, lon)
-            pin.location = location
-            pin.save(update_fields=["location"])
-        elif pin.location and not pin.location.slug:
-            pin.location.ensure_slug()
-
+                
         # Backfill slug for legacy pins created before slug generation was automatic.
+        if pin.wiki and not pin.wiki.slug:
+            pin.wiki.ensure_slug()
         if not pin.slug:
             pin.slug = pin.ensure_slug()
             pin.save(update_fields=["slug"])
@@ -1041,7 +1030,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.latitude or not pin.longitude:
+        if not pin.location.latitude or not pin.location.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
         from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
@@ -1050,7 +1039,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         weather_forecast_gateway = OpenWeatherMapGateway()
 
         # Get the weather forecast from the OpenWeather API
-        weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.latitude, pin.longitude)
+        weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.location.latitude, pin.location.longitude)
 
         logger.debug("forecast_data: %s", weather_forecast)
 

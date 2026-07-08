@@ -105,10 +105,14 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.detail_bg_opacity = int(body["bg_opacity"])
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = int(body["border_opacity"])
-        if body.get("latitude"):
-            detail_pin.latitude = float(body["latitude"])
-        if body.get("longitude"):
-            detail_pin.longitude = float(body["longitude"])
+            
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        if new_latitude or new_longitude:
+            # Create a new Location at these coordinates if one doesn't exist
+            location = Location.objects.get_or_create(latitude=new_latitude, longitude=new_longitude)
+            detail_pin.location = location
+            
         detail_pin.save()
         return JsonResponse({"ok": True})
 
@@ -247,13 +251,11 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = int(body["border_opacity"])
 
-        lat = body.get("latitude")
-        lon = body.get("longitude")
-        moved = bool(lat and lon)
-        old_lat, old_lon = detail_pin.latitude, detail_pin.longitude
-        if moved:
-            detail_pin.latitude = float(lat)
-            detail_pin.longitude = float(lon)
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        old_lat, old_lon = detail_pin.location.latitude, detail_pin.location.longitude
+        if moved := (new_latitude or new_longitude):
+            detail_pin.location = Location.objects.get_or_create(latitude=new_latitude, longitude=new_longitude)
         detail_pin.save()
 
         if moved:
@@ -264,7 +266,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
                     "detail_pin_moved": {
                         "pin": detail_pin.effective_name,
                         "from": [str(old_lat), str(old_lon)],
-                        "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
+                        "to": [str(detail_pin.location.latitude), str(detail_pin.location.longitude)],
                     }
                 },
             )

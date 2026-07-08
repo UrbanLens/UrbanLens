@@ -61,10 +61,10 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
             pin=pin,
             defaults={"profile": profile},
         )
-        # Sync wiki in case pin.wiki was reassigned since this campus was created.
         if campus.wiki_id != pin.wiki_id:
             campus.wiki = pin.wiki
-            campus.save(update_fields=["wiki", "updated"])
+            campus.location = pin.location
+            campus.save(update_fields=["wiki", "location", "updated"])
 
         # Boundary generation (Overpass, building-footprint downloads, shapely
         # work) never runs on the request path: schedule it in Celery and tell
@@ -141,7 +141,7 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
         # generated_polygon is deliberately absent: only the background fetch
         # task writes it (single-column queryset update), so this save can
         # never clobber a boundary the worker landed concurrently.
-        campus.save(update_fields=["polygon", "location", "updated"])
+        campus.save(update_fields=["polygon", "wiki", "location", "updated"])
 
         effective = campus.polygon or campus.generated_polygon
         return JsonResponse(
@@ -167,27 +167,32 @@ class CampusController(LoginRequiredMixin, GenericViewSet):
 
         if profile:
             pin_campuses = list(
-                Campus.objects.filter(profile=profile, pin__isnull=False).select_related("location"),
+                Campus.objects.filter(profile=profile, pin__isnull=False).with_coordinate_location(),
             )
-            covered_location_ids = {c.location_id for c in pin_campuses}
+            covered_wiki_ids = {c.wiki_id for c in pin_campuses if c.wiki_id}
             location_defaults = list(
-                Campus.objects.filter(profile__isnull=True, pin__isnull=True).exclude(location_id__in=covered_location_ids).select_related("location"),
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True)
+                .exclude(wiki_id__in=covered_wiki_ids)
+                .with_coordinate_location(),
             )
             campuses = pin_campuses + location_defaults
         else:
             campuses = list(
-                Campus.objects.filter(profile__isnull=True, pin__isnull=True).select_related("location"),
+                Campus.objects.filter(profile__isnull=True, pin__isnull=True).with_coordinate_location(),
             )
 
         result = []
         for c in campuses:
             effective = c.polygon or c.generated_polygon
+            location = c.coordinate_location
+            if location is None or location.latitude is None or location.longitude is None:
+                continue
             result.append(
                 {
                     "id": c.id,
-                    "location_id": c.location_id,
-                    "latitude": float(c.location.latitude),
-                    "longitude": float(c.location.longitude),
+                    "location_id": location.id,
+                    "latitude": float(location.latitude),
+                    "longitude": float(location.longitude),
                     "polygon": json.loads(effective.geojson) if effective else None,
                     "default_radius_meters": c.default_radius_meters,
                 },
