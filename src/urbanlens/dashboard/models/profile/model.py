@@ -304,12 +304,6 @@ class Profile(abstract.PublicDashboardModel):
     def _slugify_base(self) -> str:
         return self.user.username or "user"
 
-    def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug from the username if not already set."""
-        self.ensure_slug()
-        # TODO: This could result in 2 saves
-        super().save(*args, **kwargs)
-
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.
 

@@ -167,8 +167,39 @@ class PublicDashboardModel(FrontendDashboardModel):
     
     def save(self, *args, **kwargs) -> None:
         """Auto-generate a unique slug from the username if not already set."""
-        self.ensure_slug()
-        # TODO: This could result in 2 saves
+        if not self.slug:
+            # Handle race condition for slug creation
+            for _ in range(20):
+                try:
+                    self.slug = self._generate_slug()
+                    super().save(*args, **kwargs)
+                except IntegrityError as e:
+                    if "duplicate key value violates unique constraint" in str(e):
+                        continue
+                    
+                    try:
+                        # Try to reset the slug and save any other data before we bail out,
+                        # to avoid a side effect of data loss.
+                        self.slug = f"{uuid4()}-{self.slug}"[:self._slug_max_length()]
+                        super().save(*args, **kwargs)
+                        return
+                    except IntegrityError as e:
+                        logger.exception("Slug collision: Error saving %s %s due to unknown exception: %s", self.__class__.__name__, self.pk, e)
+                    
+                    raise
+                
+            if not self.slug:
+                try:
+                    # Try to reset the slug and save any other data before we bail out,
+                    # to avoid a side effect of data loss.
+                    self.slug = f"{uuid4()}-{self.slug}"[:self._slug_max_length()]
+                    super().save(*args, **kwargs)
+                    return
+                except IntegrityError as e:
+                    logger.exception("Slug collision: Error saving %s %s after repeated attempts: %s", self.__class__.__name__, self.pk, e)
+                    return
+        
+        # We didn't save and return yet...
         super().save(*args, **kwargs)
 
     class Meta(FrontendDashboardModel.Meta):

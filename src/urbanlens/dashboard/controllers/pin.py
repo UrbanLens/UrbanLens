@@ -70,7 +70,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin.wiki.ensure_slug()
         if not pin.slug:
             pin.slug = pin.ensure_slug()
-            pin.save(update_fields=["slug"])
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

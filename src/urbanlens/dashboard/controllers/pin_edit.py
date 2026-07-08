@@ -102,9 +102,6 @@ def _overview_context(pin: Pin) -> dict:
     lat, lng = pin.effective_latitude, pin.effective_longitude
     overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
 
-    if pin.location and not pin.location.slug:
-        pin.location.ensure_slug()
-
     return {
         "pin": pin,
         "client_version": _pin_version(pin),

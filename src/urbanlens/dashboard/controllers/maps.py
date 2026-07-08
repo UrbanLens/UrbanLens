@@ -230,7 +230,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
             pin.slug = pin.ensure_slug()
-            pin.save(update_fields=["slug"])
 
             # When adding from a Places layer marker, pre-populate the GooglePlace
             # link on both the pin and its location so subsequent views avoid an

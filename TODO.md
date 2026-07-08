@@ -49,6 +49,12 @@ Features planned for this release.
 * Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.
 * Rate limit on google places causes an ugly error page.
 * Wikipedia not showing up for some HRSH buildings.
+* Map caching / loading seems to be less reliable at 8k+ pins.
+    [UL] Cache MISS - fetching all pins from server
+    VM96 map:1014 [UL] Fetching 1 tile(s) from server: *
+    VM96 map:1055 [UL] Server returned 8495 new pin(s) for tile(s): *
+    VM96 map:402 [UL] Cache write failed (QuotaExceededError) - pins will reload next visit
+    _writeCache	@	VM96 map:402
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
