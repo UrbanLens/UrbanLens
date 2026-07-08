@@ -481,7 +481,7 @@
 
     <!-- Header with step indicator -->
     <div class="iw-header dialog-header">
-        <h2 id="iw-title">Import Pins</h2>
+        <h2 id="iw-title">{{ import_title|default:"Import Pins" }}</h2>
         <div class="iw-step-dots">
             <div class="iw-dot active" id="iw-dot-1"></div>
             <div class="iw-dot" id="iw-dot-2"></div>
@@ -493,7 +493,11 @@
     <div id="iw-step-1">
         <div class="iw-body">
             <p class="iw-hint">
+                {% if import_variant == "memories" %}
+                Bring in everywhere you've been - import routes, trips, visits, and saved places from Google Takeout or another app.
+                {% else %}
                 Import data from another app. Many apps are supported.
+                {% endif %}
                 We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
@@ -622,9 +626,9 @@ function showStep(name, dotIdx) {
         d.className = 'iw-dot' + (i < dotIdx ? ' done' : i === dotIdx ? ' active' : '');
     });
     $('iw-title').textContent = {
-        upload: 'Import Pins',
-        parsing: 'Import Pins',
-        preview: 'Review Import',
+        upload: '{{ import_title|default:"Import Pins"|escapejs }}',
+        parsing: '{{ import_title|default:"Import Pins"|escapejs }}',
+        preview: '{{ import_review_title|default:"Review Import"|escapejs }}',
         progress: 'Importing...',
     }[name];
 }

@@ -30,7 +30,7 @@
             <h2>No memory data yet</h2>
             <p>Import routes, location history, visits, trips, or photos to start building your Memories timeline.</p>
             <button type="button" class="btn btn--primary"
-                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
+                    hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
                 <i class="material-symbols-outlined">upload</i> Import routes &amp; history
             </button>
         </div>
@@ -42,7 +42,7 @@
             <p class="memories-subtitle">Everywhere you've been - routes, trips, visits, and photos, on one map and timeline.</p>
         </div>
         <button type="button" class="btn btn--primary" id="memories-import-btn"
-                hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
+                hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
             <i class="material-symbols-outlined">upload</i> Import routes &amp; history
         </button>
     </div>
@@ -69,17 +69,17 @@
                 <button type="button" class="btn btn--sm btn--ghost" data-range="all">All time</button>
             </div>
             <div class="memories-legend">
-                <label class="memories-legend-item" data-type="route">
-                    <span class="memories-legend-swatch" style="background:#2196F3"></span> Routes
+                <label class="memories-legend-item memories-type-route" data-type="route">
+                    <span class="memories-legend-swatch"></span> Routes
                 </label>
-                <label class="memories-legend-item" data-type="trip">
-                    <span class="memories-legend-swatch" style="background:#FF9800"></span> Trips
+                <label class="memories-legend-item memories-type-trip" data-type="trip">
+                    <span class="memories-legend-swatch"></span> Trips
                 </label>
-                <label class="memories-legend-item" data-type="visit">
-                    <span class="memories-legend-swatch" style="background:#4CAF50"></span> Visits
+                <label class="memories-legend-item memories-type-visit" data-type="visit">
+                    <span class="memories-legend-swatch"></span> Visits
                 </label>
-                <label class="memories-legend-item" data-type="photo">
-                    <span class="memories-legend-swatch" style="background:#E91E63"></span> Photos
+                <label class="memories-legend-item memories-type-photo" data-type="photo">
+                    <span class="memories-legend-swatch"></span> Photos
                 </label>
             </div>
         </div>
@@ -96,6 +96,23 @@
 <div id="importPinsModal"></div>
 
 {% if has_memory_data %}
+{# -- Photo lightbox (opened from timeline photo cards) ----------------------- #}
+<dialog id="memories-lightbox" class="gallery-lightbox ul-dialog">
+    <div class="lightbox-inner">
+        <button type="button" class="lightbox-close" id="memories-lightbox-close">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+        <button type="button" class="lightbox-nav lightbox-prev" id="memories-lightbox-prev">
+            <i class="material-symbols-outlined">chevron_left</i>
+        </button>
+        <img id="memories-lightbox-img" src="" alt="" class="lightbox-img">
+        <button type="button" class="lightbox-nav lightbox-next" id="memories-lightbox-next">
+            <i class="material-symbols-outlined">chevron_right</i>
+        </button>
+        <div class="lightbox-caption" id="memories-lightbox-caption"></div>
+    </div>
+</dialog>
+
 <script>
 (function () {
     var root = document.getElementById('memories-page');
@@ -106,7 +123,6 @@
     var mapLng = parseFloat(root.dataset.mapLng);
     if (isNaN(mapLat) || isNaN(mapLng)) { mapLat = 39.8283; mapLng = -98.5795; } // continental US fallback
 
-    var TYPE_COLORS = { route: '#2196F3', trip: '#FF9800', visit: '#4CAF50', photo: '#E91E63' };
     var TYPE_ICONS = { route: 'route', trip: 'luggage', visit: 'pin_drop', photo: 'photo_camera' };
 
     // -- Map setup ------------------------------------------------------------
@@ -129,7 +145,7 @@
     function divIcon(type) {
         return L.divIcon({
             className: '',
-            html: '<div class="memories-marker-icon" style="background:' + TYPE_COLORS[type] + ';width:26px;height:26px;">' +
+            html: '<div class="memories-marker-icon memories-type-' + type + '">' +
                   '<i class="material-symbols-outlined">' + TYPE_ICONS[type] + '</i></div>',
             iconSize: [26, 26],
             iconAnchor: [13, 13],
@@ -137,13 +153,13 @@
     }
 
     function popupHtml(event) {
-        var html = '<div style="min-width:160px">';
+        var html = '<div class="memories-popup">';
         if (event.thumbnail_url) {
-            html += '<img src="' + event.thumbnail_url + '" style="width:100%;border-radius:.4rem;margin-bottom:.4rem;object-fit:cover;max-height:120px">';
+            html += '<img class="memories-popup-thumb" src="' + event.thumbnail_url + '">';
         }
-        html += '<div style="font-weight:700">' + escapeHtml(event.title) + '</div>';
-        if (event.subtitle) { html += '<div style="font-size:.8rem;color:#777">' + escapeHtml(event.subtitle) + '</div>'; }
-        if (event.url) { html += '<a href="' + event.url + '" style="font-size:.8rem">View details &rarr;</a>'; }
+        html += '<div class="memories-popup-title">' + escapeHtml(event.title) + '</div>';
+        if (event.subtitle) { html += '<div class="memories-popup-subtitle">' + escapeHtml(event.subtitle) + '</div>'; }
+        if (event.url) { html += '<a class="memories-popup-link" href="' + event.url + '">View details &rarr;</a>'; }
         html += '</div>';
         return html;
     }
@@ -228,10 +244,19 @@
                 var card = document.createElement('a');
                 card.className = 'memories-card';
                 card.href = event.url || '#';
-                if (!event.url) { card.style.cursor = 'default'; card.addEventListener('click', function (e) { e.preventDefault(); }); }
+                if (event.type === 'photo' && event.thumbnail_url) {
+                    // Photos open in an on-page lightbox instead of navigating to the gallery.
+                    card.classList.add('memories-card--photo');
+                    card.dataset.photoSrc = event.thumbnail_url;
+                    card.dataset.photoCaption = event.subtitle ? event.title + ' · ' + event.subtitle : event.title;
+                    card.addEventListener('click', function (e) { e.preventDefault(); openLightbox(card); });
+                } else if (!event.url) {
+                    card.classList.add('memories-card--static');
+                    card.addEventListener('click', function (e) { e.preventDefault(); });
+                }
                 var media = event.thumbnail_url
                     ? '<img class="memories-card-thumb" src="' + event.thumbnail_url + '">'
-                    : '<div class="memories-card-icon" style="background:' + event.color + '"><i class="material-symbols-outlined">' + event.icon + '</i></div>';
+                    : '<div class="memories-card-icon memories-type-' + event.type + '"><i class="material-symbols-outlined">' + event.icon + '</i></div>';
                 card.innerHTML = media +
                     '<div class="memories-card-body">' +
                     '<div class="memories-card-title">' + escapeHtml(event.title) + '</div>' +
@@ -242,6 +267,45 @@
             container.appendChild(grid);
         });
     }
+
+    // -- Photo lightbox -----------------------------------------------------
+
+    var lbDialog = document.getElementById('memories-lightbox');
+    var lbImg = document.getElementById('memories-lightbox-img');
+    var lbCaption = document.getElementById('memories-lightbox-caption');
+    var lbItems = [];
+    var lbIdx = 0;
+
+    function showLightbox() {
+        var el = lbItems[lbIdx];
+        if (!el) { return; }
+        lbImg.src = el.dataset.photoSrc;
+        lbCaption.textContent = el.dataset.photoCaption || '';
+    }
+
+    function navLightbox(dir) {
+        if (!lbItems.length) { return; }
+        lbIdx = (lbIdx + dir + lbItems.length) % lbItems.length;
+        showLightbox();
+    }
+
+    function openLightbox(card) {
+        // Collect the currently rendered photo cards so prev/next walks the timeline.
+        lbItems = Array.prototype.slice.call(document.querySelectorAll('.memories-card--photo'));
+        lbIdx = lbItems.indexOf(card);
+        if (lbIdx < 0) { lbIdx = 0; }
+        showLightbox();
+        lbDialog.showModal();
+    }
+
+    document.getElementById('memories-lightbox-close').addEventListener('click', function () { lbDialog.close(); });
+    document.getElementById('memories-lightbox-prev').addEventListener('click', function () { navLightbox(-1); });
+    document.getElementById('memories-lightbox-next').addEventListener('click', function () { navLightbox(1); });
+    document.addEventListener('keydown', function (e) {
+        if (!lbDialog.open) { return; }
+        if (e.key === 'ArrowLeft') { navLightbox(-1); }
+        else if (e.key === 'ArrowRight') { navLightbox(1); }
+    });
 
     // -- Data fetching ------------------------------------------------------
 

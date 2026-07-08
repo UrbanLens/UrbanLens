@@ -559,13 +559,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["get"])
     def import_form(self, request: HttpRequest):
-        """
-        View the import pins form
+        """View the import wizard dialog.
+
+        The same wizard powers both the pin importer and the Memories
+        "Import routes & history" flow; only the surrounding copy differs.
+
+        Args:
+            request: The incoming request. An optional ``variant`` query
+                parameter of ``"memories"`` swaps the dialog's title and intro
+                text for routes/location-history wording; any other value uses
+                the default pin-import wording.
+
+        Returns:
+            The rendered import wizard dialog template.
         """
         from urbanlens.dashboard.models.badges.model import Badge
 
         profile = Profile.objects.get(user=request.user)
         tags = Badge.objects.visible_to(profile).ordered()
+        variant = "memories" if request.GET.get("variant") == "memories" else "pins"
+        import_title = "Import Routes & History" if variant == "memories" else "Import Pins"
         return render(
             request,
             "dashboard/pages/location/import/csv.html",
@@ -573,6 +586,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "form": UploadDataFile(),
                 "tags": tags,
                 "profile": profile,
+                "import_variant": variant,
+                "import_title": import_title,
+                "import_review_title": "Review Import",
             },
         )
 

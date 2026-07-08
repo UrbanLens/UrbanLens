@@ -1,5 +1,22 @@
 @use 'variables' as *;
 
+// Shared type accent colors (routes / trips / visits / photos). Adjust these to
+// recolor the legend swatches, map markers, and timeline card icons together.
+$memories-type-colors: (
+    route: $color-blue-500,
+    trip: $color-orange-500,
+    visit: $color-green-500,
+    photo: $color-pink-500,
+);
+
+// Each type utility class exposes its accent via a custom property so any
+// descendant (swatch, marker, card icon) can pick it up with a single rule.
+@each $type, $color in $memories-type-colors {
+    .memories-type-#{$type} {
+        --memories-type-color: #{$color};
+    }
+}
+
 // -- Memories page ----------------------------------------------------------
 #memories-page {
     margin-top: 1rem;
@@ -184,6 +201,7 @@
         height: 10px;
         border-radius: 50%;
         display: inline-block;
+        background: var(--memories-type-color);
     }
 
     &.is-off {
@@ -207,6 +225,9 @@
 }
 
 .memories-marker-icon {
+    width: 26px;
+    height: 26px;
+    background: var(--memories-type-color);
     border-radius: 50%;
     border: 2px solid #fff;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
@@ -217,6 +238,32 @@
     .material-symbols-outlined {
         color: #fff;
         font-size: 14px;
+    }
+}
+
+// Leaflet marker popups (built in JS via popupHtml()).
+.memories-popup {
+    min-width: 160px;
+
+    .memories-popup-thumb {
+        width: 100%;
+        max-height: 120px;
+        object-fit: cover;
+        border-radius: .4rem;
+        margin-bottom: .4rem;
+    }
+
+    .memories-popup-title {
+        font-weight: 700;
+    }
+
+    .memories-popup-subtitle {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+    }
+
+    .memories-popup-link {
+        font-size: .8rem;
     }
 }
 
@@ -254,6 +301,11 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
         transform: translateY(-1px);
     }
+
+    // Cards without a target link aren't clickable.
+    &.memories-card--static {
+        cursor: default;
+    }
 }
 
 .memories-card-icon {
@@ -264,6 +316,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--memories-type-color);
 
     .material-symbols-outlined {
         color: #fff;
