@@ -27,6 +27,7 @@ class MemoriesViewEmptyStateTests(TestCase):
         self.assertNotContains(response, "memories-controls")
         self.assertNotContains(response, "memories-map")
         self.assertNotContains(response, "memories-timeline")
+        self.assertNotContains(response, reverse("memories.visits"))
 
     def test_profile_with_memory_data_sees_memories_ui(self) -> None:
         baker.make(Image, profile=self.user.profile)

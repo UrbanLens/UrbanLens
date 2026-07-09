@@ -21,6 +21,28 @@
 
     <div class="page-inner">
         {% include "dashboard/partials/memories/_photos_tabs.html" with active="visits" unlogged_visits_count=unlogged_visits|length %}
+
+        {% if unlogged_visits %}
+        {% include "dashboard/partials/memories/_unlogged_visits.html" %}
+        {% else %}
+        <section class="visits-empty-state" aria-labelledby="visits-empty-title">
+            <div class="visits-empty-hero">
+                <span class="visits-empty-icon"><i class="material-symbols-outlined">task_alt</i></span>
+                <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
+            </div>
+            <p class="visits-empty-kicker">All caught up</p>
+            <h2 id="visits-empty-title">No visit details need your attention.</h2>
+            <p>Every place you've marked as visited already has a dated visit, or there are no visited places waiting for details yet.</p>
+            <div class="visits-empty-actions">
+                <a class="btn btn--primary" href="{% url 'memories.view' %}">
+                    <i class="material-symbols-outlined">timeline</i> View your timeline
+                </a>
+                <a class="btn btn--secondary" href="{% url 'map.view' %}">
+                    <i class="material-symbols-outlined">map</i> Explore your map
+                </a>
+            </div>
+        </section>
+        {% endif %}
     </div>
 </div>
 

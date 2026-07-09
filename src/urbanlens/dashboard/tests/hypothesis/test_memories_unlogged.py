@@ -173,6 +173,18 @@ class MemoriesVisitsViewTests(TestCase):
         response = self.client.get(reverse("memories.visits"))
         self.assertEqual(response.status_code, 200)
         self.assertIn(pin, response.context["unlogged_visits"])
+        self.assertContains(response, "My Place")
+        self.assertContains(response, "memories-unlogged-grid")
+        self.assertContains(response, reverse("memories.visits"))
+
+    def test_empty_queue_shows_caught_up_body(self) -> None:
+        response = self.client.get(reverse("memories.visits"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["unlogged_visits"]), [])
+        self.assertContains(response, "No visit details need your attention")
+        self.assertContains(response, "View your timeline")
+        self.assertNotContains(response, "memories-unlogged-grid")
+        self.assertNotContains(response, reverse("memories.visits"))
 
     def test_requires_login(self) -> None:
         self.client.logout()

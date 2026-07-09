@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
+from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.visits import accept_visit_suggestion, reject_visit_suggestion
 
@@ -140,6 +141,7 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
                 "page_obj": page_obj,
                 "profile": profile,
                 "photo_count": gallery.count(),
+                "unlogged_visits_count": len(unlogged_visited_pins(profile)),
             },
         )
 

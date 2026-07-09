@@ -3,7 +3,7 @@ Timeline | Photos | Visits tab strip for the Memories section.
 
 Context:
   active            - "timeline", "photos", or "visits" (which tab is current)
-  unlogged_visits_count - optional count badge shown on the Visits tab
+  unlogged_visits_count - optional count badge shown on the Visits tab; the tab is hidden when zero/missing
 {% endcomment %}
 <nav class="memories-tabs" aria-label="Memories views">
     <a href="{% url 'memories.view' %}"
@@ -18,11 +18,13 @@ Context:
         <i class="material-symbols-outlined">photo_library</i>
         <span>Photos</span>
     </a>
+    {% if unlogged_visits_count %}
     <a href="{% url 'memories.visits' %}"
        class="memories-tab {% if active == 'visits' %}is-active{% endif %}"
        {% if active == 'visits' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">where_to_vote</i>
         <span>Visits</span>
-        {% if unlogged_visits_count %}<span class="badge">{{ unlogged_visits_count }}</span>{% endif %}
+        <span class="badge">{{ unlogged_visits_count }}</span>
     </a>
+    {% endif %}
 </nav>
