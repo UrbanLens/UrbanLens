@@ -1,0 +1,29 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block header %}
+{# Leaflet powers the shared visit dialog's map-attach composer. #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block title %}Visits{% endblock %}
+
+{% block content %}
+<div id="visits-page">
+    <div class="memories-header">
+        <div>
+            <h1 class="memories-title"><i class="material-symbols-outlined">where_to_vote</i> Log your visits</h1>
+            <p class="memories-subtitle">Places you've marked visited that don't have a dated visit yet. Add a date to log them - and photos, a map, or notes if you like.</p>
+        </div>
+    </div>
+
+    <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="visits" unlogged_visits_count=unlogged_visits|length %}
+        {% include "dashboard/partials/memories/_unlogged_visits.html" %}
+    </div>
+</div>
+
+{% include "dashboard/partials/memories/_visit_dialog.html" %}
+{% endblock %}

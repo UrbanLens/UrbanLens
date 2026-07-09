@@ -1,0 +1,19 @@
+{% comment %}
+Compact link to the Memories "Visits" subpage, shown on the Timeline page in
+place of the full unlogged-visits band (which needs more room than the
+timeline can spare). See _unlogged_visits.html for the full list.
+
+Context:
+  unlogged_visits - list of Pin objects that still need a dated visit logged
+{% endcomment %}
+{% if unlogged_visits %}
+<a href="{% url 'memories.visits' %}" class="memories-unlogged-teaser">
+    <span class="memories-unlogged-teaser-icon"><i class="material-symbols-outlined">where_to_vote</i></span>
+    <span class="memories-unlogged-teaser-text">
+        <strong>Log your visits</strong>
+        <span>{{ unlogged_visits|length }} place{{ unlogged_visits|length|pluralize }} marked visited {% if unlogged_visits|length == 1 %}needs{% else %}need{% endif %} a dated visit</span>
+    </span>
+    <span class="badge">{{ unlogged_visits|length }}</span>
+    <i class="material-symbols-outlined memories-unlogged-teaser-arrow">chevron_right</i>
+</a>
+{% endif %}

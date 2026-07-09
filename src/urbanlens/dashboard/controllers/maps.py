@@ -645,7 +645,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         import contextlib
 
-        previous_name = (pin.name or "").strip()
         if name is not None:
             pin.name = name or None
             pin.name_is_user_provided = bool(name.strip())
@@ -662,13 +661,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.custom_icon = custom_icon
         pin.is_private = is_private
         pin.save()
-
-        if name is not None:
-            from urbanlens.dashboard.services.locations.naming import (
-                sync_pin_aliases_after_rename,
-            )
-
-            sync_pin_aliases_after_rename(pin, previous_name)
 
         if badge_ids:
             from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER

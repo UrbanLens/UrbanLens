@@ -39,12 +39,6 @@ class ServiceDefaults:
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
-    "google_places": ServiceDefaults(
-        display_name="Google Places API",
-        calls_per_minute=20,
-        calls_per_day=200,
-        notes="Free tier: $200/month credit. Geocoding/details billed per call.",
-    ),
     "google_geocoding": ServiceDefaults(
         display_name="Google Geocoding API",
         calls_per_minute=20,

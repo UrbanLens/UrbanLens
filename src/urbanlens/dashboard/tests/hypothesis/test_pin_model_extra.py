@@ -306,49 +306,22 @@ class PinToDetailJsonTests(TestCase):
         self.assertIn("longitude", result)
 
 
-class PinExternalNameRefreshTests(TestCase):
-    """External API data never overwrites explicitly user-provided pin names."""
+class PinNameAliasSaveTests(TestCase):
+    """Pin.save keeps the alias list in sync with the current name.
 
-    def test_user_provided_placeholder_pin_name_is_preserved(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+    Pins are no longer auto-renamed from external sources; the invariant is
+    that every meaningful persisted name (user-typed or not) has an alias row.
+    Detailed coverage lives in test_name_resolution.py.
+    """
 
-        pin = Pin(name="Unknown", name_is_user_provided=True)
-
-        self.assertFalse(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
-        self.assertEqual(pin.name, "Unknown")
-
-    def test_auto_placeholder_private_pin_name_can_be_replaced(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
-        pin = Pin(name="Dropped Pin", name_is_user_provided=False)
-        pin._state.fields_cache["location"] = None
-
-        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
-        self.assertEqual(pin.name, "Real Place")
-
-    def test_user_provided_pin_adds_external_alias(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
+    def test_saving_named_pin_records_current_name_alias(self) -> None:
         user = baker.make("auth.User")
         pin = baker.make(Pin, profile=user.profile, name="My Label", name_is_user_provided=True)
 
-        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")]))
-        self.assertEqual(pin.name, "My Label")
-        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place"])
+        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["My Label"])
 
-    def test_promoted_private_pin_name_is_not_duplicated_as_alias(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
+    def test_placeholder_names_never_become_aliases(self) -> None:
         user = baker.make("auth.User")
-        location = baker.make("dashboard.Location", latitude="43.500000", longitude="-71.500000")
-        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False, location=location)
+        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False)
 
-        self.assertTrue(
-            update_pin_name_from_external_sources(
-                pin,
-                extra_candidates=[("wikipedia", "Real Place"), ("google_places", "Real Place Annex")],
-            ),
-        )
-        pin.refresh_from_db()
-        self.assertEqual(pin.name, "Real Place")
-        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place Annex"])
+        self.assertEqual(pin.aliases.count(), 0)

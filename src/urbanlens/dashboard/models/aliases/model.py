@@ -28,19 +28,20 @@ class AliasType(TextChoices):
     ALTERNATE = "alternate", "Alternate Name"
 
 
-class AliasSource(TextChoices):
-    """
-    The source of the alias.
+class AliasSource:
+    """Well-known alias ``source`` values.
+
+    ``source`` is a free-text slug so plugin name providers can attribute
+    aliases to themselves (e.g. ``"google_places"``, ``"wikipedia"``) without
+    the model enumerating every provider. These constants cover the two
+    non-plugin origins.
+
     * USER: A user-defined alias for the pin or location.
-    * GOOGLE_PLACES: An alias from Google Places.
-    * WIKIPEDIA: An alias from Wikipedia.
-    * OTHER: An alias from another external API source.
+    * OTHER: An alias whose external origin is unknown (e.g. backfilled data).
     """
 
-    USER = "user", "User-defined Alias"
-    GOOGLE_PLACES = "google_places", "Google Places"
-    WIKIPEDIA = "wikipedia", "Wikipedia"
-    OTHER = "other", "Other"
+    USER = "user"
+    OTHER = "other"
 
 
 class _AliasBase(abstract.DashboardModel):
@@ -48,7 +49,8 @@ class _AliasBase(abstract.DashboardModel):
 
     name = CharField(max_length=255)
     kind = CharField(max_length=10, choices=AliasType.choices, default=AliasType.ALTERNATE)
-    source = CharField(max_length=15, choices=AliasSource.choices, default=AliasSource.USER)
+    # Free-text slug, not choices: plugin name providers write their own source slugs.
+    source = CharField(max_length=50, default=AliasSource.USER)
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True

@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
 
 class NpsPanelSource(LocationCachePanelSource):
@@ -64,3 +66,7 @@ class NpsPlugin(UrbanLensPlugin):
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the NPS pin-detail panel."""
         return [NpsPanelSource()]
+
+    def get_name_providers(self) -> list[NameProvider]:
+        """Contribute the containing park's name as a place-name candidate."""
+        return [LocationCacheNameProvider(source="nps", cache_source="nps", keys=("fullName", "name"), verbose_name="National Park Service")]

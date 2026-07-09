@@ -55,6 +55,7 @@ Features planned for this release.
     VM96 map:1055 [UL] Server returned 8495 new pin(s) for tile(s): *
     VM96 map:402 [UL] Cache write failed (QuotaExceededError) - pins will reload next visit
     _writeCache	@	VM96 map:402
+* Safety check-ins should make a post to the community wiki for a location.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]

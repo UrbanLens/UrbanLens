@@ -41,6 +41,7 @@ class NpsPlugin(UrbanLensPlugin):
 | `get_panel_sources()` | `PanelSource` panels on the pin detail page (Wikipedia-style sections and Media-gallery providers) |
 | `get_satellite_providers()` | `SatelliteViewProvider` gateways for the satellite carousel |
 | `get_street_view_providers()` | `StreetViewProvider` gateways for the street-view carousel |
+| `get_name_providers()` | `NameProvider` sources of place-name candidates for a location (see below) |
 | `register(hooks)` | Arbitrary action/filter callbacks on the shared hook bus |
 
 Contributions across plugins are ordered by `(plugin.order, plugin.name)` — the imagery
@@ -50,6 +51,26 @@ New extension points should prefer a dedicated `get_*` method on `UrbanLensPlugi
 the contribution is a typed object the core aggregates; use the hook bus
 (`urbanlens.dashboard.plugins.hooks`) for lifecycle notifications and lightweight
 value-transforming filters.
+
+### Name providers
+
+A `NameProvider` (`urbanlens.dashboard.services.locations.name_resolution`) yields raw
+place-name candidates for a `Location`. Providers must not make network calls — they
+read data the plugin's panels already cached. The common case is one or more top-level
+keys of the plugin's `LocationCache` payload, which `LocationCacheNameProvider` handles
+declaratively:
+
+```python
+def get_name_providers(self):
+    return [LocationCacheNameProvider(source="nps", cache_source="nps", keys=("fullName", "name"), verbose_name="National Park Service")]
+```
+
+Candidates from all plugins are cleaned, quality-gated (meaningless names and
+address-derived fragments like street or city names are rejected), and persisted as
+official aliases attributed to the provider's `source` slug. A `NameResolver` then picks
+the official name: a name that two or more sources agree on wins; otherwise the
+site-admin's source priority order (Settings → *Name source priority*) decides, with
+unlisted sources falling back to plugin order.
 
 ### Rules
 

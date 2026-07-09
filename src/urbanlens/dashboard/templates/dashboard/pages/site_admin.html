@@ -131,6 +131,31 @@
         </form>
     </div>
 
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">badge</i>
+            <span>Place Naming</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="default-name-source-priority">Name source priority</label>
+                <p class="form-help">
+                    Comma-separated name-provider slugs, highest priority first, used to pick a location's official name
+                    from external sources. A name that two or more sources agree on always wins; sources not listed rank
+                    last, in plugin order.
+                    Available: {% for slug, label in available_name_sources %}<code>{{ slug }}</code>{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}.
+                </p>
+                <input type="text" name="default_name_source_priority" id="default-name-source-priority"
+                       value="{{ settings.default_name_source_priority }}" maxlength="500"
+                       placeholder="google_places,wikipedia,nps">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">

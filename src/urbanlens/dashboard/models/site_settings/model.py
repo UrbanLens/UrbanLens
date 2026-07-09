@@ -116,6 +116,16 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Search cache duration (hours)",
     )
 
+    # --- Place naming ---
+
+    default_name_source_priority = CharField(
+        max_length=500,
+        blank=True,
+        default="google_places,wikipedia,nps",
+        help_text=("Comma-separated name-provider slugs, highest priority first, used to pick a location's official name from external candidates. Sources not listed rank last, in plugin order. Blank = plugin order only."),
+        verbose_name="Name source priority",
+    )
+
     # --- Environment ---
 
     environment_override = CharField(
@@ -251,6 +261,15 @@ class SiteSettings(abstract.FrontendDashboardModel):
     def get_current(cls) -> SiteSettings:
         """Return (and create if missing) the singleton settings record."""
         return cls.objects.get_current()
+
+    @property
+    def name_source_priority_list(self) -> list[str]:
+        """The configured name-source priority as an ordered slug list.
+
+        Returns:
+            Provider slugs in descending priority; empty when unconfigured.
+        """
+        return [slug for raw in self.default_name_source_priority.split(",") if (slug := raw.strip())]
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.

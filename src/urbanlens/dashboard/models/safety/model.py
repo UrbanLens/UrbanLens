@@ -45,9 +45,11 @@ FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
 PLAN_UPDATE_NOTIFICATION_COOLDOWN = timedelta(minutes=15)
 
 DEFAULT_CONTACT_MESSAGE = (
-    "Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, "
-    "I haven't checked in by my expected time - please try to reach me, and if you can't, take a look "
-    "at my trip plan and last known destination below to help figure out where I might be."
+    "Hi! Before heading out, I went on a trip and set up an automated safety check-in: if I don't confirm I'm safe by "
+    "my expected return time, this message is sent to my emergency contacts. If you're reading it, "
+    "I didn't come home and may need help - please try to reach me, and if you can't, use the trip plan and "
+    "destination included with this alert to help figure out where I might be. I may not be able to use "
+    "my phone to contact anyone else for help, so it's important you try to help me."
 )
 
 

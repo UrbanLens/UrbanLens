@@ -39,6 +39,7 @@ from urbanlens.dashboard.plugins.hooks import ACTION_PLUGINS_LOADED, hooks
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,16 @@ class PluginRegistry:
             PanelSource instances in plugin order.
         """
         return self._collect("get_panel_sources")
+
+    def name_providers(self) -> list[NameProvider]:
+        """Place-name candidate providers contributed by enabled plugins.
+
+        Returns:
+            NameProvider instances in plugin order, which is the arrival
+            order the name resolver uses to break ties among unprioritized
+            sources.
+        """
+        return self._collect("get_name_providers")
 
     def satellite_providers(self) -> list[SatelliteViewProvider]:
         """The satellite-imagery provider chain, in plugin order.

@@ -5,16 +5,27 @@
         <span>Aliases</span>
     </div>
     <div class="card__body aliases-body">
-    <p class="aliases-description">Community-contributed alternate names for this location.</p>
+    <p class="aliases-description">Every name this location is known by, including its current name. Contributed by the community and by external sources.</p>
 
     {% if aliases %}
     <div class="alias-chips-row">
         {% for alias in aliases %}
-        <span class="alias-chip" id="alias-chip-{{ alias.id }}">
+        <span class="alias-chip{% if alias.is_current %} alias-chip--current{% endif %}" id="alias-chip-{{ alias.id }}">
             <span class="alias-chip-name">{{ alias.name }}</span>
             {% if alias.created_by %}
             <span class="alias-chip-author" title="Added by {{ alias.created_by }}">{{ alias.created_by }}</span>
             {% endif %}
+            {% if alias.is_current %}
+            <span class="alias-chip-current-badge" title="Current name">current</span>
+            {% else %}
+            <button type="button"
+                    class="alias-chip-use"
+                    title="Use this name"
+                    hx-post="{% url 'location.wiki.alias.use' location.slug alias.id %}"
+                    hx-target="#location-aliases-panel"
+                    hx-swap="outerHTML">
+                <i class="material-symbols-outlined">check</i>
+            </button>
             <button type="button"
                     class="alias-chip-remove"
                     title="Remove alias"
@@ -24,6 +35,7 @@
                     hx-confirm="Remove alias &ldquo;{{ alias.name }}&rdquo;?">
                 <i class="material-symbols-outlined">close</i>
             </button>
+            {% endif %}
         </span>
         {% endfor %}
     </div>

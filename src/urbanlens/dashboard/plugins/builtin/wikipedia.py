@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
 
 class WikipediaPanelSource(LocationCachePanelSource):
@@ -74,3 +76,7 @@ class WikipediaPlugin(UrbanLensPlugin):
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the Wikipedia pin-detail panel."""
         return [WikipediaPanelSource()]
+
+    def get_name_providers(self) -> list[NameProvider]:
+        """Contribute the cached article's title as a place-name candidate."""
+        return [LocationCacheNameProvider(source="wikipedia", cache_source="wikipedia", keys=("title",), verbose_name="Wikipedia")]

@@ -18,6 +18,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -71,6 +72,12 @@ class VisitedWithoutRecordQuerySetTests(TestCase):
         parent = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
         child = _make_pin(self.profile, last_visited=_aware(2024, 6, 1), parent_pin=parent)
         self.assertNotIn(child, self._unlogged())
+
+    def test_dismissed_pin_is_excluded(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        pin.unlogged_visit_dismissed = True
+        pin.save(update_fields=["unlogged_visit_dismissed"])
+        self.assertNotIn(pin, self._unlogged())
 
 
 class UnloggedVisitedPinsServiceTests(TestCase):
@@ -150,3 +157,77 @@ class MemoriesVisitViewTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertFalse(PinVisit.objects.filter(pin=other_pin).exists())
+
+
+class MemoriesVisitsViewTests(TestCase):
+    """MemoriesVisitsView (the Visits subpage) renders the unlogged-visits list."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_lists_unlogged_pins(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(pin, response.context["unlogged_visits"])
+
+    def test_requires_login(self) -> None:
+        self.client.logout()
+        response = self.client.get(reverse("memories.visits"))
+        self.assertEqual(response.status_code, 302)
+
+
+class MemoriesUnloggedActionViewTests(TestCase):
+    """MemoriesUnloggedActionView dismisses or un-marks a pin from the unlogged-visits queue."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+
+    def test_dismiss_hides_pin_without_changing_visited_status(self) -> None:
+        response = self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "dismiss"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertTrue(self.pin.unlogged_visit_dismissed)
+        self.assertIsNotNone(self.pin.last_visited)
+        self.assertNotIn(self.pin, unlogged_visited_pins(self.profile))
+
+    def test_unmark_clears_last_visited_and_drops_pin_from_queue(self) -> None:
+        response = self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "unmark"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertIsNone(self.pin.last_visited)
+        self.assertNotIn(self.pin, unlogged_visited_pins(self.profile))
+
+    def test_unmark_removes_visited_badge(self) -> None:
+        # Every profile gets exactly one "Visited" status badge auto-created on
+        # signup (see badges.signals.create_default_tags) - fetch that one rather
+        # than baking a duplicate, so removal targets the badge actually attached.
+        badge = Badge.objects.get(profile=self.profile, kind="status", name="Visited")
+        self.pin.badges.add(badge)
+
+        self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "unmark"]))
+
+        self.assertNotIn(badge, self.pin.badges.all())
+
+    def test_unknown_action_is_404(self) -> None:
+        response = self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "bogus"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_act_on_another_users_pin(self) -> None:
+        other = baker.make(User)
+        other_pin = _make_pin(other.profile, last_visited=_aware(2024, 6, 1), name="Their Secret Spot")
+
+        response = self.client.post(reverse("memories.unlogged.action", args=[other_pin.slug, "dismiss"]))
+
+        self.assertEqual(response.status_code, 404)
+        other_pin.refresh_from_db()
+        self.assertFalse(other_pin.unlogged_visit_dismissed)

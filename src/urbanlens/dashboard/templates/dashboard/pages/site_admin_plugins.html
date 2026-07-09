@@ -70,6 +70,9 @@
             {% if entry.street_count %}
             <span class="ul-chip"><i class="material-symbols-outlined">streetview</i>street imagery</span>
             {% endif %}
+            {% for source in entry.name_sources %}
+            <span class="ul-chip" title="Provides place-name candidates as '{{ source }}'"><i class="material-symbols-outlined">badge</i>names: {{ source }}</span>
+            {% endfor %}
         </div>
 
         {% if entry.services %}

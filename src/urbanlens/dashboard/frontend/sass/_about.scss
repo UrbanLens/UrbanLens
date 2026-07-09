@@ -23,10 +23,12 @@
         grid-template-columns: 1fr;
         align-items: center;
         gap: 3rem;
-        min-height: 60vh;
+        height: 60vh;
+        min-height: 29rem;
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
-        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 50%, $color-indigo-700 80%, $color-blue-500 100%);
+        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 30%, $color-indigo-700 50%, $color-blue-500 100%);
+        
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
@@ -94,77 +96,6 @@
         }
     }
 
-    .about-map-mock {
-        position: relative;
-        width: 340px;
-        height: 280px;
-        background: rgba(255, 255, 255, .06);
-        border: 1px solid rgba(255, 255, 255, .12);
-        border-radius: 16px;
-        backdrop-filter: blur(4px);
-    }
-
-    .about-map-dot {
-        position: absolute;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, .15);
-        border: 2px solid rgba(255, 255, 255, .4);
-        
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: 1.2rem;
-            color: var(--ul-grey-0);
-        }
-
-        &--1 {
-            top: 40px;
-            left: 60px;
-        }
-
-        &--2 {
-            top: 80px;
-            left: 200px;
-        }
-
-        &--3 {
-            top: 180px;
-            left: 100px;
-        }
-
-        &--4 {
-            top: 140px;
-            left: 250px;
-            background: rgba(99, 102, 241, .5);
-        }
-    }
-
-    .about-map-line {
-        position: absolute;
-        background: rgba(255, 255, 255, .2);
-        border-radius: 2px;
-
-        &--1 {
-            top: 78px;
-            left: 96px;
-            width: 110px;
-            height: 2px;
-            transform: rotate(19deg);
-        }
-
-        &--2 {
-            top: 150px;
-            left: 121px;
-            width: 102px;
-            height: 2px;
-            transform: rotate(136deg);
-        }
-    }
-
     // -- Shared section chrome -------------------------------------------------
     .about-section {
         padding: 5rem 0;
@@ -173,7 +104,7 @@
 
     .about-values-section {
         padding: 5rem 0;
-        background: var(--ul-grey-0);
+        background: var(--ul-grey-0b);
     }
 
     .about-features-section {
@@ -182,7 +113,7 @@
 
     .about-audience-section {
         padding: 5rem 0;
-        background: var(--ul-grey-0);
+        background: var(--ul-grey-0b);
     }
 
     .about-section-label {
@@ -267,8 +198,8 @@
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-grey-0a);
-        border: 1px solid var(--ul-grey-3b);
+        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-grey-1b);
         border-radius: 12px;
         position: relative;
     }
@@ -418,8 +349,8 @@
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-grey-0a);
-        border: 1px solid var(--ul-grey-3b);
+        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-grey-1b);
         border-radius: 12px;
         text-align: center;
 

@@ -305,7 +305,8 @@ class LocationExternalNameRefreshTests(TestCase):
         wiki.refresh_from_db()
         self.assertEqual(loc.official_name, "External Name")
         self.assertEqual(wiki.name, "User Curated Name")
-        self.assertEqual(list(wiki.aliases.values_list("name", flat=True)), ["External Name"])
+        # The alias list holds every known name, including the current one.
+        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["User Curated Name", "External Name"])
 
     def test_external_names_are_added_as_wiki_aliases(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
@@ -325,9 +326,9 @@ class LocationExternalNameRefreshTests(TestCase):
         )
         wiki.refresh_from_db()
         self.assertEqual(wiki.name, "Curated Mill")
-        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Old Mill", "Historic Mill"])
+        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Curated Mill", "Old Mill", "Historic Mill"])
 
-    def test_promoted_external_name_is_not_duplicated_as_wiki_alias(self) -> None:
+    def test_promoted_external_name_is_recorded_as_wiki_alias(self) -> None:
         from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
         loc: Location = baker.make(
@@ -347,4 +348,5 @@ class LocationExternalNameRefreshTests(TestCase):
         wiki.refresh_from_db()
         self.assertEqual(loc.official_name, "Grand Hall")
         self.assertEqual(wiki.name, "Grand Hall")
-        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Grand Hall Museum"])
+        # The promoted name is itself an alias (the list includes the current name).
+        self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Grand Hall", "Grand Hall Museum"])

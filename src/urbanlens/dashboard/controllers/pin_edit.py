@@ -17,7 +17,6 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.locations.naming import sync_pin_aliases_after_rename
 
 logger = logging.getLogger(__name__)
 
@@ -319,7 +318,6 @@ class PinEditView(LoginRequiredMixin, View):
         if pin_type not in valid_types:
             pin_type = pin.pin_type
 
-        previous_name = (pin.name or "").strip()
         next_name = (name or "").strip()
 
         pin.name = name
@@ -358,8 +356,6 @@ class PinEditView(LoginRequiredMixin, View):
                 "updated",
             ]
         )
-
-        sync_pin_aliases_after_rename(pin, previous_name)
 
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:

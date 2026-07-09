@@ -11,6 +11,7 @@ from datetime import timedelta
 import json
 import logging
 import os
+import re
 import sys
 import time
 from urllib.parse import urlencode
@@ -103,6 +104,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
 
+        from urbanlens.dashboard.plugins.registry import plugin_registry
+
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
         return render(
@@ -116,6 +119,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
+                "available_name_sources": [(provider.source, provider.verbose_name) for provider in plugin_registry.name_providers()],
             },
         )
 
@@ -149,6 +153,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.search_cache_hours = max(0, cache_hours)
         except (ValueError, TypeError):
             pass
+
+        if "default_name_source_priority" in request.POST:
+            # Unknown slugs are tolerated: the name resolver ignores sources it
+            # never sees, so a disabled plugin's slug can stay configured.
+            slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
+            settings.default_name_source_priority = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
 
         if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
             settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
@@ -643,6 +653,7 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     "panel_count": len(plugin.get_panel_sources()) if plugin_enabled else 0,
                     "satellite_count": len(plugin.get_satellite_providers()) if plugin_enabled else 0,
                     "street_count": len(plugin.get_street_view_providers()) if plugin_enabled else 0,
+                    "name_sources": [provider.source for provider in plugin.get_name_providers()] if plugin_enabled else [],
                 }
             )
 

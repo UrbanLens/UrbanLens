@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import DateField, Min
 from django.db.models.functions import Cast, Coalesce
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -33,7 +33,7 @@ from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_ev
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, sync_last_visited
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -58,6 +58,22 @@ def _unlogged_band_context(profile: Profile) -> dict[str, object]:
         "unlogged_visits": unlogged_visited_pins(profile),
         "today": timezone.now().date().isoformat(),
     }
+
+
+def _toast(message: str, level: str = "success") -> HttpResponse:
+    """Return an empty HTMX response that removes the swapped card and fires a toast.
+
+    Args:
+        message: Text to display in the toast.
+        level: toastr level (``success``/``info``/``warning``/``error``).
+
+    Returns:
+        An empty-body response carrying an ``HX-Trigger`` header; swapping it with
+        ``outerHTML`` removes the card while the toast fires.
+    """
+    response = HttpResponse("")
+    response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": level}})
+    return response
 
 
 def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
@@ -410,3 +426,73 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             },
         )
         return response
+
+
+class MemoriesVisitsView(LoginRequiredMixin, View):
+    """The "log your visits" subpage of Memories - pins marked visited with no dated record.
+
+    GET /memories/visits/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the unlogged-visits page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Visits page listing every visited-but-unlogged pin.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(
+            request,
+            "dashboard/pages/memories/visits.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                **_unlogged_band_context(profile),
+            },
+        )
+
+
+class MemoriesUnloggedActionView(LoginRequiredMixin, View):
+    """Dismiss or un-mark a card in the "log your visits" queue.
+
+    POST /memories/unlogged/<pin_slug>/<action>/
+    where action is "dismiss" (hide the suggestion without changing the pin's
+    visited status) or "unmark" (clear the pin's visited status entirely, e.g.
+    a stray "Visited" badge or import glitch the user never actually visited).
+    """
+
+    def _get_pin(self, request: HttpRequest, pin_slug: str) -> Pin:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return get_object_or_404(Pin, slug=pin_slug, profile=profile)
+
+    def dismiss(self, request: HttpRequest, pin: Pin) -> HttpResponse:
+        """Hide the pin from the unlogged-visits queue without touching its visited status."""
+        Pin.objects.filter(pk=pin.pk).update(unlogged_visit_dismissed=True)
+        return _toast("Removed from your list.", "info")
+
+    def unmark(self, request: HttpRequest, pin: Pin) -> HttpResponse:
+        """Clear the pin's "Visited" status/badge so it drops out of the queue entirely."""
+        remove_visited_status(pin)
+        return _toast('"Visited" status removed.', "info")
+
+    _ACTIONS = {"dismiss": dismiss, "unmark": unmark}
+
+    def post(self, request: HttpRequest, pin_slug: str, action: str) -> HttpResponse:
+        """Dispatch to the handler named by ``action``.
+
+        Args:
+            request: The HTTP request.
+            pin_slug: Slug of the pin being acted on.
+            action: The queue action to perform.
+
+        Returns:
+            An HTMX card-removing response, or 404 for an unknown action.
+        """
+        handler = self._ACTIONS.get(action)
+        if handler is None:
+            raise Http404
+        pin = self._get_pin(request, pin_slug)
+        return handler(self, request, pin)

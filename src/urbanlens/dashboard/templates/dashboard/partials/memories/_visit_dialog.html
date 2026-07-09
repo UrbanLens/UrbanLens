@@ -1,0 +1,32 @@
+{% comment %}
+Shared visit dialog: log a visit or add details (photos, map, notes, people) to
+any visit memory. Opened via window.memoriesOpenVisitDialog(url) from the
+unlogged-visits band, the Visits subpage, and the timeline's per-card
+"Add details" button.
+{% endcomment %}
+<dialog id="memories-visit-dialog" class="visit-add-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Visit details" %}
+    <div id="memories-visit-dialog-body" class="visit-edit-body">
+        <p class="visit-edit-loading">Loading&hellip;</p>
+    </div>
+</dialog>
+<script>
+(function () {
+    // Load the visit form for a pin (add) or existing visit (edit) into the shared
+    // dialog and open it.
+    window.memoriesOpenVisitDialog = function (url) {
+        var dlg = document.getElementById('memories-visit-dialog');
+        var body = document.getElementById('memories-visit-dialog-body');
+        if (!dlg || !body || typeof htmx === 'undefined') { return; }
+        body.innerHTML = '<p class="visit-edit-loading">Loading&hellip;</p>';
+        htmx.ajax('GET', url, { target: '#memories-visit-dialog-body', swap: 'innerHTML' })
+            .then(function () { dlg.showModal(); });
+    };
+
+    // A saved visit fires memoriesFeedRefresh; reload the timeline so the new/edited
+    // visit appears there too. No-op on pages without a timeline feed.
+    document.body.addEventListener('memoriesFeedRefresh', function () {
+        if (typeof window.memoriesRefreshFeed === 'function') { window.memoriesRefreshFeed(); }
+    });
+}());
+</script>

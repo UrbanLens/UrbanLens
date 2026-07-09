@@ -24,7 +24,7 @@
         justify-content: center;
         text-align: center;
         padding: 4rem 1.5rem 3rem;
-        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 50%, $color-indigo-700 80%, $color-blue-500 100%);
+        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 30%, $color-indigo-700 60%, $color-blue-500 100%);
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
@@ -66,6 +66,10 @@
         line-height: 1.7;
         max-width: 560px;
         margin: 0 auto;
+
+        + .values-subtitle {
+            margin-top: 1rem;
+        }
     }
 
     // -- Shared section chrome -------------------------------------------------
@@ -173,6 +177,10 @@
         font-size: 1.05rem;
         color: $color-indigo-200;
         margin: 0 0 2rem;
+
+        + .values-cta-body {
+            margin-top: 1rem;
+        }
     }
 }
 

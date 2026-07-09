@@ -63,8 +63,8 @@ class PlaceNameResolverChainTests(TestCase):
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
-            mock.patch("urbanlens.dashboard.services.locations.naming.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.locations.naming.GooglePlacesGateway") as gateway,
+            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
+            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.side_effect = ValueError("bad response")
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))

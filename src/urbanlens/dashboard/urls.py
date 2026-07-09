@@ -315,6 +315,11 @@ urlpatterns = [
                                 name="pin.alias.delete",
                             ),
                             path(
+                                "<slug:pin_slug>/aliases/<int:alias_id>/use/",
+                                aliases.PinAliasUseView.as_view(),
+                                name="pin.alias.use",
+                            ),
+                            path(
                                 "<slug:pin_slug>/comments/",
                                 comments.PinCommentsView.as_view(),
                                 name="pin.comments",
@@ -636,6 +641,11 @@ urlpatterns = [
                     name="location.wiki.alias.delete",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/aliases/<int:alias_id>/use/",
+                    aliases.LocationAliasUseView.as_view(),
+                    name="location.wiki.alias.use",
+                ),
+                path(
                     "<slug:location_slug>/wiki/gallery/",
                     image_gallery.WikiGalleryView.as_view(),
                     name="location.wiki.gallery",
@@ -843,6 +853,8 @@ urlpatterns = [
                 path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
                 path("visit/<slug:pin_slug>/", memories.MemoriesVisitView.as_view(), name="memories.visit"),
                 path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
+                path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
+                path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
                 path("photos/page/", photos.PhotoGridPageView.as_view(), name="memories.photos.page"),

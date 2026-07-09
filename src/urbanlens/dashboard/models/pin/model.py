@@ -160,6 +160,48 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # ------------------------------------------------------------------
+    # Name/alias invariant
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_db(cls, db, field_names, values) -> Pin:
+        """Track the persisted name so ``save()`` can detect renames.
+
+        Args:
+            db: Database alias the row was loaded from.
+            field_names: Names of the loaded fields.
+            values: Loaded field values.
+
+        Returns:
+            The loaded Pin instance.
+        """
+        instance = super().from_db(db, field_names, values)
+        if "name" in field_names:
+            instance._loaded_name = instance.name  # noqa: SLF001
+        return instance
+
+    def save(self, *args, **kwargs) -> None:
+        """Save the pin, keeping the alias list in sync with the name.
+
+        The alias list is the full set of names a pin has ever had, including
+        the current one - so whenever a meaningful ``name`` is persisted, an
+        alias row for it is ensured. This single enforcement point covers
+        every write path (HTMX controllers, REST serializer, Django admin).
+        """
+        super().save(*args, **kwargs)
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "name" not in update_fields:
+            return
+        if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
+            from urbanlens.dashboard.models.aliases.model import PinAlias
+
+            try:
+                PinAlias.objects.get_or_create(pin=self, name=(self.name or "").strip())
+            except DatabaseError:
+                logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
+        self._loaded_name = self.name
+
+    # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
 

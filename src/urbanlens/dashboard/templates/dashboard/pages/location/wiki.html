@@ -333,6 +333,19 @@
         event.detail.headers['X-CSRFToken'] = csrftoken;
     });
 
+    // -- "Use this name" from the aliases panel -------------------------------
+    document.body.addEventListener('wikiRenamed', (event) => {
+        const name = event.detail && event.detail.name;
+        if (!name) return;
+        document.querySelectorAll('.wiki-title').forEach((el) => { el.textContent = name; });
+        const nameField = document.getElementById('wiki-field-name');
+        if (nameField) nameField.textContent = name;
+        const nameInput = document.getElementById('wiki-name');
+        if (nameInput) nameInput.value = name;
+        // Refresh the history tab so the rename edit shows up.
+        htmx.trigger('[data-tab="history"]', 'click');
+    });
+
 
     // -- Community wiki onboarding -------------------------------------------
     (function initWikiOnboarding() {

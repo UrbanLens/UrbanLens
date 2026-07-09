@@ -865,59 +865,70 @@ $memories-type-colors: (
     p { margin: .5rem 0 0; }
 }
 
-// -- Unlogged-visits band ("Log your visits") ------------------------------
+// -- Unlogged-visits list ("Log your visits" subpage) -----------------------
 
 .memories-unlogged {
     margin-bottom: 1.75rem;
+}
 
-    &--empty { display: none; }
+.memories-unlogged--caught-up {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .9rem 1rem;
+    border-radius: .75rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+
+    .material-symbols-outlined { color: $color-green-500; }
 }
 
 .memories-unlogged-head {
     display: flex;
     align-items: center;
     gap: .5rem;
-    margin-bottom: .35rem;
-
-    h2 {
-        display: flex;
-        align-items: center;
-        gap: .4rem;
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin: 0;
-        color: var(--ul-grey-8);
-    }
-
-    .material-symbols-outlined { font-size: 1.3rem; color: $color-deep-purple-500; }
-}
-
-.memories-unlogged-sub {
-    margin: 0 0 .75rem;
+    margin-bottom: .85rem;
     font-size: .88rem;
-    line-height: 1.35;
     color: var(--ul-grey-6);
 }
 
-.memories-unlogged-scroll {
-    display: flex;
+.memories-unlogged-grid {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: .85rem;
-    overflow-x: auto;
-    padding-bottom: .5rem;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
 }
 
 .unlogged-card {
-    flex: 0 0 82%;
-    max-width: 320px;
-    scroll-snap-align: start;
+    position: relative;
     display: flex;
     gap: .65rem;
     padding: .85rem;
     border: 1px solid var(--ul-grey-1a);
     border-radius: .85rem;
     background: var(--ul-grey-0);
+}
+
+.unlogged-card-dismiss {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ul-grey-5);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+
+    .material-symbols-outlined { font-size: 1.1rem; }
+
+    &:hover { background: var(--ul-grey-1a); color: var(--ul-grey-8); }
 }
 
 .unlogged-card-icon {
@@ -948,6 +959,8 @@ $memories-type-colors: (
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    // Leave room for the dismiss button pinned to the card's top-right corner.
+    padding-right: 1.8rem;
 }
 
 .unlogged-card-meta {
@@ -958,6 +971,16 @@ $memories-type-colors: (
     color: var(--ul-grey-6);
 
     .material-symbols-outlined { font-size: 1rem; }
+}
+
+// Mobile-first: the quick-log form, "Add details", and "Not visited" each get
+// their own row by default; wider cards (see the grid breakpoint below) have
+// room for everything on one line.
+.unlogged-card-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .5rem;
 }
 
 .unlogged-card-quick {
@@ -978,8 +1001,64 @@ $memories-type-colors: (
     }
 }
 
-.unlogged-card-details {
+.unlogged-card-details,
+.unlogged-card-unmark {
     align-self: flex-start;
+}
+
+.unlogged-card-unmark:hover {
+    color: $color-red-500;
+    border-color: $color-red-500;
+}
+
+// -- "Log your visits" teaser (Timeline page link to the Visits subpage) ---
+
+.memories-unlogged-teaser {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+    padding: .8rem 1rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .75rem;
+    background: var(--ul-grey-0);
+    text-decoration: none;
+    transition: box-shadow .15s ease, border-color .15s ease;
+
+    &:hover {
+        border-color: $color-deep-purple-500;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+    }
+}
+
+.memories-unlogged-teaser-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    background: rgba($color-green-500, .14);
+
+    .material-symbols-outlined { color: $color-green-500; font-size: 1.3rem; }
+}
+
+.memories-unlogged-teaser-text {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+    flex: 1 1 auto;
+
+    strong { font-size: .92rem; color: var(--ul-grey-8); }
+
+    span { font-size: .8rem; color: var(--ul-grey-6); }
+}
+
+.memories-unlogged-teaser-arrow {
+    flex: 0 0 auto;
+    color: var(--ul-grey-5);
 }
 
 // -- Add-details button on a timeline visit card ---------------------------
@@ -1015,9 +1094,20 @@ $memories-type-colors: (
 
 @media (min-width: 640px) {
     .photo-card { flex-basis: 320px; }
-    .unlogged-card { flex-basis: 300px; }
 
     .photos-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; }
 
     .photos-dropzone { padding: 2rem 1rem; }
+
+    .memories-unlogged-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+    // Enough width now for the quick-log form, "Add details", and "Not visited"
+    // to share a single row instead of stacking.
+    .unlogged-card-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .unlogged-card-quick { flex: 1 1 auto; }
 }

@@ -10,7 +10,7 @@ from typing import Protocol
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.locations import naming
+from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
@@ -34,7 +34,7 @@ class GooglePlacesNameResolver:
         if not settings.google_unrestricted_api_key:
             return None
         try:
-            results = naming.GooglePlacesGateway(api_key=settings.google_unrestricted_api_key).get_data(
+            results = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key).get_data(
                 latitude,
                 longitude,
                 radius=self.radius,

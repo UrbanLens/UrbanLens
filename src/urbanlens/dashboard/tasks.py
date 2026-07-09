@@ -192,10 +192,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             name = location.official_name or location.display_name or ""
             article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
             LocationCache.set(location, "wikipedia", article or {}, query_key=name)
-            update_location_name_from_external_sources(
-                location,
-                extra_candidates=[("wikipedia", (article or {}).get("title"))],
-            )
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
@@ -210,10 +206,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
             park = NPSGateway().find_park_containing_location(lat, lng)
             LocationCache.set(location, "nps", park or {}, query_key=f"{lat:.5f},{lng:.5f}")
-            update_location_name_from_external_sources(
-                location,
-                extra_candidates=[("nps", (park or {}).get("fullName") or (park or {}).get("name"))],
-            )
             logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
@@ -227,12 +219,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             place_data = django_cache.get(f"ul_place_details_{google_place_id}")
             if place_data:
                 LocationCache.set(location, "google_places", place_data, query_key=google_place_id)
-                update_location_name_from_external_sources(
-                    location,
-                    extra_candidates=[
-                        ("google_places", place_data.get("name") if isinstance(place_data, dict) else None),
-                    ],
-                )
                 logger.info(
                     "prefetch_location_external_data: migrated Google Places cache for location %s",
                     location_id,
@@ -242,6 +228,14 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 "prefetch_location_external_data: Google Places migration failed for location %s",
                 location_id,
             )
+
+    # Resolve the official name once, after every cache write above has landed,
+    # so the plugin name providers see all fresh candidates in a single pass
+    # (per-source refreshes let whichever source ran last win).
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

@@ -21,6 +21,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry
 from urbanlens.dashboard.plugins.registry import PluginRegistry
+from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 # -- HookRegistry ----------------------------------------------------------------
@@ -181,6 +182,24 @@ class PluginRegistryTests(TestCase):
         with self.assertLogs("urbanlens.dashboard.plugins.registry", level="ERROR"):
             self.assertEqual(registry.panel_sources(), [])
 
+    def test_name_providers_aggregate_in_plugin_order(self) -> None:
+        class EarlyNames(UrbanLensPlugin):
+            name: ClassVar[str] = "early"
+            order: ClassVar[int] = 5
+
+            def get_name_providers(self) -> list[NameProvider]:
+                return [NameProvider(source="early_source")]
+
+        class LateNames(UrbanLensPlugin):
+            name: ClassVar[str] = "late"
+            order: ClassVar[int] = 50
+
+            def get_name_providers(self) -> list[NameProvider]:
+                return [NameProvider(source="late_source")]
+
+        registry = self._registry(LateNames, EarlyNames)
+        self.assertEqual([provider.source for provider in registry.name_providers()], ["early_source", "late_source"])
+
 
 # -- Integration with real discovery ----------------------------------------------
 
@@ -200,6 +219,7 @@ class BuiltinDiscoveryTests(TestCase):
             "wikimedia",
             "library_of_congress",
             "google_maps",
+            "google_places",
             "esri",
             "nasa_gibs",
             "mapbox",
@@ -214,10 +234,16 @@ class BuiltinDiscoveryTests(TestCase):
         from urbanlens.dashboard.services.rate_limiter import all_service_defaults
 
         merged = all_service_defaults()
-        # Plugin-declared service.
+        # Plugin-declared services (google_places moved out of SERVICE_REGISTRY).
         self.assertIn("wikipedia", merged)
+        self.assertIn("google_places", merged)
         # Static SERVICE_REGISTRY fallback for a not-yet-converted service.
         self.assertIn("openweathermap", merged)
+
+    def test_builtin_name_providers_cover_the_naming_sources(self) -> None:
+        sources = [provider.source for provider in plugin_registry.name_providers()]
+        for expected in ("google_places", "wikipedia", "nps"):
+            self.assertIn(expected, sources, f"name provider '{expected}' missing")
 
     def test_panel_sources_contains_core_and_plugin_panels(self) -> None:
         from urbanlens.dashboard.services.external_data import panel_sources
