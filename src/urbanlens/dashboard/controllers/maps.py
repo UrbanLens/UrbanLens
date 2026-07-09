@@ -482,11 +482,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin_slug: Slug of the target pin.
 
         Returns:
-            An empty 200 response, 400 if no file was given, or 409 if the
-            uploader already has this exact file on the pin.
+            An empty 200 response, 400 if no file was given, 409 if the
+            uploader already has this exact file on the pin, or 413 if the
+            upload would exceed the uploader's storage quota.
         """
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = request.FILES.get("image")
@@ -497,7 +499,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         checksum = compute_checksum(image)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
             return HttpResponse("You already uploaded this photo to this pin.", status=409)
-        img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum)
+        quota_error = quota_error_for_upload(profile, image.size)
+        if quota_error:
+            return HttpResponse(quota_error, status=413)
+        img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size)
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 

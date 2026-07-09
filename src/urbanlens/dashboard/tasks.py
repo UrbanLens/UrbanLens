@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -246,15 +247,20 @@ def process_image_upload(self, image_id: int) -> bool:
     missing: the duplicate-detection ``checksum`` (rows predating that field)
     and the shared ``location`` link - taken from the pin/wiki the photo is
     attached to, or resolved from its GPS via ``get_nearby_or_create``.
+
+    It also snapshots the full EXIF metadata (before any re-encoding), applies
+    the storage downscale/WebP policy for the uploader, and records the stored
+    file size that counts against the uploader's storage quota.
     """
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.images import compute_checksum, extract_gps_coords, extract_taken_at
+    from urbanlens.dashboard.services.images import compute_checksum, downscale_stored_image, extract_exif_data, extract_gps_coords, extract_taken_at
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
+    from urbanlens.dashboard.services.storage import get_downscale_policy
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
-    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location").first()
+    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
     if image is None or not image.image:
         return False
     try:
@@ -262,6 +268,7 @@ def process_image_upload(self, image_id: int) -> bool:
             coords = extract_gps_coords(image_file)
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
+            exif_data = extract_exif_data(image_file) if image.exif_data is None else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
@@ -279,6 +286,30 @@ def process_image_upload(self, image_id: int) -> bool:
     if checksum:
         image.checksum = checksum
         update_fields["checksum"] = checksum
+    if exif_data:
+        image.exif_data = exif_data
+        update_fields["exif_data"] = exif_data
+
+    # Downscale/convert per the uploader's storage policy, then record the
+    # stored size that counts against their quota. The EXIF snapshot above is
+    # taken from the original file, so nothing is lost in the re-encode.
+    stored_size: int | None = None
+    with contextlib.suppress(OSError):
+        stored_size = image.image.size
+    if image.profile is not None:
+        max_dimension, convert_webp = get_downscale_policy(image.profile)
+        if max_dimension is not None or convert_webp:
+            try:
+                new_size = downscale_stored_image(image, max_dimension, convert_webp)
+            except (OSError, ValueError) as exc:
+                logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
+            else:
+                if new_size is not None:
+                    stored_size = new_size
+                    update_fields["image"] = image.image.name
+    if stored_size is not None and stored_size != image.file_size:
+        image.file_size = stored_size
+        update_fields["file_size"] = stored_size
 
     if image.location_id is None:
         location = _resolve_image_location(image, coords)

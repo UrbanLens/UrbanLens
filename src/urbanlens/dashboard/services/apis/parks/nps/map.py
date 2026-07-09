@@ -14,16 +14,16 @@ class NPSMapGateway(Gateway):
     service_key: ClassVar[str] = "nps"
     paid_service: ClassVar[bool] = False
 
-    base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
+    base_url: str = "https://services1.arcgis.com/fBc8EJBxQRMcHlei/ArcGIS/rest/services/NPS_Land_Resources_Division_Boundary_and_Tract_Data_Service/FeatureServer/2/query"
 
     def check_coordinates_within_park(self, latitude: float, longitude: float) -> str | None:
         """Return the park code of the NPS unit whose boundary contains the point.
 
         Resolves containment server-side with a point-in-polygon query against
-        the NPS ParkBoundaries feature service, so only the containing unit (if
-        any) comes back rather than the entire boundary dataset. The returned
-        code is lower-cased to match the developer API's ``parkCode``
-        (e.g. ArcGIS ``YELL`` -> ``yell``).
+        the NPS Land Resources Division boundary feature service, so only the
+        containing unit (if any) comes back rather than the entire boundary
+        dataset. The returned code is lower-cased to match the developer
+        API's ``parkCode`` (e.g. ArcGIS ``YELL`` -> ``yell``).
 
         Args:
             latitude: WGS-84 latitude.

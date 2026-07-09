@@ -813,7 +813,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         when the search/scrape produces no results.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.external_data import LoopnetPanelSource
+        from urbanlens.dashboard.plugins.builtin.loopnet import LoopnetPanelSource
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)

@@ -37,17 +37,17 @@
     <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form" id="safety-checkin-form">
         {% csrf_token %}
         <p class="safety-autosave-status" id="safety-autosave-status"></p>
-        <div class="form-row">
+        <div class="form-row form-row--title">
             <label for="title">Title</label>
             <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked %}disabled{% endif %}>
             {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
         </div>
-        <div class="form-row">
+        <div class="form-row form-row--plan">
             <label for="plan_details">Trip plan</label>
             <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
             {% if checkin.contacts_locked %}<p class="form-hint">Editing this will notify your emergency contacts of the update.</p>{% endif %}
         </div>
-        <div class="form-row">
+        <div class="form-row form-row--map">
             <label>Destination &amp; route</label>
             {% url 'safety.checkin.markup.json' checkin.uuid as markup_json_url %}
             {% url 'safety.checkin.markup' checkin.uuid as markup_create_url %}
@@ -69,7 +69,7 @@
             {% include "dashboard/partials/safety/_wiki_notify_toggle.html" with wiki=destination_wiki checked=checkin.notify_community_wiki %}
         </div>
         {% endif %}
-        <div class="form-row">
+        <div class="form-row form-row--message">
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.contacts_locked %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
             {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}

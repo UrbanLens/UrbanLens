@@ -109,8 +109,11 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
         True if any brand-new file was uploaded (so callers can refresh the
         gallery), False otherwise.
     """
+    from django.contrib import messages
+
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.services.images import compute_checksum
+    from urbanlens.dashboard.services.storage import quota_error_for_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
     owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
@@ -125,6 +128,11 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
             # storing a second copy.
             reattached_pks.append(existing.pk)
             continue
+        quota_error = quota_error_for_upload(pin.profile, image_file.size)
+        if quota_error:
+            # Linking existing photos is still fine - only new files need space.
+            messages.warning(request, quota_error)
+            continue
         img = Image.objects.create(
             image=image_file,
             pin=pin,
@@ -132,6 +140,7 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
             profile=pin.profile,
             visit=visit,
             checksum=checksum,
+            file_size=image_file.size,
         )
         safely_enqueue_task(process_image_upload, img.pk)
         uploaded_pks.append(img.pk)

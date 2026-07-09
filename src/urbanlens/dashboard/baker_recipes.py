@@ -253,7 +253,7 @@ reaction: Recipe[Reaction] = Recipe(
 
 review: Recipe[Review] = Recipe(
     "dashboard.Review",
-    user=foreign_key("dashboard.user"),
+    profile=_make_profile,
     pin=foreign_key("dashboard.pin"),
     rating=4,
     review="A test review.",

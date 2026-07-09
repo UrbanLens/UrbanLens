@@ -23,6 +23,7 @@ from urbanlens.dashboard.forms.settings_form import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -84,6 +85,7 @@ class SettingsView(LoginRequiredMixin, View):
             "ai_form": AISettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
+            **get_storage_settings_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 
@@ -147,6 +149,23 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Style settings saved.")
                 return redirect("settings.view")
 
+        elif section == "storage":
+            raw_dimension = (request.POST.get("image_downscale_max_dimension") or "").strip()
+            if raw_dimension == "":
+                profile.image_downscale_max_dimension = None
+            else:
+                try:
+                    dimension = int(raw_dimension)
+                except (ValueError, TypeError):
+                    dimension = None
+                if dimension is None or dimension not in allowed_user_dimension_values(profile):
+                    messages.error(request, "That photo size is not available.")
+                    return redirect("settings.view")
+                profile.image_downscale_max_dimension = dimension
+            profile.save(update_fields=["image_downscale_max_dimension", "updated"])
+            messages.success(request, "Storage settings saved. The new photo size applies to future uploads.")
+            return redirect("settings.view")
+
         elif section == "map":
             map_display_form = MapDisplayForm(request.POST, instance=profile)
             map_center_form = MapCenterForm(request.POST, instance=profile)
@@ -167,6 +186,7 @@ class SettingsView(LoginRequiredMixin, View):
             "ai_form": ai_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
+            **get_storage_settings_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 

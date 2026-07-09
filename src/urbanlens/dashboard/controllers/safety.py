@@ -642,6 +642,8 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
         Returns:
             Rendered toggle fragment.
         """
+        lat: float | None
+        lng: float | None
         try:
             lat = float(request.GET.get("destination_latitude", ""))
             lng = float(request.GET.get("destination_longitude", ""))
@@ -711,6 +713,11 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
         img = Image.objects.create(
             image=image_file,
             safety_checkin=checkin,
@@ -718,7 +725,12 @@ class SafetyGalleryView(LoginRequiredMixin, View):
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
             checksum=checksum,
+            file_size=image_file.size,
         )
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
         return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 
 

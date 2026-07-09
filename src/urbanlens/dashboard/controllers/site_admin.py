@@ -187,6 +187,19 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if "signup_restricted" in request.POST:
             settings.signup_restricted = request.POST.get("signup_restricted") in {"1", "true", "on", "True"}
 
+        if "storage_quota_gb" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.storage_quota_gb = max(0, int(request.POST.get("storage_quota_gb", settings.storage_quota_gb)))
+        if "image_downscale_enabled" in request.POST:
+            settings.image_downscale_enabled = request.POST.get("image_downscale_enabled") in {"1", "true", "on", "True"}
+        if "image_downscale_max_dimension" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.image_downscale_max_dimension = min(max(256, int(request.POST.get("image_downscale_max_dimension", settings.image_downscale_max_dimension))), 20_000)
+        if "image_convert_webp" in request.POST:
+            settings.image_convert_webp = request.POST.get("image_convert_webp") in {"1", "true", "on", "True"}
+        if "image_downscale_vip" in request.POST:
+            settings.image_downscale_vip = request.POST.get("image_downscale_vip") in {"1", "true", "on", "True"}
+
         settings.save()
 
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")
@@ -478,6 +491,21 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
                 sub.save(update_fields=["expires_at", "updated"])
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
+
+        if action == "role_quota":
+            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            raw_quota = (request.POST.get("storage_quota_gb") or "").strip()
+            if raw_quota == "":
+                quota = None
+            else:
+                try:
+                    quota = max(0, int(raw_quota))
+                except (ValueError, TypeError):
+                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Storage quota must be a whole number of GB."}))
+            SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
 
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()

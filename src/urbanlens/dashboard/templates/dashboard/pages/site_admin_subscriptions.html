@@ -30,6 +30,31 @@
       </form>
     </section>
     <section class="site-admin-card ul-section card">
+      <div class="card-header"><i class="material-symbols-outlined">database</i><span>Role storage quotas</span></div>
+      <p class="form-help">
+        Storage quota (GB) granted to users holding each role - the largest applicable quota wins.
+        Leave blank to use the site default, or set <strong>0</strong> for unlimited.
+      </p>
+      <div class="subscription-list">
+        <ul class="subscription-list__items">
+          {% for role in roles %}
+          <li class="subscription-list__item">
+            <form method="post" class="inline-sub-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_quota">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              <label for="role-quota-{{ role.slug }}">Quota (GB)</label>
+              <input type="number" id="role-quota-{{ role.slug }}" name="storage_quota_gb"
+                     value="{{ role.storage_quota_gb|default_if_none:'' }}" min="0" step="1" placeholder="Site default">
+              <button class="btn btn--ghost" type="submit">Save</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    <section class="site-admin-card ul-section card">
       <div class="card-header">
         <i class="material-symbols-outlined">manage_accounts</i>
         <span>Your active grants</span>

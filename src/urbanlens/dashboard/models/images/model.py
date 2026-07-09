@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
@@ -84,6 +84,16 @@ class Image(abstract.FrontendDashboardModel):
     # no EXIF data or that predate this field; consumers should fall back to
     # `created` when absent.
     taken_at = DateTimeField(null=True, blank=True)
+    # Bytes currently occupied by the stored file - the size after any
+    # downscaling/webp conversion, counted against the uploader's storage quota.
+    # Nullable because rows predating this field are backfilled lazily by
+    # process_image_upload; usage sums simply skip unmeasured rows until then.
+    file_size = BigIntegerField(null=True, blank=True)
+    # Full EXIF metadata captured from the original upload BEFORE any
+    # downscaling or format conversion, so nothing is lost if the stored file
+    # is re-encoded. Keys are human-readable tag names; values are
+    # JSON-sanitized (rationals/bytes stringified).
+    exif_data = JSONField(null=True, blank=True)
     # Set when the user explicitly clears an unfiled photo out of the Memories
     # "needs attention" organize queue without deleting it (e.g. a photo with no
     # GPS they don't want to tie to a visit). Keeps that queue finite; the photo

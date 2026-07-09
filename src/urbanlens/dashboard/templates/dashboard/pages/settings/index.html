@@ -309,7 +309,7 @@
                 <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
             </div>
 
-            <div class="settings-field">
+            <div class="settings-field settings-field--map-preview">
                 <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
                 <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
                 <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
@@ -580,6 +580,57 @@
         </form>
     </section>
     {% endif %}
+
+    {# -- Storage --------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="storage-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">database</i>
+            <div>
+                <h2 class="settings-section-title">Storage</h2>
+                <p class="settings-section-desc">Your upload space and photo size preference.</p>
+            </div>
+        </div>
+
+        <div class="storage-usage">
+            {% if storage_quota_bytes %}
+            <div class="storage-usage__bar" role="progressbar" aria-valuenow="{{ storage_percent_used }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="storage-usage__fill{% if storage_percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ storage_percent_used }}%;"></div>
+            </div>
+            <p class="storage-usage__text">
+                <strong>{{ storage_used_bytes|filesizeformat }}</strong> of {{ storage_quota_bytes|filesizeformat }} used
+                &middot; {{ storage_remaining_bytes|filesizeformat }} left
+            </p>
+            {% else %}
+            <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
+            {% endif %}
+        </div>
+
+        <form method="post" class="settings-form" id="storage-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="storage">
+
+            <div class="settings-field">
+                <label class="settings-label" for="id_image_downscale_max_dimension">Photo size for future uploads</label>
+                <p class="settings-help">
+                    Photos are downscaled to this size (longest edge) when stored. Choosing a smaller size
+                    lets more photos fit in your storage. Applies to future uploads only - existing photos
+                    are not changed.{% if storage_convert_webp %} Processed photos are stored as WebP.{% endif %}
+                </p>
+                <select class="settings-select browser-default" name="image_downscale_max_dimension" id="id_image_downscale_max_dimension">
+                    {% for option in storage_downscale_options %}
+                    <option value="{{ option.value }}" data-estimated-photos="{{ option.estimated_photos }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+                {% if storage_quota_bytes %}
+                <p class="settings-help storage-estimate" id="storage-estimate" aria-live="polite"></p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
 
     {# -- Notifications ------------------------------------------------------- #}
     <section class="settings-section ul-section">
@@ -1088,6 +1139,23 @@ window.updateClusterRadius = function (value) {
 
     masterToggle.addEventListener('change', syncSubOptions);
     syncSubOptions();
+}());
+
+// -- Storage: show the photos-remaining estimate for the selected size ---------
+(function () {
+    var sizeSelect = document.getElementById('id_image_downscale_max_dimension');
+    var estimate   = document.getElementById('storage-estimate');
+    if (!sizeSelect || !estimate) return;
+
+    function updateEstimate() {
+        var option = sizeSelect.options[sizeSelect.selectedIndex];
+        var photos = option ? parseInt(option.getAttribute('data-estimated-photos'), 10) : NaN;
+        estimate.textContent = isNaN(photos) ? '' :
+            'Room for about ' + photos.toLocaleString() + ' more photos at this size.';
+    }
+
+    sizeSelect.addEventListener('change', updateEstimate);
+    updateEstimate();
 }());
 </script>
 {% endblock %}

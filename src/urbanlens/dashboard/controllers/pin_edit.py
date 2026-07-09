@@ -360,12 +360,12 @@ class PinEditView(LoginRequiredMixin, View):
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:
             Review.objects.update_or_create(
-                user=request.user,
+                profile=request.user.profile,
                 pin=pin,
                 defaults={"rating": rating, "review": ""},
             )
         elif rating == 0:
-            Review.objects.filter(user=request.user, pin=pin).delete()
+            Review.objects.filter(profile=request.user.profile, pin=pin).delete()
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:

@@ -274,12 +274,25 @@
     @include icon-btn(28px);
 }
 
+.form-row--message {
+    margin-top: 1rem;
+}
+
+.form-row--map {
+    margin-top: 1rem;
+}
+
+.form-row--title {
+    margin-top: 1rem;
+}
+
 // -- Contact picker: chips, avatar picker, autocomplete -------------------------
 
 .safety-contact-picker {
     @include surface($radius-sm);
     padding: 1rem 1.25rem;
     max-width: 32rem;
+    margin: 1rem 0;
 }
 
 .safety-contact-picker-header {

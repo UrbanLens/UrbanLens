@@ -2,7 +2,7 @@
 
 Covers:
 - Rating field validation (MinValueValidator(0), MaxValueValidator(5))
-- unique_together (user, pin) constraint
+- unique_together (profile, pin) constraint
 - Pin.rating property delegates to the latest review
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ class ReviewRatingBoundsTests(TestCase):
     @given(valid_rating)
     @_db_settings
     def test_valid_rating_passes_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", user=self.user, pin=self.pin)
+        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
         try:
             review.full_clean()  # must not raise
         except ValidationError as exc:
@@ -56,28 +56,28 @@ class ReviewRatingBoundsTests(TestCase):
     @given(invalid_rating_low)
     @_db_settings
     def test_rating_below_zero_fails_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", user=self.user, pin=self.pin)
+        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
         with self.assertRaises(ValidationError, msg=f"Rating {rating} should fail validation"):
             review.full_clean()
 
     @given(invalid_rating_high)
     @_db_settings
     def test_rating_above_five_fails_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", user=self.user, pin=self.pin)
+        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
         with self.assertRaises(ValidationError, msg=f"Rating {rating} should fail validation"):
             review.full_clean()
 
     def test_boundary_zero_is_valid(self) -> None:
-        review = baker.make(Review, user=self.user, pin=self.pin, rating=0)
+        review = baker.make(Review, profile=self.profile, pin=self.pin, rating=0)
         review.full_clean()
 
     def test_boundary_five_is_valid(self) -> None:
-        review = baker.make(Review, user=self.user, pin=self.pin, rating=5)
+        review = baker.make(Review, profile=self.profile, pin=self.pin, rating=5)
         review.full_clean()
 
 
 class ReviewUniqueConstraintTests(TestCase):
-    """Each (user, pin) pair must have at most one Review."""
+    """Each (profile, pin) pair must have at most one Review."""
 
     user: User
     profile: Profile
@@ -96,18 +96,18 @@ class ReviewUniqueConstraintTests(TestCase):
         rating1: int,
         rating2: int,
     ) -> None:
-        baker.make(Review, user=self.user, pin=self.pin, rating=rating1)
+        baker.make(Review, profile=self.profile, pin=self.pin, rating=rating1)
         with self.assertRaises((IntegrityError, ValidationError)):
             with transaction.atomic():
-                baker.make(Review, user=self.user, pin=self.pin, rating=rating2)
+                baker.make(Review, profile=self.profile, pin=self.pin, rating=rating2)
 
     @given(valid_rating)
     @_db_settings
     def test_same_user_different_pins_are_independent(self, rating: int) -> None:
         other_pin = baker.make(Pin, profile=self.profile)
-        baker.make(Review, user=self.user, pin=self.pin, rating=rating)
+        baker.make(Review, profile=self.profile, pin=self.pin, rating=rating)
         try:
-            baker.make(Review, user=self.user, pin=other_pin, rating=rating)
+            baker.make(Review, profile=self.profile, pin=other_pin, rating=rating)
         except (IntegrityError, ValidationError) as exc:
             self.fail(f"Reviews for different pins should be independent: {exc}")
 
@@ -115,9 +115,9 @@ class ReviewUniqueConstraintTests(TestCase):
     @_db_settings
     def test_different_users_same_pin_are_independent(self, rating: int) -> None:
         other_user: User = baker.make(User)
-        baker.make(Review, user=self.user, pin=self.pin, rating=rating)
+        baker.make(Review, profile=self.profile, pin=self.pin, rating=rating)
         try:
-            baker.make(Review, user=other_user, pin=self.pin, rating=rating)
+            baker.make(Review, profile=other_user.profile, pin=self.pin, rating=rating)
         except (IntegrityError, ValidationError) as exc:
             self.fail(f"Reviews from different users for the same pin should be independent: {exc}")
 
@@ -141,7 +141,7 @@ class PinRatingPropertyTests(TestCase):
     @_db_settings
     def test_rating_reflects_stored_review(self, rating: int) -> None:
         pin = baker.make(Pin, profile=self.profile)
-        baker.make(Review, user=self.user, pin=pin, rating=rating)
+        baker.make(Review, profile=self.profile, pin=pin, rating=rating)
         # Re-fetch to clear any cached state.
         pin.refresh_from_db()
         self.assertEqual(pin.rating, rating)
@@ -151,7 +151,7 @@ class PinRatingPropertyTests(TestCase):
     def test_rating_returns_latest_when_updated(self, first: int, second: int) -> None:
         """Updating the review must change the reported pin rating."""
         pin = baker.make(Pin, profile=self.profile)
-        review = baker.make(Review, user=self.user, pin=pin, rating=first)
+        review = baker.make(Review, profile=self.profile, pin=pin, rating=first)
         review.rating = second
         review.save()
         pin.refresh_from_db()

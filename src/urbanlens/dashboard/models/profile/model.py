@@ -211,6 +211,12 @@ class Profile(abstract.PublicDashboardModel):
     ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
+    # Voluntary downscale cap (longest edge, px) for future photo uploads.
+    # Null means "use whatever the site policy entitles me to". A value here can
+    # only tighten the site policy (the effective cap is the smaller of the two),
+    # letting users trade image resolution for more photos within their quota.
+    image_downscale_max_dimension = IntegerField(null=True, blank=True)
+
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")

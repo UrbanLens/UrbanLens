@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.storage import quota_error_for_upload
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -64,6 +65,9 @@ class PinGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
 
         img = Image.objects.create(
             image=image_file,
@@ -73,6 +77,7 @@ class PinGalleryView(LoginRequiredMixin, View):
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
             checksum=checksum,
+            file_size=image_file.size,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -154,6 +159,9 @@ class WikiGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
 
         img = Image.objects.create(
             image=image_file,
@@ -162,6 +170,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
             checksum=checksum,
+            file_size=image_file.size,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

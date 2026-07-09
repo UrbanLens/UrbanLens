@@ -70,7 +70,7 @@ def print_pillow_metadata(path: Path) -> None:
             for key, value in img.info.items():
                 if isinstance(value, bytes):
                     printable = f"<{len(value)} bytes>"
-                    if key.lower() in {"exif", "xmp", "xml", "comment"}:
+                    if isinstance(key, str) and key.lower() in {"exif", "xmp", "xml", "comment"}:
                         try:
                             printable = value.decode("utf-8", errors="replace")
                         except Exception:

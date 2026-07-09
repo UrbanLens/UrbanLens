@@ -4,6 +4,16 @@
     <div class="pin-overview-title-row">
         <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
 
+        {# Lists collapsed sections for this pin and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
+        <div class="collapse-restore" data-collapse-restore-scope="pin" hidden>
+            <button type="button" class="btn btn--ghost btn--sm collapse-restore-toggle" aria-haspopup="true">
+                <i class="material-symbols-outlined">visibility</i>
+                Hidden sections
+                <span class="badge collapse-restore-count">0</span>
+            </button>
+            <div class="collapse-restore-menu"></div>
+        </div>
+
         {% if pin.is_private %}
         <div class="pin-wiki-box pin-wiki-box--private">
             <i class="material-symbols-outlined">lock</i>

@@ -164,7 +164,7 @@ class NPSGateway(Gateway):
         if not park_code:
             return None
 
-        params = {"parkCode": park_code, "limit": 1, "fields": "images,activities,operatingHours"}
+        params: dict[str, Any] = {"parkCode": park_code, "limit": 1, "fields": "images,activities,operatingHours"}
         try:
             resp = self.session.get(f"{self.base_url}/parks", headers=self._headers, params=params, timeout=20)
             resp.raise_for_status()

@@ -31,7 +31,7 @@ class TripViewSet(viewsets.ModelViewSet):
     def remove_user(self, request, pk=None):
         trip = self.get_object()
         user = request.user
-        if user in trip.profiles.all():
+        if user.profile in trip.profiles.all():
             trip.profiles.remove(user.profile)
 
             # If the trip is empty, delete it

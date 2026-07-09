@@ -81,9 +81,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def by_profile(self, profile):
         return self.filter(profile=profile)
 
-    def by_user(self, user):
-        return self.filter(user=user)
-
     def by_created_year(self, year):
         return self.filter(created__year=year)
 

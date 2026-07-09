@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -30,6 +30,14 @@ class SubscriptionRole(abstract.DashboardModel):
     name = CharField(max_length=100)
     description = CharField(max_length=255, blank=True)
     features = CharField(max_length=500, blank=True, help_text="Comma-separated SiteFeature values.")
+    # Storage quota (GB) granted to users holding this role. Null means the role
+    # grants no quota of its own and the site-wide default applies. When a user
+    # holds several active roles, the largest applicable quota wins.
+    storage_quota_gb = IntegerField(
+        null=True,
+        blank=True,
+        help_text="Storage quota (GB) for users with this role. Blank uses the site default; 0 means unlimited.",
+    )
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]
@@ -38,6 +46,9 @@ class SubscriptionRole(abstract.DashboardModel):
     # when they should be automatically granted to VIPs; ensure_defaults will merge them
     # into existing rows without removing any admin-configured extras.
     _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH})
+
+    # Default storage quota (GB) granted to the built-in VIP role on creation.
+    _VIP_DEFAULT_STORAGE_QUOTA_GB: int = 500
 
     @classmethod
     def ensure_defaults(cls) -> None:
@@ -48,6 +59,7 @@ class SubscriptionRole(abstract.DashboardModel):
                 "name": "VIP",
                 "description": "Grants access to VIP-only features.",
                 "features": ",".join(sorted(cls._VIP_CANONICAL_FEATURES)),
+                "storage_quota_gb": cls._VIP_DEFAULT_STORAGE_QUOTA_GB,
             },
         )
         if not created:
@@ -145,6 +157,29 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
         .select_related("role")
     )
     return any(subscription.role.grants(feature) for subscription in subscriptions)
+
+
+def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
+    """Return the subscription roles the user currently holds.
+
+    Args:
+        user: The user to look up; anonymous users hold no roles.
+
+    Returns:
+        The roles of the user's active (unrevoked, unexpired) subscriptions.
+    """
+    if not isinstance(user, User) or not user.is_authenticated:
+        return []
+    now = timezone.now()
+    subscriptions = (
+        UserSubscription.objects.filter(
+            user=user,
+            revoked_at__isnull=True,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .select_related("role")
+    )
+    return [subscription.role for subscription in subscriptions]
 
 
 def grant_subscription(user: User, role: SubscriptionRole, granted_by: User, months: int | None) -> UserSubscription:

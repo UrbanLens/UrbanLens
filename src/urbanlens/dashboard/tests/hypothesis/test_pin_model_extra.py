@@ -165,12 +165,12 @@ class PinRatingTests(TestCase):
         self.assertEqual(self.pin.rating, 0)
 
     def test_single_review_returns_its_rating(self) -> None:
-        baker.make("dashboard.Review", user=self.user, pin=self.pin, rating=4)
+        baker.make("dashboard.Review", profile=self.user.profile, pin=self.pin, rating=4)
         self.pin = Pin.objects.get(pk=self.pin.pk)
         self.assertEqual(self.pin.rating, 4)
 
     def test_rating_is_integer(self) -> None:
-        baker.make("dashboard.Review", user=self.user, pin=self.pin, rating=3)
+        baker.make("dashboard.Review", profile=self.user.profile, pin=self.pin, rating=3)
         self.pin = Pin.objects.get(pk=self.pin.pk)
         self.assertIsInstance(self.pin.rating, int)
 

@@ -192,6 +192,72 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
+            <i class="material-symbols-outlined">database</i>
+            <span>Storage &amp; Uploads</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-storage">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="storage-quota-gb">Default storage quota (GB)</label>
+                <p class="form-help">
+                    Photo/video storage each regular user may use. Subscription roles can grant a larger
+                    quota on the <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.
+                    Set to <strong>0</strong> for unlimited.
+                </p>
+                <input type="number" name="storage_quota_gb" id="storage-quota-gb"
+                       value="{{ settings.storage_quota_gb }}" min="0" max="1000000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-enabled">Downscale uploaded photos</label>
+                <p class="form-help">
+                    Photos larger than the maximum dimension below are downscaled on upload to save storage
+                    space. The full EXIF metadata of the original file is always saved before any conversion.
+                </p>
+                <select name="image_downscale_enabled" id="image-downscale-enabled">
+                    <option value="1"{% if settings.image_downscale_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.image_downscale_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-max-dimension">Max photo dimension (px)</label>
+                <p class="form-help">
+                    Longest edge photos are downscaled to. 1920&nbsp;px keeps plenty of detail for screens
+                    while reducing the size of a modern phone photo to roughly 1/8th.
+                </p>
+                <input type="number" name="image_downscale_max_dimension" id="image-downscale-max-dimension"
+                       value="{{ settings.image_downscale_max_dimension }}" min="256" max="20000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="image-convert-webp">Convert uploads to WebP</label>
+                <p class="form-help">
+                    Re-encode processed uploads as WebP for additional storage savings (roughly a third
+                    smaller than JPEG at the same quality).
+                </p>
+                <select name="image_convert_webp" id="image-convert-webp">
+                    <option value="1"{% if settings.image_convert_webp %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.image_convert_webp %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-vip">Downscale subscriber uploads</label>
+                <p class="form-help">
+                    Whether photos uploaded by users with an active subscription are also downscaled and
+                    converted. When off, subscribers keep their original files (unless they opt into
+                    downscaling in their own settings).
+                </p>
+                <select name="image_downscale_vip" id="image-downscale-vip">
+                    <option value="1"{% if settings.image_downscale_vip %} selected{% endif %}>Yes, downscale subscribers too</option>
+                    <option value="0"{% if not settings.image_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
             <i class="material-symbols-outlined">person_add_disabled</i>
             <span>Registration</span>
         </div>

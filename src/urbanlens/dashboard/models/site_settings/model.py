@@ -100,6 +100,36 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(500), MaxValueValidator(200_000)],
     )
 
+    # --- Storage quotas & upload processing ---
+
+    storage_quota_gb = IntegerField(
+        default=10,
+        help_text="Storage quota (GB) for photo/video uploads per regular user. Subscription roles can override this with a larger quota. Set to 0 for unlimited.",
+        verbose_name="Default storage quota (GB)",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+    image_downscale_enabled = BooleanField(
+        default=True,
+        help_text="Downscale uploaded photos that exceed the maximum dimension below, to save storage space. The original EXIF metadata is always preserved on the image record.",
+        verbose_name="Downscale uploaded photos",
+    )
+    image_downscale_max_dimension = IntegerField(
+        default=1920,
+        help_text="Longest edge (pixels) uploaded photos are downscaled to when downscaling is enabled. 1920px keeps plenty of detail for screens while reducing the size of a modern phone photo to roughly 1/8th.",
+        verbose_name="Max photo dimension (px)",
+        validators=[MinValueValidator(256), MaxValueValidator(20_000)],
+    )
+    image_convert_webp = BooleanField(
+        default=False,
+        help_text="Re-encode processed uploads as WebP for additional storage savings.",
+        verbose_name="Convert uploads to WebP",
+    )
+    image_downscale_vip = BooleanField(
+        default=False,
+        help_text="Also downscale/convert uploads from users with an active subscription. When off, subscribers keep their original files (unless they opt into downscaling themselves).",
+        verbose_name="Downscale subscriber uploads",
+    )
+
     # --- Search provider ---
 
     search_provider = CharField(
@@ -353,4 +383,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
+            CheckConstraint(condition=Q(storage_quota_gb__gte=0), name="storage_quota_gb_gte_0"),
+            CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
         ]

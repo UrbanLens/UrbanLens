@@ -443,6 +443,10 @@
         flex-direction: column;
         gap: 0.25rem;
     }
+
+    &--map-preview {
+        max-width: 45rem;
+    }
 }
 
 .settings-label {
@@ -495,9 +499,7 @@
 .settings-form--privacy {
     .settings-field {
         padding: 0.95rem 1rem;
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: $radius-md;
-        background: var(--ul-grey-0);
+        max-width: 45rem;
     }
 
     @include up($breakpoint-md) {
@@ -605,6 +607,45 @@
     @include btn-primary;
     padding: 10px 24px;
     font-weight: 600;
+}
+
+// -- Storage section (usage bar + photo size preference) ------------------------
+
+.storage-usage {
+    margin-bottom: 1.25rem;
+}
+
+.storage-usage__bar {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--ul-grey-2);
+    overflow: hidden;
+}
+
+.storage-usage__fill {
+    height: 100%;
+    border-radius: 5px;
+    background: var(--primary-color);
+    transition: width 0.4s ease;
+
+    &--warn {
+        background: var(--ul-danger, #e53e3e);
+    }
+}
+
+.storage-usage__text {
+    margin: .5rem 0 0;
+    font-size: .9rem;
+    color: var(--ul-grey-5);
+
+    strong {
+        color: var(--ul-grey-9);
+    }
+}
+
+.storage-estimate {
+    font-style: italic;
+    margin-top: .5rem;
 }
 
 .settings-cluster-row {

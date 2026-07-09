@@ -744,6 +744,9 @@ $('iw-btn-upload').addEventListener('click', async function () {
     try {
         var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData });
         if (!res.ok) {
+            if (res.status === 413) {
+                throw new Error('That upload is too large. Try removing some files or splitting them into smaller batches.');
+            }
             var err = await res.json().catch(function () { return {}; });
             throw new Error(err.error || 'Server error ' + res.status);
         }
