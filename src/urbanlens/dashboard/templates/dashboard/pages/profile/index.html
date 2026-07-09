@@ -139,9 +139,26 @@
                 {% endif %}
 
                 {% if profile.user == request.user %}
-                <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
-                    <i class="material-symbols-outlined">edit</i> Edit Profile
-                </a>
+                <div class="profile-owner-actions">
+                    {% if preview_modes %}
+                    <details class="profile-viewas">
+                        <summary class="btn btn--ghost" title="See your profile exactly as another user sees it">
+                            <i class="material-symbols-outlined">visibility</i> View as
+                        </summary>
+                        <div class="profile-viewas-menu">
+                            {% for mode, label in preview_modes %}
+                            <form method="post" action="{% url 'profile.preview' mode %}">
+                                {% csrf_token %}
+                                <button type="submit" class="profile-viewas-item">{{ label }}</button>
+                            </form>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                    <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
+                        <i class="material-symbols-outlined">edit</i> Edit Profile
+                    </a>
+                </div>
                 {% endif %}
             </div>
 

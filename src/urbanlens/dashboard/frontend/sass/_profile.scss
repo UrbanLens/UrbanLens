@@ -2688,3 +2688,88 @@ a.profile-stat--link {
         padding: 1.25rem;
     }
 }
+// -- "View as" preview (own profile) --------------------------------------------
+
+.profile-owner-actions {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+.profile-viewas {
+    position: relative;
+
+    summary {
+        list-style: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+    }
+}
+
+.profile-viewas-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + .35rem);
+    min-width: 240px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+    padding: .35rem;
+    display: flex;
+    flex-direction: column;
+    z-index: 300;
+}
+
+.profile-viewas-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: $radius-sm;
+    padding: .5rem .65rem;
+    font-size: .9rem;
+    color: var(--ul-grey-9);
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-grey-1);
+    }
+}
+
+// Fixed banner injected by ProfilePreviewMiddleware while a preview is active
+.profile-preview-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1rem;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    max-width: min(92vw, 720px);
+    padding: .65rem 1rem;
+    background: var(--ul-grey-0);
+    border: 1px solid $primary-color;
+    border-radius: $radius-md;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .3);
+    color: var(--ul-grey-9);
+    font-size: .9rem;
+
+    > .material-symbols-outlined {
+        color: $primary-color;
+        flex-shrink: 0;
+    }
+
+    .profile-preview-exit {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+}

@@ -81,6 +81,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    # Innermost: swaps in the simulated viewer for "view profile as" previews.
+    "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [

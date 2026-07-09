@@ -74,6 +74,10 @@ class ViewProfileView(LoginRequiredMixin, View):
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
         }
+        if request.user == profile.user:
+            from urbanlens.dashboard.services.profile_preview import preview_modes
+
+            context["preview_modes"] = preview_modes()
         self._add_common_context(request, profile, context)
         return render(request, "dashboard/pages/profile/index.html", context)
 
@@ -109,11 +113,9 @@ class ViewProfileView(LoginRequiredMixin, View):
         if visibility == VisibilityChoice.FRIENDS:
             from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
-            try:
-                friendship = Friendship.objects.between(my_profile, profile)
-                return FriendshipStatus.is_friend(friendship.status)
-            except Friendship.DoesNotExist:
-                return False
+            # between() returns None (not DoesNotExist) when no row exists.
+            friendship = Friendship.objects.between(my_profile, profile)
+            return friendship is not None and FriendshipStatus.is_friend(friendship.status)
 
         if visibility == VisibilityChoice.COMMON_PIN:
             my_loc_ids = set(
@@ -239,6 +241,62 @@ class ViewProfileView(LoginRequiredMixin, View):
         trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
         context["trust_rating"] = trust.rating if trust else 0
         context["my_profile"] = my_profile
+
+
+class ProfilePreviewStartView(LoginRequiredMixin, View):
+    """Start previewing your own profile as a selected type of user.
+
+    Stores the preview state in the session and redirects to the public
+    profile URL; ``ProfilePreviewMiddleware`` then renders that page as a
+    simulated user with the chosen relationship.
+    """
+
+    def post(self, request: HttpRequest, mode: str) -> HttpResponse:
+        """Activate a preview session for the given audience.
+
+        Args:
+            request: The HTTP request.
+            mode: A ``VisibilityChoice`` value selecting the simulated viewer.
+
+        Returns:
+            Redirect to the previewed profile page (or back to the profile
+            when the mode is unknown).
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.profile_preview import SESSION_KEY, preview_modes
+
+        if mode not in dict(preview_modes()):
+            return redirect("profile.view")
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.slug:
+            # Slugs are generated on save; force one so the public URL exists.
+            profile.save()
+        if not profile.slug:
+            return redirect("profile.view")
+
+        path = reverse("profile.view_user", kwargs={"profile_slug": profile.slug})
+        request.session[SESSION_KEY] = {"mode": mode, "path": path, "owner_id": profile.pk}
+        return redirect(path)
+
+
+class ProfilePreviewStopView(LoginRequiredMixin, View):
+    """Exit profile preview mode and return to the normal profile page."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Clear any active preview session.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Redirect to the owner's profile page.
+        """
+        from urbanlens.dashboard.services.profile_preview import SESSION_KEY
+
+        request.session.pop(SESSION_KEY, None)
+        return redirect("profile.view")
 
 
 class ProfileFieldUpdateView(LoginRequiredMixin, View):

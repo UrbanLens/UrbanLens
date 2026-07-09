@@ -94,6 +94,10 @@
         @include up($breakpoint-sm) {
             display: flex;
         }
+
+        img {
+            max-height: 29rem;
+        }
     }
 
     // -- Shared section chrome -------------------------------------------------
@@ -102,18 +106,24 @@
         background: var(--ul-grey-0);
     }
 
-    .about-values-section {
+    .about-team-section {
         padding: 5rem 0;
         background: var(--ul-grey-0b);
     }
 
-    .about-features-section {
+    .about-values-section {
+        padding: 5rem 0;
         background: var(--ul-grey-0);
+    }
+
+    .about-features-section {
+        padding: 5rem 0;
+        background: var(--ul-grey-0b);
     }
 
     .about-audience-section {
         padding: 5rem 0;
-        background: var(--ul-grey-0b);
+        background: var(--ul-grey-0);
     }
 
     .about-section-label {
@@ -138,7 +148,6 @@
         font-size: 1.05rem;
         color: var(--ul-grey-7);
         line-height: 1.75;
-        max-width: 700px;
         margin: 0 0 1.1rem;
     }
 
@@ -337,6 +346,10 @@
                 flex-shrink: 0;
             }
         }
+
+        + a {
+            margin-top: 1.5rem;
+        }
     }
 
     // -- Audience grid ---------------------------------------------------------
@@ -397,6 +410,7 @@
         margin: 0 0 2rem;
     }
 }
+
 
 
 [data-theme="dark"] {
