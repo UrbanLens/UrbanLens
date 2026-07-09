@@ -26,7 +26,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -231,10 +231,11 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         return
     lat, lng = coords
 
-    pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
-    PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
-    sync_last_visited(pin)
-    add_visited_status(pin)
+    if visit_logging_allowed(completer):
+        pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
+        PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
+        sync_last_visited(pin)
+        add_visited_status(pin)
 
     if activity.scheduled_at is not None:
         other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
@@ -1081,23 +1082,25 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         ]
 
         geocoded_results: list[dict] = []
-        try:
-            from geopy.geocoders import Nominatim
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.external_apis_enabled:
+            try:
+                from geopy.geocoders import Nominatim
 
-            geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
-            geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
-            if geo_hits:
-                for hit in geo_hits:
-                    geocoded_results.append(
-                        {
-                            "name": hit.address,
-                            "lat": hit.latitude,
-                            "lng": hit.longitude,
-                            "type": "geocoded",
-                        },
-                    )
-        except (ImportError, OSError, ValueError) as exc:
-            logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
+                geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
+                geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
+                if geo_hits:
+                    for hit in geo_hits:
+                        geocoded_results.append(
+                            {
+                                "name": hit.address,
+                                "lat": hit.latitude,
+                                "lng": hit.longitude,
+                                "type": "geocoded",
+                            },
+                        )
+            except (ImportError, OSError, ValueError) as exc:
+                logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
         return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
 
@@ -1542,7 +1545,9 @@ class TripWeatherView(LoginRequiredMixin, View):
         error: str = ""
         grouped: list[tuple] = []
 
-        if not app_settings.openweathermap_api_key:
+        if not profile.external_apis_enabled:
+            error = "External weather lookups are turned off in your settings."
+        elif not app_settings.openweathermap_api_key:
             error = "Weather API key not configured."
         else:
             today = datetime.date.today()

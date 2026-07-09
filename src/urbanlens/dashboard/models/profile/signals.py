@@ -15,7 +15,10 @@ def create_user_profile(sender: type[User], instance: User, created: bool, **kwa
     if created:
         from urbanlens.dashboard.services.site_admin import promote_first_user_if_needed
 
-        Profile.objects.get_or_create(user=instance, defaults={"primary_email_normalized": normalized})
+        Profile.objects.get_or_create(
+            user=instance,
+            defaults={"primary_email_normalized": normalized, "profile_setup_complete": False},
+        )
         promote_first_user_if_needed(instance)
     else:
         Profile.objects.filter(user=instance).exclude(primary_email_normalized=normalized).update(primary_email_normalized=normalized)

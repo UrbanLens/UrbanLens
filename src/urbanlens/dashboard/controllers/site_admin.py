@@ -344,7 +344,8 @@ class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin,
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         profile.guidance_level = GuidanceLevel.ALL
-        profile.save(update_fields=["guidance_level"])
+        profile.welcome_onboarding_complete = False
+        profile.save(update_fields=["guidance_level", "welcome_onboarding_complete"])
 
         response = HttpResponse(status=204)
         response["HX-Trigger"] = json.dumps({"devOnboardingReset": True})

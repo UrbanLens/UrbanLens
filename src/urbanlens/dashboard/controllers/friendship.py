@@ -128,7 +128,8 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     """
     existing = Friendship.objects.all().between(from_profile, to_profile)
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
-        existing.accept()
+        if not existing.accept():
+            return None
         NotificationLog.objects.create(
             profile=to_profile,
             status=Status.UNREAD,
@@ -263,7 +264,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
-        friendship.accept()
+        if not friendship.accept():
+            return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
 
         # Notify the original requester that their request was accepted.
         requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile

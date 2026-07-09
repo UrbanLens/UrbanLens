@@ -17,7 +17,7 @@ from django.contrib.gis.measure import D
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import add_visited_status, create_minimal_pin, sync_last_visited
+from urbanlens.dashboard.services.visits import add_visited_status, create_minimal_pin, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -93,7 +93,7 @@ def create_pin_and_log_visit(
     latitude: Decimal | float | None = None,
     longitude: Decimal | float | None = None,
     name: str | None = None,
-) -> tuple[Pin, PinVisit]:
+) -> tuple[Pin, PinVisit | None]:
     """Create a pin for a geotagged photo and log a visit there in one step.
 
     Used for a photo that has GPS but matches none of the user's existing pins.
@@ -117,7 +117,9 @@ def create_pin_and_log_visit(
             Location's canonical name via ``Pin.effective_name``.
 
     Returns:
-        The newly created Pin and PinVisit.
+        The newly created Pin, and the new PinVisit - or None if profile has
+        turned off visit-history tracking (the pin/photo association still
+        happens; only the visit row is skipped).
 
     Raises:
         ValueError: If neither an override nor the image supplies coordinates.
@@ -137,18 +139,19 @@ def create_pin_and_log_visit(
         pin.save(update_fields=["name", "name_is_user_provided", "updated"])
     safely_enqueue_task(create_location_for_pin, pin.pk)
 
-    visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO)
+    visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     image.pin = pin
     image.visit = visit
     # The pin's shared Location is resolved by create_location_for_pin in the
     # background, which also backfills image.location for the pin's photos.
     image.save(update_fields=["pin", "visit", "updated"])
-    sync_last_visited(pin)
-    add_visited_status(pin)
+    if visit is not None:
+        sync_last_visited(pin)
+        add_visited_status(pin)
     return pin, visit
 
 
-def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit:
+def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | None:
     """Log a photo-sourced visit on an existing pin and attach the photo to it.
 
     Used both for a geotagged photo the user manually assigns and for a photo with
@@ -161,9 +164,10 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit:
         pin: The pin to log the visit against.
 
     Returns:
-        The newly created PinVisit.
+        The newly created PinVisit, or None if profile has turned off
+        visit-history tracking (the photo is still attached to the pin).
     """
-    visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO)
+    visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     update_fields = ["pin", "visit", "updated"]
     image.pin = pin
     image.visit = visit
@@ -175,6 +179,7 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit:
         image.longitude = pin.location.longitude
         update_fields.extend(["latitude", "longitude"])
     image.save(update_fields=update_fields)
-    sync_last_visited(pin)
-    add_visited_status(pin)
+    if visit is not None:
+        sync_last_visited(pin)
+        add_visited_status(pin)
     return visit

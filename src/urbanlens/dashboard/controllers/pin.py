@@ -1070,6 +1070,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the weather forecast for a pin.
         """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.external_apis_enabled:
+            return HttpResponse("External weather lookups are turned off in your settings.", status=403)
+
         # Get the pin
         try:
             pin: Pin = Pin.objects.get(slug=pin_slug)

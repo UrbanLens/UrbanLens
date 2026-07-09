@@ -262,10 +262,20 @@ def import_my_activity_streaming(
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-    from urbanlens.dashboard.services.visits import create_visit_suggestion, find_nearest_pin
+    from urbanlens.dashboard.services.visits import create_visit_suggestion, find_nearest_pin, visit_logging_allowed
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
+
+    if not visit_logging_allowed(profile):
+        yield sse(
+            {
+                "type": "error",
+                "message": "Visit logging is turned off - enable it in Settings to import your activity history.",
+                "subtype": "my_activity",
+            },
+        )
+        return
 
     all_entries: list[dict[str, Any]] = []
     for filename, raw_bytes in files:

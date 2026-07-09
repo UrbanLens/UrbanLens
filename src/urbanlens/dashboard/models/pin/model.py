@@ -177,9 +177,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         the current one - so whenever a meaningful ``name`` is persisted, an
         alias row for it is ensured. This single enforcement point covers
         every write path (HTMX controllers, REST serializer, Django admin).
+
+        Also enforces that a pin can never be saved as non-private while its
+        owner has disabled Community - covers every write path the same way.
         """
-        super().save(*args, **kwargs)
         update_fields = kwargs.get("update_fields")
+        if self.profile_id and not self.is_private and not self.profile.community_enabled:
+            self.is_private = True
+            if update_fields is not None and "is_private" not in update_fields:
+                kwargs["update_fields"] = [*update_fields, "is_private"]
+
+        super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):

@@ -45,6 +45,19 @@ ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
 # How long before the hard delete the "1 day left" reminder goes out.
 ACCOUNT_DELETION_REMINDER_LEAD = datetime.timedelta(days=1)
 
+# Visibility fields forced to VisibilityChoice.NO_ONE while community_enabled is
+# False. Re-enabling community makes them editable again; their values are not
+# restored to whatever they were before - they stay at NO_ONE until re-chosen.
+_COMMUNITY_GATED_VISIBILITY_FIELDS = (
+    "profile_visibility",
+    "comment_visibility",
+    "friend_request_visibility",
+    "photo_upload_visibility",
+    "viewer_photo_filter",
+    "trip_pin_location_visibility",
+    "contact_visibility",
+)
+
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     """Great-circle distance in kilometres between two (lat, lng) points."""
@@ -87,6 +100,10 @@ class Profile(abstract.PublicDashboardModel):
 
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     profile_setup_complete = BooleanField(default=True)
+    # Default False so every newly-created profile shows /welcome/ once with no
+    # signup-path race; the migration that adds this field backfills existing
+    # rows to True so pre-existing accounts never see it.
+    welcome_onboarding_complete = BooleanField(default=False)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
@@ -230,6 +247,23 @@ class Profile(abstract.PublicDashboardModel):
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
+    # Memories preferences. Each independently controls whether a category of
+    # visit/location history is ever saved - including from explicit user actions
+    # like GPX/Takeout imports, not just passive/background tracking.
+    track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from manual entries, imports, and photo tagging.")
+    track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
+    track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
+
+    # When False: your pins are forced private, your profile and privacy
+    # settings are locked to the most restrictive option, and you cannot send
+    # or receive friend requests. Enforced in Pin.save()/Profile.save().
+    community_enabled = BooleanField(default=True, help_text="Allow other users to see your pins, profile, and friend requests.")
+
+    # Master switch for all external API calls made on your behalf (weather,
+    # geocoding, place data, AI, etc). Individual services also have their own
+    # toggles below/elsewhere that remain independently adjustable.
+    external_apis_enabled = BooleanField(default=True, help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.")
+
     # Set when the user requests account deletion; cleared on cancel/undo.
     # A non-null value means the account is scheduled for hard deletion at
     # deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD.
@@ -255,6 +289,23 @@ class Profile(abstract.PublicDashboardModel):
         notifications: DjangoManager[NotificationLog]
         triggered_notifications: DjangoManager[NotificationLog]
         markup_items: DjangoManager[PinMarkup]
+
+    def save(self, *args, **kwargs) -> None:
+        """Save the profile, forcing visibility settings to their most restrictive value while Community is off.
+
+        This single enforcement point covers every write path (settings forms,
+        onboarding, admin) so the existing view-level (``_can_view_profile``)
+        and model-level (``can_view_contact_info``) visibility checks work
+        correctly with no changes of their own.
+        """
+        update_fields = kwargs.get("update_fields")
+        if not self.community_enabled:
+            forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
+            for field in forced:
+                setattr(self, field, VisibilityChoice.NO_ONE)
+            if forced and update_fields is not None:
+                kwargs["update_fields"] = [*update_fields, *forced]
+        super().save(*args, **kwargs)
 
     @property
     def is_pending_deletion(self) -> bool:

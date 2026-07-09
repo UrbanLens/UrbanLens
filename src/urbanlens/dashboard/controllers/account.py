@@ -26,7 +26,6 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
 
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
 from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
@@ -261,11 +260,6 @@ class VerifyEmailView(View):
         user.is_active = True
         user.save(update_fields=["is_active"])
 
-        profile, created = Profile.objects.get_or_create(user=user)
-        if created:
-            profile.profile_setup_complete = False
-            profile.save(update_fields=["profile_setup_complete"])
-
         # Auto-send friend request from any pending email invitations
         session_invite_token = request.session.pop("pending_invite_token", None)
         invite_token = session_invite_token or verification.pending_invite_token
@@ -426,6 +420,9 @@ class PostLoginRedirectView(View):
         except Profile.DoesNotExist:
             profile, _ = Profile.objects.get_or_create(user=request.user)
 
+        if not profile.welcome_onboarding_complete:
+            return redirect("onboarding.welcome")
+
         if not profile.profile_setup_complete:
             return redirect("profile.edit")
 
@@ -500,6 +497,8 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
         user: The newly-verified User.
         invite_token: Optional invitation token stored during signup from an invite link.
     """
+    from urbanlens.dashboard.models.profile.model import Profile
+
     try:
         profile, _ = Profile.objects.get_or_create(user=user)
         for invitation in _collect_pending_invitations(user, invite_token):

@@ -1,0 +1,63 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="settings-page page-content">
+    <div class="settings-header">
+        <h1 class="settings-title">Welcome to UrbanLens</h1>
+        <p class="settings-subtitle">
+            To make the site work best for you, choose what UrbanLens does for you below. Everything defaults to on,
+            and UrbanLens is fully private either way - nothing you do here is shared with anyone unless you take a
+            separate, explicit action later to share it. You can change any of these anytime from Settings.
+        </p>
+    </div>
+
+    <section class="settings-section ul-section">
+        <form method="post" class="settings-form" id="welcome-onboarding-form">
+            {% csrf_token %}
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ form.memories_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ form.memories_enabled.label }}</strong>
+                        <span class="settings-help">{{ form.memories_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if form.memories_enabled.errors %}
+                <p class="settings-error">{{ form.memories_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ form.community_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ form.community_enabled.label }}</strong>
+                        <span class="settings-help">{{ form.community_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if form.community_enabled.errors %}
+                <p class="settings-error">{{ form.community_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ form.external_apis_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ form.external_apis_enabled.label }}</strong>
+                        <span class="settings-help">{{ form.external_apis_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if form.external_apis_enabled.errors %}
+                <p class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Continue</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

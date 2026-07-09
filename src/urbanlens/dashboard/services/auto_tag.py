@@ -129,7 +129,7 @@ class AutoTagService:
         Returns:
             True if auto-tagging is permitted for this kind and profile.
         """
-        if not getattr(profile, "ai_enabled", True):
+        if not getattr(profile, "ai_enabled", True) or not getattr(profile, "external_apis_enabled", True):
             return False
         pref_field = _KIND_PREF.get(kind)
         return bool(getattr(profile, pref_field, True)) if pref_field else True

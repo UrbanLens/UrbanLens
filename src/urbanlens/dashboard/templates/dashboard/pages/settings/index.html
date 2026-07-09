@@ -7,6 +7,42 @@
         <p class="settings-subtitle">Manage your account preferences</p>
     </div>
 
+    {# -- Community ------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="community-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">groups</i>
+            <div>
+                <h2 class="settings-section-title">Community</h2>
+                <p class="settings-section-desc">Whether other users can see your pins, profile, and friend requests.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="community-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="community">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ community_form.community_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ community_form.community_enabled.label }}</strong>
+                        <span class="settings-help">{{ community_form.community_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if community_form.community_enabled.errors %}
+                <p class="settings-error">{{ community_form.community_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            {% if not community_form.instance.community_enabled %}
+            <p class="settings-help">All of your pins are private and your privacy settings below are locked to the most restrictive option while this is off.</p>
+            {% endif %}
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
     {# -- Privacy ------------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
@@ -380,6 +416,92 @@
                 <p class="settings-error">{{ map_display_form.use_pin_cache.errors|join:", " }}</p>
                 {% endif %}
             </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- Memories -------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="memories-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">history</i>
+            <div>
+                <h2 class="settings-section-title">Memories</h2>
+                <p class="settings-section-desc">What visit and location history UrbanLens saves for you.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="memories-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="memories">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ memories_form.track_pin_visits }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ memories_form.track_pin_visits.label }}</strong>
+                        <span class="settings-help">{{ memories_form.track_pin_visits.help_text }}</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ memories_form.track_routes }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ memories_form.track_routes.label }}</strong>
+                        <span class="settings-help">{{ memories_form.track_routes.help_text }}</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ memories_form.track_geolocation }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ memories_form.track_geolocation.label }}</strong>
+                        <span class="settings-help">{{ memories_form.track_geolocation.help_text }}</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+
+    {# -- External Services ------------------------------------------------------ #}
+    <section class="settings-section ul-section" id="external-api-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">public</i>
+            <div>
+                <h2 class="settings-section-title">External Services</h2>
+                <p class="settings-section-desc">Whether UrbanLens can call external services on your behalf.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="external-api-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="external_apis">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ external_api_form.external_apis_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ external_api_form.external_apis_enabled.label }}</strong>
+                        <span class="settings-help">{{ external_api_form.external_apis_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if external_api_form.external_apis_enabled.errors %}
+                <p class="settings-error">{{ external_api_form.external_apis_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+            {% if not external_api_form.instance.external_apis_enabled %}
+            <p class="settings-help">Weather, geocoding, place-data panels, and AI features are unavailable while this is off. AI and Places sources below can still be turned back on individually.</p>
+            {% endif %}
 
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>

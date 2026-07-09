@@ -484,6 +484,8 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     source = get_panel_source(source_key)
     if source is None:
         return False
+    if not pin.profile.external_apis_enabled:
+        return False
     if cache.get(source.skip_key(pin)):
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
@@ -513,6 +515,11 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
     source = get_panel_source(source_key)
     if source is None:
         logger.warning("Panel fetch for unknown source '%s' skipped (plugin removed or disabled?)", source_key)
+        return
+    if not pin.profile.external_apis_enabled:
+        # External APIs may have been turned off after this task was enqueued;
+        # skip without recording a failure so the panel just stays absent.
+        cache.delete(source.flight_key(pin))
         return
     try:
         source.fetch(pin)

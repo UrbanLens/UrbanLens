@@ -33,7 +33,7 @@ from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_ev
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -380,6 +380,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit.save()
             created = False
         else:
+            if not visit_logging_allowed(profile):
+                return HttpResponse("Visit logging is turned off - enable it in Settings to log a visit.", status=403)
             visit = PinVisit.objects.create(
                 pin=pin,
                 visited_at=visited_at,

@@ -197,6 +197,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if not latitude or not longitude:
                 if not address:
                     return HttpResponse("Error: No address or lat/lon provided.", status=400)
+                if not request.user.profile.external_apis_enabled:
+                    return HttpResponse("Error: External lookups are turned off in your settings - drop a pin on the map instead.", status=403)
                 latitude, longitude = get_pin_by_address(address)
                 if not latitude or not longitude:
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
@@ -220,6 +222,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 is_private=is_private,
                 profile=request.user.profile,
             )
+            # Pin.save() may have forced is_private=True (Community disabled) even
+            # though the request asked for a public pin - re-read the persisted
+            # value so the external-enrichment gates below reflect reality.
+            is_private = pin.is_private
 
             if badge_ids:
                 pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
@@ -258,7 +264,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
             # web-search results cache, so the pin detail page doesn't need to hit
             # the APIs on first load.
-            if location and not is_private:
+            if location and not is_private and request.user.profile.external_apis_enabled:
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
                 from urbanlens.dashboard.tasks import (
                     prefetch_location_external_data,
@@ -272,7 +278,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 user_has_feature,
             )
 
-            if location and not is_private and user_has_feature(request.user, SiteFeature.SEARCH):
+            if location and not is_private and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
+                from urbanlens.dashboard.services.celery import safely_enqueue_task
+                from urbanlens.dashboard.tasks import refresh_pin_web_search
+
                 safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
             if user_has_feature(request.user, SiteFeature.AI):
@@ -335,6 +344,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         q = (request.GET.get("q") or "").strip()
         if len(q) < 2:
             return JsonResponse({"results": [], "source": "places"})
+
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"results": [], "source": "places", "disabled": True})
 
         api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:

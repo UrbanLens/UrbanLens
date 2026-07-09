@@ -488,11 +488,16 @@ def _import_visit_history(
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visits.model import PinVisit
+    from urbanlens.dashboard.services.visits import visit_logging_allowed
 
     rows = _read_json(data_dir, "visit_history.json")
     if not rows:
         return
     total_rows = len(rows)
+
+    if not visit_logging_allowed(profile):
+        result.inc_skipped("visit_history", total_rows)
+        return
 
     for idx, row in enumerate(rows, start=1):
         if report_progress:

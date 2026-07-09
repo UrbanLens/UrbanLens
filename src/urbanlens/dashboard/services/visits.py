@@ -28,6 +28,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def visit_logging_allowed(profile: Profile) -> bool:
+    """True if manual/imported/photo-derived PinVisit rows may be created for this profile."""
+    return profile.track_pin_visits
+
+
+def route_import_allowed(profile: Profile) -> bool:
+    """True if GPS route/track import (and its bundled dwell-detected visits) is allowed."""
+    return profile.track_routes
+
+
+def geolocation_tracking_allowed(profile: Profile) -> bool:
+    """True if live device-geolocation visit pings may be recorded."""
+    return profile.track_geolocation
+
+
 def build_visit_suggestion_message(*, location: Location | None = None, fallback: str = "at a location", **kwargs: str | None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
 
@@ -367,7 +382,7 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
     return VisitSource.USER
 
 
-def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit:
+def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit | None:
     """Accept a visit suggestion by logging a new, separate PinVisit.
 
     Ensures a pin exists at the suggested place (reusing suggested_to's existing
@@ -380,8 +395,13 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
         accepting_profile: The profile accepting (must be suggestion.suggested_to).
 
     Returns:
-        The newly created PinVisit for the accepting profile.
+        The newly created PinVisit for the accepting profile, or None (no-op,
+        suggestion left pending) if accepting_profile has turned off visit-history
+        tracking.
     """
+    if not visit_logging_allowed(accepting_profile):
+        return None
+
     pin = get_or_create_pin_at(accepting_profile, location=suggestion.location, latitude=suggestion.latitude, longitude=suggestion.longitude)
 
     visit = PinVisit.objects.create(pin=pin, visited_at=suggestion.visited_at, source=_visit_source_for(suggestion))
@@ -500,8 +520,12 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         visited_at: Timestamp to store; defaults to ``timezone.now()``.
 
     Returns:
-        List of newly-created ``PinVisit`` rows.
+        List of newly-created ``PinVisit`` rows. Always empty if the profile has
+        turned off live geolocation tracking.
     """
+    if not geolocation_tracking_allowed(profile):
+        return []
+
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import D
     from django.utils import timezone

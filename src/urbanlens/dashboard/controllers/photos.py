@@ -257,7 +257,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         suggestion = self._pending_suggestion(image)
         if suggestion is None:
             return _render_card(request, image, toast="That suggestion is no longer available.")
-        accept_visit_suggestion(suggestion, profile)
+        if accept_visit_suggestion(suggestion, profile) is None:
+            return _render_card(request, image, toast="Visit logging is turned off - enable it in Settings to add this to your visit history.")
         return _toast("Added to your visit history.")
 
     def reject(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
@@ -282,7 +283,9 @@ class PhotoActionView(LoginRequiredMixin, View):
         if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
         # TODO: We must sanitize the name to prevent XSS attacks.
-        create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
+        _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
+        if visit is None:
+            return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info")
         return _toast("Pin created and visit logged.")
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
@@ -291,7 +294,9 @@ class PhotoActionView(LoginRequiredMixin, View):
         pin = Pin.objects.filter(slug=pin_slug, profile=profile).first()
         if pin is None:
             return _render_card(request, image, toast="That pin could not be found.", level="error")
-        log_visit_on_pin(profile, image, pin)
+        visit = log_visit_on_pin(profile, image, pin)
+        if visit is None:
+            return _toast("Photo filed. Visit logging is turned off, so no visit was recorded.", "info")
         return _toast("Visit logged.")
 
     def dismiss(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:

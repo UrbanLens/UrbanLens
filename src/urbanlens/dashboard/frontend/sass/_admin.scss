@@ -922,8 +922,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .75rem;
     flex: 1 1 150px;
     min-width: 140px;
-    background: var(--ul-grey-0b);
-    border: 1px solid var(--ul-grey-1b);
+    background: var(--ul-grey-1b);
+    border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     padding: .9rem 1.1rem;
 
@@ -992,7 +992,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
     > a {
         background-color: var(--ul-grey-1b);
-        border-color: var(--ul-grey-2b);
+        border-color: var(--ul-grey-1a);
     }
 }
 
@@ -1160,7 +1160,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
     .admin-home-hero {
         background: linear-gradient(135deg, var(--ul-black) 0%, var(--ul-grey-0a) 100%);
-        border-color: var(--ul-grey-3b);
     }
 
     .admin-home-meta-pill {
@@ -1168,14 +1167,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         border-color: var(--ul-grey-3b);
     }
 
-    .admin-home-quickstat {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-    }
-
     .admin-nav-card {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
 
         &:hover {
             border-color: rgba($color-blue-500, .4);

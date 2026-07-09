@@ -110,6 +110,18 @@ class PrivacySettingsForm(forms.ModelForm):
             "contact_visibility",
         ]
 
+    def __init__(self, *args, **kwargs):
+        """Disable every field while Community is off - they're forced to "No one" in Profile.save() anyway.
+
+        ``disabled=True`` both greys the field out in rendering and makes Django
+        ignore any posted value for it, so this is also the belt to Profile.save()'s
+        suspenders against a tampered POST re-enabling one field at a time.
+        """
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for field in self.fields.values():
+                field.disabled = True
+
 
 class ContactSettingsForm(forms.Form):
     """Contact information - saves to the Django User model."""
@@ -404,3 +416,60 @@ class AISettingsForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ["ai_enabled", "ai_badge_categories", "ai_badge_tags", "ai_badge_statuses"]
+
+
+class MemoriesSettingsForm(forms.ModelForm):
+    """Which visit/location-history categories get saved. Independently adjustable at any time."""
+
+    track_pin_visits = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Visit History",
+        help_text="Log visits to your pins from manual entries, imports, and photo tagging.",
+    )
+    track_routes = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="GPS Routes",
+        help_text="Save imported GPS routes/tracks.",
+    )
+    track_geolocation = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Live Location",
+        help_text="Record visits from your live device location.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["track_pin_visits", "track_routes", "track_geolocation"]
+
+
+class CommunitySettingsForm(forms.ModelForm):
+    """Master switch for pin privacy, profile visibility, and friendships."""
+
+    community_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Community Features",
+        help_text="Allow other users to see your pins, view your profile, and send/receive friend requests.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["community_enabled"]
+
+
+class ExternalApiSettingsForm(forms.ModelForm):
+    """Master switch for external API calls made on this profile's behalf."""
+
+    external_apis_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="External Services",
+        help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["external_apis_enabled"]

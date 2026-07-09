@@ -13,16 +13,20 @@ from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
     AISettingsForm,
+    CommunitySettingsForm,
     ContactSettingsForm,
+    ExternalApiSettingsForm,
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
+    MemoriesSettingsForm,
     PlacesLayerForm,
     PrivacySettingsForm,
     StyleSettingsForm,
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.community import bulk_privatize_pins
 from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
 
 if TYPE_CHECKING:
@@ -83,6 +87,9 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
+            "memories_form": MemoriesSettingsForm(instance=profile),
+            "community_form": CommunitySettingsForm(instance=profile),
+            "external_api_form": ExternalApiSettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
@@ -103,6 +110,9 @@ class SettingsView(LoginRequiredMixin, View):
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
+        memories_form = MemoriesSettingsForm(instance=profile)
+        community_form = CommunitySettingsForm(instance=profile)
+        external_api_form = ExternalApiSettingsForm(instance=profile)
 
         if section == "places_layer":
             if user_has_feature(request.user, SiteFeature.PLACES):
@@ -175,6 +185,30 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Map settings saved.")
                 return redirect("settings.view")
 
+        elif section == "memories":
+            memories_form = MemoriesSettingsForm(request.POST, instance=profile)
+            if memories_form.is_valid():
+                memories_form.save()
+                messages.success(request, "Memories settings saved.")
+                return redirect("settings.view")
+
+        elif section == "community":
+            was_enabled = profile.community_enabled
+            community_form = CommunitySettingsForm(request.POST, instance=profile)
+            if community_form.is_valid():
+                community_form.save()
+                if was_enabled and not profile.community_enabled:
+                    bulk_privatize_pins(profile)
+                messages.success(request, "Community settings saved.")
+                return redirect("settings.view")
+
+        elif section == "external_apis":
+            external_api_form = ExternalApiSettingsForm(request.POST, instance=profile)
+            if external_api_form.is_valid():
+                external_api_form.save()
+                messages.success(request, "External API settings saved.")
+                return redirect("settings.view")
+
         context = {
             "privacy_form": privacy_form,
             "contact_form": contact_form,
@@ -184,6 +218,9 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "ai_form": ai_form,
+            "memories_form": memories_form,
+            "community_form": community_form,
+            "external_api_form": external_api_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
@@ -214,6 +251,11 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"lat": lat, "lng": lng})
         except ValueError:
             pass
+
+    if request.user.is_authenticated:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.external_apis_enabled:
+            return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
 
     # Try Google Geocoding.
     try:

@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.visits import (
     add_visited_status,
     create_visit_suggestion,
     sync_last_visited,
+    visit_logging_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,9 @@ class VisitHistoryView(LoginRequiredMixin, View):
             Rendered HTML partial, or 400 on validation failure.
         """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+
+        if not visit_logging_allowed(pin.profile):
+            return HttpResponse("Visit logging is turned off - enable it in Settings to log a visit.", status=403)
 
         visited_at = _parse_visited_at(request)
         if visited_at is None:

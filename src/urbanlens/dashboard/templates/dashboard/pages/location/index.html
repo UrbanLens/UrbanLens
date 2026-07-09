@@ -120,83 +120,88 @@
         </div>
     </div>{# end .location-map #}
 
-    {# -- Satellite / street view: always present, directly below the map ---- #}
-    <div id="satellite-view-section" class="satellite-view card card--primary"
-        hx-get="{% url 'pin.satellite_view' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-symbols-outlined">globe</i>
-            <h3>Satellite View</h3>
-        </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading...
-        </div>
-    </div>
-
-    <div id="street-view-section" class="street-view card card--primary"
-        hx-get="{% url 'pin.street_view' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-symbols-outlined">streetview</i>
-            <h3>Street View</h3>
-        </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading...
-        </div>
-    </div>
-
-    {# -- Gallery: alongside satellite / street view in the detail grid ---- #}
-    <div id="pin-gallery-panel"
-     hx-get="{% url 'pin.gallery' pin.slug %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-        <div class="card card--secondary">
+    {# -- Satellite / street view / photos: each card grows to fill the space -- #}
+    {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
+    {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
+    <div class="pin-media-row">
+        <div id="satellite-view-section" class="satellite-view card card--primary"
+            hx-get="{% url 'pin.satellite_view' pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML">
             <div class="card-header">
-                <i class="material-symbols-outlined">photo_library</i>
-                <span>Photos</span>
+                <i class="material-symbols-outlined">globe</i>
+                <h3>Satellite View</h3>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading...
+            </div>
         </div>
-    </div>
 
-    {# -- Visits / categories / aliases: always present ------------------- #}
-    <div hx-get="{% url 'pin.visits' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        class="visit-history card card--secondary">
-        <div class="card-header">
-            <i class="material-symbols-outlined">history</i>
-            <span>Visit History</span>
+        <div id="street-view-section" class="street-view card card--primary"
+            hx-get="{% url 'pin.street_view' pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML">
+            <div class="card-header">
+                <i class="material-symbols-outlined">streetview</i>
+                <h3>Street View</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading...
+            </div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
 
-    <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        class="tag-panel card card--secondary">
-        <div class="tag-panel-header">
-            <i class="material-symbols-outlined">category</i>
-            <span>Badges</span>
+        <div id="pin-gallery-panel"
+         hx-get="{% url 'pin.gallery' pin.slug %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+            <div class="card card--secondary">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">photo_library</i>
+                    <span>Photos</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
+    </div>{# end .pin-media-row #}
 
-    <div hx-get="{% url 'pin.aliases' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        id="pin-aliases-panel"
-        class="aliases-panel card card--secondary">
-        <div class="card-header">
-            <i class="material-symbols-outlined">label_important</i>
-            <span>Aliases</span>
+    {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
+    <div class="pin-lists-row">
+        <div hx-get="{% url 'pin.visits' pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML"
+            class="visit-history card card--secondary">
+            <div class="card-header">
+                <i class="material-symbols-outlined">history</i>
+                <span>Visit History</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
+
+        <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML"
+            class="tag-panel card card--secondary">
+            <div class="tag-panel-header">
+                <i class="material-symbols-outlined">category</i>
+                <span>Badges</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        </div>
+
+        <div hx-get="{% url 'pin.aliases' pin.slug %}"
+            hx-trigger="load"
+            hx-swap="outerHTML"
+            id="pin-aliases-panel"
+            class="aliases-panel card card--secondary">
+            <div class="card-header">
+                <i class="material-symbols-outlined">label_important</i>
+                <span>Aliases</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        </div>
+    </div>{# end .pin-lists-row #}
 
     {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
     {# space left by any card that doesn't render (optional cards, or cards -- #}

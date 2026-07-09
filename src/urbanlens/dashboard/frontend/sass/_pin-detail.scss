@@ -2565,12 +2565,8 @@ body.page-location-details .pin-detail-grid {
         'onboarding'
         'overview'
         'map'
-        'satellite'
-        'street'
-        'gallery'
-        'visits'
-        'categories'
-        'aliases'
+        'media'
+        'lists'
         'aux'
         'comments';
     gap: var(--pin-detail-gap);
@@ -2589,25 +2585,11 @@ body.page-location-details .pin-detail-grid {
     > .location-map,
     > .pin-map { grid-area: map; }
 
-    > .satellite-view,
-    > #satellite-view-section { grid-area: satellite; min-width: 0; }
+    > .pin-media-row { grid-area: media; }
 
-    > .street-view,
-    > #street-view-section { grid-area: street; min-width: 0; }
-
-    > .visit-history,
-    > #visit-history-panel { grid-area: visits; }
-
-    > .tag-panel { grid-area: categories; }
-
-    > .aliases-panel,
-    > #pin-aliases-panel { grid-area: aliases; }
+    > .pin-lists-row { grid-area: lists; }
 
     > .pin-aux-grid { grid-area: aux; }
-
-    > .photo-gallery,
-    > #pin-gallery-panel,
-    > #photo-gallery { grid-area: gallery; min-width: 0; }
 
     > .comment-panel,
     > #comment-panel { grid-area: comments; }
@@ -2618,10 +2600,8 @@ body.page-location-details .pin-detail-grid {
             'onboarding onboarding'
             'overview   overview'
             'map        map'
-            'satellite  street'
-            'gallery    gallery'
-            'visits     categories'
-            'aliases    aliases'
+            'media      media'
+            'lists      lists'
             'aux        aux'
             'comments   comments';
     }
@@ -2631,8 +2611,8 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'overview   overview   overview'
             'map        map        map'
-            'satellite  street     gallery'
-            'visits     categories aliases'
+            'media      media      media'
+            'lists      lists      lists'
             'aux        aux        aux'
             'comments   comments   comments';
     }
@@ -2641,10 +2621,41 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'overview   overview   overview'
             'map        map        map'
-            'satellite  street     gallery'
-            'visits     categories aliases'
+            'media      media      media'
+            'lists      lists      lists'
             'aux        aux        aux'
             'comments   comments   .';
+    }
+}
+
+// Satellite Imagery / Street View / Photos, and Visit History / Badges /
+// Aliases: each row starts every card at an equal share of the row and lets
+// `auto-fit` redivide that space among whichever cards are actually visible.
+// Collapsing a card (`.is-collapsed`, see _collapsible.scss) removes it from
+// flow, so its siblings grow to fill the freed space instead of leaving a
+// blank track the way named grid-area placement would.
+.pin-media-row,
+.pin-lists-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--pin-detail-gap);
+    align-items: start;
+
+    > * {
+        min-width: 0;
+        align-self: stretch;
+    }
+}
+
+.pin-media-row {
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 22em), 1fr));
+    }
+}
+
+.pin-lists-row {
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
     }
 }
 

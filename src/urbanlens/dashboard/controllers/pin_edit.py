@@ -193,7 +193,7 @@ class PinOverviewView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         pin = result
-        if pin.location and not pin.location.route:
+        if pin.location and not pin.location.route and pin.profile.external_apis_enabled:
             _ensure_location_address(pin.location)
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 

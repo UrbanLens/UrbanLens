@@ -130,10 +130,20 @@ def import_location_history_streaming(
         SSE-formatted strings (``data: {...}\\n\\n``).
     """
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-    from urbanlens.dashboard.services.visits import find_nearest_pin
+    from urbanlens.dashboard.services.visits import find_nearest_pin, visit_logging_allowed
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
+
+    if not visit_logging_allowed(profile):
+        yield sse(
+            {
+                "type": "error",
+                "message": "Visit logging is turned off - enable it in Settings to import your location history.",
+                "subtype": "location_history",
+            },
+        )
+        return
 
     all_visits: list[dict[str, Any]] = []
     for filename, raw_bytes in files:
