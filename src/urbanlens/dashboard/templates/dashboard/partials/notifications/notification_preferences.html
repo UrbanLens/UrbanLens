@@ -7,6 +7,7 @@
     </p>
     {% endif %}
     <form hx-post="{% url 'notifications.preferences' %}"
+          hx-trigger="change delay:150ms"
           hx-target="#notif-prefs"
           hx-swap="outerHTML"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -63,9 +64,6 @@
             {% endfor %}
         </div>
 
-        <div class="notif-prefs__footer">
-            <button type="submit" class="settings-save-btn">Save</button>
-        </div>
     </form>
 </div>
 <script>
