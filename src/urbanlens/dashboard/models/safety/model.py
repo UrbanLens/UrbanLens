@@ -10,6 +10,7 @@ from uuid import uuid4
 from django.db.models import (
     CASCADE,
     SET_NULL,
+    BooleanField,
     CheckConstraint,
     DecimalField,
     DurationField,
@@ -215,6 +216,10 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         resolved_at: When the check-in concluded, if at all.
         plan_update_notified_at: When contacts were last re-notified of a trip plan/destination/
             route change made after escalation, if at all.
+        notify_community_wiki: Whether escalation should also post a comment to the destination's
+            community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
+        wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
+            escalation-time wiki notification idempotent.
     """
 
     title = CharField(max_length=200)
@@ -232,6 +237,9 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     escalated_at = DateTimeField(null=True, blank=True)
     resolved_at = DateTimeField(null=True, blank=True)
     plan_update_notified_at = DateTimeField(null=True, blank=True)
+
+    notify_community_wiki = BooleanField(default=False)
+    wiki_notified_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     destination_location = ForeignKey(

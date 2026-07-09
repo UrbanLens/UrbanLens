@@ -43,6 +43,12 @@
             {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False %}
             <p class="form-hint">Route markup (arrows, areas, labels) can be added once the check-in is created.</p>
         </div>
+        {# Filled in (only) when the picked destination is covered by a community wiki. #}
+        <div id="safety-wiki-notify-option"
+             hx-get="{% url 'safety.checkin.wiki_option' %}"
+             hx-trigger="change from:#safety-destination-lat"
+             hx-include="#safety-destination-lat, #safety-destination-lng, #notify_community_wiki"
+             hx-swap="innerHTML"></div>
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>

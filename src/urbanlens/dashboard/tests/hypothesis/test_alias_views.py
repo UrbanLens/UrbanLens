@@ -8,7 +8,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -75,6 +75,45 @@ class PinAliasDeleteGuardTests(PinAliasViewTestsBase):
         self.assertContains(response, "alias-chip--current")
 
 
+class PinAliasNicknameTests(PinAliasViewTestsBase):
+    """Creating and toggling nickname-only pin aliases."""
+
+    def test_create_alias_with_nickname_checkbox_sets_nickname_kind(self) -> None:
+        response = self.client.post(
+            reverse("pin.aliases", args=[self.pin.slug]),
+            {"name": "Spooky House", "is_nickname": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        alias = self.pin.aliases.get(name="Spooky House")
+        self.assertEqual(alias.kind, AliasType.NICKNAME)
+        self.assertTrue(alias.is_nickname)
+
+    def test_create_alias_without_checkbox_is_not_nickname(self) -> None:
+        response = self.client.post(reverse("pin.aliases", args=[self.pin.slug]), {"name": "Another Name"})
+        self.assertEqual(response.status_code, 200)
+        alias = self.pin.aliases.get(name="Another Name")
+        self.assertEqual(alias.kind, AliasType.ALTERNATE)
+        self.assertFalse(alias.is_nickname)
+
+    def test_toggle_nickname_flips_kind(self) -> None:
+        alias = baker.make(PinAlias, pin=self.pin, name="Toggle Me", kind=AliasType.ALTERNATE)
+        response = self.client.post(reverse("pin.alias.toggle_nickname", args=[self.pin.slug, alias.id]))
+        self.assertEqual(response.status_code, 200)
+        alias.refresh_from_db()
+        self.assertTrue(alias.is_nickname)
+
+        response = self.client.post(reverse("pin.alias.toggle_nickname", args=[self.pin.slug, alias.id]))
+        self.assertEqual(response.status_code, 200)
+        alias.refresh_from_db()
+        self.assertFalse(alias.is_nickname)
+
+    def test_toggle_nickname_requires_pin_ownership(self) -> None:
+        other_pin = baker.make(Pin, profile=baker.make("auth.User").profile, name="Not Yours")
+        alias = other_pin.aliases.get(name="Not Yours")
+        response = self.client.post(reverse("pin.alias.toggle_nickname", args=[other_pin.slug, alias.id]))
+        self.assertEqual(response.status_code, 404)
+
+
 class LocationAliasUseViewTests(TestCase):
     """POST location.wiki.alias.use renames the wiki and records a WikiEdit."""
 
@@ -100,3 +139,42 @@ class LocationAliasUseViewTests(TestCase):
         response = self.client.delete(reverse("location.wiki.alias.delete", args=[self.location.slug, alias.id]))
         self.assertEqual(response.status_code, 400)
         self.assertTrue(self.wiki.aliases.filter(name="Curated Mill").exists())
+
+
+class LocationAliasNicknameTests(TestCase):
+    """Creating and toggling nickname-only wiki aliases."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.client.force_login(self.user)
+
+    def test_create_alias_with_nickname_checkbox_sets_nickname_kind(self) -> None:
+        response = self.client.post(
+            reverse("location.wiki.aliases", args=[self.location.slug]),
+            {"name": "The Old Grain Place", "is_nickname": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        alias = self.wiki.aliases.get(name="The Old Grain Place")
+        self.assertEqual(alias.kind, AliasType.NICKNAME)
+
+    def test_create_alias_without_checkbox_is_not_nickname(self) -> None:
+        response = self.client.post(reverse("location.wiki.aliases", args=[self.location.slug]), {"name": "Formal Name"})
+        self.assertEqual(response.status_code, 200)
+        alias = self.wiki.aliases.get(name="Formal Name")
+        self.assertEqual(alias.kind, AliasType.ALTERNATE)
+
+    def test_toggle_nickname_flips_kind(self) -> None:
+        alias = baker.make(WikiAlias, wiki=self.wiki, name="Toggle Me", kind=AliasType.OFFICIAL, source="google_places")
+        response = self.client.post(reverse("location.wiki.alias.toggle_nickname", args=[self.location.slug, alias.id]))
+        self.assertEqual(response.status_code, 200)
+        alias.refresh_from_db()
+        self.assertTrue(alias.is_nickname)
+
+        response = self.client.post(reverse("location.wiki.alias.toggle_nickname", args=[self.location.slug, alias.id]))
+        self.assertEqual(response.status_code, 200)
+        alias.refresh_from_db()
+        self.assertFalse(alias.is_nickname)
+        self.assertEqual(alias.kind, AliasType.ALTERNATE)

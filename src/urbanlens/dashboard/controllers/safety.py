@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.safety import (
     create_chat_message,
     create_checkin,
     default_contacts_as_input,
+    find_community_wiki,
     get_active_checkin,
     get_or_create_preference,
     is_contact_opted_out,
@@ -375,6 +376,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 destination_latitude=float(lat) if lat else None,
                 destination_longitude=float(lng) if lng else None,
                 contacts=allowed_contacts,
+                notify_community_wiki="notify_community_wiki" in request.POST,
             )
         except ValueError as exc:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
@@ -389,7 +391,12 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the check-in detail/monitor page.
+        """Render the check-in detail/monitor page, or the community view for non-owners.
+
+        A non-owner following the link from a community wiki comment (see
+        ``services.safety.post_checkin_to_community_wiki``) gets a limited
+        read-only status page instead of a 404 - but only for check-ins that
+        were actually posted to a wiki, and only via their UUID link.
 
         Args:
             request: Incoming HTTP request.
@@ -399,7 +406,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             Rendered page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        try:
+            checkin = _get_checkin_by_slug(profile, checkin_slug)
+        except Http404:
+            return self._render_community_view(request, checkin_slug)
         checkin.ensure_slug()
         contacts = list(checkin.contacts.all())
         return render(
@@ -412,8 +422,43 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contact_status": _contact_status_map(checkin, contacts),
                 "connections": get_connections(profile),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                "destination_wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude),
                 "map_attribution": _MAP_ATTRIBUTION,
                 **_markup_style_context(profile),
+            },
+        )
+
+    def _render_community_view(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Render the read-only community status page for a wiki-posted check-in.
+
+        Only check-ins that already posted to a community wiki (``wiki_notified_at``
+        set) are visible, and only by UUID - slugs are unique per-profile, not
+        globally, so a slug can't safely identify another user's check-in. The
+        page deliberately omits the trip plan, contacts, and chat: the owner
+        opted into telling the community *that* they're overdue and where, not
+        into sharing their whole check-in.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: The URL identifier - must be the check-in's UUID.
+
+        Returns:
+            Rendered community status page.
+
+        Raises:
+            Http404: If the identifier isn't a UUID of a wiki-posted check-in.
+        """
+        try:
+            checkin = get_object_or_404(SafetyCheckin.objects.select_related("profile"), uuid=checkin_slug, wiki_notified_at__isnull=False)
+        except ValidationError as exc:
+            raise Http404 from exc
+        return render(
+            request,
+            "dashboard/pages/safety/community_status.html",
+            {
+                "checkin": checkin,
+                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude),
+                "map_attribution": _MAP_ATTRIBUTION,
             },
         )
 
@@ -482,7 +527,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         else:
             checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
             checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
-            update_fields += ["title", "contact_message"]
+            # Absent means unchecked - either the box was cleared or the destination has no
+            # community wiki (the toggle isn't rendered at all then), which disables it too.
+            checkin.notify_community_wiki = "notify_community_wiki" in request.POST
+            update_fields += ["title", "contact_message", "notify_community_wiki"]
 
             allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile), checkin=checkin)
             set_checkin_contacts(checkin, allowed)
@@ -571,6 +619,40 @@ class SafetyCheckinCheckInView(LoginRequiredMixin, View):
         if not checkin.is_resolved:
             check_in(checkin, profile)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
+
+
+class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
+    """HTMX fragment: the "also notify the community wiki" toggle for a destination point.
+
+    Re-fetched whenever the destination marker moves on the create/detail forms,
+    so the toggle only ever shows when the picked point is actually covered by an
+    existing community wiki.
+
+    GET /safety/wiki-option/?destination_latitude=..&destination_longitude=..
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the toggle partial - empty when no wiki covers the destination.
+
+        Args:
+            request: Incoming HTTP request. Reads ``destination_latitude``/
+                ``destination_longitude`` and the current ``notify_community_wiki``
+                checkbox state (included so moving the pin preserves the choice).
+
+        Returns:
+            Rendered toggle fragment.
+        """
+        try:
+            lat = float(request.GET.get("destination_latitude", ""))
+            lng = float(request.GET.get("destination_longitude", ""))
+        except ValueError:
+            lat = lng = None
+        wiki = find_community_wiki(lat, lng)
+        return render(
+            request,
+            "dashboard/partials/safety/_wiki_notify_toggle.html",
+            {"wiki": wiki, "checked": "notify_community_wiki" in request.GET},
+        )
 
 
 class SafetyGalleryView(LoginRequiredMixin, View):

@@ -10,11 +10,19 @@
     {% if aliases %}
     <div class="alias-chips-row">
         {% for alias in aliases %}
-        <span class="alias-chip{% if alias.is_current %} alias-chip--current{% endif %}" id="alias-chip-{{ alias.id }}">
+        <span class="alias-chip{% if alias.is_current %} alias-chip--current{% endif %}{% if alias.is_nickname %} alias-chip--nickname{% endif %}" id="alias-chip-{{ alias.id }}">
             <span class="alias-chip-name">{{ alias.name }}</span>
             {% if alias.created_by %}
             <span class="alias-chip-author" title="Added by {{ alias.created_by }}">{{ alias.created_by }}</span>
             {% endif %}
+            <button type="button"
+                    class="alias-chip-nickname-toggle{% if alias.is_nickname %} is-active{% endif %}"
+                    title="{% if alias.is_nickname %}Nickname only - not used in external searches. Click to allow.{% else %}Click to mark as nickname-only (excluded from external searches).{% endif %}"
+                    hx-post="{% url 'location.wiki.alias.toggle_nickname' location.slug alias.id %}"
+                    hx-target="#location-aliases-panel"
+                    hx-swap="outerHTML">
+                <i class="material-symbols-outlined">person</i>
+            </button>
             {% if alias.is_current %}
             <span class="alias-chip-current-badge" title="Current name">current</span>
             {% else %}
@@ -49,6 +57,10 @@
           hx-swap="outerHTML">
         {% csrf_token %}
         <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
+        <label class="alias-nickname-check" title="Nickname-only aliases help the community find this location, but are never sent to external APIs (Google, Wikipedia, etc).">
+            <input type="checkbox" name="is_nickname" value="1">
+            Nickname only
+        </label>
         <button type="submit" class="alias-add-btn">
             <i class="material-symbols-outlined">add</i>
         </button>

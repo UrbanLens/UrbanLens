@@ -98,6 +98,9 @@ class NotificationPreference(abstract.DashboardModel):
     wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    # Defaults to BOTH (not SITE like the rest): this alerts pin owners that someone may be
+    # missing at their pinned place - an email is the point when the recipient isn't logged in.
+    wiki_safety_checkin = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
 
     profile = models.OneToOneField(
         "dashboard.Profile",

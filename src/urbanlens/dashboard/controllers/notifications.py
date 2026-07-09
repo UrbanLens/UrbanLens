@@ -31,6 +31,7 @@ _PREF_FIELDS = [
     ("wiki_updated", "Community Wiki Updated"),
     ("pin_shared", "Pin Shared"),
     ("visit_suggested", "Visit Suggested"),
+    ("wiki_safety_checkin", "Safety Check-in at a Pinned Location"),
 ]
 
 

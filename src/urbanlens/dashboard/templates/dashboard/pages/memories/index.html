@@ -38,7 +38,6 @@
 
     <div class="page-inner">
         {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" unlogged_visits_count=unlogged_visits|length %}
-        {% include "dashboard/partials/memories/_unlogged_visits_teaser.html" %}
 
         {% if not has_memory_data %}
         {% if not unlogged_visits %}

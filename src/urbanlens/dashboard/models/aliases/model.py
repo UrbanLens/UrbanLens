@@ -56,6 +56,21 @@ class _AliasBase(abstract.DashboardModel):
         abstract = True
         ordering = ["name"]
 
+    @property
+    def is_nickname(self) -> bool:
+        """True when this alias is marked nickname-only (excluded from external API queries)."""
+        return self.kind == AliasType.NICKNAME
+
+    def toggle_nickname(self) -> None:
+        """Flip this alias between nickname-only and a plain alternate name.
+
+        Toggling off an ``official`` alias demotes it to ``alternate`` rather
+        than restoring ``official`` - that designation is only re-established
+        by the next external-source sync, since we don't track prior kind.
+        """
+        self.kind = AliasType.ALTERNATE if self.kind == AliasType.NICKNAME else AliasType.NICKNAME
+        self.save(update_fields=["kind", "updated"])
+
 
 class PinAlias(_AliasBase):
     """An alternate name for a Pin, visible only to the pin's owner.

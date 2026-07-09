@@ -320,6 +320,11 @@ urlpatterns = [
                                 name="pin.alias.use",
                             ),
                             path(
+                                "<slug:pin_slug>/aliases/<int:alias_id>/toggle-nickname/",
+                                aliases.PinAliasToggleNicknameView.as_view(),
+                                name="pin.alias.toggle_nickname",
+                            ),
+                            path(
                                 "<slug:pin_slug>/comments/",
                                 comments.PinCommentsView.as_view(),
                                 name="pin.comments",
@@ -646,6 +651,11 @@ urlpatterns = [
                     name="location.wiki.alias.use",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/aliases/<int:alias_id>/toggle-nickname/",
+                    aliases.LocationAliasToggleNicknameView.as_view(),
+                    name="location.wiki.alias.toggle_nickname",
+                ),
+                path(
                     "<slug:location_slug>/wiki/gallery/",
                     image_gallery.WikiGalleryView.as_view(),
                     name="location.wiki.gallery",
@@ -759,6 +769,7 @@ urlpatterns = [
                 path("", safety.SafetyHomeView.as_view(), name="safety.home"),
                 path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
                 path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
+                path("wiki-option/", safety.SafetyCheckinWikiOptionView.as_view(), name="safety.checkin.wiki_option"),
                 path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
                 path("contact/<uuid:token>/opt-out/<str:scope>/", safety.SafetyContactOptOutView.as_view(), name="safety.contact.optout"),

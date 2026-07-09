@@ -94,6 +94,30 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
     return None
 
 
+def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius_m: int) -> Pin | None:
+    """Return a profile's closest pin within radius_m metres of a point, or None.
+
+    Used to match ambient/imported location signals (Google Takeout Location
+    History placeVisits, My Activity "Directions to X" entries) against a
+    profile's existing pins, rather than creating a new pin for every
+    everyday-life coordinate an import file happens to carry.
+
+    Args:
+        latitude: Point latitude.
+        longitude: Point longitude.
+        profile: Owner profile - only this profile's pins are searched.
+        radius_m: Maximum match distance in metres.
+
+    Returns:
+        Nearest matching Pin, or None if no pin is within range.
+    """
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import D
+
+    point = Point(longitude, latitude, srid=4326)
+    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("location__point").first()
+
+
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
     """Return whether a profile already has a (non-detail) pin at a place.
 
@@ -202,12 +226,14 @@ def create_visit_suggestion(
     safety_checkin: SafetyCheckin | None = None,
     origin_image: Image | None = None,
     origin_pin: Pin | None = None,
+    from_my_activity: bool = False,
+    destination_label: str | None = None,
 ) -> VisitSuggestion | None:
     """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
 
-    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin``/``origin_image``
-    must be given - it determines both which flow raised this suggestion and, on
-    acceptance, which VisitSource the resulting PinVisit gets (see
+    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin``/``origin_image``/
+    ``from_my_activity`` must be given - it determines both which flow raised this
+    suggestion and, on acceptance, which VisitSource the resulting PinVisit gets (see
     ``_visit_source_for``).
 
     If suggested_to already has a visit logged for this place on this date, and
@@ -233,6 +259,12 @@ def create_visit_suggestion(
             self-directed suggestion where ``suggested_to`` is the uploader).
         origin_pin: The suggester's own pin, used only as a message fallback when
             there is no Location (e.g. a private, unlinked pin).
+        from_my_activity: Whether this suggestion was raised from a Google Takeout
+            My Activity (Maps) "Directions to X" entry with no matching pin (a
+            self-directed suggestion, like origin_image, but with no backing row).
+        destination_label: The destination name parsed from the My Activity entry,
+            used only as a message fallback (like origin_pin.official_name) when
+            there is no Location - never stored.
 
     Returns:
         The created VisitSuggestion, or None if nothing would change for suggested_to.
@@ -256,6 +288,7 @@ def create_visit_suggestion(
         trip_activity=trip_activity,
         safety_checkin=safety_checkin,
         origin_image=origin_image,
+        from_my_activity=from_my_activity,
         existing_visit=existing_visit,
     )
     suggestion.candidate_profiles.set(candidate_profiles)
@@ -267,7 +300,12 @@ def create_visit_suggestion(
     if pref == DeliveryPreference.NONE:
         return suggestion
 
-    place = build_visit_suggestion_message(location=location, official_name=origin_pin.official_name if origin_pin else None, city=origin_pin.city if origin_pin else None, state=origin_pin.state if origin_pin else None)
+    place = build_visit_suggestion_message(
+        location=location,
+        official_name=destination_label or (origin_pin.official_name if origin_pin else None),
+        city=origin_pin.city if origin_pin else None,
+        state=origin_pin.state if origin_pin else None,
+    )
     when = visited_at.strftime("%b %d, %Y")
     if safety_checkin is not None:
         title = "Confirm your visit?"
@@ -275,6 +313,9 @@ def create_visit_suggestion(
     elif origin_image is not None:
         title = "Confirm your visit?"
         message = f"A photo you added looks like you visited {place} on {when}. Add it to your visit history?"
+    elif from_my_activity:
+        title = "Confirm your visit?"
+        message = f"Your Google Maps activity shows you got directions and were {place} on {when}. Add it to your visit history?"
     elif existing_visit:
         who = suggested_by.username if suggested_by else "A connection"
         title = "Update your visit?"
@@ -304,9 +345,10 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
         suggestion: The suggestion being accepted.
 
     Returns:
-        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, VisitSource.PHOTO, or
-        VisitSource.USER depending on which origin is set (the model's check
-        constraint guarantees exactly one of the four is set).
+        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, VisitSource.PHOTO,
+        VisitSource.HISTORY, or VisitSource.USER depending on which origin is
+        set (the model's check constraint guarantees exactly one of the five
+        is set).
     """
     if suggestion.trip_activity_id:
         return VisitSource.TRIP
@@ -314,6 +356,8 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
         return VisitSource.SAFETY_CHECKIN
     if suggestion.origin_image_id:
         return VisitSource.PHOTO
+    if suggestion.from_my_activity:
+        return VisitSource.HISTORY
     return VisitSource.USER
 
 

@@ -2,7 +2,7 @@
 
 Covers:
 - is_archive() magic-byte detection
-- validate_content_type() for JSON, location_history, KML, CSV formats
+- validate_content_type() for JSON, location_history, KML, CSV, My Activity HTML formats
 - extract_archive() for well-formed ZIP and TGZ archives
 - Security: path traversal, symlink skipping, per-file size limit, total size limit,
   file count limit, compression-ratio (zip bomb) detection
@@ -244,6 +244,40 @@ class ValidateContentTypeTests(TestCase):
         data = b"\x05\x99\x12\x34\x56\x78\x9a\xbc\xde\xf0"
         self.assertIsNone(validate_content_type("binary.dat", data))
 
+    def test_my_activity_html_identified(self):
+        data = (
+            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b'<div class="outer-cell"><div class="mdl-grid">'
+            b'<div class="header-cell"><p class="mdl-typography--title">Maps<br></p></div>'
+            b'<div class="content-cell mdl-typography--body-1">Directions to '
+            b'<a href="https://www.google.com/maps/dir//1.0,2.0/@1.0,2.0,13z">Somewhere</a><br>'
+            b"1.0,2.0<br>Jul 3, 2026, 1:18:25 PM EDT<br></div></div></div></body></html>"
+        )
+        self.assertEqual(validate_content_type("MyActivity.html", data), "my_activity")
+
+    def test_generic_html_returns_none(self):
+        data = b"<!DOCTYPE html><html><head><title>Some Page</title></head><body><h1>Hello</h1></body></html>"
+        self.assertIsNone(validate_content_type("page.html", data))
+
+    def test_bare_html_tag_start_without_doctype_detected(self):
+        data = (
+            b'<html><body><p class="mdl-typography--title">Maps<br></p>'
+            b'Directions to <a href="https://x">Y</a></body></html>'
+        )
+        self.assertEqual(validate_content_type("MyActivity.html", data), "my_activity")
+
+    def test_my_activity_html_not_misidentified_as_csv(self):
+        # A My Activity file's <title> tag contains the literal substring "title", which
+        # would trip the CSV header heuristic (url/title/note) if the HTML check didn't
+        # run first - this guards that ordering.
+        data = (
+            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b'<div class="outer-cell"><p class="mdl-typography--title">Maps<br></p>'
+            b'<div>not a directions entry</div></div></body></html>'
+        )
+        result = validate_content_type("MyActivity.html", data)
+        self.assertNotEqual(result, "csv")
+
 
 # ---------------------------------------------------------------------------
 # extract_archive - ZIP
@@ -334,6 +368,14 @@ class ExtractZipTests(TestCase):
         result = extract_archive(data)
         names = {r.name for r in result}
         self.assertEqual(names, {"track.gpx", "geom.wkt", "export.osm"})
+
+    def test_extracts_nested_my_activity_html_from_takeout_zip(self):
+        # Real Takeout exports nest MyActivity.html several folders deep -
+        # _safe_basename should flatten the path, same as any other format.
+        data = _make_zip({"Takeout/My Activity/Maps/MyActivity.html": b"<html>...</html>"})
+        result = extract_archive(data)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "MyActivity.html")
 
 
 # ---------------------------------------------------------------------------

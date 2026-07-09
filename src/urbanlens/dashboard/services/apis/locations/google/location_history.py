@@ -22,14 +22,11 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.contrib.gis.geos import Point
-from django.contrib.gis.measure import D
 from django.db import DatabaseError
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
 
@@ -102,24 +99,6 @@ def _parse_semantic(json_data: dict) -> Generator[dict[str, Any], None, None]:
         }
 
 
-def _nearest_pin(lat: float, lon: float, profile: Profile, radius_m: int) -> Pin | None:
-    """Return the closest pin in profile within radius_m metres, or None.
-
-    Args:
-        lat: Visit latitude.
-        lon: Visit longitude.
-        profile: Owner profile - only this profile's pins are searched.
-        radius_m: Maximum match distance in metres.
-
-    Returns:
-        Nearest matching Pin, or None if no pin is within range.
-    """
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    point = Point(lon, lat, srid=4326)
-    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("location__point").first()
-
-
 def import_location_history_streaming(
     files: list[tuple[str, bytes]],
     profile: Profile,
@@ -151,6 +130,7 @@ def import_location_history_streaming(
         SSE-formatted strings (``data: {...}\\n\\n``).
     """
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+    from urbanlens.dashboard.services.visits import find_nearest_pin
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
@@ -192,7 +172,7 @@ def import_location_history_streaming(
     skipped = 0
 
     for i, visit in enumerate(all_visits, 1):
-        pin = _nearest_pin(visit["latitude"], visit["longitude"], profile, radius_m)
+        pin = find_nearest_pin(visit["latitude"], visit["longitude"], profile, radius_m)
         if pin is not None:
             already_exists = PinVisit.objects.filter(
                 pin=pin,

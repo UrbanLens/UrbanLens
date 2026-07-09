@@ -55,6 +55,20 @@
             {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template %}
             {% if checkin.contacts_locked %}<p class="form-hint">Editing the destination or route will notify your emergency contacts of the update.</p>{% endif %}
         </div>
+        {% if checkin.wiki_notified_at %}
+        <div class="form-row safety-wiki-notify">
+            <p class="form-hint"><i class="material-symbols-outlined">groups</i> The community wiki for this destination was notified {{ checkin.wiki_notified_at|naturaltime }}.</p>
+        </div>
+        {% elif not checkin.contacts_locked %}
+        {# Filled in (only) when the destination is covered by a community wiki; re-checked when the pin moves. #}
+        <div id="safety-wiki-notify-option"
+             hx-get="{% url 'safety.checkin.wiki_option' %}"
+             hx-trigger="change from:#safety-destination-lat"
+             hx-include="#safety-destination-lat, #safety-destination-lng, #notify_community_wiki"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/safety/_wiki_notify_toggle.html" with wiki=destination_wiki checked=checkin.notify_community_wiki %}
+        </div>
+        {% endif %}
         <div class="form-row">
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.contacts_locked %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>

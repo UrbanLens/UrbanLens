@@ -17,7 +17,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -94,8 +94,9 @@ class PinAliasView(LoginRequiredMixin, View):
         name = (request.POST.get("name") or "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
+        kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            PinAlias.objects.create(pin=pin, name=name)
+            PinAlias.objects.create(pin=pin, name=name, kind=kind)
         except IntegrityError:
             return HttpResponse("That alias already exists.", status=409)
         return _render_pin_panel(request, pin)
@@ -128,6 +129,16 @@ class PinAliasUseView(LoginRequiredMixin, View):
         return _show_toast(HttpResponse(panel.content + overview.content), f"Renamed to “{alias.name}”.")
 
 
+class PinAliasToggleNicknameView(LoginRequiredMixin, View):
+    """POST: flip one of the pin's aliases between nickname-only and a plain alias."""
+
+    def post(self, request, pin_slug, alias_id):
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        alias = get_object_or_404(PinAlias, id=alias_id, pin=pin)
+        alias.toggle_nickname()
+        return _render_pin_panel(request, pin)
+
+
 def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
     """Resolve the Location for a slug and its (lazily-created) Wiki."""
     location = get_object_or_404(Location, slug=location_slug)
@@ -152,8 +163,9 @@ class LocationAliasView(LoginRequiredMixin, View):
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            WikiAlias.objects.create(wiki=wiki, name=name, created_by=profile)
+            WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
         WikiEdit.objects.create(
@@ -199,3 +211,13 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         response = _render_location_panel(request, location, wiki)
         response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": alias.name}})
         return _show_toast(response, f"Renamed to “{alias.name}”.")
+
+
+class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
+    """POST: flip one of the wiki's aliases between nickname-only and a plain alias."""
+
+    def post(self, request, location_slug, alias_id):
+        location, wiki = _resolve_wiki(location_slug)
+        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias.toggle_nickname()
+        return _render_location_panel(request, location, wiki)

@@ -376,6 +376,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             import_location_history_streaming,
             semantic_history_to_routes,
         )
+        from urbanlens.dashboard.services.apis.locations.google.my_activity import import_my_activity_streaming
         from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
         from urbanlens.dashboard.services.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
@@ -387,9 +388,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
 
-        # Separate files into pin-data files and location-history files so each
-        # category can be reported with an accurate total.
+        # Separate files into pin-data files, location-history files, and My
+        # Activity files so each category can be reported with an accurate total.
         location_history_files: list[tuple[str, bytes]] = []
+        my_activity_files: list[tuple[str, bytes]] = []
         # GPX tracks/routes and Google Takeout activitySegments both produce
         # Route candidates, saved in a separate pass after pins (see below).
         parsed_routes: list[ParsedRoute] = []
@@ -423,6 +425,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
             if fmt == "location_history":
                 location_history_files.append((filename, raw_bytes))
+                continue
+
+            if fmt == "my_activity":
+                my_activity_files.append((filename, raw_bytes))
                 continue
 
             try:
@@ -460,7 +466,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
                 _notify_pin_import_parse_failure(fmt)
 
-        if not parsed and not location_history_files:
+        if not parsed and not location_history_files and not my_activity_files:
             yield sse({"type": "error", "message": "No valid location files found in the upload."})
             return
 
@@ -590,8 +596,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if detect_location_history_format(data) == "semantic":
                     parsed_routes.extend(semantic_history_to_routes(data, user_profile, filename))
 
+        # Process any My Activity (Maps) files found in the same upload, as a
+        # third pass with subtype="my_activity".
+        if my_activity_files:
+            yield from import_my_activity_streaming(my_activity_files, user_profile)
+
         # Save any Route candidates gathered above (GPX tracks/routes, Google
-        # Takeout activitySegments) as a third pass, subtype="route".
+        # Takeout activitySegments) as a fourth pass, subtype="route".
         if parsed_routes:
             yield from import_routes_streaming(parsed_routes, user_profile)
 
@@ -636,7 +647,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
-            if fmt is None or fmt == "location_history":
+            if fmt is None or fmt in ("location_history", "my_activity"):
                 continue
 
             stem = _filename_stem(filename)

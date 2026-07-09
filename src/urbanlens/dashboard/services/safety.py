@@ -13,7 +13,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import (
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +392,103 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
     checkin.save(update_fields=["plan_update_notified_at", "updated"])
 
 
+def find_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None) -> Wiki | None:
+    """Return the community Wiki covering a destination point, if one already exists.
+
+    Only *existing* wikis count - wikis are materialised lazily (see
+    ``WikiManager.get_or_create_for_location``), and a check-in escalation must
+    not conjure a community page for a place nobody has written about.
+    Matching mirrors ``LocationManager.get_for_point``: campus generated
+    polygons first, then a 50 m proximity fallback.
+
+    Args:
+        latitude: WGS-84 latitude of the destination, or None if no destination is set.
+        longitude: WGS-84 longitude of the destination, or None if no destination is set.
+
+    Returns:
+        The matching Wiki, or None when there is no destination or no wiki covers it.
+    """
+    if latitude is None or longitude is None:
+        return None
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.filter(wiki__isnull=False).within_bounding_box(float(latitude), float(longitude)).first()
+    return location.wiki if location else None
+
+
+def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
+    """Post an escalated check-in to its destination's community wiki and notify pin owners there.
+
+    Runs at escalation time, alongside the emergency-contact notifications, and only
+    when the owner opted in (``checkin.notify_community_wiki``). Posts a comment on
+    the wiki (authored by the check-in's owner) linking to the check-in page, then
+    notifies every profile with a pin at the wiki's location - per their
+    ``wiki_safety_checkin`` notification preference - that a safety check-in was
+    posted. Idempotent via ``wiki_notified_at``.
+
+    Args:
+        checkin: The escalating check-in.
+    """
+    if checkin.wiki_notified_at is not None:
+        return
+    wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+    if wiki is None:
+        logger.info("Safety check-in %s opted into community wiki notification, but no wiki covers its destination", checkin.uuid)
+        return
+
+    from urbanlens.dashboard.models.comments.model import Comment
+
+    # The community-facing check-in page is linked by UUID, not slug - slugs are
+    # only unique per-profile, so a slug URL isn't safe to resolve across owners.
+    checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)})
+    checkin_url = _absolute_url(checkin_path)
+    wiki_path = reverse("location.wiki", kwargs={"location_slug": wiki.location.slug or str(wiki.location.uuid)})
+
+    Comment.objects.create(
+        wiki=wiki,
+        profile=checkin.profile,
+        text=(
+            f"Safety alert: {checkin.profile.username} planned a trip here (\"{checkin.title}\") and hasn't "
+            f"checked in as expected. If you've seen them or can help, see the check-in page: {checkin_url}"
+        ),
+    )
+    checkin.wiki_notified_at = timezone.now()
+    checkin.save(update_fields=["wiki_notified_at", "updated"])
+
+    recipients = Profile.objects.filter(pins__location=wiki.location, pins__parent_pin__isnull=True, pins__parent_wiki__isnull=True).exclude(pk=checkin.profile_id).distinct()
+    for recipient in recipients:
+        try:
+            pref = recipient.notification_preferences.wiki_safety_checkin
+        except AttributeError:
+            pref = DeliveryPreference.BOTH
+        if pref == DeliveryPreference.NONE:
+            continue
+        if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+            NotificationLog.objects.create(
+                profile=recipient,
+                source_profile=checkin.profile,
+                status=Status.UNREAD,
+                importance=Importance.HIGH,
+                notification_type=NotificationType.WIKI_SAFETY_CHECKIN,
+                title=f"Safety check-in posted to {wiki.name}",
+                message=f"{checkin.profile.username} hasn't checked in from a trip to {wiki.name} - a place you have pinned.",
+                url=wiki_path,
+            )
+        recipient_email = recipient.user.email if recipient.user else None
+        if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH) and recipient_email:
+            _send_email(
+                to=recipient_email,
+                subject=f"Safety check-in posted to {wiki.name}",
+                template="dashboard/email/safety_checkin_wiki.html",
+                context={
+                    "checkin": checkin,
+                    "wiki": wiki,
+                    "checkin_url": checkin_url,
+                    "wiki_url": _absolute_url(wiki_path),
+                },
+            )
+
+
 def create_checkin(
     *,
     profile: Profile,
@@ -403,6 +501,7 @@ def create_checkin(
     destination_latitude: float | Decimal | None = None,
     destination_longitude: float | Decimal | None = None,
     contacts: Iterable[ContactInput] = (),
+    notify_community_wiki: bool = False,
 ) -> SafetyCheckin:
     """Create a new safety check-in with its emergency contacts.
 
@@ -417,6 +516,8 @@ def create_checkin(
         destination_latitude: Destination latitude, for the concluding VisitSuggestion.
         destination_longitude: Destination longitude, for the concluding VisitSuggestion.
         contacts: Iterable of (contact_profile, email, name) tuples.
+        notify_community_wiki: Whether escalation should also post to the destination's
+            community wiki (see ``post_checkin_to_community_wiki``).
 
     Returns:
         The newly created SafetyCheckin.
@@ -438,6 +539,7 @@ def create_checkin(
         destination_location=destination_location,
         destination_latitude=destination_latitude,
         destination_longitude=destination_longitude,
+        notify_community_wiki=notify_community_wiki,
     )
     checkin.ensure_slug()
     set_checkin_contacts(checkin, contacts)
@@ -528,11 +630,15 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     """Notify every emergency contact that the profile hasn't checked in.
 
     Does not resolve the check-in - contacts still need to respond by marking
-    the profile safe.
+    the profile safe. If the owner opted in, the destination's community wiki
+    is notified at the same time (see ``post_checkin_to_community_wiki``).
 
     Args:
         checkin: The overdue check-in.
     """
+    if checkin.notify_community_wiki:
+        post_checkin_to_community_wiki(checkin)
+
     for contact in checkin.contacts.all():
         if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
             continue

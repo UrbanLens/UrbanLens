@@ -813,6 +813,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         border-radius: $radius-sm;
         overflow: hidden;
         font-size: .84rem;
+        max-width: 33rem;
     }
 
     &__header,
@@ -820,6 +821,13 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         display: grid;
         grid-template-columns: $notif-prefs-cols;
         align-items: center;
+    }
+
+    &__row {
+        background: var(--ul-grey-1);
+        &:nth-child(even) {
+            background: var(--ul-grey-1b);
+        }
     }
 
     &__header {

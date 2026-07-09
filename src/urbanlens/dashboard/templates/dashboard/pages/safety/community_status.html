@@ -1,0 +1,53 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load humanize %}
+
+{% comment %}
+Read-only community view of a safety check-in, linked from the comment posted to a
+destination's community wiki at escalation (services.safety.post_checkin_to_community_wiki).
+
+Deliberately limited: status, owner, expected check-in time, and the destination map.
+The trip plan, contact message, emergency contacts, photos, and chat stay owner/contact
+only - opting into the wiki post shares that the owner is overdue and where, not the
+whole check-in.
+{% endcomment %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block content %}
+<div class="safety-page page-content">
+
+    <div class="safety-header">
+        <div class="safety-header-left">
+            <h1 class="safety-title">
+                <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
+                {{ checkin.title }}
+            </h1>
+            <p class="safety-subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">
+                <a href="{% url 'profile.view_user' checkin.profile.slug|default:checkin.profile.uuid %}">{{ checkin.profile.username }}</a>
+                was expected to check in {{ checkin.checkin_by|naturaltime }}.
+            </p>
+        </div>
+    </div>
+
+    <div class="card safety-community-notice">
+        {% if checkin.is_resolved %}
+        <p><i class="material-symbols-outlined">check_circle</i>
+            This check-in has been resolved - {{ checkin.profile.username }} is accounted for.</p>
+        {% else %}
+        <p><i class="material-symbols-outlined">emergency</i>
+            {{ checkin.profile.username }} hasn't checked in from a trip to this destination, and their
+            emergency contacts have been notified. If you've seen them or know something that could help,
+            leave a comment on the community wiki{% if wiki %} for <a href="{% url 'location.wiki' wiki.location.slug|default:wiki.location.uuid %}">{{ wiki.name }}</a>{% endif %}
+            or reach out to them directly.</p>
+        {% endif %}
+    </div>
+
+    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
+
+</div>
+{% endblock %}

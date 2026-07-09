@@ -26,10 +26,14 @@ class VisitSuggestion(abstract.DashboardModel):
     (``origin_visit`` set), when a trip activity is marked completed and another
     RSVP'd-yes member needs to confirm they were there (``trip_activity`` set),
     when a safety check-in concludes and the checked-in user needs to confirm they
-    actually made it to the planned destination (``safety_checkin`` set), or when
+    actually made it to the planned destination (``safety_checkin`` set), when
     a user uploads a geotagged, timestamped photo to one of their pins and is
-    asked to confirm the visit it implies (``origin_image`` set). Exactly one of
-    those four links is set per row.
+    asked to confirm the visit it implies (``origin_image`` set), or when a
+    Google Takeout "My Activity" (Maps) import finds a "Directions to X" entry
+    that doesn't match any existing pin (``from_my_activity`` set). Unlike the
+    other four origins, a My Activity entry has no persisted row to link to - it's
+    transient data parsed out of an uploaded file - so it's a boolean marker
+    rather than a foreign key. Exactly one of those five origins is set per row.
 
     Only ``location``/``latitude``/``longitude``/``visited_at`` are used to identify
     the place and time to the recipient - the origin pin's private custom name and
@@ -47,6 +51,10 @@ class VisitSuggestion(abstract.DashboardModel):
         safety_checkin: The concluded SafetyCheckin this suggestion was raised from.
         origin_image: The uploaded photo whose GPS + capture time raised this
             suggestion (a self-directed "did you visit here?" prompt).
+        from_my_activity: Whether this suggestion was raised from a Google
+            Takeout "My Activity" (Maps) "Directions to X" entry that matched
+            none of the importing profile's existing pins (a self-directed
+            prompt, like ``origin_image``, but with no backing row to link to).
         candidate_profiles: Other profiles from the same batch (minus suggested_to),
             re-filtered to mutual connections of suggested_to at accept time.
         notification: The notification delivered to suggested_to for this row.
@@ -61,6 +69,7 @@ class VisitSuggestion(abstract.DashboardModel):
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     visited_at = models.DateTimeField()
     status = models.CharField(max_length=20, choices=VisitSuggestionStatus.choices, default=VisitSuggestionStatus.PENDING)
+    from_my_activity = models.BooleanField(default=False)
     candidate_profiles = models.ManyToManyField("dashboard.Profile", blank=True, related_name="+")
 
     location = models.ForeignKey(
@@ -166,6 +175,16 @@ class VisitSuggestion(abstract.DashboardModel):
         """
         return self.origin_image_id is not None
 
+    @property
+    def is_from_my_activity(self) -> bool:
+        """Whether this suggestion was raised from a Google Takeout My Activity import.
+
+        Returns:
+            True when ``from_my_activity`` is set, so the UI can phrase the
+            prompt as a self-directed "your Google Maps activity shows..." message.
+        """
+        return self.from_my_activity
+
     def __str__(self) -> str:
         """Return a human-readable description of this suggestion.
 
@@ -181,14 +200,15 @@ class VisitSuggestion(abstract.DashboardModel):
         ]
         constraints = [
             CheckConstraint(
-                # Exactly one of the four origin links must be set. CheckConstraint's ``^``
+                # Exactly one of the five origins must be set. CheckConstraint's ``^``
                 # only XORs two Q objects, so more than two origins need the explicit
                 # one-true-the-rest-false form instead.
                 condition=(
-                    (Q(origin_visit__isnull=False) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=True))
-                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=False) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=True))
-                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=False) & Q(origin_image__isnull=True))
-                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=False))
+                    (Q(origin_visit__isnull=False) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=True) & Q(from_my_activity=False))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=False) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=True) & Q(from_my_activity=False))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=False) & Q(origin_image__isnull=True) & Q(from_my_activity=False))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=False) & Q(from_my_activity=False))
+                    | (Q(origin_visit__isnull=True) & Q(trip_activity__isnull=True) & Q(safety_checkin__isnull=True) & Q(origin_image__isnull=True) & Q(from_my_activity=True))
                 ),
                 name="db_visit_suggestion_exactly_one_origin",
             ),

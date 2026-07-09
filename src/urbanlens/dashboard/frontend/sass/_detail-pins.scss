@@ -321,7 +321,8 @@
     }
 
     .alias-chip-remove,
-    .alias-chip-use {
+    .alias-chip-use,
+    .alias-chip-nickname-toggle {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -359,6 +360,19 @@
         }
     }
 
+    .alias-chip-nickname-toggle {
+        &:hover,
+        &:focus {
+            background: color-mix(in srgb, $color-amber-500 30%, transparent);
+            color: $color-amber-600;
+        }
+
+        &.is-active {
+            background: color-mix(in srgb, $color-amber-500 35%, transparent);
+            color: $color-amber-700;
+        }
+    }
+
     .alias-chip-current-badge {
         font-size: .68rem;
         font-weight: 600;
@@ -373,6 +387,11 @@
     &.alias-chip--current {
         background: color-mix(in srgb, $color-indigo-500 22%, transparent);
         border-color: color-mix(in srgb, $color-indigo-500 45%, transparent);
+    }
+
+    &.alias-chip--nickname {
+        background: color-mix(in srgb, $color-amber-500 14%, transparent);
+        border-color: color-mix(in srgb, $color-amber-500 30%, transparent);
     }
 }
 
@@ -389,6 +408,21 @@
     gap: .5rem;
     padding: 0 1rem 1rem;
     align-items: center;
+
+    .alias-nickname-check {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+        cursor: pointer;
+
+        input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+        }
+    }
 
     .alias-add-input {
         flex: 1;

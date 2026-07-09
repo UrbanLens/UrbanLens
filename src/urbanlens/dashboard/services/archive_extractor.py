@@ -28,9 +28,11 @@ _MAX_FILE_COUNT = 1000
 # KMZ is included because it is itself a ZIP (containing KML) and may appear inside
 # an outer archive. shp/dbf/shx/prj/cpg are Shapefile sidecar parts, which are
 # grouped by filename stem elsewhere (see services.import_formats.shapefile)
-# rather than sniffed individually here.
+# rather than sniffed individually here. html is for Google Takeout's My Activity
+# export, which ships as Takeout/My Activity/Maps/MyActivity.html inside a zipped
+# Takeout archive.
 _ARCHIVE_ALLOWED_EXTENSIONS = frozenset(
-    {"json", "kml", "csv", "kmz", "gpx", "geojson", "wkt", "wkb", "osm", "shp", "dbf", "shx", "prj", "cpg"},
+    {"json", "kml", "csv", "kmz", "gpx", "geojson", "wkt", "wkb", "osm", "shp", "dbf", "shx", "prj", "cpg", "html"},
 )
 
 # XML root tags recognised at the archive-extraction/import-format-sniffing layer,
@@ -102,8 +104,8 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     to guard against misnamed or deliberately misleading uploads.
 
     Supported return values: ``'json'``, ``'kml'``, ``'csv'``, ``'location_history'``,
-    ``'gpx'``, ``'wkt'``, ``'wkb'``, ``'osm_xml'``. KMZ files are handled at the
-    archive-extraction layer and are not returned here. Shapefile parts
+    ``'gpx'``, ``'wkt'``, ``'wkb'``, ``'osm_xml'``, ``'my_activity'``. KMZ files are
+    handled at the archive-extraction layer and are not returned here. Shapefile parts
     (``.shp``/``.dbf``/``.shx``/``.prj``/``.cpg``) are not sniffed here either -
     they are grouped by filename stem in ``services.import_formats.shapefile``
     before this function is ever consulted for them.
@@ -159,6 +161,18 @@ def validate_content_type(name: str, data: bytes) -> str | None:
             if tag in window:
                 return fmt
         logger.debug("File is XML but does not match a known format: %s", name)
+        return None
+
+    # HTML: Google Takeout's My Activity export. Checked before the WKT/CSV
+    # heuristics below - a huge single-line My Activity file's <title> tag or
+    # "mdl-typography--title" class name would otherwise trip the CSV header
+    # heuristic's "title" substring check and get misclassified as CSV.
+    if text[:20].lower().startswith(("<!doctype html", "<html")):
+        from urbanlens.dashboard.services.apis.locations.google.my_activity import looks_like_my_activity
+
+        if looks_like_my_activity(text[:4000]):
+            return "my_activity"
+        logger.debug("File is HTML but not a recognised My Activity export: %s", name)
         return None
 
     # WKT: first token is a recognised geometry keyword, e.g. "POINT (...)".

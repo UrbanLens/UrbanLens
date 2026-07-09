@@ -498,7 +498,7 @@
                 {% else %}
                 Import data from another app. Many apps are supported.
                 {% endif %}
-                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout's My Activity (Maps) HTML export - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
             <div class="iw-takeout-help" style="margin-bottom:18px;">
@@ -513,7 +513,7 @@
             <div class="iw-takeout-help" id="iw-takeout-help" hidden>
                 <ol>
                     <li>Go to <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Google Takeout</a> and sign in with the Google account that has your saved places.</li>
-                    <li>Click <strong>Deselect all</strong>, then scroll down and check only <strong>Saved</strong> (this covers your Google Maps lists).</li>
+                    <li>Click <strong>Deselect all</strong>, then scroll down and check <strong>Saved</strong> (this covers your Google Maps lists). To also import driving-directions history, check <strong>My Activity</strong> too - open its options and set the Maps output format to <strong>HTML</strong>.</li>
                     <li>Click <strong>Next step</strong>, choose how you'd like to receive the export (an emailed download link is simplest), and click <strong>Create export</strong>.</li>
                     <li>Google will email you a download link, usually within a few minutes. Download the .zip file it sends you.</li>
                     <li>Come back here and drop that .zip file into the upload area below - no need to unzip it first.</li>
@@ -525,7 +525,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
         </div>

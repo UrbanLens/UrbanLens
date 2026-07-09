@@ -15,7 +15,7 @@ Features planned for this release.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
 * Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc) [UL-265]
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
-* Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School") [UL-267]
+* ~~Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School") [UL-267]~~
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
@@ -55,7 +55,6 @@ Features planned for this release.
     VM96 map:1055 [UL] Server returned 8495 new pin(s) for tile(s): *
     VM96 map:402 [UL] Cache write failed (QuotaExceededError) - pins will reload next visit
     _writeCache	@	VM96 map:402
-* Safety check-ins should make a post to the community wiki for a location.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
@@ -282,6 +281,8 @@ Features planned for future releases.
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,893: INFO/ForkPoolWorker-2] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] succeeded in 0.036874303594231606s: 0
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,907: INFO/ForkPoolWorker-1] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] succeeded in 0.037884799763560295s: 0
 * On Pin details page: When dragging a photo to reposition it... if an error is encountered, it should snap back to its original coordinates (which are presumably still the correct coordinates per the backend server)
+* User settings page: AI Features section needs better explanations.
+* Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
