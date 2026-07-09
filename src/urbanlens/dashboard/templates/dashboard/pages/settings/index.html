@@ -147,7 +147,7 @@
                 <i class="material-symbols-outlined">history</i>
                 Memories
             </h3>
-            <p class="settings-section-desc">What visit and location history UrbanLens saves for you.</p>
+            <p class="settings-section-desc">What visit and location history is saved.</p>
 
             <form method="post" class="settings-form" id="memories-form">
                 {% csrf_token %}
@@ -732,7 +732,7 @@
                 <input type="hidden" name="section" value="storage">
 
                 <div class="settings-field">
-                    <label class="settings-label" for="id_image_downscale_max_dimension">Photo size for future uploads</label>
+                    <label class="settings-label" for="id_image_downscale_max_dimension">Photo size</label>
                     <p class="settings-help">
                         Photos are downscaled to this size (longest edge) when stored. Choosing a smaller size
                         lets more photos fit in your storage. Applies to future uploads only - existing photos

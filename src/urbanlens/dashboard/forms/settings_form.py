@@ -452,7 +452,7 @@ class CommunitySettingsForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Community Features",
-        help_text="Allow other users to see your pins, view your profile, and send/receive friend requests.",
+        help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.",
     )
 
     class Meta:

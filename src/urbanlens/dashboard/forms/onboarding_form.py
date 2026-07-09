@@ -34,7 +34,7 @@ class WelcomeOnboardingForm(forms.ModelForm):
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="External Services",
-        help_text="Disable all external services (weather, geocoding, place data, web searches, AI). When viewing your pins, no research data will be displayed, unless it has already been cached from another user's request. This will prevent you from getting alerts about places you plan to visit.",
+        help_text="Disable all external services (weather, geocoding, place data, web searches, AI). No research data will be displayed, unless it has already been cached from another user's request. This will prevent you from getting alerts about places you research.",
     )
 
     class Meta:

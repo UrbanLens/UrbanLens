@@ -106,6 +106,7 @@ $onboarding-card-accents: (
     overflow: hidden;
     pointer-events: none;
     border-radius: 0 $radius-md 0 0;
+    z-index: 2;
 }
 
 .onboarding-card-ribbon {
@@ -219,5 +220,16 @@ $onboarding-card-accents: (
                 color: $accent;
             }
         }
+    }
+}
+
+.page-onboarding-welcome {
+    .settings-subtitle {
+        color: var(--ul-grey-7);
+    }
+
+    .settings-actions {
+        display: flex;
+        justify-content: flex-end;
     }
 }

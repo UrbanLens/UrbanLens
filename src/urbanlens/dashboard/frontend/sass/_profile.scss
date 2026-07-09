@@ -2767,6 +2767,10 @@ a.profile-stat--link {
     display: flex;
     align-items: center;
     gap: .6rem;
+
+    summary.btn--secondary {
+        height: 1.5rem;
+    }
 }
 
 .profile-viewas {

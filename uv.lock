@@ -3961,7 +3961,7 @@ wheels = [
 
 [[package]]
 name = "urbanlens"
-version = "0.3.0b1"
+version = "0.4.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "celery" },

@@ -250,19 +250,19 @@ class Profile(abstract.PublicDashboardModel):
     # Memories preferences. Each independently controls whether a category of
     # visit/location history is ever saved - including from explicit user actions
     # like GPX/Takeout imports, not just passive/background tracking.
-    track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from manual entries, imports, and photo tagging.")
+    track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from journal entries, imports, and photo tagging.")
     track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
     track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
 
     # When False: your pins are forced private, your profile and privacy
     # settings are locked to the most restrictive option, and you cannot send
     # or receive friend requests. Enforced in Pin.save()/Profile.save().
-    community_enabled = BooleanField(default=True, help_text="Allow other users to see your pins, profile, and friend requests.")
+    community_enabled = BooleanField(default=True, help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.")
 
     # Master switch for all external API calls made on your behalf (weather,
     # geocoding, place data, AI, etc). Individual services also have their own
     # toggles below/elsewhere that remain independently adjustable.
-    external_apis_enabled = BooleanField(default=True, help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.")
+    external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
 
     # Set when the user requests account deletion; cleared on cancel/undo.
     # A non-null value means the account is scheduled for hard deletion at
@@ -494,6 +494,70 @@ class Profile(abstract.PublicDashboardModel):
             "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
         }
 
+    @staticmethod
+    def _visibility_permits(visibility: str, subject: Profile, other: Profile) -> bool:
+        """Return True if ``subject``'s ``visibility`` setting permits ``other``.
+
+        Shared evaluator for every per-field ``VisibilityChoice`` setting on
+        this model (contact info, profile, photos, etc.) so the friend/common-pin/
+        common-friend/common-trip relationship queries live in exactly one place.
+        """
+        if visibility == VisibilityChoice.ANYONE:
+            return True
+        if visibility == VisibilityChoice.NO_ONE:
+            return False
+        if visibility == VisibilityChoice.FRIENDS:
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+            return Friendship.objects.filter(
+                models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+                status=FriendshipStatus.ACCEPTED,
+            ).exists()
+        if visibility == VisibilityChoice.COMMON_PIN:
+            from urbanlens.dashboard.models.pin.model import Pin
+
+            my_locs = set(
+                Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
+            )
+            their_locs = set(
+                Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
+            )
+            return bool(my_locs & their_locs)
+        if visibility == VisibilityChoice.COMMON_FRIEND:
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+            accepted = FriendshipStatus.ACCEPTED
+            my_friends = set(
+                Friendship.objects.filter(from_profile=subject, status=accepted).values_list(
+                    "to_profile_id",
+                    flat=True,
+                ),
+            ) | set(
+                Friendship.objects.filter(to_profile=subject, status=accepted).values_list(
+                    "from_profile_id",
+                    flat=True,
+                ),
+            )
+            their_friends = set(
+                Friendship.objects.filter(from_profile=other, status=accepted).values_list(
+                    "to_profile_id",
+                    flat=True,
+                ),
+            ) | set(
+                Friendship.objects.filter(to_profile=other, status=accepted).values_list(
+                    "from_profile_id",
+                    flat=True,
+                ),
+            )
+            return bool(my_friends & their_friends)
+        if visibility == VisibilityChoice.COMMON_TRIP:
+            from urbanlens.dashboard.models.trips.model import TripMembership
+
+            my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
+            their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+            return bool(my_trips & their_trips)
+        return False
+
     def can_view_photos_from(self, uploader: Profile) -> bool:
         """Return True if this profile is allowed to see photos uploaded by ``uploader``.
 
@@ -504,69 +568,11 @@ class Profile(abstract.PublicDashboardModel):
         if self == uploader:
             return True
 
-        def _check(visibility: str, subject: Profile, other: Profile) -> bool:
-            """Return True if ``subject``'s ``visibility`` setting permits ``other``."""
-            if visibility == VisibilityChoice.ANYONE:
-                return True
-            if visibility == VisibilityChoice.NO_ONE:
-                return False
-            if visibility == VisibilityChoice.FRIENDS:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                return Friendship.objects.filter(
-                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
-                    status=FriendshipStatus.ACCEPTED,
-                ).exists()
-            if visibility == VisibilityChoice.COMMON_PIN:
-                from urbanlens.dashboard.models.pin.model import Pin
-
-                my_locs = set(
-                    Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
-                )
-                their_locs = set(
-                    Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
-                )
-                return bool(my_locs & their_locs)
-            if visibility == VisibilityChoice.COMMON_FRIEND:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                accepted = FriendshipStatus.ACCEPTED
-                my_friends = set(
-                    Friendship.objects.filter(from_profile=subject, status=accepted).values_list(
-                        "to_profile_id",
-                        flat=True,
-                    ),
-                ) | set(
-                    Friendship.objects.filter(to_profile=subject, status=accepted).values_list(
-                        "from_profile_id",
-                        flat=True,
-                    ),
-                )
-                their_friends = set(
-                    Friendship.objects.filter(from_profile=other, status=accepted).values_list(
-                        "to_profile_id",
-                        flat=True,
-                    ),
-                ) | set(
-                    Friendship.objects.filter(to_profile=other, status=accepted).values_list(
-                        "from_profile_id",
-                        flat=True,
-                    ),
-                )
-                return bool(my_friends & their_friends)
-            if visibility == VisibilityChoice.COMMON_TRIP:
-                from urbanlens.dashboard.models.trips.model import TripMembership
-
-                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
-                return bool(my_trips & their_trips)
-            return False
-
         # Uploader must allow this viewer.
-        if not _check(uploader.photo_upload_visibility, uploader, self):
+        if not self._visibility_permits(uploader.photo_upload_visibility, uploader, self):
             return False
         # This viewer's filter must allow the uploader.
-        return _check(self.viewer_photo_filter, self, uploader)
+        return self._visibility_permits(self.viewer_photo_filter, self, uploader)
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.
@@ -579,45 +585,28 @@ class Profile(abstract.PublicDashboardModel):
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
-
-        def _ck(visibility: str, subject: Profile, other: Profile) -> bool:
-            if visibility == VisibilityChoice.ANYONE:
-                return True
-            if visibility == VisibilityChoice.NO_ONE:
-                return False
-            if visibility == VisibilityChoice.FRIENDS:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                return Friendship.objects.filter(
-                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
-                    status=FriendshipStatus.ACCEPTED,
-                ).exists()
-            if visibility == VisibilityChoice.COMMON_PIN:
-                from urbanlens.dashboard.models.pin.model import Pin
-
-                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
-                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
-                return bool(my_locs & their_locs)
-            if visibility == VisibilityChoice.COMMON_FRIEND:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                accepted = FriendshipStatus.ACCEPTED
-                my_friends = set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
-                their_friends = set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
-                return bool(my_friends & their_friends)
-            if visibility == VisibilityChoice.COMMON_TRIP:
-                from urbanlens.dashboard.models.trips.model import TripMembership
-
-                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
-                return bool(my_trips & their_trips)
-            return False
-
         if self.contact_visibility == VisibilityChoice.ANYONE:
             return True
         if viewer is None:
             return False
-        return _ck(self.contact_visibility, self, viewer)
+        return self._visibility_permits(self.contact_visibility, self, viewer)
+
+    def can_view_profile(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see this profile's identity (name, etc).
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when the viewer passes the profile_visibility setting.
+        """
+        if viewer is not None and self.pk == viewer.pk:
+            return True
+        if self.profile_visibility == VisibilityChoice.ANYONE:
+            return True
+        if viewer is None:
+            return False
+        return self._visibility_permits(self.profile_visibility, self, viewer)
 
     def __str__(self):
         return self.username

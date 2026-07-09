@@ -1067,6 +1067,271 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     transform: translateX(3px);
 }
 
+// -- Users admin page -----------------------------------------------------------
+
+.users-admin-privacy-notice {
+    margin-bottom: 1.25rem;
+}
+
+.users-admin-search {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    flex-wrap: wrap;
+    padding: 0 1rem 1rem;
+
+    &__field {
+        flex: 1 1 260px;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .55rem .85rem;
+        border: 1.5px solid var(--ul-grey-1a);
+        border-radius: 8px;
+        background: var(--ul-grey-0);
+        transition: border-color .15s;
+
+        &:focus-within {
+            border-color: $color-blue-500;
+        }
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.1rem;
+            color: var(--ul-grey-5);
+        }
+
+        input {
+            flex: 1;
+            min-width: 0;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: .9rem;
+            color: var(--ul-grey-8);
+
+            &::placeholder {
+                color: var(--ul-grey-5);
+            }
+        }
+    }
+}
+
+$users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr) minmax(150px, 1.1fr) minmax(160px, 1.05fr) minmax(90px, .65fr);
+
+.users-list {
+    padding: 0 1rem 1.25rem;
+
+    &__head {
+        display: grid;
+        grid-template-columns: $users-list-cols;
+        gap: .75rem;
+        padding: .5rem .85rem .65rem;
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-7);
+    }
+
+    &__items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+    }
+
+    &__item {
+        display: grid;
+        grid-template-columns: $users-list-cols;
+        gap: .75rem;
+        align-items: center;
+        padding: .85rem;
+        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
+        transition: border-color .15s, box-shadow .15s;
+
+        &:hover {
+            border-color: $color-blue-300;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
+        }
+    }
+
+    &__label {
+        display: none;
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-6);
+        margin-bottom: .25rem;
+    }
+
+    &__value {
+        min-width: 0;
+    }
+
+    &__identity {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-width: 0;
+    }
+
+    &__avatar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        color: #fff;
+        font-weight: 700;
+        font-size: .95rem;
+        flex-shrink: 0;
+
+        &--hidden {
+            background: var(--ul-grey-3) !important;
+            color: var(--ul-grey-6);
+
+            .material-symbols-outlined,
+            .material-icons {
+                font-size: 1.1rem;
+            }
+        }
+    }
+
+    &__identity--hidden {
+        opacity: .75;
+    }
+
+    &__identity-text {
+        min-width: 0;
+    }
+
+    &__username {
+        display: block;
+        font-size: .92rem;
+        color: var(--ul-grey-8);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &--hidden {
+            font-style: italic;
+            color: var(--ul-grey-5);
+        }
+    }
+
+    &__name {
+        display: block;
+        margin-top: .1rem;
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__email {
+        font-size: .85rem;
+        color: var(--ul-grey-7);
+        word-break: break-word;
+    }
+
+    &__hidden {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        font-style: italic;
+        color: var(--ul-grey-5);
+        cursor: help;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .9rem;
+        }
+    }
+
+    &__muted {
+        color: var(--ul-grey-5);
+        font-style: italic;
+        font-size: .85rem;
+    }
+
+    &__chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+    }
+
+    &__storage-bar {
+        width: 100%;
+        max-width: 140px;
+        margin-bottom: .3rem;
+    }
+
+    &__storage-text {
+        display: block;
+        font-size: .76rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+    }
+
+    &__empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        padding: 2.5rem 1rem;
+        color: var(--ul-grey-6);
+        font-size: .9rem;
+        background: var(--ul-grey-0);
+        border: 1px dashed var(--ul-grey-1a);
+        border-radius: 10px;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.4rem;
+            opacity: .55;
+        }
+    }
+
+    @media (max-width: 1100px) {
+        &__head {
+            display: none;
+        }
+
+        &__item {
+            grid-template-columns: 1fr;
+            gap: .85rem;
+            align-items: stretch;
+        }
+
+        &__label {
+            display: block;
+        }
+    }
+}
+
+.users-admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .85rem;
+    padding: 1rem 0 .25rem;
+
+    .btn.is-disabled {
+        opacity: .4;
+        pointer-events: none;
+    }
+}
+
 // -- Skeleton loading ---------------------------------------------------------
 
 @keyframes skeleton-pulse {
@@ -1131,7 +1396,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         color: var(--ul-grey-8);
     }
 
-    .subscription-list {
+    .subscription-list,
+    .users-list {
         &__item,
         &__empty {
             background: var(--ul-grey-1);
@@ -1145,6 +1411,15 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
         &__empty {
             border-style: dashed;
+        }
+    }
+
+    .users-admin-search__field {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-3b);
+
+        &:focus-within {
+            border-color: color.adjust($primary-color, $lightness: 10%);
         }
     }
 

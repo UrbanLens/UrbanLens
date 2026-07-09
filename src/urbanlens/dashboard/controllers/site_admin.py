@@ -696,6 +696,99 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         )
 
 
+class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Read-only directory of registered users for site administrators.
+
+    GET /site-admin/users/ → paginated, searchable list of users.
+
+    This is deliberately privacy-preserving: even a site admin does not get a
+    backdoor around a user's ``contact_visibility`` setting here. Email is
+    only shown when the viewing admin's own profile would satisfy that
+    user's configured visibility rule, exactly as
+    ``Profile.can_view_contact_info`` evaluates for any other viewer (e.g. a
+    "Friends only" user's email stays hidden unless the admin happens to be
+    their friend).
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+    request: HttpRequest
+    PAGE_SIZE = 25
+
+    def handle_no_permission(self) -> HttpResponseRedirect:
+        """Send anonymous users to login; return 403 for authenticated non-admins."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request: HttpRequest):
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.subscriptions import active_subscription_roles
+        from urbanlens.dashboard.services.pagination import get_page
+        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes
+
+        if not isinstance(request.user, User):
+            return HttpResponseForbidden()
+
+        search = request.GET.get("q", "").strip()
+        users_qs = User.objects.select_related("profile").prefetch_related("groups").order_by("username")
+        if search:
+            users_qs = users_qs.filter(Q(username__icontains=search) | Q(email__icontains=search) | Q(first_name__icontains=search))
+
+        page = get_page(request, users_qs, self.PAGE_SIZE)
+
+        viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        rows = []
+        for member in page.object_list:
+            profile = getattr(member, "profile", None)
+            if profile is None:
+                # Legacy/incomplete accounts without a Profile row yet - every
+                # user should still appear in the directory.
+                profile, _ = Profile.objects.get_or_create(user=member)
+
+            email_visible = profile.can_view_contact_info(viewer_profile)
+            profile_visible = profile.can_view_profile(viewer_profile)
+            quota_bytes = get_quota_bytes(profile)
+            used_bytes = get_storage_used_bytes(profile)
+            percent_used = 0
+            if quota_bytes:
+                percent_used = min(round(used_bytes * 100 / quota_bytes), 100)
+
+            rows.append(
+                {
+                    "user": member,
+                    "profile": profile,
+                    "profile_visible": profile_visible,
+                    "display_username": member.username if profile_visible else "Invisible User",
+                    "display_first_name": member.first_name if profile_visible else "",
+                    "email_visible": email_visible,
+                    "is_site_admin": member.is_superuser or any(group.name == SITE_ADMIN_GROUP_NAME for group in member.groups.all()),
+                    "roles": active_subscription_roles(member),
+                    "quota_bytes": quota_bytes,
+                    "used_bytes": used_bytes,
+                    "percent_used": percent_used,
+                    "avatar_hue": sum(ord(char) for char in member.username) % 360,
+                }
+            )
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_users.html",
+            {
+                "page_name": "site-admin-users",
+                "rows": rows,
+                "page_obj": page,
+                "search": search,
+                "total_users": page.paginator.count,
+            },
+        )
+
+
 class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Admin dashboard homepage.
 
