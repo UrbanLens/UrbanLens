@@ -20,6 +20,7 @@
             </div>
         </div>
 
+        <div class="settings-section-body">
         <form method="post" class="settings-form settings-form--privacy" id="privacy-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="privacy">
@@ -220,6 +221,7 @@
                     <button type="submit" class="settings-save-btn">Save</button>
                 </div>
             </form>
+        </div>
         </div>
     </section>
 

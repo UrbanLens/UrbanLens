@@ -8,7 +8,7 @@
             UrbanLens is fully private - nothing is shared with anyone unless you take a separate, explicit action to share it. But some users may want even more anonymity by turning some features completely off.
         </p>
         <p class="settings-subtitle">
-            Clicking these buttons will disable core features of the site. You can change any of these anytime from Settings.
+            Clicking these buttons will disable core features of the site. Unless you're the type of person who lives in a bunker with a fake identity, I'd strongly recommend leaving these features on. You can change them anytime.
         </p>
     </div>
 
@@ -16,64 +16,72 @@
         <form method="post" class="settings-form" id="welcome-onboarding-form">
             {% csrf_token %}
 
+            <h2 class="onboarding-section-title">
+                <i class="material-symbols-outlined">visibility_off</i>
+                Disable Features
+            </h2>
+
             <div class="onboarding-cards">
                 <label class="onboarding-card onboarding-card--memories">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
                     <span class="onboarding-card-top">
                         <span class="onboarding-card-icon">
                             <i class="material-symbols-outlined">history</i>
                         </span>
                         <span class="ul-switch onboarding-card-switch">
-                            {{ form.disable_memories }}
+                            {{ form.memories_enabled }}
                             <span class="ul-switch__track"></span>
                         </span>
                     </span>
                     <span class="onboarding-card-title-row">
-                        <span class="onboarding-card-title">{{ form.disable_memories.label }}</span>
-                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Privacy gain: nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct." %}
+                        <span class="onboarding-card-title">{{ form.memories_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct." %}
                     </span>
-                    <span class="onboarding-card-desc" id="{{ form.disable_memories.id_for_label }}_helptext">{{ form.disable_memories.help_text }}</span>
-                    {% if form.disable_memories.errors %}
-                    <span class="settings-error">{{ form.disable_memories.errors|join:", " }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.memories_enabled.id_for_label }}_helptext">{{ form.memories_enabled.help_text }}</span>
+                    {% if form.memories_enabled.errors %}
+                    <span class="settings-error">{{ form.memories_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
 
                 <label class="onboarding-card onboarding-card--community">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
                     <span class="onboarding-card-top">
                         <span class="onboarding-card-icon">
                             <i class="material-symbols-outlined">groups</i>
                         </span>
                         <span class="ul-switch onboarding-card-switch">
-                            {{ form.disable_community }}
+                            {{ form.community_enabled }}
                             <span class="ul-switch__track"></span>
                         </span>
                     </span>
                     <span class="onboarding-card-title-row">
-                        <span class="onboarding-card-title">{{ form.disable_community.label }}</span>
-                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Privacy gain: your profile, pins, and activity become invisible to every other user, so no one can look you up, see where you've marked, or send you a friend request." %}
+                        <span class="onboarding-card-title">{{ form.community_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these off if you don't plan to interact with other users, and don't want to be confused by buttons that lead you to pages you won't use. Community wikis won't be displayed to you, and you won't see notifications for friend requests, or options to create group trips." %}
                     </span>
-                    <span class="onboarding-card-desc" id="{{ form.disable_community.id_for_label }}_helptext">{{ form.disable_community.help_text }}</span>
-                    {% if form.disable_community.errors %}
-                    <span class="settings-error">{{ form.disable_community.errors|join:", " }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.community_enabled.id_for_label }}_helptext">{{ form.community_enabled.help_text }}</span>
+                    {% if form.community_enabled.errors %}
+                    <span class="settings-error">{{ form.community_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
 
                 <label class="onboarding-card onboarding-card--external">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
                     <span class="onboarding-card-top">
                         <span class="onboarding-card-icon">
                             <i class="material-symbols-outlined">cloud</i>
                         </span>
                         <span class="ul-switch onboarding-card-switch">
-                            {{ form.disable_external_apis }}
+                            {{ form.external_apis_enabled }}
                             <span class="ul-switch__track"></span>
                         </span>
                     </span>
                     <span class="onboarding-card-title-row">
-                        <span class="onboarding-card-title">{{ form.disable_external_apis.label }}</span>
-                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Privacy gain: your coordinates, search terms, and photos are never sent to a third-party service (Google, weather, AI, etc), so those companies never see your activity." %}
+                        <span class="onboarding-card-title">{{ form.external_apis_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about anonymized coordinates and place names being sent to APIs, like google search. These requests are never sent with identifying information, but turning these features off will prevent the requests from happening at all." %}
                     </span>
-                    <span class="onboarding-card-desc" id="{{ form.disable_external_apis.id_for_label }}_helptext">{{ form.disable_external_apis.help_text }}</span>
-                    {% if form.disable_external_apis.errors %}
-                    <span class="settings-error">{{ form.disable_external_apis.errors|join:", " }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.external_apis_enabled.id_for_label }}_helptext">{{ form.external_apis_enabled.help_text }}</span>
+                    {% if form.external_apis_enabled.errors %}
+                    <span class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
             </div>

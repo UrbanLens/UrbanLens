@@ -21,6 +21,23 @@ $onboarding-card-accents: (
     }
 }
 
+.onboarding-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--ul-grey-9);
+    margin: 0 0 1.25rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    .material-symbols-outlined {
+        font-size: 1.35rem;
+        color: var(--primary-color);
+    }
+}
+
 .onboarding-cards {
     display: grid;
     grid-template-columns: 1fr;
@@ -62,6 +79,55 @@ $onboarding-card-accents: (
             }
         }
     }
+
+    // Unchecked = the feature is disabled. Flatten the card to a neutral grey (rather
+    // than a colored/glowing highlight, which would read as "active/selected") so
+    // the off state reads as muted at a glance, backed up by the icon slash + ribbon.
+    &:has(.onboarding-card-switch input:not(:checked)) {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-2a);
+
+        .onboarding-card-title,
+        .onboarding-card-desc {
+            opacity: 0.6;
+        }
+    }
+}
+
+// Corner clip so the diagonal ribbon below is cut flush with the card edges
+// without needing overflow:hidden on .onboarding-card itself (which would also
+// clip its hover box-shadow and focus outline).
+.onboarding-card-corner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 90px;
+    height: 90px;
+    overflow: hidden;
+    pointer-events: none;
+    border-radius: 0 $radius-md 0 0;
+}
+
+.onboarding-card-ribbon {
+    position: absolute;
+    top: 16px;
+    right: -32px;
+    width: 130px;
+    padding: 3px 0;
+    background: var(--ul-grey-6);
+    color: var(--ul-grey-0a);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    transform: rotate(45deg);
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+.onboarding-card:has(.onboarding-card-switch input:not(:checked)) .onboarding-card-ribbon {
+    opacity: 1;
 }
 
 .onboarding-card-top {
@@ -72,12 +138,14 @@ $onboarding-card-accents: (
 }
 
 .onboarding-card-icon {
+    position: relative;
     width: 48px;
     height: 48px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
     transition: background .15s;
@@ -86,6 +154,33 @@ $onboarding-card-accents: (
         font-size: 1.6rem;
         color: var(--ul-grey-5);
         transition: color .15s;
+    }
+
+    // Diagonal "muted" slash, in the same spirit as a mic-off/no-signal icon -
+    // scaled in from the center when the card is unchecked (disabled).
+    &::after {
+        content: '';
+        position: absolute;
+        left: -15%;
+        top: 50%;
+        width: 130%;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--ul-grey-7);
+        transform: translateY(-50%) rotate(-45deg) scaleX(0);
+        transition: transform .2s ease;
+    }
+}
+
+.onboarding-card:has(.onboarding-card-switch input:not(:checked)) .onboarding-card-icon {
+    background: var(--ul-grey-2a);
+
+    .material-symbols-outlined {
+        color: var(--ul-grey-6);
+    }
+
+    &::after {
+        transform: translateY(-50%) rotate(-45deg) scaleX(1);
     }
 }
 
@@ -123,11 +218,6 @@ $onboarding-card-accents: (
             .material-symbols-outlined {
                 color: $accent;
             }
-        }
-
-        &:has(.onboarding-card-switch input:checked) {
-            border-color: $accent;
-            box-shadow: 0 4px 20px rgba($accent, .12);
         }
     }
 }
