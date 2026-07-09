@@ -79,6 +79,25 @@ class PinQuerySetStructureTests(TestCase):
         self.assertNotIn(self.detail, self._qs().location_detail_pins())
 
 
+class PinSavePointSyncTests(TestCase):
+    """Pin.save() keeps the spatial index aligned with effective coordinates."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+
+    def test_location_partial_save_updates_spatial_point(self) -> None:
+        original = baker.make(Location, latitude="40.000000", longitude="-74.000000")
+        replacement = baker.make(Location, latitude="41.000000", longitude="-75.000000")
+        pin = baker.make(Pin, profile=self.profile, location=original, latitude=None, longitude=None)
+
+        pin.location = replacement
+        pin.save(update_fields=["location"])
+        pin.refresh_from_db()
+
+        self.assertAlmostEqual(pin.point.y, 41.0, places=6)
+        self.assertAlmostEqual(pin.point.x, -75.0, places=6)
+
+
 # -- never_visited -------------------------------------------------------------
 
 class PinQuerySetNeverVisitedTests(TestCase):

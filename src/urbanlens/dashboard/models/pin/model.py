@@ -479,7 +479,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             self.point = Point(longitude, latitude, srid=4326)
 
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
+        coordinate_fields = {"latitude", "longitude", "location"}
+        if update_fields is not None and "point" not in update_fields and coordinate_fields.intersection(update_fields):
             kwargs["update_fields"] = {*update_fields, "point"}
 
         super().save(*args, **kwargs)
