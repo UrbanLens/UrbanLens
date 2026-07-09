@@ -110,8 +110,8 @@ class PinQuerySetRatingTests(TestCase):
         self.profile = self.user.profile
         self.pin_3 = baker.make(Pin, profile=self.profile)
         self.pin_5 = baker.make(Pin, profile=self.profile)
-        baker.make(Review, user=self.user, pin=self.pin_3, rating=3)
-        baker.make(Review, user=self.user, pin=self.pin_5, rating=5)
+        baker.make(Review, profile=self.profile, pin=self.pin_3, rating=3)
+        baker.make(Review, profile=self.profile, pin=self.pin_5, rating=5)
 
     def _qs(self):
         return Pin.objects.filter(profile=self.profile)

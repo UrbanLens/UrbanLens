@@ -163,7 +163,7 @@ class FilterByCriteriaRatingTests(TestCase):
         self.pins_by_rating: dict[int, Pin] = {}
         for rating in range(1, 6):
             pin = baker.make(Pin, profile=self.profile)
-            baker.make(Review, user=self.user, pin=pin, rating=rating)
+            baker.make(Review, profile=self.profile, pin=pin, rating=rating)
             self.pins_by_rating[rating] = pin
 
     def _base_qs(self):
