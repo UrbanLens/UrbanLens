@@ -16,7 +16,6 @@ class _Pin:
     location_id = 20
     is_private = False
     parent_pin_id = None
-    parent_wiki_id = None
     effective_latitude = 40.0
     effective_longitude = -74.0
 

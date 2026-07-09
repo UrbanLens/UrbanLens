@@ -223,6 +223,11 @@ urlpatterns = [
                                 name="pin.web_search",
                             ),
                             path(
+                                "<slug:pin_slug>/search/refresh/",
+                                pin.PinController.as_view({"post": "web_search_refresh"}),
+                                name="pin.web_search.refresh",
+                            ),
+                            path(
                                 "<slug:pin_slug>/satellite_view/",
                                 pin.PinController.as_view({"get": "satellite_view_carousell"}),
                                 name="pin.satellite_view",

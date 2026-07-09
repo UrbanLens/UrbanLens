@@ -200,8 +200,9 @@ class WebSearchViewTests(TestCase):
 
         with (
             patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
-            patch.object(Pin.objects, "get", return_value=pin),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
+            mock_select_related.return_value.get.return_value = pin
             view = PinController()
             response = view.web_search(request, pin_slug=pin.slug)
 
@@ -223,11 +224,12 @@ class WebSearchViewTests(TestCase):
 
         with (
             patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
-            patch.object(Pin.objects, "get", return_value=pin),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
             mock_gw = MagicMock()
             mock_gw.search.return_value = mock_results
             mock_factory.return_value = mock_gw
+            mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             response = view.web_search(request, pin_slug=pin.slug)
@@ -251,8 +253,9 @@ class WebSearchViewTests(TestCase):
 
         with (
             patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
-            patch.object(Pin.objects, "get", return_value=pin),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
+            mock_select_related.return_value.get.return_value = pin
             view = PinController()
             response = view.web_search(request, pin_slug=pin.slug)
 
@@ -283,12 +286,13 @@ class WebSearchViewTests(TestCase):
 
         with (
             patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
-            patch.object(Pin.objects, "get", return_value=pin),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
             mock_gw = MagicMock()
             mock_gw.search.return_value = mock_results
             mock_factory.return_value = mock_gw
+            mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             view.web_search(request, pin_slug=pin.slug)
@@ -296,6 +300,100 @@ class WebSearchViewTests(TestCase):
         self.assertEqual(len(captured), 2)
         self.assertEqual(captured[0]["domain"], "example.com")
         self.assertEqual(captured[1]["domain"], "news.bbc.co.uk")
+
+    def test_cache_shared_between_two_pins_at_same_location(self):
+        """Two pins at the same Location with no custom name issue the same query and share one fetch."""
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        pin_a = self._make_pin()
+        # A Pin is unique per (location, profile), so a second pin at the same
+        # Location needs a different (subscribed) owner.
+        user_b = baker.make("auth.User")
+        role = baker.make(SubscriptionRole, features=SiteFeature.SEARCH)
+        grant_subscription(user_b, role, user_b, None)
+        pin_b = baker.make(Pin, location=pin_a.location, profile=Profile.objects.get(user=user_b))
+        rf = RequestFactory()
+
+        mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "s"}]
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_gw = MagicMock()
+            mock_gw.search.return_value = mock_results
+            mock_factory.return_value = mock_gw
+            mock_select_related.return_value.get.side_effect = [pin_a, pin_b]
+
+            view = PinController()
+            request_a = rf.get("/")
+            request_a.user = pin_a.profile.user
+            response_a = view.web_search(request_a, pin_slug=pin_a.slug)
+
+            request_b = rf.get("/")
+            request_b.user = pin_b.profile.user
+            response_b = view.web_search(request_b, pin_slug=pin_b.slug)
+
+        self.assertEqual(response_a.status_code, 200)
+        self.assertEqual(response_b.status_code, 200)
+        mock_gw.search.assert_called_once()
+
+    def test_refresh_rejected_when_cache_is_too_recent(self):
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        pin = self._make_pin()
+        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+
+        rf = RequestFactory()
+        request = rf.post("/")
+        request.user = pin.profile.user
+
+        with patch.object(Pin.objects, "select_related") as mock_select_related:
+            mock_select_related.return_value.get.return_value = pin
+            view = PinController()
+            response = view.web_search_refresh(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 429)
+
+    def test_refresh_allowed_once_cache_is_a_day_old(self):
+        from datetime import timedelta
+
+        from django.test import RequestFactory
+        from django.utils import timezone
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        pin = self._make_pin()
+        entry = LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+        LocationCache.objects.filter(pk=entry.pk).update(updated=timezone.now() - timedelta(days=1, minutes=1))
+
+        rf = RequestFactory()
+        request = rf.post("/")
+        request.user = pin.profile.user
+
+        mock_results = [{"title": "Fresh Result", "link": "http://example.com/new", "snippet": "s"}]
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_gw = MagicMock()
+            mock_gw.search.return_value = mock_results
+            mock_factory.return_value = mock_gw
+            mock_select_related.return_value.get.return_value = pin
+
+            view = PinController()
+            response = view.web_search_refresh(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 200)
+        mock_gw.search.assert_called_once()
 
     def test_gateway_exception_returns_error_template(self):
         from django.test import RequestFactory
@@ -316,12 +414,13 @@ class WebSearchViewTests(TestCase):
 
         with (
             patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
-            patch.object(Pin.objects, "get", return_value=pin),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
             mock_gw = MagicMock()
             mock_gw.search.side_effect = RuntimeError("API down")
             mock_factory.return_value = mock_gw
+            mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             view.web_search(request, pin_slug=pin.slug)

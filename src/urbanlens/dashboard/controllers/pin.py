@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.viewsets import GenericViewSet
 
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -349,10 +351,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the web search results for a pin.
         """
-        from urbanlens.dashboard.models.site_settings import SiteSettings
+        return self._web_search_response(request, pin_slug, force_refresh=False)
+
+    @action(detail=True, methods=["post"])
+    def web_search_refresh(self, request: HttpRequest, pin_slug):
+        """
+        HTMX partial: force a fresh web search, bypassing the shared cache.
+
+        Only allowed once the cached results are at least
+        ``_WEB_SEARCH_MIN_REFRESH_AGE`` old, so the refresh button can't be
+        used to burn through search-API quota faster than a real cache miss
+        would.
+        """
+        return self._web_search_response(request, pin_slug, force_refresh=True)
+
+    def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         try:
-            pin: Pin = Pin.objects.get(slug=pin_slug)
+            pin: Pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -369,62 +386,69 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"error": "Web search is available to VIP subscribers."},
+                {"pin": pin, "error": "Web search is available to VIP subscribers."},
                 status=403,
             )
 
-        cache_key = make_cache_key("web_search_pin", str(pin.pk))
-        site_settings = SiteSettings.get_current()
-        cache_hours = site_settings.search_cache_hours
+        location = pin.location
+        # Shared across every pin/wiki at this Location, keyed on the search
+        # query text -- two pins with the same effective name (the common
+        # case) hit the same cache entry instead of each paying for their own.
+        # A pin with a custom override name produces a different query, which
+        # is treated as a miss rather than serving another pin's results.
+        cached = LocationCache.get_fresh(location, "web_search") if location else None
+        if cached is not None and cached.query_key != search_name:
+            cached = None
 
-        if cache_hours > 0:
-            cached = cache.get(cache_key)
-            if cached is not None:
-                page_obj = get_page(request, cached, _WEB_SEARCH_PAGE_SIZE)
-                return render(
-                    request,
-                    "dashboard/pages/location/web_search.html",
-                    {
-                        "search_results": page_obj.object_list,
-                        "page_obj": page_obj,
-                        "adaptive_pagination": True,
-                        "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(cached)),
-                    },
-                )
+        can_refresh = cached is not None and timezone.now() - cached.updated >= _WEB_SEARCH_MIN_REFRESH_AGE
+
+        if force_refresh:
+            if not can_refresh:
+                return HttpResponse("Search results were cached too recently to refresh.", status=429)
+            cached = None
+
+        if cached is not None:
+            results = cached.data.get("results", [])
+            page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {
+                    "pin": pin,
+                    "search_results": page_obj.object_list,
+                    "page_obj": page_obj,
+                    "adaptive_pagination": True,
+                    "can_refresh": can_refresh,
+                    "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(results)),
+                },
+            )
 
         from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
             search_gateway = get_search_gateway()
-            if query := pin.get_unique_search_name(quote_name=True):
-                # Deadline-bounded: this is the one external fetch still made on
-                # the request path (interactive, VIP-gated, and cached below), so
-                # a slow search backend degrades to the error card instead of
-                # holding the request open.
-                search_results = call_with_deadline(
-                    lambda: search_gateway.search(query),
-                    timeout=EXTERNAL_CALL_DEADLINE,
-                    default=None,
-                    name="web_search",
-                )
-                if search_results is None:
-                    return render(
-                        request,
-                        "dashboard/pages/location/web_search.html",
-                        {"error": "Search unavailable. Please try again later."},
-                    )
-            else:
+            # Deadline-bounded: this is the one external fetch still made on
+            # the request path (interactive, VIP-gated, and cached below), so
+            # a slow search backend degrades to the error card instead of
+            # holding the request open.
+            search_results = call_with_deadline(
+                lambda: search_gateway.search(search_name),
+                timeout=EXTERNAL_CALL_DEADLINE,
+                default=None,
+                name="web_search",
+            )
+            if search_results is None:
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"error": "This pin does not have a descriptive name to search for."},
+                    {"pin": pin, "error": "Search unavailable. Please try again later."},
                 )
         except (OSError, ValueError, RuntimeError) as e:
             logger.exception("Unable to contact web search API: %s", e)
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"error": "Search unavailable. Please try again later."},
+                {"pin": pin, "error": "Search unavailable. Please try again later."},
             )
 
         for r in search_results:
@@ -434,17 +458,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 r["domain"] = ""
             r["date_display"] = format_search_date(r.get("date"))
 
-        if cache_hours > 0:
-            cache.set(cache_key, search_results, cache_hours * 3600)
+        if location:
+            LocationCache.set(location, "web_search", {"results": search_results}, query_key=search_name)
 
         page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
         return render(
             request,
             "dashboard/pages/location/web_search.html",
             {
+                "pin": pin,
                 "search_results": page_obj.object_list,
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
+                "can_refresh": False,
                 "debug": self._debug_entry(request, "web_search", search_name, from_cache=False, count=len(search_results)),
             },
         )
@@ -967,7 +993,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_usgs_topo.html", context)
 
     # Sources rendered via LocationCache on the pin detail page (see the endpoints above).
-    _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress")
+    _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress", "web_search")
     # Gateway service_keys used by the satellite/street-view carousels (see satellite_view_carousell / street_view).
     _SATELLITE_DEBUG_SERVICES = ("google_maps", "esri", "nasa_gibs", "mapbox", "bing_maps", "open_aerial_map")
     _STREET_VIEW_DEBUG_SERVICES = ("google_maps", "mapillary", "kartaview")
@@ -999,8 +1025,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 location=pin.location,
                 source__in=self._LOCATION_CACHE_DEBUG_SOURCES,
             ).delete()
-
-        cache.delete(make_cache_key("web_search_pin", str(pin.pk)))
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude

@@ -269,14 +269,6 @@ Features planned for future releases.
 * Investigate: import pin data into google my maps. (If not: then consider other services)
 * Email export data to the user feature, so that data can be persisted even without the server online. (Alternatively: dropbox, meta, etc)
 * Celery tasks for external APIs which are rate limited could be queued for later.
-* Production server app log is noisy. e.g.: 
-  * 127.0.0.1:54708 - - [08/Jul/2026:20:16:09] "GET /health/" 200 5
-  * [2026-07-08 20:17:40,851: INFO/MainProcess] Scheduler: Sending due task safety-checkin-escalation (urbanlens.dashboard.tasks.escalate_overdue_checkins)
-    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,855: INFO/MainProcess] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] received
-    urbanlens_production_celery_beat    | [2026-07-08 20:17:40,866: INFO/MainProcess] Scheduler: Sending due task safety-checkin-due-reminders (urbanlens.dashboard.tasks.send_due_checkin_reminders)
-    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,868: INFO/MainProcess] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] received
-    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,893: INFO/ForkPoolWorker-2] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] succeeded in 0.036874303594231606s: 0
-    urbanlens_production_celery_worker  | [2026-07-08 20:17:40,907: INFO/ForkPoolWorker-1] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] succeeded in 0.037884799763560295s: 0
 * User settings page: AI Features section needs better explanations.
 * Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.

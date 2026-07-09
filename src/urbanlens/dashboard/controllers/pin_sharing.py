@@ -25,7 +25,6 @@ def _recipient_has_pin(profile: Profile, source: Pin) -> bool:
     return Pin.objects.filter(
         profile=profile,
         parent_pin__isnull=True,
-        parent_wiki__isnull=True,
         location_id=source.location_id,
     ).exists()
 

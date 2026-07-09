@@ -142,9 +142,9 @@
                 <div class="profile-owner-actions">
                     {% if preview_modes %}
                     <details class="profile-viewas">
-                        <summary class="btn btn--ghost" title="See your profile exactly as another user sees it">
+                        <button class="btn btn--secondary" title="See your profile exactly as another user sees it">
                             <i class="material-symbols-outlined">visibility</i> View as
-                        </summary>
+                        </button>
                         <div class="profile-viewas-menu">
                             {% for mode, label in preview_modes %}
                             <form method="post" action="{% url 'profile.preview' mode %}">

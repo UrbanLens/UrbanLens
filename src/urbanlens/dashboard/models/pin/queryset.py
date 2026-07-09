@@ -28,8 +28,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     """
 
     def root_pins(self) -> Self:
-        """Return only top-level pins (excludes both personal and community detail pins)."""
-        return self.filter(parent_pin__isnull=True, parent_wiki__isnull=True)
+        """Return only top-level pins (excludes personal detail pins)."""
+        return self.filter(parent_pin__isnull=True)
 
     def detail_pins(self) -> Self:
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
@@ -56,10 +56,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             frontier = children - all_ids
             all_ids |= frontier
         return Pin.objects.filter(pk__in=all_ids)
-
-    def wiki_detail_pins(self) -> Self:
-        """Return only community detail pins (attached directly to a Wiki)."""
-        return self.filter(parent_wiki__isnull=False, parent_pin__isnull=True)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
@@ -326,7 +322,6 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
             location=location,
             profile=profile,
             parent_pin__isnull=True,
-            parent_wiki__isnull=True,
         ).first()
         if existing_pin is not None:
             return existing_pin, False

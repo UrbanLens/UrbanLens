@@ -118,12 +118,15 @@
                 </select>
             </div>
             <div class="form-row">
-                <label for="search-cache-hours">Search result cache duration (hours)</label>
+                <label for="external-data-cache-days">External data cache duration (days)</label>
                 <p class="form-help">
-                    How long to cache web search results per pin before re-fetching. Set to 0 to disable caching.
+                    Minimum number of days to cache external API responses before re-fetching. Applies to
+                    Wikipedia, NPS, LoopNet, USGS, Nominatim, media archives, Google Places, web search, and
+                    satellite/street view imagery -- all shared per Location so pins and wikis at the same
+                    place reuse one cached result instead of each fetching their own.
                 </p>
-                <input type="number" name="search_cache_hours" id="search-cache-hours"
-                       value="{{ settings.search_cache_hours }}" min="0" max="8760" step="1">
+                <input type="number" name="external_data_cache_days" id="external-data-cache-days"
+                       value="{{ settings.external_data_cache_days }}" min="1" max="365" step="1">
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>

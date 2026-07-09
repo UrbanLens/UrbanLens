@@ -149,8 +149,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.search_provider = provider
 
         try:
-            cache_hours = int(request.POST.get("search_cache_hours", settings.search_cache_hours))
-            settings.search_cache_hours = max(0, cache_hours)
+            cache_days = int(request.POST.get("external_data_cache_days", settings.external_data_cache_days))
+            settings.external_data_cache_days = max(1, cache_days)
         except (ValueError, TypeError):
             pass
 

@@ -73,6 +73,12 @@ class SubscriptionRole(abstract.DashboardModel):
     def feature_set(self) -> set[str]:
         return {feature.strip() for feature in (self.features or "").split(",") if feature.strip()}
 
+    @property
+    def feature_labels(self) -> list[str]:
+        """Human-readable labels for the role's granted features, in declaration order."""
+        feature_set = self.feature_set
+        return [label for value, label in SiteFeature.choices if value in feature_set]
+
     def grants(self, feature: SiteFeature | str) -> bool:
         return str(feature) in self.feature_set
 

@@ -97,7 +97,7 @@ def enqueue_location_creation(sender: type[Pin], instance: Pin, created: bool, *
     A Pin always references a Location now, so this ensures that place's community
     Wiki and default Campus boundary exist and links the pin to the wiki.
     """
-    if not created or not instance.location_id or instance.is_private or instance.parent_pin_id or instance.parent_wiki_id:
+    if not created or not instance.location_id or instance.is_private or instance.parent_pin_id:
         return
 
     def _enqueue() -> None:

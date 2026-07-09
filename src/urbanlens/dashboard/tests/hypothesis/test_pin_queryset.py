@@ -27,26 +27,20 @@ if TYPE_CHECKING:
 
 
 class PinQuerySetStructureTests(TestCase):
-    """root_pins / detail_pins / location_detail_pins partition pins by parent FK."""
+    """root_pins / detail_pins partition pins by the parent_pin FK."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
-        self.wiki = baker.make("dashboard.Wiki", location=self.location)
-        # Root: no parent_pin, no parent_wiki
+        # Root: no parent_pin
         self.root = baker.make(
             Pin, profile=self.profile, location=self.location,
-            parent_pin=None, parent_wiki=None,
+            parent_pin=None,
         )
         # Detail: parent_pin set
         self.detail = baker.make(
             Pin, profile=self.profile, location=self.location,
-            parent_pin=self.root, parent_wiki=None,
-        )
-        # Community wiki detail: parent_wiki set, no parent_pin
-        self.loc_detail = baker.make(
-            Pin, profile=self.profile, location=self.location,
-            parent_wiki=self.wiki, parent_pin=None,
+            parent_pin=self.root,
         )
 
     def _qs(self):
@@ -58,26 +52,42 @@ class PinQuerySetStructureTests(TestCase):
     def test_root_pins_excludes_detail_pin(self) -> None:
         self.assertNotIn(self.detail, self._qs().root_pins())
 
-    def test_root_pins_excludes_location_detail_pin(self) -> None:
-        self.assertNotIn(self.loc_detail, self._qs().root_pins())
-
     def test_detail_pins_includes_detail(self) -> None:
         self.assertIn(self.detail, self._qs().detail_pins())
 
     def test_detail_pins_excludes_root(self) -> None:
         self.assertNotIn(self.root, self._qs().detail_pins())
 
-    def test_detail_pins_excludes_location_detail(self) -> None:
-        self.assertNotIn(self.loc_detail, self._qs().detail_pins())
 
-    def test_location_detail_pins_includes_loc_detail(self) -> None:
-        self.assertIn(self.loc_detail, self._qs().wiki_detail_pins())
+class WikiQuerySetStructureTests(TestCase):
+    """root_wikis / child_wikis partition wikis by the parent_wiki FK."""
 
-    def test_location_detail_pins_excludes_root(self) -> None:
-        self.assertNotIn(self.root, self._qs().wiki_detail_pins())
+    def setUp(self):
+        self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        self.child_location = baker.make("dashboard.Location", latitude="40.001", longitude="-74.001")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, parent_wiki=None)
+        self.child = baker.make(
+            "dashboard.Wiki",
+            location=self.child_location,
+            parent_wiki=self.wiki,
+        )
 
-    def test_location_detail_pins_excludes_detail_pin(self) -> None:
-        self.assertNotIn(self.detail, self._qs().wiki_detail_pins())
+    def _qs(self):
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        return Wiki.objects.filter(pk__in=[self.wiki.pk, self.child.pk])
+
+    def test_root_wikis_includes_root(self) -> None:
+        self.assertIn(self.wiki, self._qs().root_wikis())
+
+    def test_root_wikis_excludes_child(self) -> None:
+        self.assertNotIn(self.child, self._qs().root_wikis())
+
+    def test_child_wikis_includes_child(self) -> None:
+        self.assertIn(self.child, self._qs().child_wikis())
+
+    def test_child_wikis_excludes_root(self) -> None:
+        self.assertNotIn(self.wiki, self._qs().child_wikis())
 
 
 # -- never_visited -------------------------------------------------------------

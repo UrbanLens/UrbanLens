@@ -23,8 +23,6 @@ class LocationCache(abstract.DashboardModel):
     A missing row means the source has never been queried for this location.
     """
 
-    STALE_AFTER_DAYS = 7
-
     source = models.CharField(max_length=50)
     data = models.JSONField(default=dict)
     query_key = models.CharField(max_length=255, blank=True)
@@ -47,8 +45,11 @@ class LocationCache(abstract.DashboardModel):
 
     @property
     def is_stale(self) -> bool:
-        """True if the cached entry is older than STALE_AFTER_DAYS."""
-        return timezone.now() - self.updated > timedelta(days=self.STALE_AFTER_DAYS)
+        """True if the cached entry is older than the site's configured minimum cache duration."""
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        max_age_days = SiteSettings.get_current().external_data_cache_days
+        return timezone.now() - self.updated > timedelta(days=max_age_days)
 
     @classmethod
     def get_fresh(cls, location: Location, source: str) -> LocationCache | None:

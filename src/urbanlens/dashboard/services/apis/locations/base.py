@@ -25,6 +25,13 @@ MAX_DEFAULT_BOUNDARY_AREA_DEGREES = 0.02
 _CACHE_MISS = object()
 
 
+def _external_data_cache_seconds() -> int:
+    """Seconds to cache satellite/street-view imagery, per the site's configured minimum."""
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    return SiteSettings.get_current().external_data_cache_days * 86400
+
+
 @dataclass(frozen=True)
 class SatelliteSlide:
     """A single slide in the satellite imagery carousel.
@@ -79,7 +86,7 @@ class SatelliteViewProvider(Gateway, ABC):
             if limit > 0 and len(slides) >= limit:
                 break
 
-        cache.set(cache_key, slides, 24 * 3600)
+        cache.set(cache_key, slides, _external_data_cache_seconds())
         return slides, False
 
 
@@ -99,7 +106,7 @@ class StreetViewProvider(Gateway, ABC):
             if limit > 0 and len(slides) >= limit:
                 break
 
-        cache.set(cache_key, slides, 24 * 3600)
+        cache.set(cache_key, slides, _external_data_cache_seconds())
         return slides, False
 
 

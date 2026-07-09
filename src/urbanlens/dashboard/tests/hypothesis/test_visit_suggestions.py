@@ -177,7 +177,7 @@ class FindPinAtTests(TestCase):
         self.assertIsNone(found)
 
     def test_excludes_detail_pins(self) -> None:
-        parent = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None, parent_wiki=None)
+        parent = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
         baker.make(Pin, profile=self.profile, location=self.location, parent_pin=parent)
         found = find_pin_at(self.profile, location_id=self.location.pk)
         self.assertEqual(found, parent)

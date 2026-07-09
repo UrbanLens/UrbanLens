@@ -2,9 +2,10 @@
 
 The Wiki holds everything a community collectively knows and edits about a
 place: its canonical name, description, security indicators, dates, badges,
-aliases, comments, photos, community detail pins and edit history.  It links
-to a :class:`~urbanlens.dashboard.models.location.model.Location` for its
-current address/coordinates via a ``OneToOneField``.
+aliases, comments, photos, child wikis (community detail markers, via the
+self-referential ``parent_wiki``) and edit history.  It links to a
+:class:`~urbanlens.dashboard.models.location.model.Location` for its current
+address/coordinates via a ``OneToOneField``.
 
 Address and coordinate data never live here - they are read-only proxies that
 delegate to ``self.location``.  When a wiki's coordinates or address change we
@@ -19,10 +20,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import DatabaseError
-from django.db.models import RESTRICT, SET_NULL, Index, ManyToManyField, OneToOneField
-from django.db.models.fields import CharField, DateField, SlugField, TextField
+from django.db.models import CASCADE, RESTRICT, ForeignKey, Index, ManyToManyField, OneToOneField
+from django.db.models.fields import CharField, DateField, IntegerField, SlugField, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.wiki.queryset import WikiManager
 
 if TYPE_CHECKING:
@@ -65,6 +67,20 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 
+    pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
+
+    # Direct hex color override for this wiki's map marker (e.g. "#F44336").
+    # Only meaningful for a child wiki (see parent_wiki below).
+    color = CharField(max_length=20, null=True, blank=True)
+    icon = CharField(max_length=255, null=True, blank=True)
+
+    # Child-wiki circle styling: background fill and border around the marker
+    # icon. Opacity stored as 0-100 integer (percent).
+    detail_bg_color = CharField(max_length=20, null=True, blank=True)
+    detail_bg_opacity = IntegerField(default=80)
+    detail_border_color = CharField(max_length=20, null=True, blank=True)
+    detail_border_opacity = IntegerField(default=100)
+
     # Shared taxonomy - the real-world place's type, visible to all users.
     badges = ManyToManyField(
         "dashboard.Badge",
@@ -72,16 +88,27 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         related_name="wikis",
     )
 
-    # The shared address/coordinate row this page describes. SET_NULL so a
-    # Location can be removed without cascade-deleting community content.
+    # The shared address/coordinate row this page describes.
     location = OneToOneField(
         "dashboard.Location",
         on_delete=RESTRICT,
         related_name="wiki",
     )
+    # Self-referential FK for community sub-markers ("child wikis") nested
+    # within a parent wiki's page - buildings, entrances, points of interest,
+    # hazards, etc. Mirrors Pin.parent_pin (see that field's docstring); never
+    # allowed to nest into a cycle (see would_create_cycle).
+    parent_wiki = ForeignKey(
+        "self",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="child_wikis",
+    )
 
     if TYPE_CHECKING:
         location_id: int
+        parent_wiki_id: int | None
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
 
@@ -132,6 +159,43 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
             except DatabaseError:
                 logger.debug("Could not ensure alias for wiki %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name
+
+    # ------------------------------------------------------------------
+    # Hierarchy
+    # ------------------------------------------------------------------
+
+    def would_create_cycle(self, new_parent: Wiki | None) -> bool:
+        """Return True if ``new_parent`` becoming this wiki's parent would close a loop.
+
+        Mirrors ``Pin.would_create_cycle``: walks ``new_parent``'s own
+        ``parent_wiki`` chain looking for this wiki's pk. A ``visited`` guard
+        bounds the walk to the number of distinct wikis actually in the
+        chain, so the check still terminates promptly even against data that
+        is already corrupted with a pre-existing cycle.
+
+        Args:
+            new_parent: The wiki that would be assigned to ``self.parent_wiki``,
+                or None (clearing the parent never creates a cycle).
+
+        Returns:
+            True if the assignment would make this wiki its own ancestor.
+        """
+        if new_parent is None:
+            return False
+        if self.pk is not None and new_parent.pk == self.pk:
+            return True
+        visited: set[int] = set()
+        current: Wiki | None = new_parent
+        while current is not None:
+            if current.pk is None:
+                return False
+            if current.pk in visited:
+                return False  # pre-existing cycle among ancestors, not involving self
+            visited.add(current.pk)
+            if self.pk is not None and current.pk == self.pk:
+                return True
+            current = current.parent_wiki
+        return False
 
     # ------------------------------------------------------------------
     # Badge helpers
@@ -226,6 +290,23 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
             "longitude": float(longitude) if longitude is not None else None,
         }
 
+    def to_detail_json(self) -> dict:
+        """Compact serialisation for child-wiki map markers."""
+        return {
+            "uuid": str(self.uuid),
+            "name": self.name,
+            "description": self.description or "",
+            "pin_type": self.pin_type,
+            "latitude": float(self.latitude) if self.latitude is not None else None,
+            "longitude": float(self.longitude) if self.longitude is not None else None,
+            "icon": self.icon,
+            "color": self.color,
+            "bg_color": self.detail_bg_color or "",
+            "bg_opacity": self.detail_bg_opacity,
+            "border_color": self.detail_border_color or "",
+            "border_opacity": self.detail_border_opacity,
+        }
+
     def _slugify_base(self) -> str:
         return self.name or "wiki"
 
@@ -236,4 +317,5 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
             Index(fields=["uuid"], name="idxdb_wiki_uuid"),
             Index(fields=["name"], name="idxdb_wiki_name"),
             Index(fields=["location"], name="idxdb_wiki_location"),
+            Index(fields=["parent_wiki"], name="idxdb_wiki_parent_wiki"),
         ]

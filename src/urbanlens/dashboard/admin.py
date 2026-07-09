@@ -6,6 +6,7 @@ from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
 
@@ -117,48 +118,57 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         )
 
 
-def _delete_unedited_community_pins(modeladmin, request: HttpRequest, queryset) -> None:
-    """Delete community detail pins that have never been edited after their initial creation.
+@admin.register(Pin)
+class PinAdmin(admin.ModelAdmin):
+    """Admin for Pin - primarily useful for bulk operations on personal pins."""
 
-    A community detail pin is a Pin with ``parent_wiki`` set and ``parent_pin``
-    null.  "Unedited" is detected by comparing the ``updated`` and ``created``
-    timestamps: if they differ by less than 10 seconds, the pin was never saved
-    again after its initial INSERT, meaning no user has moved, renamed, or changed
-    it.
+    list_display = ["__str__", "profile", "location", "parent_pin", "created"]
+    list_filter = ["profile"]
+    search_fields = ["name", "location__official_name"]
+    readonly_fields = ["uuid", "slug", "created", "updated"]
 
-    NOTE: Community detail pins are created manually by users via the wiki page and
-    are NOT auto-recreated by any background process.  Deleting them permanently
+
+def _delete_unedited_child_wikis(modeladmin, request: HttpRequest, queryset) -> None:
+    """Delete child wikis that have never been edited after their initial creation.
+
+    A child wiki is a Wiki with ``parent_wiki`` set.  "Unedited" is detected by
+    comparing the ``updated`` and ``created`` timestamps: if they differ by
+    less than 10 seconds, the wiki was never saved again after its initial
+    INSERT, meaning no user has moved, renamed, or changed it.
+
+    NOTE: Child wikis are created manually by users via the wiki page and are
+    NOT auto-recreated by any background process.  Deleting them permanently
     removes them unless a user re-adds them.
     """
     from datetime import timedelta
 
     from django.db.models import DurationField, ExpressionWrapper, F
 
-    community_pins = queryset.wiki_detail_pins()
-    never_edited = community_pins.annotate(
+    child_wikis = queryset.child_wikis()
+    never_edited = child_wikis.annotate(
         age_since_update=ExpressionWrapper(F("updated") - F("created"), output_field=DurationField()),
     ).filter(age_since_update__lt=timedelta(seconds=10))
     count = never_edited.count()
     never_edited.delete()
     modeladmin.message_user(
         request,
-        f"Deleted {count} unedited community pin(s). Note: these pins are NOT auto-recreated and must be re-added manually.",
+        f"Deleted {count} unedited child wiki(s). Note: these are NOT auto-recreated and must be re-added manually.",
         messages.SUCCESS,
     )
 
 
-_delete_unedited_community_pins.short_description = "Delete unedited community detail pins"  # type: ignore[attr-defined]
+_delete_unedited_child_wikis.short_description = "Delete unedited child wikis"  # type: ignore[attr-defined]
 
 
-@admin.register(Pin)
-class PinAdmin(admin.ModelAdmin):
-    """Admin for Pin - primarily useful for bulk operations on community pins."""
+@admin.register(Wiki)
+class WikiAdmin(admin.ModelAdmin):
+    """Admin for Wiki - primarily useful for bulk operations on child wikis."""
 
-    list_display = ["__str__", "profile", "location", "parent_wiki", "created"]
-    list_filter = ["profile"]
+    list_display = ["__str__", "location", "parent_wiki", "created"]
+    list_filter = ["parent_wiki"]
     search_fields = ["name", "location__official_name"]
     readonly_fields = ["uuid", "slug", "created", "updated"]
-    actions = [_delete_unedited_community_pins]
+    actions = [_delete_unedited_child_wikis]
 
 
 @admin.register(WikiEdit)

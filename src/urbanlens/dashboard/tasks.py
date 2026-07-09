@@ -389,18 +389,15 @@ def run_scheduled_database_backup(self) -> bool:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def refresh_pin_web_search(self, pin_id: int) -> int:
-    """Refresh cached web-search results for a pin detail page."""
+    """Pre-warm the shared web-search cache for a pin's Location."""
     from urllib.parse import urlparse
 
-    from django.core.cache import cache
-
-    from urbanlens.core.cache_keys import make_cache_key
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.pin import Pin
-    from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    query = pin.get_unique_search_name(quote_name=True) if pin else None
+    query = pin.get_unique_search_name(quote_name=True) if pin and pin.location else None
     if not query:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search...")
@@ -411,9 +408,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         except (ValueError, AttributeError):
             result["domain"] = ""
         result["date_display"] = format_search_date(result.get("date"))
-    cache_hours = SiteSettings.get_current().search_cache_hours
-    if cache_hours > 0:
-        cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
+    LocationCache.set(pin.location, "web_search", {"results": results}, query_key=query)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
 

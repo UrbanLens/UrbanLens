@@ -140,10 +140,15 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Search provider",
     )
 
-    search_cache_hours = IntegerField(
-        default=24,
-        help_text="How many hours to cache web search results per pin before re-fetching. Set to 0 to disable caching.",
-        verbose_name="Search cache duration (hours)",
+    external_data_cache_days = IntegerField(
+        default=7,
+        help_text=(
+            "Minimum number of days to cache external API responses before they are considered stale and re-fetched. "
+            "Applies to every shared, Location-scoped external data source (Wikipedia, NPS, LoopNet, USGS, Nominatim, "
+            "media archives, Google Places, web search, and satellite/street view imagery)."
+        ),
+        verbose_name="External data cache (days)",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
     )
 
     # --- Place naming ---
@@ -383,6 +388,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
+            CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
             CheckConstraint(condition=Q(storage_quota_gb__gte=0), name="storage_quota_gb_gte_0"),
             CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
         ]

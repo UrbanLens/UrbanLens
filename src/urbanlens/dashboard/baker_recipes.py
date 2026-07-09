@@ -104,6 +104,15 @@ wiki: Recipe[Wiki] = Recipe(
     "dashboard.Wiki",
     name=seq("Wiki "),
     location=foreign_key("dashboard.location"),
+    parent_wiki=None,
+)
+
+# A wiki nested under another wiki (community sub-marker / child wiki).
+child_wiki: Recipe[Wiki] = Recipe(
+    "dashboard.Wiki",
+    name=seq("Child Wiki "),
+    location=foreign_key("dashboard.location"),
+    parent_wiki=foreign_key("dashboard.wiki"),
 )
 
 # -- Badges --------------------------------------------------------------------
@@ -151,7 +160,6 @@ pin: Recipe[Pin] = Recipe(
     profile=_make_profile,
     location=foreign_key("dashboard.location"),
     parent_pin=None,
-    parent_wiki=None,
 )
 
 # A pin nested under another pin (detail/sub-pin).

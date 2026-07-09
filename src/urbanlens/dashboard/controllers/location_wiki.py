@@ -85,7 +85,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         # Only count root pins (not detail pins), and count distinct users.
-        root_pins = location.pins.filter(parent_pin__isnull=True, parent_wiki__isnull=True)
+        root_pins = location.pins.filter(parent_pin__isnull=True)
         pin_count = root_pins.values("profile").distinct().count()
         first_pinned = root_pins.select_related("profile__user").order_by("created").first()
 

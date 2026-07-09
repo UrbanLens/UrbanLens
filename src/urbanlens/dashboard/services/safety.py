@@ -455,7 +455,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
     checkin.wiki_notified_at = timezone.now()
     checkin.save(update_fields=["wiki_notified_at", "updated"])
 
-    recipients = Profile.objects.filter(pins__location=wiki.location, pins__parent_pin__isnull=True, pins__parent_wiki__isnull=True).exclude(pk=checkin.profile_id).distinct()
+    recipients = Profile.objects.filter(pins__location=wiki.location, pins__parent_pin__isnull=True).exclude(pk=checkin.profile_id).distinct()
     for recipient in recipients:
         try:
             pref = recipient.notification_preferences.wiki_safety_checkin

@@ -18,6 +18,26 @@
     {{ error }}
   </div>
   {% endif %}
+  <section class="site-admin-card ul-section card subscription-types-card">
+    <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types</span></div>
+    <ul class="subscription-types-list">
+      {% for role in roles %}
+      <li class="subscription-types-list__item">
+        <div class="subscription-types-list__heading">
+          <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+          {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
+        </div>
+        <div class="subscription-types-list__features">
+          {% for label in role.feature_labels %}
+          <span class="ul-chip"><i class="material-symbols-outlined">check</i> {{ label }}</span>
+          {% empty %}
+          <span class="subscription-types-list__no-features">No features included.</span>
+          {% endfor %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
   <div class="subscription-grid">
     <section class="site-admin-card ul-section card">
       <div class="card-header"><i class="material-symbols-outlined">add_moderator</i><span>Grant role</span></div>

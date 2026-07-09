@@ -107,7 +107,12 @@ services:
     restart: unless-stopped
 
     entrypoint: ["/docker-entrypoint.sh", "daphne"]
-    command: ["-b", "0.0.0.0", "-p", "8001", "urbanlens.UrbanLens.asgi:application"]
+    # Daphne logs an access line to stdout for every request by default (verbosity=1),
+    # including the docker healthcheck hitting /health/ every 30s - that's pure noise
+    # in `docker logs`. Route it to the shared log volume instead so it's still on
+    # disk for debugging WS issues (see channels_redis timeout tuning) without
+    # flooding the console.
+    command: ["-b", "0.0.0.0", "-p", "8001", "--access-log", "/var/log/urbanlens/daphne-access.log", "urbanlens.UrbanLens.asgi:application"]
 
     # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
     # its healthcheck can pass - waiting on `app` being healthy, not just
@@ -207,7 +212,11 @@ services:
     # services/external_data.py): a cold pin detail page enqueues ~10 small
     # IO-bound tasks at once, and 2 workers made the last panels wait through
     # every earlier provider's network time before starting.
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=info", "--concurrency=4"]
+    # loglevel=warning: info logs a "received"/"succeeded" line for every task,
+    # including the safety-checkin scheduled tasks that fire every 5 minutes -
+    # that drowns out real signal in production. Failures/retries are still
+    # surfaced explicitly via the task_failure/task_retry handlers in celery.py.
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--concurrency=4"]
     restart: on-failure
     depends_on:
       db:
@@ -233,7 +242,10 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=info", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
+    # loglevel=warning: info logs "Scheduler: Sending due task ..." on every beat tick
+    # (every 5 minutes for the safety-checkin tasks alone), which is pure noise once
+    # the schedule is known-good.
+    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=warning", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
     restart: on-failure
     depends_on:
       db:

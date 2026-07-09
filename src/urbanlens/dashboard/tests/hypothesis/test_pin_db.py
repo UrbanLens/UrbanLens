@@ -174,7 +174,7 @@ class PinQuerySetRootPinsTests(TestCase):
     @_db_settings
     def test_root_pins_count_excludes_detail_pins(self, n_root: int, n_child: int) -> None:
         """root_pins() count must equal exactly the number of top-level pins."""
-        roots = [baker.make(Pin, profile=self.profile, parent_pin=None, parent_wiki=None) for _ in range(n_root)]
+        roots = [baker.make(Pin, profile=self.profile, parent_pin=None) for _ in range(n_root)]
         for root in roots[:n_child]:
             baker.make(Pin, profile=self.profile, parent_pin=root)
         root_count = Pin.objects.filter(profile=self.profile).root_pins().count()
@@ -183,7 +183,7 @@ class PinQuerySetRootPinsTests(TestCase):
     @given(n=st.integers(min_value=1, max_value=5))
     @_db_settings
     def test_detail_pins_are_excluded_from_root_pins(self, n: int) -> None:
-        parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_wiki=None)
+        parent = baker.make(Pin, profile=self.profile, parent_pin=None)
         children = [baker.make(Pin, profile=self.profile, parent_pin=parent) for _ in range(n)]
         root_qs = Pin.objects.filter(profile=self.profile).root_pins()
         child_ids = {c.pk for c in children}
@@ -193,7 +193,7 @@ class PinQuerySetRootPinsTests(TestCase):
     @given(n=st.integers(min_value=1, max_value=5))
     @_db_settings
     def test_detail_pins_queryset_excludes_roots(self, n: int) -> None:
-        parent = baker.make(Pin, profile=self.profile, parent_pin=None, parent_wiki=None)
+        parent = baker.make(Pin, profile=self.profile, parent_pin=None)
         children = {baker.make(Pin, profile=self.profile, parent_pin=parent).pk for _ in range(n)}
         detail_ids = set(Pin.objects.filter(profile=self.profile).detail_pins().values_list("pk", flat=True))
         self.assertEqual(detail_ids, children)

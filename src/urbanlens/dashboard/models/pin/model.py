@@ -136,20 +136,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="detail_pins",
     )
-    # TODO: Handle detail pins differently.
-    # Community detail pin - attached directly to a Wiki (community-level, shared).
-    parent_wiki = ForeignKey(
-        "dashboard.Wiki",
-        on_delete=CASCADE,
-        null=True,
-        blank=True,
-        related_name="wiki_detail_pins",
-    )
 
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
-        parent_wiki_id: int | None
         parent_pin_id: int | None
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
@@ -553,12 +543,11 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
             Index(fields=["location"], name="idxdb_pin_location"),
             Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
-            Index(fields=["parent_wiki"], name="idxdb_pin_parent_wiki"),
         ]
         constraints = [
             UniqueConstraint(
                 fields=["location", "profile"],
-                condition=Q(parent_pin__isnull=True, parent_wiki__isnull=True),
+                condition=Q(parent_pin__isnull=True),
                 name="db_pin_unique_location_per_profile",
             ),
             UniqueConstraint(

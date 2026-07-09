@@ -86,7 +86,7 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
     Returns:
         The matching Pin, or None.
     """
-    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_wiki__isnull=True)
+    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True)
     if location_id:
         pin = qs.filter(location_id=location_id).first()
         if pin:

@@ -2411,6 +2411,10 @@ body.page-location-details .pin-detail-grid {
     }
 
     .web-search {
+        .web-search-refresh-btn.htmx-request i {
+            animation: ul-spin .65s linear infinite;
+        }
+
         .search-results-list {
             padding: .25rem 0;
             list-style: none;

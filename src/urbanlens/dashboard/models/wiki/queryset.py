@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
@@ -23,6 +23,14 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
     Filters here operate on community data (name, badges). For address/geo
     filtering use LocationQuerySet; for per-user filtering use PinQuerySet.
     """
+
+    def root_wikis(self) -> Self:
+        """Return only top-level wikis (excludes child wikis)."""
+        return self.filter(parent_wiki__isnull=True)
+
+    def child_wikis(self) -> Self:
+        """Return only child wikis (community sub-markers nested under a parent wiki)."""
+        return self.filter(parent_wiki__isnull=False)
 
     def by_category(self, category):
         return self.filter(badges__name=category, badges__kind="category")
