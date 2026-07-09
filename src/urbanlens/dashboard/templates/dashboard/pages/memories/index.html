@@ -29,7 +29,7 @@
             <h1 class="memories-title"><i class="material-symbols-outlined">auto_awesome_motion</i> Memories</h1>
             <p class="memories-subtitle">Everywhere you've been - routes, trips, visits, and photos, on one map and timeline.</p>
         </div>
-        <button type="button" class="btn btn--primary" id="memories-import-btn"
+        <button type="button" class="btn btn--secondary" id="memories-import-btn"
                 hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
             <i class="material-symbols-outlined">upload</i> Import routes &amp; history
         </button>
@@ -64,12 +64,12 @@
                 <input type="date" id="memories-start-date" min="{{ earliest_date }}" max="{{ today }}">
                 <span>&ndash;</span>
                 <input type="date" id="memories-end-date" min="{{ earliest_date }}" max="{{ today }}">
-                <button type="button" class="btn btn--sm btn--ghost" id="memories-apply-range">Apply</button>
+                <button type="button" class="btn btn--sm btn--secondary" id="memories-apply-range">Apply</button>
             </div>
             <div class="memories-quick-range">
-                <button type="button" class="btn btn--sm btn--ghost" data-range="90">Last 90 days</button>
-                <button type="button" class="btn btn--sm btn--ghost" data-range="365">Last year</button>
-                <button type="button" class="btn btn--sm btn--ghost" data-range="all">All time</button>
+                <button type="button" class="btn btn--sm btn--secondary" data-range="90">Last 90 days</button>
+                <button type="button" class="btn btn--sm btn--secondary" data-range="365">Last year</button>
+                <button type="button" class="btn btn--sm btn--secondary" data-range="all">All time</button>
             </div>
             <div class="memories-legend">
                 <label class="memories-legend-item memories-type-route" data-type="route">

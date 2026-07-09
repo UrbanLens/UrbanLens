@@ -50,6 +50,18 @@
 		}
 	}
 
+	&--secondary {
+		background: var(--ul-grey-0);
+		border-color: var(--ul-grey-1);
+
+		&:focus,
+		&:hover {
+			background-color: var(--ul-button-hover-bg);
+			border-color: var(--ul-grey-3b);
+			color: var(--ul-button-hover-text);
+		}
+	}
+
 	&--ghost {
 		border-color: var(--ul-grey-2b);
 		color: var(--ul-grey-7);
