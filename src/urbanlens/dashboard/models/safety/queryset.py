@@ -21,7 +21,10 @@ class SafetyCheckinQuerySet(abstract.QuerySet):
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
 
-        return self.filter(status=SafetyCheckinStatus.SCHEDULED, checkin_by__lte=timezone.now())
+        now = timezone.now()
+        return self.annotate(
+            overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
+        ).filter(status=SafetyCheckinStatus.SCHEDULED, checkin_by__lte=now, overdue_at__gt=now)
 
     def overdue(self) -> Self:
         """Return check-ins whose grace period has elapsed with no response.
@@ -33,7 +36,7 @@ class SafetyCheckinQuerySet(abstract.QuerySet):
 
         return self.annotate(
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
-        ).filter(status=SafetyCheckinStatus.AWAITING_CHECKIN, overdue_at__lte=timezone.now())
+        ).filter(status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN), overdue_at__lte=timezone.now())
 
 
 class SafetyCheckinManager(abstract.Manager.from_queryset(SafetyCheckinQuerySet)):
