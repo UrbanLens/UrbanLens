@@ -289,20 +289,8 @@
 // -- Contact picker: chips, avatar picker, autocomplete -------------------------
 
 .safety-contact-picker {
-    @include surface($radius-sm);
-    padding: 1rem 1.25rem;
     max-width: 32rem;
     margin: 1rem 0;
-}
-
-.safety-contact-picker-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    margin-bottom: .5rem;
-
-    label { margin: 0; }
 }
 
 // Collapsed (default) state on the check-in detail page - hides every add/remove
@@ -580,10 +568,6 @@
             border-bottom: none;
         }
     }
-}
-
-.safety-chat-panel {
-    padding: 1rem 1.25rem;
 }
 
 .safety-chat-messages {

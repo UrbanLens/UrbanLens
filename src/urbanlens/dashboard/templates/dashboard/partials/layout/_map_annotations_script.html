@@ -402,11 +402,22 @@ markup_border_color, markup_border_opacity.
         const marker = L.marker([lat, lng], { icon: _makePhotoIcon(url, 44, false), draggable: true });
         marker.on('dragend', function () {
             const pos = marker.getLatLng();
+            const prevLat = _photoMarkers[imgId].lat;
+            const prevLng = _photoMarkers[imgId].lng;
             _photoMarkers[imgId].lat = pos.lat;
             _photoMarkers[imgId].lng = pos.lng;
             const item = _photoPanelItems.find(p => p.id === imgId);
             if (item) { item.lat = pos.lat; item.lng = pos.lng; }
-            if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, pos.lat, pos.lng);
+            if (window.galleryRepositionImage) {
+                window.galleryRepositionImage(imgId, pos.lat, pos.lng, function () {
+                    // Server rejected the move - snap back to the last known-good position.
+                    marker.setLatLng([prevLat, prevLng]);
+                    _photoMarkers[imgId].lat = prevLat;
+                    _photoMarkers[imgId].lng = prevLng;
+                    if (item) { item.lat = prevLat; item.lng = prevLng; }
+                    _buildPhotoPanel();
+                });
+            }
             _buildPhotoPanel();
         });
         marker.on('mouseover', function () { window._galleryHighlightMarker(imgId, true); });
@@ -517,10 +528,26 @@ markup_border_color, markup_border_opacity.
         const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
         const item = _photoPanelItems.find(p => p.id === imgId);
         if (!item) return;
+        const prevLat = item.lat;
+        const prevLng = item.lng;
         item.lat = latlng.lat;
         item.lng = latlng.lng;
         _addPhotoMarker(imgId, item.url, latlng.lat, latlng.lng);
-        if (window.galleryRepositionImage) window.galleryRepositionImage(imgId, latlng.lat, latlng.lng);
+        if (window.galleryRepositionImage) {
+            window.galleryRepositionImage(imgId, latlng.lat, latlng.lng, function () {
+                // Server rejected the move - snap back, or remove the marker
+                // entirely if the photo had no prior coordinates.
+                item.lat = prevLat;
+                item.lng = prevLng;
+                if (prevLat != null && prevLng != null) {
+                    _addPhotoMarker(imgId, item.url, prevLat, prevLng);
+                } else if (_photoMarkers[imgId]) {
+                    _photoLayer.removeLayer(_photoMarkers[imgId].marker);
+                    delete _photoMarkers[imgId];
+                }
+                _buildPhotoPanel();
+            });
+        }
         _buildPhotoPanel();
         _refreshPanelHeader();
     });

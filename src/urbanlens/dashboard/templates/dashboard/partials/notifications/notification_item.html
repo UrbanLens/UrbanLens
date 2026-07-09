@@ -1,10 +1,11 @@
+{% load humanize %}
 {% if n.notification_type == 'pin_shared' and n.pin_share.is_actionable %}
 <li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem">
   <div class="notif-item__icon-wrap notif-item__icon-wrap--pin_shared"><i class="material-symbols-outlined">ios_share</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    <p class="notif-item__time">{{ n.created|naturaltime }}</p>
     <div class="notif-actions">
       <a class="btn btn--primary" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
     </div>
@@ -31,7 +32,7 @@
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    <p class="notif-item__time">{{ n.created|naturaltime }}</p>
     {% if n.is_friend_request_pending %}
     {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="friend.respond" respond_arg=n.source_profile_id reject_action="decline" reject_label="Decline" %}
     {% endif %}
@@ -50,7 +51,7 @@
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    <p class="notif-item__time">{{ n.created|naturaltime }}</p>
     <div class="notif-actions">
       <a class="btn btn--primary btn--yes" href="{{ n.url }}" onclick="event.stopPropagation()">
         <i class="material-symbols-outlined">check_circle</i> Check in
@@ -68,7 +69,7 @@
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    <p class="notif-item__time">{{ n.created|naturaltime }}</p>
     {% if n.visit_suggestion.offers_merge %}
     <div class="notif-actions notif-actions--triple">
       <button type="button" class="btn btn--primary btn--yes" onclick="event.stopPropagation()"
@@ -124,7 +125,7 @@
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-    <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+    <p class="notif-item__time">{{ n.created|naturaltime }}</p>
   </div>
 
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}

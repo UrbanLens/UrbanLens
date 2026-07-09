@@ -37,8 +37,8 @@ Features planned for this release.
 * When clearing a formula, it doesn't trigger a pin refresh. [UL-272]
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??) [UL-273]
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?) [UL-274]
-* Pin details page: Plus buttons don't look good again. [UL-275]
-* On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]
+* ~~Pin details page: Plus buttons don't look good again. [UL-275]~~
+* ~~On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]~~
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
 * In import pins dialog, unchecking "Create category X" does not remove the sample badge.
 * Satellite view seems to be unable to zoom in as much as I'd expect.
@@ -75,8 +75,8 @@ Features planned for this release.
 ## Features that need verification
 * password reset. [UL-41]
 * Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
-* Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]
-* Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]
+* ~~Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]~~
+* ~~Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]~~
 * Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
 * Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
 * Limit failed login attempts. [UL-28]
@@ -160,7 +160,7 @@ Features planned for future releases.
 * "Recently used emojis" to make selecting them easier. [UL-172]
 * Pre-populate example tags for new users (to help explain usage of site). "Notable", "Graffiti", "Photography", "Dangerous", "Popular" [UL-173]
 * dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently. [UL-174]
-* When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]
+* ~~When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]~~
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
 * More (or all?) vector emojis that can change color. [UL-177]
 * Limit username changes to prevent users from pretending to be someone else in comments, etc. (Perhaps track historical usernames and display them on the public profile? I'm not sure about this.) [UL-145]
@@ -256,7 +256,6 @@ Features planned for future releases.
 * Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
 * Audit for XSS risks related to badge names, and all other fields, etc
-* On PinVisit entries, show avatar for other participants, instead of username.
 * Cleanup TODO file (This file). Remove completed, verify features, etc.
 * Jinja templates (or html partials??) for emails.
 * Extract javascript into TS files (this may already be a TODO item elsewhere in this file).
@@ -270,8 +269,6 @@ Features planned for future releases.
 * Investigate: import pin data into google my maps. (If not: then consider other services)
 * Email export data to the user feature, so that data can be persisted even without the server online. (Alternatively: dropbox, meta, etc)
 * Celery tasks for external APIs which are rate limited could be queued for later.
-* Check for duplicate photos on photo upload.
-* Cap maximum storage space for photos.
 * Production server app log is noisy. e.g.: 
   * 127.0.0.1:54708 - - [08/Jul/2026:20:16:09] "GET /health/" 200 5
   * [2026-07-08 20:17:40,851: INFO/MainProcess] Scheduler: Sending due task safety-checkin-escalation (urbanlens.dashboard.tasks.escalate_overdue_checkins)
@@ -280,7 +277,6 @@ Features planned for future releases.
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,868: INFO/MainProcess] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] received
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,893: INFO/ForkPoolWorker-2] Task urbanlens.dashboard.tasks.escalate_overdue_checkins[c96d6ded-e7a3-46b1-8738-477b228cb321] succeeded in 0.036874303594231606s: 0
     urbanlens_production_celery_worker  | [2026-07-08 20:17:40,907: INFO/ForkPoolWorker-1] Task urbanlens.dashboard.tasks.send_due_checkin_reminders[152ccfed-cf7c-4cc7-b628-c9eef85c0791] succeeded in 0.037884799763560295s: 0
-* On Pin details page: When dragging a photo to reposition it... if an error is encountered, it should snap back to its original coordinates (which are presumably still the correct coordinates per the backend server)
 * User settings page: AI Features section needs better explanations.
 * Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.
@@ -306,7 +302,7 @@ Features planned for future releases.
 * Automatically check off visit logs [UL-82]
 * "Who is here?" ping feature, allowing other users with the app to opt in to sharing their location. This solves the "I hear footsteps" problem. [UL-83]
 * Track trip progress via gps, device motion, etc. This allows the user to remember what route they took, and could help address mapping tunnels. [UL-84]
-* "I've been hurt" features, allowing users to keep their location secret unless they hit a button, or don't get back on the app after an explore, at which point their last known location and trip details are sent to emergency contacts. [UL-85]
+* ~~"I've been hurt" features, allowing users to keep their location secret unless they hit a button, or don't get back on the app after an explore, at which point their last known location and trip details are sent to emergency contacts. [UL-85]~~
 * "Emergency device lock" feature, similar to an app from the ACLU, which turns on recording, disables notifications on the homescreen, disables fingerprint and face unlock, etc. [UL-86]
 * "Location Warning" feature, allowing users to set a warning radius around their location, and other users in that radius can be notified (if they wish). [UL-87]
 * "People on site group chat". [UL-88]

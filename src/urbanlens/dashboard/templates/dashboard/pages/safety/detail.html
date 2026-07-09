@@ -124,7 +124,7 @@
             var picker = container.querySelector('.safety-contact-picker');
             var toggleBtn = container.querySelector('[data-role="edit-toggle"]');
             if (picker) picker.classList.add('is-editing');
-            if (toggleBtn) toggleBtn.textContent = 'Done';
+            if (toggleBtn && window.safetyContactPickerSetEditToggleState) window.safetyContactPickerSetEditToggleState(toggleBtn, true);
         }
         container.querySelectorAll('script').forEach(function (oldScript) {
             var newScript = document.createElement('script');
@@ -163,6 +163,11 @@
 
     form.addEventListener('input', function (evt) {
         if (evt.target.type === 'range') return;
+        // The contact picker's friend-search box isn't itself submitted (no `name`
+        // attribute - only committed chips are) and re-renders the whole picker on
+        // every autosave, which would wipe out whatever the user is still mid-typing.
+        // Chip add/remove already triggers its own immediate save via 'contactschange'.
+        if (evt.target.closest('[data-role="contact-picker"]')) return;
         scheduleSave(false);
     });
     form.addEventListener('change', function (evt) {

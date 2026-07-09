@@ -83,7 +83,17 @@
                 {% if visit_participants %}
                 <div class="visit-participants">
                     <i class="material-symbols-outlined">group</i>
-                    with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    <span class="visit-participant-avatars">
+                        {% for p in visit_participants %}
+                        <a href="{% url 'profile.view_user' p.slug %}" class="visit-participant-avatar" title="{{ p.username }}">
+                            {% if p.avatar %}
+                            <img src="{{ p.avatar.url }}" alt="{{ p.username }}" class="visit-participant-avatar-img">
+                            {% else %}
+                            <span class="visit-participant-avatar-initial">{{ p.username|first|upper }}</span>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                    </span>
                 </div>
                 {% endif %}
                 {% endwith %}

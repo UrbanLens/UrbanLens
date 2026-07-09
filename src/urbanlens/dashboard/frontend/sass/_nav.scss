@@ -929,7 +929,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 // -- Active safety check-in banner ---------------------------------------------
 
 .safety-active-banner {
-    background: var(--ul-accent-amber-bg, #{$color-amber-100});
+    background: var(--ul-grey-0);
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 

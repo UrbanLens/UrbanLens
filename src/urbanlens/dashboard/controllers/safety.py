@@ -550,6 +550,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                     "connections": get_connections(profile),
                     "contact_status": _contact_status_map(checkin, contacts),
                     "locked": checkin.contacts_locked,
+                    "collapsible": True,
                 },
                 request=request,
             )

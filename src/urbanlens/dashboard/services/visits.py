@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_visit_suggestion_message(*, location: Location | None = None, **kwargs: str | None) -> str:
+def build_visit_suggestion_message(*, location: Location | None = None, fallback: str = "at a location", **kwargs: str | None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
 
     Prefers the shared Location. When there is no Location - e.g. the origin pin is
@@ -41,11 +41,14 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
     Args:
         location: Shared Location identifying the place, if one exists. Wins over
             official_name/city/state below whenever present.
+        fallback: Phrase to use when no usable name or city/state is available from
+            either source - callers should phrase it to fit their own sentence (e.g.
+            "to your destination" for "did you make it ___?").
         **kwargs: Additional keyword arguments for fallback values.
 
     Returns:
-        A short phrase like "at Old Mill" or "in Springfield, IL", or a generic
-        fallback when no usable name or city/state is available from either source.
+        A short phrase like "at Old Mill" or "in Springfield, IL", or `fallback`
+        when no usable name or city/state is available from either source.
     """
     official_name = location.official_name if location else kwargs.get("official_name")
     canonical_name = kwargs.get("canonical_name")
@@ -68,7 +71,7 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
         return f"in {city}, {state}"
     if city:
         return f"in {city}"
-    return "at a location"
+    return fallback
 
 
 def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> Pin | None:
@@ -305,6 +308,9 @@ def create_visit_suggestion(
         official_name=destination_label or (origin_pin.official_name if origin_pin else None),
         city=origin_pin.city if origin_pin else None,
         state=origin_pin.state if origin_pin else None,
+        # Only the safety check-in phrasing ("did you make it ___?") reads naturally
+        # with "to your destination" - the other messages below use "at/in ___" verbs.
+        fallback="to your destination" if safety_checkin is not None else "at a location",
     )
     when = visited_at.strftime("%b %d, %Y")
     if safety_checkin is not None:

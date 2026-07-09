@@ -13,85 +13,100 @@ already been notified - see SafetyCheckin.contacts_locked), and `collapsible` (s
 collapsed to a plain read-only chip list behind an "Edit" button rather than showing
 the add/remove controls inline right away - only meaningful when not `locked`).
 {% endcomment %}
-<div class="form-row safety-contact-picker{% if collapsible and not locked %} safety-contact-picker--collapsible{% endif %}" data-role="contact-picker">
-    <div class="safety-contact-picker-header">
-        <label>Emergency contacts</label>
+<div class="safety-contact-picker card{% if collapsible and not locked %} safety-contact-picker--collapsible{% endif %}" data-role="contact-picker">
+    <div class="card-header">
+        <i class="material-symbols-outlined">contacts</i>
+        <h3>Emergency contacts</h3>
         {% if collapsible and not locked %}
-        <button type="button" class="btn btn--ghost btn--sm" data-role="edit-toggle">Edit</button>
-        {% endif %}
-    </div>
-
-    <div class="safety-contact-chips" data-role="chips">
-        {% for contact_profile, email, name in contacts %}
-        {% if contact_profile %}
-        <span class="safety-contact-chip" data-type="profile" data-id="{{ contact_profile.id }}">
-            {% if contact_profile.avatar %}
-            <img class="safety-contact-chip-avatar" src="{{ contact_profile.avatar.url }}" alt="">
-            {% else %}
-            <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">{{ contact_profile.username|first|upper }}</span>
-            {% endif %}
-            <span class="safety-contact-chip-label">{{ contact_profile.username }}</span>
-            {% with status=contact_status|dict_get:contact_profile.id %}
-            {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
-            {% endwith %}
-            <input type="hidden" name="contact_profile_ids" value="{{ contact_profile.id }}">
-            {% if not locked %}
-            <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ contact_profile.username }}">
-                <i class="material-symbols-outlined">close</i>
-            </button>
-            {% endif %}
-        </span>
-        {% elif email %}
-        <span class="safety-contact-chip" data-type="email" data-email="{{ email }}">
-            <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">
-                <i class="material-symbols-outlined">mail</i>
-            </span>
-            <span class="safety-contact-chip-label">{{ email }}</span>
-            {% with status=contact_status|dict_get:email %}
-            {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
-            {% endwith %}
-            <input type="hidden" name="contact_emails" value="{{ email }}">
-            {% if not locked %}
-            <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ email }}">
-                <i class="material-symbols-outlined">close</i>
-            </button>
-            {% endif %}
-        </span>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    {% if locked %}
-    <p class="form-hint">Locked - emergency contacts have already been notified, so the contact list can't change.</p>
-    {% else %}
-    {% if connections %}
-    <div class="safety-contact-avatar-picker" data-role="avatar-picker">
-        {% for friend in connections %}
-        <button type="button" class="safety-contact-avatar-btn" data-role="avatar-btn"
-                data-id="{{ friend.id }}" data-username="{{ friend.username }}"
-                title="Add {{ friend.username }}">
-            {% if friend.avatar %}
-            <img class="safety-contact-avatar-img" src="{{ friend.avatar.url }}" alt="">
-            {% else %}
-            <span class="safety-contact-avatar-img safety-contact-avatar-img--placeholder">{{ friend.username|first|upper }}</span>
-            {% endif %}
-            <span class="safety-contact-avatar-name">{{ friend.username }}</span>
+        <button type="button" class="btn btn--icon-sm" data-role="edit-toggle" title="Add emergency contacts" aria-label="Add emergency contacts">
+            <i class="material-symbols-outlined">add</i>
         </button>
-        {% endfor %}
+        {% endif %}
     </div>
-    {{ connections|contact_picker_options|json_script:"safety-contact-friends-data" }}
-    {% endif %}
 
-    <div class="safety-contact-input-wrap" data-role="input-wrap">
-        <input type="text" class="safety-contact-input" data-role="input"
-               placeholder="Type a friend's name or an email address" autocomplete="off">
-        <div class="safety-contact-suggestions" data-role="suggestions" hidden></div>
+    <div class="card__body">
+        <div class="safety-contact-chips" data-role="chips">
+            {% for contact_profile, email, name in contacts %}
+            {% if contact_profile %}
+            <span class="safety-contact-chip" data-type="profile" data-id="{{ contact_profile.id }}">
+                {% if contact_profile.avatar %}
+                <img class="safety-contact-chip-avatar" src="{{ contact_profile.avatar.url }}" alt="">
+                {% else %}
+                <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">{{ contact_profile.username|first|upper }}</span>
+                {% endif %}
+                <span class="safety-contact-chip-label">{{ contact_profile.username }}</span>
+                {% with status=contact_status|dict_get:contact_profile.id %}
+                {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
+                {% endwith %}
+                <input type="hidden" name="contact_profile_ids" value="{{ contact_profile.id }}">
+                {% if not locked %}
+                <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ contact_profile.username }}">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+                {% endif %}
+            </span>
+            {% elif email %}
+            <span class="safety-contact-chip" data-type="email" data-email="{{ email }}">
+                <span class="safety-contact-chip-avatar safety-contact-chip-avatar--placeholder">
+                    <i class="material-symbols-outlined">mail</i>
+                </span>
+                <span class="safety-contact-chip-label">{{ email }}</span>
+                {% with status=contact_status|dict_get:email %}
+                {% if status %}<span class="safety-badge {{ status.class }}">{{ status.label }}</span>{% endif %}
+                {% endwith %}
+                <input type="hidden" name="contact_emails" value="{{ email }}">
+                {% if not locked %}
+                <button type="button" class="safety-contact-chip-remove" data-role="remove" aria-label="Remove {{ email }}">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+                {% endif %}
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if locked %}
+        <p class="form-hint">Locked - emergency contacts have already been notified, so the contact list can't change.</p>
+        {% else %}
+        {% if connections %}
+        <div class="safety-contact-avatar-picker" data-role="avatar-picker">
+            {% for friend in connections %}
+            <button type="button" class="safety-contact-avatar-btn" data-role="avatar-btn"
+                    data-id="{{ friend.id }}" data-username="{{ friend.username }}"
+                    title="Add {{ friend.username }}">
+                {% if friend.avatar %}
+                <img class="safety-contact-avatar-img" src="{{ friend.avatar.url }}" alt="">
+                {% else %}
+                <span class="safety-contact-avatar-img safety-contact-avatar-img--placeholder">{{ friend.username|first|upper }}</span>
+                {% endif %}
+                <span class="safety-contact-avatar-name">{{ friend.username }}</span>
+            </button>
+            {% endfor %}
+        </div>
+        {{ connections|contact_picker_options|json_script:"safety-contact-friends-data" }}
+        {% endif %}
+
+        <div class="safety-contact-input-wrap" data-role="input-wrap">
+            <input type="text" class="safety-contact-input" data-role="input"
+                   placeholder="Type a friend's name or an email address" autocomplete="off">
+            <div class="safety-contact-suggestions" data-role="suggestions" hidden></div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <script>
 (function () {
+    // Shared with detail.html's autosave swap, which needs to re-apply the same
+    // icon/label after re-rendering the picker mid-edit - see replaceHtmlAndRunScripts.
+    window.safetyContactPickerSetEditToggleState = function (btn, editing) {
+        var icon = btn.querySelector('.material-symbols-outlined');
+        if (icon) icon.textContent = editing ? 'check' : 'add';
+        var label = editing ? 'Done editing emergency contacts' : 'Add emergency contacts';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+    };
+
     document.querySelectorAll('.safety-contact-picker[data-role="contact-picker"]').forEach(function (root) {
         if (root.dataset.contactPickerInit) return;
         root.dataset.contactPickerInit = '1';
@@ -113,7 +128,7 @@ the add/remove controls inline right away - only meaningful when not `locked`).
         if (editToggle) {
             editToggle.addEventListener('click', function () {
                 var editing = root.classList.toggle('is-editing');
-                editToggle.textContent = editing ? 'Done' : 'Edit';
+                window.safetyContactPickerSetEditToggleState(editToggle, editing);
             });
         }
 

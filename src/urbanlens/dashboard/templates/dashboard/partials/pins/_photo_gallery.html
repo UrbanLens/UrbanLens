@@ -318,12 +318,19 @@ Context:
   };
 
   // -- Reposition callback (called from map panel when user finishes dragging) --
-  window.galleryRepositionImage = function (imgId, lat, lng) {
+  // `onError`, if given, is invoked with no args when the server rejects the
+  // move - the caller uses it to snap the marker back to its prior position.
+  window.galleryRepositionImage = function (imgId, lat, lng, onError) {
     fetch(REPOSITION_BASE + imgId + '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
       body: JSON.stringify({ latitude: lat, longitude: lng }),
-    }).then(function (r) { return r.json(); }).then(function (data) {
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
       var el = document.getElementById('gallery-item-' + imgId);
       if (el) {
         el.dataset.lat = data.latitude;
@@ -342,6 +349,9 @@ Context:
       }
       var item = _items.find(function (i) { return i.id === imgId; });
       if (item) { item.lat = data.latitude; item.lng = data.longitude; }
+    }).catch(function (err) {
+      if (window.toastr) toastr.error('Failed to reposition photo: ' + (err.message || 'unknown error'));
+      if (typeof onError === 'function') onError();
     });
   };
 })();
