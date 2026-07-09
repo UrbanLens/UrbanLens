@@ -86,13 +86,6 @@
             </div>
             {% endif %}
             <div class="pin-stats">
-                {% if pin.has_place_name %}
-                <div class="pin-stat-item pin-stat-item--place">
-                    <span class="field-label">Place Name</span>
-                    <span class="field-value">{{ pin.place_name }}</span>
-                </div>
-                {% endif %}
-
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
 
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
@@ -102,32 +95,38 @@
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=True client_version=client_version %}
             </div>
             <div class="detail-items">
+                {% if pin.has_place_name %}
+                <div class="detail-item detail-item--place">
+                    <span class="field-label">Place Name</span>
+                    <span class="field-value">{{ pin.place_name }}</span>
+                </div>
+                {% endif %}
                 {% if pin.effective_official_name %}
-                <div class="detail-item">
+                <div class="detail-item detail-item--official">
                     <span class="field-label">Official Name</span>
                     <span class="field-value">{{ pin.effective_official_name }}</span>
                 </div>
                 {% endif %}
                 {% if pin.effective_address %}
-                <div class="detail-item">
+                <div class="detail-item detail-item--address">
                     <span class="field-label">Address</span>
                     <span class="field-value">{{ pin.effective_address }}</span>
                 </div>
                 {% endif %}
                 {% if pin.effective_latitude and pin.effective_longitude %}
-                <div class="detail-item">
+                <div class="detail-item detail-item--coordinates">
                     <span class="field-label">Coordinates</span>
                     <span class="field-value">{{ pin.effective_latitude|floatformat:5 }}, {{ pin.effective_longitude|floatformat:5 }}</span>
                 </div>
                 {% endif %}
                 {% if pin.date_abandoned %}
-                <div class="detail-item">
+                <div class="detail-item detail-item--abandoned">
                     <span class="field-label">Abandoned</span>
                     <span class="field-value">{{ pin.date_abandoned|date:"M j, Y" }}</span>
                 </div>
                 {% endif %}
                 {% if pin.effective_date_last_active %}
-                <div class="detail-item">
+                <div class="detail-item detail-item--last-active">
                     <span class="field-label">Last Active</span>
                     <span class="field-value">{{ pin.effective_date_last_active|date:"M j, Y" }}</span>
                 </div>
