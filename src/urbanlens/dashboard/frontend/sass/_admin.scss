@@ -922,8 +922,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .75rem;
     flex: 1 1 150px;
     min-width: 140px;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0b);
+    border: 1px solid var(--ul-grey-1b);
     border-radius: 10px;
     padding: .9rem 1.1rem;
 
@@ -989,6 +989,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1rem;
     margin-bottom: 2rem;
+
+    > a {
+        background-color: var(--ul-grey-1b);
+        border-color: var(--ul-grey-2b);
+    }
 }
 
 .admin-nav-card {
@@ -1154,7 +1159,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 
     .admin-home-hero {
-        background: linear-gradient(135deg, var(--ul-grey-1) 0%, var(--ul-grey-2) 100%);
+        background: linear-gradient(135deg, var(--ul-black) 0%, var(--ul-grey-0a) 100%);
         border-color: var(--ul-grey-3b);
     }
 

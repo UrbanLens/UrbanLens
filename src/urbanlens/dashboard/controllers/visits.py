@@ -9,6 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
@@ -80,6 +81,9 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "page_obj": page_obj,
             "visits": page_obj.object_list,
             "pending_suggestions": pending_suggestions,
+            # The embedded "Log a Visit" dialog's add form prefills its date field
+            # with this - see _visit_form.html.
+            "default_date": timezone.now().date().isoformat(),
         },
     )
 
@@ -307,6 +311,10 @@ class VisitEditView(LoginRequiredMixin, View):
                 **_visit_dialog_context(pin, visit=visit),
                 "visit": visit,
                 "dialog_id": f"visit-edit-dialog-{pin.slug}",
+                # Unused when editing (the date field is prefilled from visit.visited_at
+                # instead) but the template's default filter resolves this argument
+                # unconditionally, so it must always be present in context.
+                "default_date": "",
             },
         )
 

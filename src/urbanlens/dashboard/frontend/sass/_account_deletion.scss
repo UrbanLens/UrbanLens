@@ -63,6 +63,14 @@
     justify-content: space-between;
     gap: 1.5rem;
     flex-wrap: wrap;
+
+    &--disabled {
+        opacity: 0.5;
+
+        .btn {
+            cursor: not-allowed;
+        }
+    }
 }
 
 .danger-zone-row-title {

@@ -206,6 +206,7 @@ class RequestAccountDeletionViewTests(TestCase):
     """POST /settings/delete-account/ requires a correct password and typed confirmation."""
 
     def setUp(self):
+        baker.make(User)  # occupies the "first user" bootstrap slot so alice isn't auto-promoted to site admin
         self.user = baker.make(User, username="alice", email="alice@example.com")
         self.user.set_password("correct-horse")
         self.user.save()
@@ -234,6 +235,13 @@ class RequestAccountDeletionViewTests(TestCase):
         self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "DELETE ALICE"})
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.is_pending_deletion)
+
+    def test_superuser_cannot_schedule_deletion(self):
+        self.user.is_superuser = True
+        self.user.save()
+        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.is_pending_deletion)
 
 
 class CancelAccountDeletionViewTests(TestCase):

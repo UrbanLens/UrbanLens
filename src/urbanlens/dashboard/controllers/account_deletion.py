@@ -34,6 +34,10 @@ class RequestAccountDeletionView(LoginRequiredMixin, View):
     """Soft-deletes the current user's account after password + type-to-confirm verification."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
+        if request.user.is_superuser or request.user.has_perm("dashboard.view_site_admin"):
+            messages.error(request, "Admin accounts can't be deleted. Remove your admin permissions first.")
+            return redirect("settings.view")
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         form = DeleteAccountForm(request.POST, user=request.user)
         if not form.is_valid():

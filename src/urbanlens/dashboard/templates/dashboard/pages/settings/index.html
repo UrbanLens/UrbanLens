@@ -591,45 +591,47 @@
             </div>
         </div>
 
-        <div class="storage-usage">
-            {% if storage_quota_bytes %}
-            <div class="storage-usage__bar" role="progressbar" aria-valuenow="{{ storage_percent_used }}" aria-valuemin="0" aria-valuemax="100">
-                <div class="storage-usage__fill{% if storage_percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ storage_percent_used }}%;"></div>
-            </div>
-            <p class="storage-usage__text">
-                <strong>{{ storage_used_bytes|filesizeformat }}</strong> of {{ storage_quota_bytes|filesizeformat }} used
-                &middot; {{ storage_remaining_bytes|filesizeformat }} left
-            </p>
-            {% else %}
-            <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
-            {% endif %}
-        </div>
-
-        <form method="post" class="settings-form" id="storage-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="storage">
-
-            <div class="settings-field">
-                <label class="settings-label" for="id_image_downscale_max_dimension">Photo size for future uploads</label>
-                <p class="settings-help">
-                    Photos are downscaled to this size (longest edge) when stored. Choosing a smaller size
-                    lets more photos fit in your storage. Applies to future uploads only - existing photos
-                    are not changed.{% if storage_convert_webp %} Processed photos are stored as WebP.{% endif %}
-                </p>
-                <select class="settings-select browser-default" name="image_downscale_max_dimension" id="id_image_downscale_max_dimension">
-                    {% for option in storage_downscale_options %}
-                    <option value="{{ option.value }}" data-estimated-photos="{{ option.estimated_photos }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
-                    {% endfor %}
-                </select>
+        <div class="settings-section-body">
+            <div class="storage-usage">
                 {% if storage_quota_bytes %}
-                <p class="settings-help storage-estimate" id="storage-estimate" aria-live="polite"></p>
+                <div class="storage-usage__bar" role="progressbar" aria-valuenow="{{ storage_percent_used }}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="storage-usage__fill{% if storage_percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ storage_percent_used }}%;"></div>
+                </div>
+                <p class="storage-usage__text">
+                    <strong>{{ storage_used_bytes|filesizeformat }}</strong> of {{ storage_quota_bytes|filesizeformat }} used
+                    &middot; {{ storage_remaining_bytes|filesizeformat }} left
+                </p>
+                {% else %}
+                <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
                 {% endif %}
             </div>
 
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
+            <form method="post" class="settings-form" id="storage-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="storage">
+
+                <div class="settings-field">
+                    <label class="settings-label" for="id_image_downscale_max_dimension">Photo size for future uploads</label>
+                    <p class="settings-help">
+                        Photos are downscaled to this size (longest edge) when stored. Choosing a smaller size
+                        lets more photos fit in your storage. Applies to future uploads only - existing photos
+                        are not changed.{% if storage_convert_webp %} Processed photos are stored as WebP.{% endif %}
+                    </p>
+                    <select class="settings-select browser-default" name="image_downscale_max_dimension" id="id_image_downscale_max_dimension">
+                        {% for option in storage_downscale_options %}
+                        <option value="{{ option.value }}" data-estimated-photos="{{ option.estimated_photos }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if storage_quota_bytes %}
+                    <p class="settings-help storage-estimate" id="storage-estimate" aria-live="polite"></p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
     </section>
 
     {# -- Notifications ------------------------------------------------------- #}
@@ -682,17 +684,30 @@
         </div>
 
         <div class="settings-section-body">
-            <div class="danger-zone-row">
+            <div class="danger-zone-row{% if user.is_superuser or perms.dashboard.view_site_admin %} danger-zone-row--disabled{% endif %}">
                 <div>
                     <p class="danger-zone-row-title">Delete my account</p>
+                    {% if user.is_superuser or perms.dashboard.view_site_admin %}
+                    <p class="settings-help">
+                        Admin accounts can't be deleted from here. Remove your admin permissions first if you
+                        want to delete your account.
+                    </p>
+                    {% else %}
                     <p class="settings-help">
                         Your account is soft-deleted immediately and permanently deleted, along with all your
                         data, after a 7-day grace period. You can undo this at any point before then.
                     </p>
+                    {% endif %}
                 </div>
+                {% if user.is_superuser or perms.dashboard.view_site_admin %}
+                <button type="button" class="btn btn--danger-filled" disabled title="Admin accounts can't be deleted.">
+                    <i class="material-symbols-outlined">delete_forever</i> Delete my account
+                </button>
+                {% else %}
                 <button type="button" class="btn btn--danger-filled" onclick="document.getElementById('delete-account-dialog').showModal()">
                     <i class="material-symbols-outlined">delete_forever</i> Delete my account
                 </button>
+                {% endif %}
             </div>
         </div>
     </section>
