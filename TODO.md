@@ -28,7 +28,7 @@ Features planned for this release.
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
 * Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
-* Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
+* ~~Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]~~
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog. [UL-269]
@@ -41,9 +41,8 @@ Features planned for this release.
 * ~~On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]~~
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
 * In import pins dialog, unchecking "Create category X" does not remove the sample badge.
-* Satellite view seems to be unable to zoom in as much as I'd expect.
-* On the map list: Everything says "United States"
-* Badge bulk edit does not update the custom icon. 
+* ~~On the map list: Everything says "United States"~~
+* ~~Badge bulk edit does not update the custom icon. ~~
 * Organize page: Bulk edit bar shows up after selecting just one thing (good). But then clicking "edit" opens the bulk edit dialog, instead of the single edit dialog (not as good).
 * Bulk edit dialog: I'm not certain that shared properties are showing up (i.e. selecting 2 rows with the same icon, the icon should show up in the dialog)
 * Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.

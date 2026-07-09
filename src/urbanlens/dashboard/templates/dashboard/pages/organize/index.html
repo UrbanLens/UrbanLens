@@ -1347,7 +1347,20 @@ window._orgBulkSync = function(n, opts) {
     if (mergeBtn) { mergeBtn.hidden = !opts.hasMerge; mergeBtn.disabled = n < 2; }
     if (deleteBtn) deleteBtn.hidden = !opts.hasDel;
 };
+
+// When exactly one badge is selected, "Edit" should open that badge's own
+// single-edit dialog (same as clicking its row edit button) rather than the
+// bulk-edit dialog. Returns true if the single edit was opened.
+window._orgOpenSingleEdit = function(dataAttr, id) {
+    var card = document.querySelector('[' + dataAttr + '="' + id + '"]');
+    if (!card) return false;
+    var btn = card.querySelector('.tag-card-actions .btn--icon[title="Edit"]');
+    if (!btn) return false;
+    btn.click();
+    return true;
+};
 </script>
+
 
 {# -- Tags tab JS ------------------------------------------------------------- #}
 <script>
@@ -1392,7 +1405,11 @@ window._orgBulkSync = function(n, opts) {
     function _updateTagBar() {
         var n = _tagSelected.size;
         window._orgBulk.deselect = _tagBulkDeselect;
-        window._orgBulk.edit = function() { if (_tagSelected.size) _openTagBulkEditDialog(); };
+        window._orgBulk.edit = function() {
+            if (!_tagSelected.size) return;
+            if (_tagSelected.size === 1 && window._orgOpenSingleEdit('data-tag-id', Array.from(_tagSelected)[0])) return;
+            _openTagBulkEditDialog();
+        };
         window._orgBulk.merge = function() {
             if (_tagSelected.size < 2) return;
             _tagMergeTargetId = Array.from(_tagSelected)[0];
@@ -1835,7 +1852,11 @@ window._orgBulkSync = function(n, opts) {
     function _updateCatBar() {
         var n = _catSelected.size;
         window._orgBulk.deselect = _catBulkDeselect;
-        window._orgBulk.edit = function() { if (_catSelected.size) _openCatBulkEditDialog(); };
+        window._orgBulk.edit = function() {
+            if (!_catSelected.size) return;
+            if (_catSelected.size === 1 && window._orgOpenSingleEdit('data-category-id', Array.from(_catSelected)[0])) return;
+            _openCatBulkEditDialog();
+        };
         window._orgBulk.merge = function() {
             if (_catSelected.size < 2) return;
             _catMergeTargetId = Array.from(_catSelected)[0]; _renderCatMergeDialog();
@@ -2425,7 +2446,11 @@ window._orgBulkSync = function(n, opts) {
     function _syncStatusSelBar() {
         var n = _statusSelected.size;
         window._orgBulk.deselect = _statusBulkDeselect;
-        window._orgBulk.edit = function() { if (_statusSelected.size) _openStatusBulkEditDialog(); };
+        window._orgBulk.edit = function() {
+            if (!_statusSelected.size) return;
+            if (_statusSelected.size === 1 && window._orgOpenSingleEdit('data-status-id', Array.from(_statusSelected)[0])) return;
+            _openStatusBulkEditDialog();
+        };
         window._orgBulk.merge = function() {
             if (_statusSelected.size < 2) return;
             _statusMergeTargetId = Array.from(_statusSelected)[0];
@@ -2807,6 +2832,10 @@ window._orgBulkSync = function(n, opts) {
         window._orgBulk.edit = function() {
             var items = document.querySelectorAll('#priority-list .priority-item--selected');
             if (!items.length) return;
+            if (items.length === 1) {
+                var singleEditBtn = items[0].querySelector('.priority-edit-btn');
+                if (singleEditBtn) { singleEditBtn.click(); return; }
+            }
             var kinds = new Set();
             var ids = [];
             items.forEach(function(item) { kinds.add(item.dataset.kind); ids.push(item.dataset.id); });
@@ -2921,7 +2950,11 @@ window._orgBulkSync = function(n, opts) {
     function _syncPeopleSelBar() {
         var n = _peopleSelected.size;
         window._orgBulk.deselect = _peopleBulkDeselect;
-        window._orgBulk.edit = function () { if (_peopleSelected.size) _openPeopleBulkEditDialog(); };
+        window._orgBulk.edit = function () {
+            if (!_peopleSelected.size) return;
+            if (_peopleSelected.size === 1 && window._orgOpenSingleEdit('data-people-id', Array.from(_peopleSelected)[0])) return;
+            _openPeopleBulkEditDialog();
+        };
         window._orgBulk.merge = function () { _openPeopleMergeDialog(); };
         window._orgBulk.del = function () { if (confirm('Delete ' + _peopleSelected.size + ' label(s)?')) _bulkDeletePeople(); };
         _orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });

@@ -71,7 +71,7 @@ class Location(abstract.PublicDashboardModel):
     administrative_area_level_1 = CharField(max_length=30, null=True, blank=True)
     administrative_area_level_2 = CharField(max_length=50, null=True, blank=True)
     administrative_area_level_3 = CharField(max_length=50, null=True, blank=True)
-    country = CharField(max_length=20, default="United States")
+    country = CharField(max_length=100, blank=True, default="")
     zipcode = CharField(max_length=10, null=True, blank=True)
     zipcode_suffix = CharField(max_length=10, null=True, blank=True)
     point = PointField(geography=True, default=Point(0, 0))

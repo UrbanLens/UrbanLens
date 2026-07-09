@@ -144,7 +144,7 @@ def _ensure_location_address(location) -> None:
         return
 
     try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         if not app_settings.google_unrestricted_api_key:
@@ -157,10 +157,7 @@ def _ensure_location_address(location) -> None:
         if not results:
             return
 
-        type_map: dict[str, str] = {}
-        for comp in results[0].get("address_components", []):
-            for t in comp.get("types", []):
-                type_map.setdefault(t, comp.get("short_name") or comp.get("long_name") or "")
+        type_map = parse_address_components(results[0].get("address_components", []))
 
         update_fields: list[str] = []
 
@@ -175,6 +172,7 @@ def _ensure_location_address(location) -> None:
         _maybe_set("administrative_area_level_1", type_map.get("administrative_area_level_1"))
         _maybe_set("administrative_area_level_2", type_map.get("administrative_area_level_2"))
         _maybe_set("zipcode", type_map.get("postal_code"))
+        _maybe_set("country", type_map.get("country"))
 
         if update_fields:
             location.save(update_fields=update_fields)
