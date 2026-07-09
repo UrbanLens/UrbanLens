@@ -670,7 +670,35 @@
             </div>
         </div>
     </section>
+
+    {# -- Danger Zone ----------------------------------------------------------- #}
+    <section class="settings-section ul-section settings-section--danger">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">warning</i>
+            <div>
+                <h2 class="settings-section-title">Danger Zone</h2>
+                <p class="settings-section-desc">Irreversible account actions.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div class="danger-zone-row">
+                <div>
+                    <p class="danger-zone-row-title">Delete my account</p>
+                    <p class="settings-help">
+                        Your account is soft-deleted immediately and permanently deleted, along with all your
+                        data, after a 7-day grace period. You can undo this at any point before then.
+                    </p>
+                </div>
+                <button type="button" class="btn btn--danger-filled" onclick="document.getElementById('delete-account-dialog').showModal()">
+                    <i class="material-symbols-outlined">delete_forever</i> Delete my account
+                </button>
+            </div>
+        </div>
+    </section>
 </div>
+
+{% include "dashboard/partials/account/_delete_account_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}

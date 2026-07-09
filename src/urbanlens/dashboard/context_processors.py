@@ -135,6 +135,30 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
     return {"distance_units": units}
 
 
+def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
+    """Expose the current user's pending-deletion state for the site-wide warning banner.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``pending_account_deletion`` (bool), ``account_deletion_date``
+        (datetime or None), and ``account_deletion_days_left`` (int or None).
+    """
+    if isinstance(request.user, User):
+        try:
+            profile = request.user.profile
+            if profile.is_pending_deletion:
+                return {
+                    "pending_account_deletion": True,
+                    "account_deletion_date": profile.deletion_scheduled_for,
+                    "account_deletion_days_left": profile.deletion_days_remaining,
+                }
+        except (AttributeError, DatabaseError):
+            pass
+    return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
+
+
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     """Expose subscription-gated feature visibility to templates."""
     try:

@@ -41,6 +41,13 @@
                 <i class="material-symbols-outlined">search</i>
                 <span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>
             </button>
+            <button id="select-pins-button" class="map-btn-icon"
+                    data-tooltip="Select multiple pins to merge, edit, or delete" data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Select pins"
+                    onclick="toggleSelectMode()">
+                <i class="material-symbols-outlined">check_box</i>
+            </button>
         </div>
     </div>
 
@@ -129,6 +136,12 @@
         <div class="place-info-body"></div>
     </div>
     {% endif %}
+
+    {# -- Multi-select tool: floating action bar + bulk action dialogs ------- #}
+    {% include "dashboard/partials/pins/_bulk_select_toolbar.html" %}
+    {% include "dashboard/partials/pins/_bulk_delete_dialog.html" %}
+    {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
+    {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
 
     {# -- Floating address search bar ------------------------------------- #}
     <div id="addr-search-bar" class="addr-search-bar">
@@ -576,6 +589,11 @@
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
     let   _contextMenuDismiss = null;   // document click handler for the active context menu
+
+    // -- Multi-select tool -------------------------------------------------------
+    let   _selectMode      = false;   // true while the select tool is active
+    const _selectedPinUuids = new Set();
+    let   _dragSelectRect   = null;   // Leaflet rectangle preview during an active drag-select gesture
 
     // -- Map -------------------------------------------------------------------
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
@@ -1249,7 +1267,7 @@
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
-        const marker = L.marker(coords, { draggable: true });
+        const marker = L.marker(coords, { draggable: !_selectMode });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
             const resolvedColor = _resolvePinColor(pin);
@@ -1329,6 +1347,16 @@
             </div>`;
         marker.bindPopup(popupContent);
 
+        // Select-mode click toggles selection instead of opening the popup. The
+        // popup already opened by the time this runs (Leaflet's own popup-click
+        // handler fires first), so close it back out immediately.
+        marker.on('click', function (e) {
+            if (!_selectMode) return;
+            marker.closePopup();
+            L.DomEvent.stop(e);
+            _togglePinSelection(pin.uuid);
+        });
+
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
@@ -1341,6 +1369,7 @@
 
             // Drag freely; the position is only committed once the user confirms on drop.
             marker.on('dragstart', function () {
+                if (_selectMode) return;
                 clusterGroup.removeLayer(marker);
                 marker.addTo(map);
             });
@@ -2760,6 +2789,347 @@
         await _deletePinByUuid(pinUuid, pinName);
     }
 
+    // ============================================================
+    // Multi-select tool: select, merge, delete (+undo), bulk edit
+    // ============================================================
+
+    function toggleSelectMode() {
+        if (_selectMode) { exitSelectMode(); } else { enterSelectMode(); }
+    }
+
+    function enterSelectMode() {
+        if (_selectMode) return;
+        _selectMode = true;
+        document.getElementById('select-pins-button')?.classList.add('active');
+        document.getElementById('map')?.classList.add('select-mode');
+        map.dragging.disable();
+        _addPinClickMode = false;
+        _markerMap.forEach(function (m) { if (m.dragging) m.dragging.disable(); });
+        document.getElementById('bulk-select-toolbar').hidden = false;
+        _renderBulkSelectToolbar();
+    }
+
+    function exitSelectMode() {
+        if (!_selectMode) return;
+        _selectMode = false;
+        document.getElementById('select-pins-button')?.classList.remove('active');
+        document.getElementById('map')?.classList.remove('select-mode');
+        map.dragging.enable();
+        _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
+        _clearSelection();
+        document.getElementById('bulk-select-toolbar').hidden = true;
+    }
+
+    function _togglePinSelection(uuid) {
+        if (_selectedPinUuids.has(uuid)) { _selectedPinUuids.delete(uuid); } else { _selectedPinUuids.add(uuid); }
+        const marker = _markerMap.get(uuid);
+        marker?.getElement()?.classList.toggle('is-selected', _selectedPinUuids.has(uuid));
+        _renderBulkSelectToolbar();
+    }
+
+    function _clearSelection() {
+        _selectedPinUuids.forEach(function (uuid) { _markerMap.get(uuid)?.getElement()?.classList.remove('is-selected'); });
+        _selectedPinUuids.clear();
+        _renderBulkSelectToolbar();
+    }
+
+    function _renderBulkSelectToolbar() {
+        const n = _selectedPinUuids.size;
+        const countEl = document.getElementById('bulk-select-count');
+        if (countEl) countEl.textContent = n === 1 ? '1 selected' : `${n} selected`;
+        const mergeBtn = document.getElementById('bulk-select-merge-btn');
+        const editBtn = document.getElementById('bulk-select-edit-btn');
+        const delBtn = document.getElementById('bulk-select-delete-btn');
+        if (mergeBtn) mergeBtn.disabled = n < 2;
+        if (editBtn) editBtn.disabled = n < 1;
+        if (delBtn) delBtn.disabled = n < 1;
+    }
+
+    function _selectedPinName(uuid) {
+        const pin = _pinStore.get(uuid);
+        return (pin && (pin.name || pin.address)) || 'Untitled pin';
+    }
+
+    // -- Rectangle drag-select: mousedown-move-up on the map container while
+    // select mode is active. A 6px move threshold keeps a plain click on empty
+    // map space from being treated as a (zero-size) drag-select. -------------
+    (function _initSelectDragRectangle() {
+        map.getContainer().addEventListener('mousedown', function (e) {
+            if (!_selectMode || e.button !== 0) return;
+            const startLL = map.mouseEventToLatLng(e);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            let dragging = false;
+
+            function onMove(ev) {
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+                dragging = true;
+                if (_dragSelectRect) map.removeLayer(_dragSelectRect);
+                _dragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+                    color: '#1E88E5', weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false,
+                }).addTo(map);
+            }
+            function onUp(ev) {
+                document.removeEventListener('mousemove', onMove);
+                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                if (!dragging) return;
+                const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+                _markerMap.forEach(function (marker, uuid) {
+                    if (!_selectedPinUuids.has(uuid) && bounds.contains(marker.getLatLng())) _togglePinSelection(uuid);
+                });
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+        });
+    }());
+
+    // -- Bulk delete + undo -------------------------------------------------
+    function openBulkDeleteDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        const n = uuids.length;
+        document.getElementById('bulk-delete-warning').textContent =
+            `Delete ${n} pin${n === 1 ? '' : 's'}? This also removes ${n === 1 ? 'its' : 'their'} reviews, visit history, notes, and map annotations - those are not recoverable by Undo.`;
+        document.getElementById('bulk-delete-pin-list').innerHTML = uuids.map(function (uuid) {
+            return `<li>${_escHtml(_selectedPinName(uuid))}</li>`;
+        }).join('');
+        const phrase = `delete ${n} pin${n === 1 ? '' : 's'}`;
+        document.getElementById('bulk-delete-confirm-label').textContent = `Type "${phrase}" to confirm`;
+        const input = document.getElementById('bulk-delete-confirm-input');
+        input.value = '';
+        const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
+        confirmBtn.disabled = true;
+        input.oninput = function () { confirmBtn.disabled = input.value !== phrase; };
+        confirmBtn.onclick = function () { _submitBulkDelete(uuids); };
+        document.getElementById('bulk-delete-dialog').showModal();
+    }
+
+    function _submitBulkDelete(uuids) {
+        const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
+        confirmBtn.disabled = true;
+        fetch('{% url "pin.bulk_delete" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ uuids: uuids }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (data) {
+            document.getElementById('bulk-delete-dialog').close();
+            uuids.forEach(function (uuid) {
+                if (_markerMap.has(uuid)) { clusterGroup.removeLayer(_markerMap.get(uuid)); _markerMap.delete(uuid); }
+                _pinStore.delete(uuid);
+            });
+            _totalPins = _pinStore.size;
+            exitSelectMode();
+            _showUndoDeleteToast(data.count, data.undo_token);
+        })
+        .catch(function () { toastr.error('Failed to delete pins.'); confirmBtn.disabled = false; });
+    }
+
+    function _showUndoDeleteToast(count, token) {
+        const msg = `${count} pin${count === 1 ? '' : 's'} deleted. `
+            + `<button type="button" class="toast-undo-btn" onclick="_undoBulkDelete('${token}', this)">Undo</button>`;
+        toastr.success(msg, '', { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
+    }
+
+    function _undoBulkDelete(token, btn) {
+        if (btn) btn.disabled = true;
+        fetch('{% url "pin.bulk_undo" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ token: token }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            toastr.clear();
+            toastr.success('Pins restored.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Could not undo - the delete may have expired.'); });
+    }
+
+    // -- Merge ----------------------------------------------------------------
+    let _bulkMergeTargetUuid = null;
+
+    function _pinCardIconHtml(pin) {
+        if (!pin || !pin.icon) return '<i class="material-icons tag-icon-empty">place</i>';
+        if (/^[a-z_]+$/.test(pin.icon)) return `<i class="material-icons">${_escHtml(pin.icon)}</i>`;
+        if (/^(https?:\/\/|\/)/.test(pin.icon)) return `<img src="${_escHtml(pin.icon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;
+        return `<span class="tag-icon-emoji">${_escHtml(pin.icon)}</span>`;
+    }
+
+    function _pinMiniCardHtml(uuid, isTarget) {
+        const pin = _pinStore.get(uuid) || {};
+        const style = pin.color ? `color:${pin.color}` : '';
+        const swapBtn = isTarget ? '' : `<button type="button" class="cat-merge-swap-btn" data-swap-uuid="${uuid}" title="Make this the top-level pin"><i class="material-symbols-outlined">swap_vert</i></button>`;
+        return `<div class="cat-merge-mini-card${isTarget ? ' cat-merge-mini-card--target' : ''}" data-merge-uuid="${uuid}">`
+            + `<div class="tag-card-icon cat-merge-mini-icon" style="${style}">${_pinCardIconHtml(pin)}</div>`
+            + `<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">${_escHtml(_selectedPinName(uuid))}</div></div>`
+            + swapBtn + `</div>`;
+    }
+
+    function _renderBulkMergeDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!_bulkMergeTargetUuid || !_selectedPinUuids.has(_bulkMergeTargetUuid)) _bulkMergeTargetUuid = uuids[0];
+        const sources = uuids.filter(function (u) { return u !== _bulkMergeTargetUuid; });
+        document.getElementById('bulk-merge-dialog-title').textContent = `Merge ${uuids.length} pins`;
+        document.getElementById('bulk-merge-target-card').innerHTML = _pinMiniCardHtml(_bulkMergeTargetUuid, true);
+        document.getElementById('bulk-merge-sources-list').innerHTML = sources.map(function (u) { return _pinMiniCardHtml(u, false); }).join('');
+        const confirmBtn = document.getElementById('bulk-merge-confirm-btn');
+        confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${_escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
+        confirmBtn.disabled = false;
+    }
+
+    function openBulkMergeDialog() {
+        if (_selectedPinUuids.size < 2) return;
+        _bulkMergeTargetUuid = null;
+        _renderBulkMergeDialog();
+        document.getElementById('bulk-merge-dialog').showModal();
+    }
+
+    document.getElementById('bulk-merge-sources-list').addEventListener('click', function (e) {
+        const btn = e.target.closest('.cat-merge-swap-btn');
+        if (!btn) return;
+        _bulkMergeTargetUuid = btn.dataset.swapUuid;
+        _renderBulkMergeDialog();
+    });
+
+    document.getElementById('bulk-merge-confirm-btn').addEventListener('click', function () {
+        const uuids = Array.from(_selectedPinUuids);
+        const sources = uuids.filter(function (u) { return u !== _bulkMergeTargetUuid; });
+        const btn = this;
+        const saved = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
+        fetch('{% url "pin.bulk_merge" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ target_uuid: _bulkMergeTargetUuid, source_uuids: sources }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            document.getElementById('bulk-merge-dialog').close();
+            exitSelectMode();
+            toastr.success('Pins merged.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
+    });
+
+    // -- Bulk edit: description replace + badge add/remove --------------------
+    function _makeBadgeChipPicker(chipsElId, searchElId, suggElId) {
+        const chipsEl = document.getElementById(chipsElId);
+        const searchEl = document.getElementById(searchElId);
+        const suggEl = document.getElementById(suggElId);
+        let candidates = [];
+        let selected = [];
+
+        function renderChips() {
+            chipsEl.innerHTML = '';
+            selected.forEach(function (b) {
+                const chip = document.createElement('span');
+                chip.className = 'apdlg-badge-chip-item';
+                chip.dataset.id = b.id;
+                const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${_escHtml(b.icon)}</span>` : '';
+                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
+                chip.querySelector('.apdlg-chip-remove').addEventListener('click', function () {
+                    selected = selected.filter(function (s) { return s.id !== b.id; });
+                    renderChips();
+                });
+                chipsEl.appendChild(chip);
+            });
+        }
+
+        function renderSuggestions(query) {
+            const q = (query || '').toLowerCase().trim();
+            const selectedIds = new Set(selected.map(function (b) { return b.id; }));
+            const matches = candidates.filter(function (b) {
+                return !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q));
+            }).slice(0, 12);
+            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
+            suggEl.innerHTML = '';
+            matches.forEach(function (b) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'apdlg-badge-sugg-item';
+                const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${_escHtml(b.icon)}</span>` : '';
+                item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>`;
+                item.addEventListener('click', function () {
+                    selected.push(b);
+                    renderChips();
+                    searchEl.value = '';
+                    suggEl.hidden = true;
+                    searchEl.focus();
+                });
+                suggEl.appendChild(item);
+            });
+            suggEl.hidden = false;
+        }
+
+        searchEl.addEventListener('input', function () { renderSuggestions(searchEl.value); });
+        searchEl.addEventListener('focus', function () { renderSuggestions(searchEl.value); });
+        searchEl.addEventListener('blur', function () { setTimeout(function () { suggEl.hidden = true; }, 150); });
+
+        return {
+            setCandidates: function (list) { candidates = list || []; },
+            reset: function () { selected = []; renderChips(); searchEl.value = ''; suggEl.hidden = true; },
+            getSelectedIds: function () { return selected.map(function (b) { return b.id; }); },
+        };
+    }
+
+    const _bulkEditAddPicker = _makeBadgeChipPicker('bulk-edit-add-badge-chips', 'bulk-edit-add-badge-search', 'bulk-edit-add-badge-suggestions');
+    const _bulkEditRemovePicker = _makeBadgeChipPicker('bulk-edit-remove-badge-chips', 'bulk-edit-remove-badge-search', 'bulk-edit-remove-badge-suggestions');
+
+    function openBulkEditDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        document.getElementById('bulk-edit-dialog-title').textContent = `Edit ${uuids.length} pins`;
+        document.getElementById('bulk-edit-description-value').value = '';
+        document.getElementById('bulk-edit-description-nochange').checked = true;
+        _bulkEditAddPicker.reset();
+        _bulkEditAddPicker.setCandidates(_apdlgAllBadges);
+        _bulkEditRemovePicker.reset();
+        _bulkEditRemovePicker.setCandidates([]);
+        const removeHint = document.getElementById('bulk-edit-remove-badge-hint');
+        removeHint.textContent = 'Loading...';
+        fetch('{% url "pin.bulk_edit.badge_options" %}?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
+            .then(function (r) { return r.ok ? r.json() : { badges: [] }; })
+            .then(function (data) {
+                _bulkEditRemovePicker.setCandidates(data.badges || []);
+                removeHint.textContent = 'Only badges present on at least one selected pin are offered here.';
+            })
+            .catch(function () { removeHint.textContent = 'Only badges present on at least one selected pin are offered here.'; });
+        document.getElementById('bulk-edit-dialog').showModal();
+    }
+
+    document.getElementById('bulk-edit-confirm-btn').addEventListener('click', function () {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        const btn = this;
+        const saved = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving...';
+        const payload = { uuids: uuids };
+        if (!document.getElementById('bulk-edit-description-nochange').checked) {
+            payload.description = document.getElementById('bulk-edit-description-value').value;
+        }
+        payload.add_badge_ids = _bulkEditAddPicker.getSelectedIds();
+        payload.remove_badge_ids = _bulkEditRemovePicker.getSelectedIds();
+        fetch('{% url "pin.bulk_edit" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify(payload),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            document.getElementById('bulk-edit-dialog').close();
+            toastr.success('Pins updated.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Update failed.'); })
+        .finally(function () { btn.disabled = false; btn.innerHTML = saved; });
+    });
+
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
@@ -2813,9 +3183,11 @@
             case 's': toggleSatelliteView(); break;                  // S - Satellite view
             case 't': toggleTopographyView(); break;                 // T - Topography view
             case 'w': toggleWeatherView(); break;                    // W - Weather view
-            case 'd': toggleDarkMode(); break;                       // D - Dark mode
+            case 'd': toggleMapDarkMode(); break;                       // D - Dark mode
             case 'escape':
-                if (document.getElementById('filter-panel')?.classList.contains('open')) {
+                if (_selectMode) {
+                    exitSelectMode();
+                } else if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
                 } else if (document.getElementById('pin-list-panel')?.classList.contains('open')) {
                     _togglePinListPanel();

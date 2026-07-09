@@ -1,0 +1,15 @@
+{# Large, obtrusive warning shown site-wide while the logged-in user's account is pending deletion. #}
+{% if pending_account_deletion %}
+<div class="account-deletion-banner" role="alert">
+    <i class="material-symbols-outlined">warning</i>
+    <span class="account-deletion-banner__text">
+        Your account will be <strong>permanently deleted on {{ account_deletion_date|date:"F j, Y" }}</strong>
+        ({{ account_deletion_days_left }} day{{ account_deletion_days_left|pluralize }} left).
+    </span>
+    <form method="post" action="{% url 'account.delete.cancel' %}" class="account-deletion-banner__form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button type="submit" class="btn btn--primary account-deletion-banner__undo">Undo</button>
+    </form>
+</div>
+{% endif %}

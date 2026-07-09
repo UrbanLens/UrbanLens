@@ -66,6 +66,14 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
+        # Defense-in-depth: this endpoint only ever creates a brand-new child pin
+        # (never re-parents an existing one), so a cycle can't actually form here
+        # today. Guard anyway so this stays safe if that ever changes, and so a
+        # pre-existing corrupted ancestor chain on `parent` is caught rather than
+        # silently extended.
+        if parent.would_create_cycle(parent):
+            return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
+
         detail_name = body.get("name") or None
         detail_pin = Pin.objects.create(
             name=detail_name,

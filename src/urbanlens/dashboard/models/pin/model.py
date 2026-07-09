@@ -202,6 +202,43 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         self._loaded_name = self.name
 
     # ------------------------------------------------------------------
+    # Hierarchy
+    # ------------------------------------------------------------------
+
+    def would_create_cycle(self, new_parent: Pin | None) -> bool:
+        """Return True if ``new_parent`` becoming this pin's parent would close a loop.
+
+        Walks ``new_parent``'s own ``parent_pin`` chain looking for this pin's pk.
+        A ``visited`` guard bounds the walk to the number of distinct pins actually
+        in the chain, so the check still terminates promptly even against data that
+        is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk
+        in ``Badge.get_badge_and_descendants``).
+
+        Args:
+            new_parent: The pin that would be assigned to ``self.parent_pin``, or
+                None (clearing the parent never creates a cycle).
+
+        Returns:
+            True if the assignment would make this pin its own ancestor.
+        """
+        if new_parent is None:
+            return False
+        if self.pk is not None and new_parent.pk == self.pk:
+            return True
+        visited: set[int] = set()
+        current: Pin | None = new_parent
+        while current is not None:
+            if current.pk is None:
+                return False
+            if current.pk in visited:
+                return False  # pre-existing cycle among ancestors, not involving self
+            visited.add(current.pk)
+            if self.pk is not None and current.pk == self.pk:
+                return True
+            current = current.parent_pin
+        return False
+
+    # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
 

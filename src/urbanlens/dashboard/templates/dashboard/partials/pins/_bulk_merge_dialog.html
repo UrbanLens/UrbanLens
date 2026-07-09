@@ -1,0 +1,25 @@
+{# Merge dialog: pick which selected pin survives as top-level; the rest become its detail pins. #}
+<dialog id="bulk-merge-dialog" class="ul-dialog cat-merge-dialog bulk-merge-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Merge pins" title_id="bulk-merge-dialog-title" %}
+    <div class="cat-merge-dialog-body">
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label"><i class="material-symbols-outlined">check_circle</i> Top-level pin</div>
+            <div id="bulk-merge-target-card" class="cat-merge-target-card"></div>
+        </div>
+        <div class="cat-merge-divider"><i class="material-symbols-outlined">merge</i><span>Will become its detail pins</span></div>
+        <div class="cat-merge-section">
+            <div class="cat-merge-section-label">
+                <i class="material-symbols-outlined">low_priority</i> Sources
+                <span class="cat-merge-hint">- click <i class="material-icons" style="font-size:.85rem;vertical-align:middle">swap_vert</i> to make one the target</span>
+            </div>
+            <div id="bulk-merge-sources-list" class="cat-merge-sources-list"></div>
+        </div>
+        <p class="cat-merge-warning"><i class="material-symbols-outlined">info</i> Pins keep their own reviews, photos, and visit history - they're just nested under the target pin, and can be un-merged later from the target's detail pins panel.</p>
+    </div>
+    <div class="cat-merge-dialog-footer">
+        <button type="button" id="bulk-merge-confirm-btn" class="btn btn--primary">
+            <i class="material-symbols-outlined">merge</i> Merge
+        </button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>

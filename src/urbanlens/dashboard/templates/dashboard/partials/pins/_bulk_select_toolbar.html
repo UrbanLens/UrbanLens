@@ -1,0 +1,19 @@
+{# Floating bottom-center action bar shown while the map's select tool is active. #}
+<div id="bulk-select-toolbar" class="bulk-select-toolbar" hidden>
+    <span id="bulk-select-count" class="bulk-select-count">0 selected</span>
+    <button type="button" class="btn btn--ghost btn--sm" onclick="_clearSelection()">
+        <i class="material-symbols-outlined">deselect</i> Clear
+    </button>
+    <button type="button" class="btn btn--primary btn--sm" id="bulk-select-merge-btn" onclick="openBulkMergeDialog()" disabled>
+        <i class="material-symbols-outlined">merge</i> Merge
+    </button>
+    <button type="button" class="btn btn--primary btn--sm" id="bulk-select-edit-btn" onclick="openBulkEditDialog()" disabled>
+        <i class="material-symbols-outlined">edit</i> Edit
+    </button>
+    <button type="button" class="btn btn--danger-filled btn--sm" id="bulk-select-delete-btn" onclick="openBulkDeleteDialog()" disabled>
+        <i class="material-symbols-outlined">delete</i> Delete
+    </button>
+    <button type="button" class="btn btn--ghost btn--sm bulk-select-close" onclick="exitSelectMode()" aria-label="Exit select mode">
+        <i class="material-symbols-outlined">close</i>
+    </button>
+</div>

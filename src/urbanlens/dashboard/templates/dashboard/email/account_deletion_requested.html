@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#fef2f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;padding:40px 16px">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)">
+
+  <tr>
+    <td style="background:linear-gradient(135deg,#7f1d1d,#b91c1c,#dc2626);padding:32px 32px 24px;text-align:center">
+      <p style="margin:0;color:#fecaca;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">UrbanLens Account</p>
+      <h1 style="margin:8px 0 0;color:#fff;font-size:24px;font-weight:800;letter-spacing:-.02em">Account deletion requested</h1>
+    </td>
+  </tr>
+
+  <tr>
+    <td style="padding:32px">
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6">
+        We received a request to delete the UrbanLens account for <strong>{{ profile.username }}</strong>.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.65">
+        Your account and all its data will be permanently deleted on
+        <strong>{{ profile.deletion_scheduled_for|date:"F j, Y" }}</strong>. If this wasn't you, or you've
+        changed your mind, log in any time before then to undo it.
+      </p>
+
+      <div style="text-align:center;margin:28px 0">
+        <a href="{{ settings_url }}"
+           style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;
+                  font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;
+                  letter-spacing:.01em">
+          Review or undo
+        </a>
+      </div>
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;border-top:1px solid #e5e7eb;padding-top:20px">
+        If you didn't request this, log in and undo it immediately, or change your password.
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

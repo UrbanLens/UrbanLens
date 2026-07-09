@@ -1,0 +1,49 @@
+{# Password + type-to-confirm dialog for the "Delete my account" danger-zone action. #}
+<dialog id="delete-account-dialog" class="ul-dialog delete-account-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete your account" title_id="delete-account-dialog-title" %}
+    <form method="post" action="{% url 'account.delete.request' %}" id="delete-account-form">
+        {% csrf_token %}
+        <div class="ul-dialog-body delete-account-dialog-body">
+            <p class="delete-account-warning">
+                This will permanently delete your account and all your data (pins, photos, trips, reviews,
+                and everything else) after a 7-day grace period. You can undo it any time before then by
+                logging back in.
+            </p>
+
+            <label class="form-field">
+                <span class="form-label" for="delete-account-password">Enter your password</span>
+                <input type="password" name="password" id="delete-account-password" class="form-input" autocomplete="current-password" required>
+            </label>
+
+            <label class="form-field">
+                <span class="form-label" for="delete-account-confirm-input">Type "delete {{ request.user.username }}" to confirm</span>
+                <input type="text" name="confirm_text" id="delete-account-confirm-input" class="form-input"
+                       autocomplete="off" spellcheck="false" placeholder="delete {{ request.user.username }}" required>
+            </label>
+        </div>
+        <div class="ul-dialog-footer">
+            <button type="submit" id="delete-account-confirm-btn" class="btn btn--danger-filled" disabled>
+                <i class="material-symbols-outlined">delete_forever</i> Delete my account
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+<script>
+(function () {
+    var expected = 'delete {{ request.user.username|escapejs }}';
+    var password = document.getElementById('delete-account-password');
+    var confirmInput = document.getElementById('delete-account-confirm-input');
+    var confirmBtn = document.getElementById('delete-account-confirm-btn');
+    if (!password || !confirmInput || !confirmBtn) return;
+
+    function refresh() {
+        var matches = confirmInput.value.trim().toLowerCase() === expected.toLowerCase();
+        confirmBtn.disabled = !(matches && password.value.length > 0);
+    }
+
+    password.addEventListener('input', refresh);
+    confirmInput.addEventListener('input', refresh);
+})();
+</script>

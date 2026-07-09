@@ -35,6 +35,28 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
         return self.filter(parent_pin__isnull=False)
 
+    def with_descendants(self) -> Self:
+        """Expand this queryset to include the full personal detail-pin subtree of each pin.
+
+        Walks ``parent_pin`` children level by level (BFS) until no new
+        descendants are found, so pins of any nesting depth are included -
+        needed because deleting a pin cascades to its entire subtree
+        (``Pin.parent_pin`` is ``on_delete=CASCADE``).
+
+        Returns:
+            A fresh QuerySet over this queryset's pins plus every descendant.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        root_ids = set(self.values_list("pk", flat=True))
+        all_ids = set(root_ids)
+        frontier = root_ids
+        while frontier:
+            children = set(Pin.objects.filter(parent_pin_id__in=frontier).values_list("pk", flat=True))
+            frontier = children - all_ids
+            all_ids |= frontier
+        return Pin.objects.filter(pk__in=all_ids)
+
     def wiki_detail_pins(self) -> Self:
         """Return only community detail pins (attached directly to a Wiki)."""
         return self.filter(parent_wiki__isnull=False, parent_pin__isnull=True)

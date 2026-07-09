@@ -80,6 +80,20 @@
     }
 }
 
+// Multi-select tool: selected-marker ring + select-mode cursor.
+#map.select-mode {
+    cursor: crosshair;
+}
+
+.map-pin-icon-wrap.is-selected {
+    .map-pin-icon,
+    .map-pin-custom-img,
+    .map-pin-emoji,
+    .map-pin-with-circle {
+        filter: drop-shadow(0 0 0 3px $color-blue-500) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    }
+}
+
 .map-pin-custom-img {
     width: 26px;
     height: 26px;
@@ -2620,6 +2634,79 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     overflow: hidden;
 
     &[hidden] { display: none; }
+}
+
+// Multi-select tool: floating bottom-center action bar.
+.bulk-select-toolbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space-sm;
+    align-items: center;
+    background: rgba(18, 22, 30, .96);
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: $radius-md;
+    padding: $space-sm $space-md;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
+    max-width: min(560px, 92vw);
+
+    &[hidden] { display: none; }
+
+    .bulk-select-count {
+        color: rgba(255, 255, 255, .7);
+        font-size: .82rem;
+        margin-right: $space-sm;
+        white-space: nowrap;
+    }
+
+    .bulk-select-close {
+        margin-left: $space-sm;
+    }
+}
+
+// Undo action embedded inside the bulk-delete toastr message.
+.toast-undo-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, .5);
+    border-radius: $radius-sm;
+    color: inherit;
+    font-weight: 600;
+    padding: .15rem .6rem;
+    margin-left: .4rem;
+    cursor: pointer;
+
+    &:hover {
+        background: rgba(255, 255, 255, .15);
+    }
+
+    &:disabled {
+        opacity: .5;
+        cursor: default;
+    }
+}
+
+// Bulk delete confirm dialog: compact so highlighted markers stay visible around it.
+.bulk-delete-dialog {
+    width: min(420px, 92vw);
+}
+
+.bulk-delete-pin-list {
+    max-height: 160px;
+    overflow-y: auto;
+    margin: 0 0 .75rem;
+    padding: 0 0 0 1.1rem;
+    font-size: .88rem;
+}
+
+.bulk-delete-warning {
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+    margin: 0 0 .75rem;
 }
 
 .place-info-header {

@@ -73,6 +73,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
+            "can_view_contact": can_view_contact,
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile_preview import preview_modes

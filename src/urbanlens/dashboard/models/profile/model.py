@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import math
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,7 @@ from django.db.models import (
     BooleanField,
     CharField,
     DateField,
+    DateTimeField,
     DecimalField,
     ImageField,
     Index,
@@ -19,6 +21,7 @@ from django.db.models import (
     TextChoices,
     TextField,
 )
+from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
@@ -36,6 +39,11 @@ if TYPE_CHECKING:
 # 1 000 km groups intra-continental pins together while keeping intercontinental
 # collections (e.g. US east coast vs Europe, ~5 600 km) in separate clusters.
 _CLUSTER_RADIUS_KM = 1_000.0
+
+# How long a soft-deleted account stays recoverable before the hard delete runs.
+ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
+# How long before the hard delete the "1 day left" reminder goes out.
+ACCOUNT_DELETION_REMINDER_LEAD = datetime.timedelta(days=1)
 
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
@@ -222,6 +230,14 @@ class Profile(abstract.PublicDashboardModel):
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
+    # Set when the user requests account deletion; cleared on cancel/undo.
+    # A non-null value means the account is scheduled for hard deletion at
+    # deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD.
+    deletion_requested_at = DateTimeField(null=True, blank=True, db_index=True)
+    # Idempotency guard so the "1 day left" reminder is sent at most once per
+    # deletion request; cleared alongside deletion_requested_at on cancel.
+    deletion_reminder_sent_at = DateTimeField(null=True, blank=True)
+
     user = OneToOneField(
         User,
         on_delete=CASCADE,
@@ -239,6 +255,30 @@ class Profile(abstract.PublicDashboardModel):
         notifications: DjangoManager[NotificationLog]
         triggered_notifications: DjangoManager[NotificationLog]
         markup_items: DjangoManager[PinMarkup]
+
+    @property
+    def is_pending_deletion(self) -> bool:
+        """True while this account is soft-deleted and awaiting the hard delete."""
+        return self.deletion_requested_at is not None
+
+    @property
+    def deletion_scheduled_for(self) -> datetime.datetime | None:
+        """When the hard delete will run, or None if deletion isn't pending."""
+        if self.deletion_requested_at is None:
+            return None
+        return self.deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD
+
+    @property
+    def deletion_days_remaining(self) -> int | None:
+        """Whole days left before the hard delete runs, or None if not pending.
+
+        Rounds up so "a few hours left" still reads as 1 day rather than 0.
+        """
+        scheduled_for = self.deletion_scheduled_for
+        if scheduled_for is None:
+            return None
+        remaining_seconds = (scheduled_for - timezone.now()).total_seconds()
+        return max(0, math.ceil(remaining_seconds / 86_400))
 
     @property
     def show_onboarding_tips(self) -> bool:

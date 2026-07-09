@@ -463,6 +463,36 @@ def escalate_overdue_checkins() -> int:
     return count
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_account_deletion_reminders() -> int:
+    """Send the "1 day left" reminder for every account approaching its hard delete."""
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.account_deletion import send_deletion_reminder
+
+    count = 0
+    for profile in Profile.objects.due_for_deletion_reminder():
+        send_deletion_reminder(profile)
+        count += 1
+    if count:
+        logger.info("Sent %s account deletion reminder(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def hard_delete_expired_accounts() -> int:
+    """Permanently delete every account whose 7-day deletion grace period has elapsed."""
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.account_deletion import hard_delete_profile
+
+    count = 0
+    for profile in Profile.objects.due_for_hard_delete():
+        hard_delete_profile(profile)
+        count += 1
+    if count:
+        logger.info("Hard-deleted %s expired account(s)", count)
+    return count
+
+
 # No autoretry here, deliberately: run_panel_fetch owns the failure policy
 # (suppression markers with their own TTLs), and Celery-level retries would
 # race the poll-driven re-scheduling in schedule_panel_fetch. The time limits

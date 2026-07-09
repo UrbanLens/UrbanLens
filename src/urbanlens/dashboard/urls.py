@@ -11,6 +11,7 @@ from django.views.generic import TemplateView
 from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
+    account_deletion,
     aliases,
     badges,
     campus,
@@ -26,6 +27,7 @@ from urbanlens.dashboard.controllers import (
     organize,
     photos,
     pin,
+    pin_bulk,
     pin_edit,
     pin_sharing,
     safety,
@@ -113,6 +115,17 @@ urlpatterns = [
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
+                # Literal "pins/..." routes must be registered before the "pins/<slug:pin_slug>/"
+                # catch-all below, which would otherwise match e.g. "pins/bulk-delete/" as a slug.
+                path("pins/bulk-delete/", pin_bulk.PinBulkDeleteView.as_view(), name="pin.bulk_delete"),
+                path("pins/bulk-undo/", pin_bulk.PinBulkUndoView.as_view(), name="pin.bulk_undo"),
+                path("pins/bulk-merge/", pin_bulk.PinBulkMergeView.as_view(), name="pin.bulk_merge"),
+                path("pins/bulk-edit/", pin_bulk.PinBulkEditView.as_view(), name="pin.bulk_edit"),
+                path(
+                    "pins/bulk-edit/badge-options/",
+                    pin_bulk.PinBulkEditBadgeOptionsView.as_view(),
+                    name="pin.bulk_edit.badge_options",
+                ),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
                     "campus/",
@@ -462,6 +475,8 @@ urlpatterns = [
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
+    path("settings/delete-account/", account_deletion.RequestAccountDeletionView.as_view(), name="account.delete.request"),
+    path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
         include(

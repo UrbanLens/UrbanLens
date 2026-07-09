@@ -343,6 +343,36 @@ class PlacesLayerForm(forms.ModelForm):
         fields = ["places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"]
 
 
+class DeleteAccountForm(forms.Form):
+    """Confirms an account-deletion request with a password and a typed confirmation phrase."""
+
+    password = forms.CharField(
+        label="Password",
+        widget=forms.PasswordInput(attrs={"class": "settings-input", "autocomplete": "current-password"}),
+    )
+    confirm_text = forms.CharField(
+        label="Confirmation",
+        widget=forms.TextInput(attrs={"class": "settings-input", "autocomplete": "off", "spellcheck": "false"}),
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        self._user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_password(self) -> str:
+        password = self.cleaned_data["password"]
+        if not self._user or not self._user.check_password(password):
+            raise forms.ValidationError("Incorrect password.")
+        return password
+
+    def clean_confirm_text(self) -> str:
+        expected = f"delete {self._user.username}" if self._user else ""
+        confirm_text = self.cleaned_data["confirm_text"].strip()
+        if confirm_text.lower() != expected.lower():
+            raise forms.ValidationError(f'Type "{expected}" exactly to confirm.')
+        return confirm_text
+
+
 class AISettingsForm(forms.ModelForm):
     """AI feature preferences - which badge kinds can be auto-assigned on pin creation."""
 

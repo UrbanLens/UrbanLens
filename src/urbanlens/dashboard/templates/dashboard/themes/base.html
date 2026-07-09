@@ -35,6 +35,7 @@
 
 <body class="{% if page_name %}page-{{ page_name }}{% endif %}">
     {% include 'dashboard/partials/layout/_env_indicator.html' %}
+    {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}
     {% include 'dashboard/partials/layout/header.html' %}
 
     <div class="container">
@@ -149,6 +150,31 @@
                     btn.disabled = false;
                 });
             });
+        }());
+
+        // Global: while previewing your own profile as another user (see
+        // ProfilePreviewMiddleware), the page is rendered exactly as that
+        // viewer would see it - including forms/links that would mutate data
+        // or 404/403 if actually submitted. Intercept every interactive
+        // element in the capture phase so nothing fires while the preview
+        // banner is present, instead of letting each action fail server-side.
+        (function () {
+            function _previewActive() {
+                return !!document.querySelector('.profile-preview-banner');
+            }
+            function _isExitControl(el) {
+                return !!(el.closest && el.closest('.profile-preview-banner'));
+            }
+            function _guard(e) {
+                if (!_previewActive()) return;
+                var el = e.target.closest('a, button, input[type="submit"], input[type="button"], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]');
+                if (!el || _isExitControl(el)) return;
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (window.toastr) toastr.warning("You're previewing your profile - exit preview to interact.");
+            }
+            document.addEventListener('click', _guard, true);
+            document.addEventListener('submit', _guard, true);
         }());
     </script>
     <script>

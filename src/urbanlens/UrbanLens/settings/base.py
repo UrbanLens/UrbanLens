@@ -108,6 +108,7 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_site_settings",
                 "urbanlens.dashboard.context_processors.add_dev_toolbar",
                 "urbanlens.dashboard.context_processors.add_feature_access",
+                "urbanlens.dashboard.context_processors.add_pending_account_deletion",
                 "urbanlens.dashboard.context_processors.add_environment_indicator",
                 "urbanlens.dashboard.context_processors.add_distance_units",
             ],
@@ -227,6 +228,14 @@ CELERY_BEAT_SCHEDULE = {
     "safety-checkin-escalation": {
         "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
         "schedule": 5 * 60,
+    },
+    "account-deletion-reminders": {
+        "task": "urbanlens.dashboard.tasks.send_account_deletion_reminders",
+        "schedule": 60 * 60,
+    },
+    "account-deletion-hard-delete": {
+        "task": "urbanlens.dashboard.tasks.hard_delete_expired_accounts",
+        "schedule": 60 * 60,
     },
 }
 

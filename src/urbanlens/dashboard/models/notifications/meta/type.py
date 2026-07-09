@@ -21,6 +21,8 @@ class NotificationType(TextChoices):
     SAFETY_CHECKIN_RESOLVED = "safety_ci_resolved", "Safety Check-in Resolved"
     SAFETY_CHECKIN_PLAN_UPDATED = "safety_ci_plan_updated", "Safety Check-in Plan Updated"
     WIKI_SAFETY_CHECKIN = "wiki_safety_checkin", "Community Wiki Safety Check-in"
+    ACCOUNT_DELETION_REQUESTED = "account_deletion_requested", "Account Deletion Requested"
+    ACCOUNT_DELETION_REMINDER = "account_deletion_reminder", "Account Deletion Reminder"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"
     INFO = "info", "Info"
