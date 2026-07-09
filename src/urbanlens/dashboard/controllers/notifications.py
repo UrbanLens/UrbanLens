@@ -21,16 +21,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PREF_FIELDS = [
-    ("trip_updated", "Trip Updated"),
     ("friend_request", "New Friend Request"),
+    ("friend_accepted", "Friend Request Accepted"),
     ("message", "New Message"),
     ("comment_reply", "Reply to Comment"),
     ("comment_liked", "Comment Likes"),
-    ("friend_accepted", "Friend Request Accepted"),
-    ("added_to_trip", "Trip Invitation"),
-    ("wiki_updated", "Community Wiki Updated"),
     ("pin_shared", "Pin Shared"),
     ("visit_suggested", "Visit Suggested"),
+    ("added_to_trip", "Trip Invitation"),
+    ("trip_updated", "Trip Updated"),
+    ("wiki_updated", "Community Wiki Updated"),
     ("wiki_safety_checkin", "Safety Check-in at a Pinned Location"),
 ]
 

@@ -735,6 +735,10 @@
                 el.outerHTML = xhr.responseText;
                 return;
             }
+            if (el.id === 'loopnet-section') {
+                el.remove();
+                return;
+            }
             el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
         }, true);
 

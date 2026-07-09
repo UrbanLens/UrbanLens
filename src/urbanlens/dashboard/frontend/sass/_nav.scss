@@ -810,10 +810,11 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 
     &__grid {
         border: 1px solid var(--ul-grey-1a);
-        border-radius: $radius-sm;
+        border-radius: $radius-md;
         overflow: hidden;
         font-size: .84rem;
-        max-width: 33rem;
+        max-width: 40rem;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }
 
     &__header,
@@ -825,8 +826,16 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 
     &__row {
         background: var(--ul-grey-1);
+
         &:nth-child(even) {
             background: var(--ul-grey-1b);
+        }
+
+        &:nth-child(2),
+        &:nth-child(5),
+        &:nth-child(7),
+        &:nth-child(10) {
+            border-top: 6px solid var(--ul-grey-0);
         }
     }
 
@@ -878,11 +887,12 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
             position: static !important;
             opacity: 1 !important;
             pointer-events: auto !important;
-            width: 15px;
-            height: 15px;
+            width: 1.1rem;
+            height: 1.1rem;
             accent-color: var(--primary-color);
             cursor: pointer;
             display: inline-block;
+            border-radius: 4px;
         }
     }
 

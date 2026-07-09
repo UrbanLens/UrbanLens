@@ -491,6 +491,34 @@
     }
 }
 
+
+.settings-form--privacy {
+    .settings-field {
+        padding: 0.95rem 1rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: $radius-md;
+        background: var(--ul-grey-0);
+    }
+
+    @include up($breakpoint-md) {
+        .settings-field {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+            grid-template-areas:
+                "label control"
+                "help control"
+                "error error";
+            align-items: center;
+            gap: 0.15rem 1.25rem;
+        }
+
+        .settings-label { grid-area: label; margin-bottom: 0; }
+        .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
+        .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
+        .settings-error { grid-area: error; }
+    }
+}
+
 .settings-toggle-wrap {
     display: flex;
     align-items: center;

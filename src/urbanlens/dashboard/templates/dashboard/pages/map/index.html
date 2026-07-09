@@ -59,49 +59,49 @@
         {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
         <div class="map-layers-menu" id="map-layers-menu" hidden aria-hidden="true">
             <button id="street-button" class="map-layer-btn"
-                    onclick="toggleStreetView();" aria-label="Street Map">
+                    onclick="toggleStreetView();" aria-label="Street Map" data-tooltip="Street map" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street Layer" loading="lazy">
                 </span>
                 <span>Street</span>
             </button>
             <button id="topography-button" class="map-layer-btn"
-                    onclick="toggleTopographyView();" aria-label="Topography Map">
+                    onclick="toggleTopographyView();" aria-label="Topography Map" data-tooltip="Terrain map (T)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="Terrain Layer" loading="lazy">
                 </span>
                 <span>Terrain</span>
             </button>
             <button id="satellite-button" class="map-layer-btn"
-                    onclick="toggleSatelliteView();" aria-label="Satellite Map">
+                    onclick="toggleSatelliteView();" aria-label="Satellite Map" data-tooltip="Satellite map (S)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite Imagery Layer" loading="lazy">
                 </span>
                 <span>Satellite</span>
             </button>
             <button id="weather-button" class="map-layer-btn"
-                    onclick="toggleWeatherView();" aria-label="Weather overlay">
+                    onclick="toggleWeatherView();" aria-label="Weather overlay" data-tooltip="Weather overlay (W)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather Layer" loading="lazy">
                 </span>
                 <span>Weather</span>
             </button>
             <button id="toggle-pins-button" class="map-layer-btn"
-                    onclick="togglePins();" aria-label="Show or hide pins">
+                    onclick="togglePins();" aria-label="Show or hide pins" data-tooltip="Show or hide pins (P)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins Layer" loading="lazy">
                 </span>
                 <span>Pins</span>
             </button>
             <button id="dark-mode-button" class="map-layer-btn"
-                    onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode">
+                    onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode" data-tooltip="Dark mode (D)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode" loading="lazy">
                 </span>
                 <span>Dark</span>
             </button>
             <button id="boundaries-button" class="map-layer-btn"
-                    onclick="toggleBoundariesLayer();" aria-label="Toggle Geopolitical boundaries">
+                    onclick="toggleBoundariesLayer();" aria-label="Toggle Geopolitical boundaries" data-tooltip="Borders layer (B)" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_borders.jpg' %}" alt="Borders Layer" loading="lazy">
                 </span>
@@ -109,7 +109,7 @@
             </button>
             {% if show_places_layer %}
             <button id="places-button" class="map-layer-btn"
-                    onclick="togglePlacesLayer();" aria-label="Toggle Places layer">
+                    onclick="togglePlacesLayer();" aria-label="Toggle Places layer" data-tooltip="Places layer" data-tooltip-float="true" data-tooltip-pos="top">
                 <span class="map-layer-thumb">
                     <img src="{% static 'dashboard/images/map_layer_places.jpg' %}" alt="Places Layer" loading="lazy">
                 </span>
@@ -2808,6 +2808,7 @@
                 document.getElementById('address-search-input')?.focus();
                 break;
             case 'p': togglePins(); break;                           // P - Toggle pins
+            case 'b': toggleBoundariesLayer(); break;                // B - Toggle borders
             case 'l': _toggleLayersPanel(); break;                   // L - Layers
             case 's': toggleSatelliteView(); break;                  // S - Satellite view
             case 't': toggleTopographyView(); break;                 // T - Topography view
