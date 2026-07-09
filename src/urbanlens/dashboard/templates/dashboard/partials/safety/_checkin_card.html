@@ -1,5 +1,12 @@
 {% load humanize %}
-<div class="card safety-checkin-card safety-checkin-card--{{ checkin.status }}">
+<div class="card safety-checkin-card safety-checkin-card--{{ checkin.status }}" id="safety-checkin-card-{{ checkin.uuid }}">
+    <button type="button" class="safety-checkin-delete-btn"
+            data-delete-url="{% url 'safety.checkin.delete' checkin.slug|default:checkin.uuid %}"
+            data-card-id="safety-checkin-card-{{ checkin.uuid }}"
+            data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}"
+            title="Delete check-in">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
     <div class="card-header">
         <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
         <h3><a href="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}">{{ checkin.title }}</a></h3>

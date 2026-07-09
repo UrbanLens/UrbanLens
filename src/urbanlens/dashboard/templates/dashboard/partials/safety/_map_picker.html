@@ -1,0 +1,28 @@
+{% comment %}
+Results fragment for the "Attach existing map" dialog on the safety check-in detail
+page - rendered by SafetyCheckinMapPickerView, targeted by both the dialog's opening
+hx-get and its search input's live-filter hx-get (see _map_picker_dialog.html).
+
+Expects: checkin, candidates (queryset of MarkupMap, already excludes the primary
+map and anything already attached), query (str, the current search term).
+{% endcomment %}
+{% if candidates %}
+<ul class="safety-map-picker-list">
+    {% for candidate in candidates %}
+    <li>
+        <button type="button" class="safety-map-picker-item"
+                hx-post="{% url 'safety.checkin.maps.attach' checkin.slug|default:checkin.uuid %}"
+                hx-vals='{"map_uuid": "{{ candidate.uuid }}"}'
+                hx-target="#safety-attached-maps" hx-swap="outerHTML"
+                hx-on::after-request="if(event.detail.successful) this.closest('dialog').close()">
+            <span class="safety-map-picker-item-title">{{ candidate.title|default:"Untitled map" }}</span>
+            <span class="safety-map-picker-item-meta">updated {{ candidate.updated|date:"M j, Y" }}</span>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="form-hint">
+    {% if query %}No maps match "{{ query }}".{% else %}You don't have any other maps to attach yet - draw one from the Memories &gt; Maps page, or use "New map" instead.{% endif %}
+</p>
+{% endif %}

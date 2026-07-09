@@ -237,6 +237,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.hard_delete_expired_accounts",
         "schedule": 60 * 60,
     },
+    "safety-checkin-auto-delete": {
+        "task": "urbanlens.dashboard.tasks.delete_expired_safety_checkins",
+        "schedule": 60 * 60,
+    },
 }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Self
 
 from django.db.models import DateTimeField, ExpressionWrapper, F
@@ -71,6 +72,28 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
             overdue_at__gt=now,
             overdue_at__lte=now + FINAL_WARNING_LEAD_TIME,
         )
+
+    def due_for_auto_delete(self) -> Self:
+        """Return resolved check-ins past their owner's auto-delete window, if any.
+
+        The window is a per-profile ``SafetyPreference.auto_delete_after_days`` setting;
+        a null value means "never auto-delete" and excludes the profile's check-ins here.
+
+        Returns:
+            Filtered queryset.
+        """
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
+
+        return self.filter(
+            status__in=SafetyCheckinStatus.resolved_statuses(),
+            resolved_at__isnull=False,
+            profile__safety_preference__auto_delete_after_days__isnull=False,
+        ).annotate(
+            delete_at=ExpressionWrapper(
+                F("resolved_at") + F("profile__safety_preference__auto_delete_after_days") * timedelta(days=1),
+                output_field=DateTimeField(),
+            ),
+        ).filter(delete_at__lte=timezone.now())
 
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.

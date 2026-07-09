@@ -416,6 +416,28 @@ def find_community_wiki(latitude: float | Decimal | None, longitude: float | Dec
     return location.wiki if location else None
 
 
+def wiki_notify_stats(wiki: Wiki) -> tuple[datetime.datetime | None, int]:
+    """Return the wiki-notify toggle's stats: last edit time and editor count.
+
+    The editor count is deliberately drawn from edit *history* (who has actually
+    contributed), not from any access/permissions list - showing how many people
+    could see the wiki would leak private visibility information the check-in
+    owner never agreed to disclose.
+
+    Args:
+        wiki: The destination's community wiki.
+
+    Returns:
+        Tuple of (last edit timestamp or None if never edited, distinct editor count).
+    """
+    from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
+
+    edits = WikiEdit.objects.for_wiki(wiki).active()
+    last_edit = edits.first()
+    editor_count = edits.exclude(editor__isnull=True).values_list("editor", flat=True).distinct().count()
+    return (last_edit.created if last_edit else None, editor_count)
+
+
 def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
     """Post an escalated check-in to its destination's community wiki and notify pin owners there.
 

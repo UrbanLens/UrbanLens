@@ -807,6 +807,10 @@ urlpatterns = [
                 # No-trailing-slash variant so DELETE/POST fetch calls work even
                 # when APPEND_SLASH would otherwise downgrade the method to GET.
                 path("<slug:checkin_slug>/gallery/<int:image_id>", safety.SafetyImageView.as_view()),
+                path("<slug:checkin_slug>/delete/", safety.SafetyCheckinDeleteView.as_view(), name="safety.checkin.delete"),
+                path("<slug:checkin_slug>/maps/picker/", safety.SafetyCheckinMapPickerView.as_view(), name="safety.checkin.maps.picker"),
+                path("<slug:checkin_slug>/maps/attach/", safety.SafetyCheckinMapAttachView.as_view(), name="safety.checkin.maps.attach"),
+                path("<slug:checkin_slug>/maps/<uuid:map_uuid>/detach/", safety.SafetyCheckinMapDetachView.as_view(), name="safety.checkin.maps.detach"),
             ],
         ),
     ),

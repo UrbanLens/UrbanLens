@@ -217,6 +217,7 @@
 }
 
 .safety-checkin-card {
+    position: relative;
 
     h3 {
         margin: .25rem 0 0;
@@ -229,6 +230,36 @@
             &:hover { text-decoration: underline; }
         }
     }
+
+    &:hover .safety-checkin-delete-btn { opacity: 1; }
+}
+
+.safety-checkin-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+    background: rgba(0, 0, 0, .5);
+    border: none;
+    border-radius: 50%;
+    padding: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s;
+    display: flex;
+    align-items: center;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: #fff;
+    }
+
+    &:hover { background: rgba($color-red-500, .85); }
+}
+
+// Touch devices can't hover: keep the delete affordance visible.
+@media (hover: none) {
+    .safety-checkin-delete-btn { opacity: .85; }
 }
 
 .safety-checkin-meta,
@@ -285,20 +316,32 @@
     &--error { color: $color-red-500; }
 }
 
+// On the check-in detail page, the status pill floats next to whichever field was
+// just edited (positioned via JS in detail.html) and fades out after "Saved" -
+// distinct from the defaults page's inline (in-flow) status text in its card header.
+.safety-autosave-status--floating {
+    position: fixed;
+    z-index: $z-dropdown;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    box-shadow: var(--ul-shadow-md);
+    pointer-events: none;
+    transition: opacity .25s ease;
+    opacity: 1;
+
+    &.is-hidden {
+        opacity: 0;
+    }
+}
+
 .safety-defaults-close-btn {
     @include icon-btn(28px);
 }
 
-.form-row--message {
-    margin-top: 1rem;
-}
-
-.form-row--map {
-    margin-top: 1rem;
-}
-
-.form-row--title {
-    margin-top: 1rem;
+.safety-section-card {
+    margin-bottom: 1rem;
 }
 
 // -- Contact picker: chips, avatar picker, autocomplete -------------------------
@@ -693,4 +736,128 @@
     form {
         margin: 1.5rem 0;
     }
+}
+
+// -- Additional reference maps (attach-existing-map picker) --------------------
+
+.safety-attached-maps {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: .75rem;
+    margin-top: .5rem;
+}
+
+.safety-attached-maps-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.safety-attached-map-card {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-sm;
+    overflow: hidden;
+    background: var(--ul-grey-0a);
+}
+
+.safety-attached-map-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    padding: .4rem .6rem;
+}
+
+.safety-attached-map-title {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.safety-attached-map-remove {
+    @include icon-btn(22px);
+    color: var(--ul-grey-5);
+    flex-shrink: 0;
+
+    .material-symbols-outlined { font-size: 1rem; }
+
+    &:hover { color: $color-red-500; }
+}
+
+.safety-attached-map-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .25rem;
+}
+
+.safety-map-picker-dialog {
+    width: min(28rem, 90vw);
+}
+
+.safety-map-picker-search {
+    width: 100%;
+    box-sizing: border-box;
+    margin: .75rem 0;
+}
+
+.safety-map-picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 18rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.safety-map-picker-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: .5rem .65rem;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.safety-map-picker-item-title {
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.safety-map-picker-item-meta {
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+// -- Auto-delete retention setting (safety defaults) ----------------------------
+
+.safety-auto-delete-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+
+    input[type="number"] {
+        width: 5rem;
+    }
+}
+
+.safety-auto-delete-never {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    cursor: pointer;
 }

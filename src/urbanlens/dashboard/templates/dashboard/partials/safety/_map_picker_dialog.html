@@ -1,0 +1,23 @@
+{% comment %}
+Static dialog shell for the "Attach existing map" picker - included once per check-in
+detail page. Its body is filled by SafetyCheckinMapPickerView via the "Attach existing
+map" button (see _attached_maps.html) and re-filled live as the user types.
+
+Expects: checkin.
+{% endcomment %}
+<dialog id="safety-map-picker-dialog" class="ul-dialog safety-map-picker-dialog">
+    <div class="dialog-header">
+        <span>Attach an existing map</span>
+        <button type="button" class="dialog-close" onclick="document.getElementById('safety-map-picker-dialog').close()">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    <input type="search" id="safety-map-picker-search" class="safety-map-picker-search" name="q" placeholder="Search your maps…"
+           hx-get="{% url 'safety.checkin.maps.picker' checkin.slug|default:checkin.uuid %}"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#safety-map-picker-body" hx-swap="innerHTML"
+           hx-include="this">
+    <div id="safety-map-picker-body">
+        <p class="form-hint">Loading…</p>
+    </div>
+</dialog>

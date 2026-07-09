@@ -459,6 +459,19 @@ def escalate_overdue_checkins() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def delete_expired_safety_checkins() -> int:
+    """Permanently delete every resolved safety check-in past its owner's auto-delete window."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+
+    due = SafetyCheckin.objects.due_for_auto_delete()
+    count = due.count()
+    due.delete()
+    if count:
+        logger.info("Auto-deleted %s expired safety check-in(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile

@@ -100,6 +100,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         profile_id: int
         items: QuerySet[PinMarkup]
         safety_checkins: QuerySet[SafetyCheckin]
+        attached_safety_checkins: QuerySet[SafetyCheckin]
         comments: QuerySet[Comment]
         trip_comments: QuerySet[TripComment]
         visits: QuerySet[PinVisit]
@@ -125,6 +126,12 @@ class MarkupMap(abstract.FrontendDashboardModel):
         visit = self.visits.select_related("pin").first()
         if visit is not None:
             return ("visit", visit)
+        # Secondary (many-to-many) safety check-in attachments, checked last since a map
+        # attached this way is meant to be reusable across hosts, unlike the exclusive
+        # relations above - see SafetyCheckin.markup_maps.
+        attached_checkin = self.attached_safety_checkins.first()
+        if attached_checkin is not None:
+            return ("safety_checkin", attached_checkin)
         return None
 
     @property

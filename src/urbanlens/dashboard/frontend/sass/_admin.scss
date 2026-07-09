@@ -986,13 +986,17 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
 .admin-home-nav-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
     gap: 1rem;
     margin-bottom: 2rem;
 
     > a {
         background-color: var(--ul-grey-1b);
         border-color: var(--ul-grey-1a);
+    }
+
+    @include up(120rem) {
+        grid-template-columns: repeat(5, minmax(20rem, 1fr));
     }
 }
 

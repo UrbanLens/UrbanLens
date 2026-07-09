@@ -19,6 +19,7 @@ from django.db.models import (
     Index,
     IntegerField,
     Manager as DjangoManager,
+    ManyToManyField,
     OneToOneField,
     Q,
     TextField,
@@ -130,6 +131,9 @@ class SafetyPreference(abstract.DashboardModel):
 
     default_message = TextField(blank=True, default=DEFAULT_CONTACT_MESSAGE)
     default_grace_period = DurationField(default=DEFAULT_GRACE_PERIOD)
+    # Days after a check-in resolves (checked in / found safe / cancelled) before it's
+    # auto-deleted; null means "never" - see SafetyCheckinQuerySet.due_for_auto_delete().
+    auto_delete_after_days = IntegerField(null=True, blank=True)
     profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
 
     if TYPE_CHECKING:
@@ -261,6 +265,11 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         blank=True,
         related_name="safety_checkins",
     )
+    # Additional, previously-drawn maps attached for reference alongside the primary
+    # markup_map (the interactively-drawn route). Reference-only for the owner - unlike
+    # markup_map, these are not surfaced to emergency contacts in emails or the contact
+    # portal. See controllers.safety's SafetyCheckinMap*View.
+    markup_maps = ManyToManyField("dashboard.MarkupMap", blank=True, related_name="attached_safety_checkins")
 
     objects = SafetyCheckinManager()
 
@@ -291,6 +300,18 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             certain information aren't sent conflicting details later.
         """
         return self.escalated_at is not None
+
+    @property
+    def notifications_locked(self) -> bool:
+        """Whether the message/contacts/wiki-notify fields are frozen against further edits.
+
+        Returns:
+            True once contacts have already been notified (``contacts_locked``) or the
+            owner has already checked in - editing who/whether to notify no longer makes
+            sense past either point. Unlike ``contacts_locked``, this does not cover the
+            title field, which stays editable until contacts are actually notified.
+        """
+        return self.contacts_locked or self.status == SafetyCheckinStatus.CHECKED_IN
 
     def _slugify_base(self) -> str:
         """Return the raw text the URL slug is derived from.

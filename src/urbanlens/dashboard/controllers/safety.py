@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.safety import (
     save_contact_defaults,
     set_checkin_contacts,
     validate_notifiable_contacts,
+    wiki_notify_stats,
 )
 
 if TYPE_CHECKING:
@@ -227,6 +228,27 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     return datetime.timedelta(hours=max(hours, 0.25))
 
 
+def _parse_auto_delete_days(request: HttpRequest) -> int | None:
+    """Parse the submitted auto-delete window, in days.
+
+    Args:
+        request: Incoming HTTP request. Reads ``auto_delete_after_days`` - absent or
+            blank means "never delete" (the ``auto_delete_never`` checkbox, when
+            checked, clears the number field client-side before submit).
+
+    Returns:
+        A positive day count, or None for "never".
+    """
+    raw = request.POST.get("auto_delete_after_days", "").strip()
+    if not raw:
+        return None
+    try:
+        days = int(raw)
+    except ValueError:
+        return None
+    return days if days > 0 else None
+
+
 class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
     """Navbar banner for the profile's currently active (unresolved) check-in, if any.
 
@@ -299,7 +321,8 @@ class SafetyHomeView(LoginRequiredMixin, View):
         preference = get_or_create_preference(profile)
         preference.default_message = request.POST.get("default_message", "").strip()
         preference.default_grace_period = _parse_grace_period(request)
-        preference.save(update_fields=["default_message", "default_grace_period", "updated"])
+        preference.auto_delete_after_days = _parse_auto_delete_days(request)
+        preference.save(update_fields=["default_message", "default_grace_period", "auto_delete_after_days", "updated"])
         allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
         save_contact_defaults(profile, allowed)
 
@@ -308,6 +331,7 @@ class SafetyHomeView(LoginRequiredMixin, View):
                 {
                     "default_message": preference.default_message,
                     "default_grace_period_display": preference.default_grace_period_display,
+                    "auto_delete_after_days": preference.auto_delete_after_days,
                     "contact_labels": [_contact_display_label(*contact) for contact in default_contacts_as_input(profile)],
                     "rejected_contacts": rejected,
                 }
@@ -468,6 +492,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin.ensure_slug()
         _ensure_markup_map(checkin, profile)
         contacts = list(checkin.contacts.all())
+        destination_wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+        last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,
             "dashboard/pages/safety/detail.html",
@@ -478,7 +504,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contact_status": _contact_status_map(checkin, contacts),
                 "connections": get_connections(profile),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
-                "destination_wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude),
+                "destination_wiki": destination_wiki,
+                "last_wiki_edit": last_wiki_edit,
+                "wiki_editor_count": wiki_editor_count,
+                "attached_maps": checkin.markup_maps.all(),
                 "map_attribution": _MAP_ATTRIBUTION,
                 **_markup_style_context(profile),
             },
@@ -569,24 +598,32 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         update_fields = ["plan_details", "destination_latitude", "destination_longitude", "updated"]
 
         if checkin.contacts_locked:
+            submitted_title = request.POST.get("title")
+            if submitted_title is not None and submitted_title.strip() != checkin.title:
+                warnings.append("Title is locked and can't be changed once contacts have been notified.")
+        else:
+            checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
+            update_fields.append("title")
+
+        if checkin.notifications_locked:
             existing_contacts = list(checkin.contacts.all())
-            for field, label in (("title", "Title"), ("contact_message", "Message")):
-                submitted = request.POST.get(field)
-                if submitted is not None and submitted.strip() != getattr(checkin, field):
-                    warnings.append(f"{label} is locked and can't be changed once contacts have been notified.")
+            submitted_message = request.POST.get("contact_message")
+            if submitted_message is not None and submitted_message.strip() != checkin.contact_message:
+                warnings.append("Message is locked and can't be changed once contacts have been notified or you've checked in.")
             submitted_ids = set(request.POST.getlist("contact_profile_ids"))
             submitted_emails = {e.strip().lower() for e in request.POST.getlist("contact_emails") if e.strip()}
             current_ids = {str(c.contact_profile_id) for c in existing_contacts if c.contact_profile_id}
             current_emails = {c.email.lower() for c in existing_contacts if c.email}
             if submitted_ids != current_ids or submitted_emails != current_emails:
-                warnings.append("Contacts are locked and can't be changed once they've been notified.")
+                warnings.append("Contacts are locked and can't be changed once they've been notified or you've checked in.")
+            if "notify_community_wiki" in request.POST and not checkin.notify_community_wiki:
+                warnings.append("Community wiki notification is locked and can't be changed once contacts have been notified or you've checked in.")
         else:
-            checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
             checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
             # Absent means unchecked - either the box was cleared or the destination has no
             # community wiki (the toggle isn't rendered at all then), which disables it too.
             checkin.notify_community_wiki = "notify_community_wiki" in request.POST
-            update_fields += ["title", "contact_message", "notify_community_wiki"]
+            update_fields += ["contact_message", "notify_community_wiki"]
 
             allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile), checkin=checkin)
             set_checkin_contacts(checkin, allowed)
@@ -605,7 +642,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                     "contacts": [(c.contact_profile, c.email, c.name) for c in contacts],
                     "connections": get_connections(profile),
                     "contact_status": _contact_status_map(checkin, contacts),
-                    "locked": checkin.contacts_locked,
+                    "locked": checkin.notifications_locked,
                     "collapsible": True,
                 },
                 request=request,
@@ -637,6 +674,38 @@ class SafetyCheckinCancelView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
         cancel_checkin(checkin)
+        return redirect("safety.home")
+
+
+class SafetyCheckinDeleteView(LoginRequiredMixin, View):
+    """Permanently delete a safety check-in (owner-only).
+
+    If the check-in hasn't been resolved yet, it's routed through the normal
+    self-check-in flow first (``services.safety.check_in``) so any side effects
+    that flow carries - today, resolving the check-in and raising a visit
+    suggestion; it does not itself email already-notified contacts - happen
+    before the row disappears, rather than silently vanishing out from under
+    an in-progress escalation.
+
+    POST /safety/<slug:checkin_slug>/delete/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Resolve (if needed) and delete the check-in, then redirect home.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            Redirect to the safety home page.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        if not checkin.is_resolved:
+            check_in(checkin, profile)
+        checkin.delete()
+        messages.success(request, "Check-in deleted.")
         return redirect("safety.home")
 
 
@@ -707,11 +776,120 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
         except ValueError:
             lat = lng = None
         wiki = find_community_wiki(lat, lng)
+        last_wiki_edit, wiki_editor_count = wiki_notify_stats(wiki) if wiki else (None, 0)
         return render(
             request,
             "dashboard/partials/safety/_wiki_notify_toggle.html",
-            {"wiki": wiki, "checked": "notify_community_wiki" in request.GET},
+            {
+                "wiki": wiki,
+                "checked": "notify_community_wiki" in request.GET,
+                "last_wiki_edit": last_wiki_edit,
+                "wiki_editor_count": wiki_editor_count,
+            },
         )
+
+
+def _render_attached_maps(request: HttpRequest, checkin: SafetyCheckin) -> str:
+    """Render the "attached maps" list partial for a check-in.
+
+    Args:
+        request: Incoming HTTP request (needed for template context processors).
+        checkin: The check-in whose ``markup_maps`` should be rendered.
+
+    Returns:
+        Rendered HTML for ``_attached_maps.html``.
+    """
+    return render_to_string(
+        "dashboard/partials/safety/_attached_maps.html",
+        {"checkin": checkin, "attached_maps": checkin.markup_maps.all()},
+        request=request,
+    )
+
+
+class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
+    """HTMX dialog fragment: browse the profile's own maps to attach to a check-in.
+
+    Excludes the check-in's primary (drawn) route map and any map already attached,
+    so the list only ever offers maps that attaching would actually add.
+
+    GET /safety/<slug:checkin_slug>/maps/picker/?q=<title filter>
+    """
+
+    def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Render the picker dialog fragment.
+
+        Args:
+            request: Incoming HTTP request. Reads the optional ``q`` title filter.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            Rendered picker fragment.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        excluded_ids = list(checkin.markup_maps.values_list("pk", flat=True))
+        if checkin.markup_map_id:
+            excluded_ids.append(checkin.markup_map_id)
+        candidates = MarkupMap.objects.filter(profile=profile).exclude(pk__in=excluded_ids)
+        query = request.GET.get("q", "").strip()
+        if query:
+            candidates = candidates.filter(title__icontains=query)
+        return render(
+            request,
+            "dashboard/partials/safety/_map_picker.html",
+            {"checkin": checkin, "candidates": candidates[:25], "query": query},
+        )
+
+
+class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
+    """Attach one of the profile's own existing maps to a check-in as a reference map.
+
+    POST /safety/<slug:checkin_slug>/maps/attach/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Attach the given map and return the refreshed attached-maps list.
+
+        Args:
+            request: Incoming HTTP request. Reads ``map_uuid``.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            Rendered attached-maps partial, or a 400 if ``map_uuid`` doesn't
+            resolve to a map owned by the caller.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        map_uuid = request.POST.get("map_uuid", "").strip()
+        try:
+            markup_map = MarkupMap.objects.get(uuid=map_uuid, profile=profile)
+        except (MarkupMap.DoesNotExist, ValidationError, ValueError):
+            return HttpResponseBadRequest("Invalid map.")
+        checkin.markup_maps.add(markup_map)
+        return HttpResponse(_render_attached_maps(request, checkin))
+
+
+class SafetyCheckinMapDetachView(LoginRequiredMixin, View):
+    """Detach a reference map from a check-in without deleting the map itself.
+
+    POST /safety/<slug:checkin_slug>/maps/<uuid:map_uuid>/detach/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str, map_uuid: str) -> HttpResponse:
+        """Remove the map from the check-in's ``markup_maps`` and return the refreshed list.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+            map_uuid: UUID of the map to detach.
+
+        Returns:
+            Rendered attached-maps partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        checkin.markup_maps.remove(*checkin.markup_maps.filter(uuid=map_uuid))
+        return HttpResponse(_render_attached_maps(request, checkin))
 
 
 class SafetyGalleryView(LoginRequiredMixin, View):

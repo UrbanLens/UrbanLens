@@ -1,3 +1,4 @@
+{% load humanize %}
 {% comment %}
 "Also notify the community wiki" toggle for the check-in create/detail forms.
 
@@ -5,17 +6,25 @@ Rendered empty when no community wiki covers the destination point - the option
 only exists for places the community has already written about. Re-fetched via
 HTMX (safety.checkin.wiki_option) whenever the destination marker moves.
 
-Expects: wiki (Wiki or None), checked (bool).
+Expects: wiki (Wiki or None), checked (bool), last_wiki_edit (datetime or None),
+wiki_editor_count (int, defaults to 0 if omitted).
 
 Markup follows the Materialize checkbox convention (label > input + span) -
 Materialize hides the native input and draws the box on the sibling span.
 {% endcomment %}
 {% if wiki %}
 <div class="form-row safety-wiki-notify">
-    <label class="safety-wiki-notify-row">
-        <input type="checkbox" name="notify_community_wiki" id="notify_community_wiki" value="1" {% if checked %}checked{% endif %}>
+    <label class="safety-wiki-notify-row" {% if locked %}aria-disabled="true"{% endif %}>
+        <input type="checkbox" name="notify_community_wiki" id="notify_community_wiki" value="1" {% if checked %}checked{% endif %} {% if locked %}disabled{% endif %}>
         <span>Also notify the <strong>{{ wiki.name }}</strong> community wiki</span>
     </label>
+    <p class="form-hint">
+        <a href="{% url 'location.wiki' wiki.location.slug|default:wiki.location.uuid %}" target="_blank" rel="noopener">
+            <i class="material-symbols-outlined">open_in_new</i> View the wiki
+        </a>
+        · last edited {{ last_wiki_edit|naturaltime|default:"never" }}
+        · could notify {{ wiki_editor_count|default:0 }} {{ wiki_editor_count|default:0|pluralize:"person,people" }}
+    </p>
     <p class="form-hint">When your emergency contacts are notified, a comment linking to this check-in is also posted on the community wiki page, and users with this place pinned are alerted.</p>
 </div>
 {% endif %}

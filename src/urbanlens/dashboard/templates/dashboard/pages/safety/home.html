@@ -76,6 +76,12 @@
                     {% if default_contacts %}{% for contact_profile, email, name in default_contacts %}{{ contact_profile.username|default:name|default:email }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Not set{% endif %}
                 </span>
             </div>
+            <div class="safety-defaults-summary-row">
+                <span class="safety-defaults-summary-label">Auto-delete after</span>
+                <span class="safety-defaults-summary-value" id="safety-defaults-summary-auto-delete">
+                    {% if preference.auto_delete_after_days %}{{ preference.auto_delete_after_days }} day{{ preference.auto_delete_after_days|pluralize }}{% else %}Never{% endif %}
+                </span>
+            </div>
         </div>
 
         <form method="post" action="{% url 'safety.home' %}" class="safety-defaults-form" id="safety-defaults-form" hidden>
@@ -87,6 +93,20 @@
             <div class="form-row">
                 <label for="grace_period_hours">Default grace period</label>
                 {% include "dashboard/partials/safety/_grace_period_slider.html" with value=preference.default_grace_period_hours %}
+            </div>
+            <div class="form-row">
+                <label for="auto_delete_after_days">Auto-delete check-ins after</label>
+                <div class="safety-auto-delete-row">
+                    <input type="number" name="auto_delete_after_days" id="auto_delete_after_days" min="1" step="1"
+                           value="{{ preference.auto_delete_after_days|default_if_none:'' }}"
+                           {% if not preference.auto_delete_after_days %}disabled{% endif %}>
+                    <span>days</span>
+                    <label class="safety-auto-delete-never">
+                        <input type="checkbox" id="auto_delete_never" {% if not preference.auto_delete_after_days %}checked{% endif %}>
+                        Never
+                    </label>
+                </div>
+                <p class="form-hint">Resolved check-ins (checked in, found safe, or cancelled) are permanently deleted this many days after they resolve.</p>
             </div>
             {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
         </form>
@@ -152,6 +172,7 @@
             document.getElementById('safety-defaults-summary-message').textContent = data.default_message || 'Not set';
             document.getElementById('safety-defaults-summary-grace').textContent = data.default_grace_period_display;
             document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
+            document.getElementById('safety-defaults-summary-auto-delete').textContent = data.auto_delete_after_days ? (data.auto_delete_after_days + (data.auto_delete_after_days === 1 ? ' day' : ' days')) : 'Never';
             setStatus('Saved', false);
             if (window.toastr) {
                 (data.rejected_contacts || []).forEach(function (message) { toastr.error(message); });
@@ -179,6 +200,47 @@
         if (evt.target.type === 'range') scheduleSave(true);
     });
     form.addEventListener('contactschange', function () { scheduleSave(true); });
+
+    // -- Auto-delete "Never" checkbox: disables (and blanks) the day-count field --
+    var autoDeleteDays = document.getElementById('auto_delete_after_days');
+    var autoDeleteNever = document.getElementById('auto_delete_never');
+    if (autoDeleteDays && autoDeleteNever) {
+        autoDeleteNever.addEventListener('change', function () {
+            autoDeleteDays.disabled = autoDeleteNever.checked;
+            if (!autoDeleteNever.checked && !autoDeleteDays.value) autoDeleteDays.value = '30';
+            scheduleSave(true);
+        });
+        autoDeleteDays.addEventListener('input', function () {
+            if (autoDeleteDays.value && autoDeleteNever.checked) autoDeleteNever.checked = false;
+        });
+    }
+}());
+</script>
+<script>
+(function () {
+    // -- Hover-reveal delete buttons on each check-in card ---------------------
+    document.querySelectorAll('.safety-checkin-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            var notified = btn.dataset.contactsNotified === '1';
+            var ok = await window.confirmDialog({
+                title: 'Delete this check-in?',
+                message: notified
+                    ? "Your emergency contacts were already notified about this trip - deleting won't un-notify them. This can't be undone."
+                    : "This can't be undone.",
+                confirmLabel: 'Delete',
+            });
+            if (!ok) return;
+            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            fetch(btn.dataset.deleteUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+                .then(function (r) {
+                    if (!r.ok) throw new Error();
+                    var card = document.getElementById(btn.dataset.cardId);
+                    if (card) card.remove();
+                    if (window.toastr) toastr.success('Check-in deleted.');
+                })
+                .catch(function () { if (window.toastr) toastr.error('Could not delete this check-in.'); });
+        });
+    });
 }());
 </script>
 {% endblock %}
