@@ -217,7 +217,6 @@
 }
 
 .safety-checkin-card {
-    padding: 1rem 1.25rem;
 
     h3 {
         margin: .25rem 0 0;
@@ -235,6 +234,7 @@
 .safety-checkin-meta,
 .safety-checkin-contacts {
     margin: .25rem 0 0;
+    padding: 1rem 1.25rem;
     font-size: .85rem;
     color: var(--ul-grey-7);
 }
@@ -517,6 +517,54 @@
     height: 360px;
     border-radius: 12px;
     overflow: hidden;
+}
+
+// Compact base-layer switcher (street / satellite / topo) + borders overlay
+// toggle, floating over the map's bottom-right corner.
+.safety-map-layers {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 800;
+    display: flex;
+    gap: 4px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-3);
+    border-radius: 10px;
+    padding: 3px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .16);
+}
+
+.safety-layer-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1);
+    }
+
+    &.is-active {
+        background: $color-indigo-500;
+        color: #fff;
+    }
+}
+
+.safety-layer-btn--borders {
+    border-left: 1px solid var(--ul-grey-1a);
+    border-radius: 0 7px 7px 0;
 }
 
 .safety-photo-grid {

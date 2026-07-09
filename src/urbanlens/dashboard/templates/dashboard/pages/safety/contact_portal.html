@@ -43,7 +43,7 @@
     {% endif %}
 
     {% url 'safety.contact.markup.json' contact.token as markup_json_url %}
-    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url %}
+    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_json_url=markup_json_url %}
 
     {% if checkin.images.all %}
     <div class="card safety-photos">

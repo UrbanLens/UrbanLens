@@ -1193,3 +1193,78 @@ $memories-type-colors: (
     gap: .75rem;
     margin-top: 1.5rem;
 }
+
+
+// -- Memories > Maps: grid of the user's markup maps ------------------------
+
+.memories-maps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.memories-map-card {
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    // The shared comment-map thumbnail is used as the card cover.
+    .comment-map-preview {
+        margin: 0;
+        border-radius: 0;
+    }
+}
+
+.memories-map-card-body {
+    padding: .75rem .9rem .9rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    flex: 1;
+}
+
+.memories-map-card-title {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.memories-map-card-meta {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    &--draft {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+
+        .material-symbols-outlined { font-size: .95rem; }
+    }
+}
+
+.memories-map-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: $color-indigo-500;
+    text-decoration: none;
+
+    .material-symbols-outlined { font-size: .95rem; }
+
+    &:hover { text-decoration: underline; }
+}
+
+.memories-map-card-actions {
+    margin-top: auto;
+    padding-top: .5rem;
+    display: flex;
+    justify-content: flex-end;
+}

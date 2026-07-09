@@ -807,13 +807,19 @@ urlpatterns = [
                 # No-trailing-slash variant so DELETE/POST fetch calls work even
                 # when APPEND_SLASH would otherwise downgrade the method to GET.
                 path("<slug:checkin_slug>/gallery/<int:image_id>", safety.SafetyImageView.as_view()),
-                path("<uuid:safety_checkin_uuid>/markup/json/", markup.MarkupJsonView.as_view(), name="safety.checkin.markup.json"),
-                path("<uuid:safety_checkin_uuid>/markup/", markup.MarkupView.as_view(), name="safety.checkin.markup"),
-                path(
-                    "<uuid:safety_checkin_uuid>/markup/<uuid:markup_uuid>/",
-                    markup.MarkupEditView.as_view(),
-                    name="safety.checkin.markup.edit",
-                ),
+            ],
+        ),
+    ),
+    path(
+        "markup-maps/",
+        include(
+            [
+                path("new/", markup.MarkupMapCreateView.as_view(), name="markup_map.create"),
+                path("<uuid:map_uuid>/json/", markup.MarkupJsonView.as_view(), name="markup_map.json"),
+                path("<uuid:map_uuid>/view/", markup.MarkupMapViewStateView.as_view(), name="markup_map.view_state"),
+                path("<uuid:map_uuid>/delete/", markup.MarkupMapDeleteView.as_view(), name="markup_map.delete"),
+                path("<uuid:map_uuid>/markup/", markup.MarkupView.as_view(), name="markup_map.markup"),
+                path("<uuid:map_uuid>/markup/<uuid:markup_uuid>/", markup.MarkupEditView.as_view(), name="markup_map.markup.edit"),
             ],
         ),
     ),
@@ -832,7 +838,6 @@ urlpatterns = [
             [
                 path("<int:comment_id>/react/", comments.CommentReactionView.as_view(), name="comment.react"),
                 path("locations/", comments.PinnedLocationsJsonView.as_view(), name="comment.locations"),
-                path("map-pins/", comments.CommentMapPinsView.as_view(), name="comment.map_pins"),
             ],
         ),
     ),
@@ -888,6 +893,7 @@ urlpatterns = [
                 path("visit/<slug:pin_slug>/", memories.MemoriesVisitView.as_view(), name="memories.visit"),
                 path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
                 path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
+                path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),

@@ -951,17 +951,9 @@
         color: var(--ul-grey-6);
     }
 
-    .cmcc-pin-search {
-        background: var(--ul-grey-1);
-        color: var(--ul-grey-8);
-    }
-
-    .cmcc-pin-option {
-        color: var(--ul-grey-8);
-
-        &:hover {
-            background: var(--ul-hover-bg);
-        }
+    .memories-map-card {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-1a);
     }
 
     .cmc-layer-btn,

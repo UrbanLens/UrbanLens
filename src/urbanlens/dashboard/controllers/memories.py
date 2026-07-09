@@ -23,12 +23,13 @@ from urbanlens.dashboard.controllers.visits import (
     _visit_dialog_context,
 )
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.map_snapshot import parse_map_data
+from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -376,7 +377,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit = get_object_or_404(PinVisit, id=visit_id, pin=pin)
             visit.visited_at = visited_at
             visit.notes = notes
-            visit.map_data = map_data
+            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map)
             visit.save()
             created = False
         else:
@@ -387,7 +388,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                 visited_at=visited_at,
                 notes=notes,
                 source=VisitSource.MANUAL,
-                map_data=map_data,
+                markup_map=materialize_markup_map(profile, map_data),
             )
             add_visited_status(pin)
             created = True
@@ -455,6 +456,76 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
                 **_unlogged_band_context(profile),
             },
         )
+
+
+class MemoriesMapsView(LoginRequiredMixin, View):
+    """The "Maps" subpage of Memories - every markup map the user has drawn.
+
+    Lists the profile's :class:`MarkupMap` rows (check-in routes, comment and
+    visit maps, plus unattached drafts) with thumbnails, a link to whatever
+    each map is attached to, and a delete action.
+
+    GET /memories/maps/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the markup maps page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Maps page listing every markup map the user created.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        maps = MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-updated")
+        return render(
+            request,
+            "dashboard/pages/memories/maps.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "map_cards": [self._card(markup_map) for markup_map in maps],
+            },
+        )
+
+    def _card(self, markup_map: MarkupMap) -> dict[str, object]:
+        """Build the template context for one map card.
+
+        Args:
+            markup_map: The map to describe.
+
+        Returns:
+            Dict with the map, its snapshot (for the Leaflet thumbnail), item
+            count, and - when attached - a human label + link for the host.
+        """
+        kind, label, url = None, None, None
+        attachment = markup_map.attachment
+        if attachment is not None:
+            kind, host = attachment
+            if kind == "safety_checkin":
+                label = f"Safety check-in: {host.title}"
+                url = reverse("safety.checkin.detail", args=[host.slug or host.uuid])
+            elif kind == "comment" and host.pin_id:
+                label = f"Comment on {host.pin.effective_name}"
+                url = reverse("pin.details", args=[host.pin.slug])
+            elif kind == "comment":
+                label = f"Comment on {host.wiki.name}"
+                url = reverse("location.wiki", args=[host.wiki.location.slug])
+            elif kind == "trip_comment":
+                label = f"Comment on trip: {host.trip.name}"
+                url = reverse("trips.detail", args=[host.trip.uuid])
+            elif kind == "visit":
+                label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
+                url = reverse("pin.details", args=[host.pin.slug])
+        return {
+            "map": markup_map,
+            "snapshot": markup_map.to_snapshot(),
+            "item_count": len(markup_map.items.all()),
+            "attachment_kind": kind,
+            "attachment_label": label,
+            "attachment_url": url,
+        }
 
 
 class MemoriesUnloggedActionView(LoginRequiredMixin, View):

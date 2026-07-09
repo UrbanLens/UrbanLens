@@ -49,10 +49,11 @@
         </div>
         <div class="form-row form-row--map">
             <label>Destination &amp; route</label>
-            {% url 'safety.checkin.markup.json' checkin.uuid as markup_json_url %}
-            {% url 'safety.checkin.markup' checkin.uuid as markup_create_url %}
-            {% url 'safety.checkin.markup.edit' checkin.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template %}
+            {% url 'markup_map.json' checkin.markup_map.uuid as markup_json_url %}
+            {% url 'markup_map.markup' checkin.markup_map.uuid as markup_create_url %}
+            {% url 'markup_map.markup.edit' checkin.markup_map.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
+            {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
+            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.markup_map.center_latitude|default:checkin.destination_latitude map_center_lng=checkin.markup_map.center_longitude|default:checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_map_uuid=checkin.markup_map.uuid markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template %}
             {% if checkin.contacts_locked %}<p class="form-hint">Editing the destination or route will notify your emergency contacts of the update.</p>{% endif %}
         </div>
         {% if checkin.wiki_notified_at %}

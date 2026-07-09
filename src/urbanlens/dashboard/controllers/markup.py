@@ -1,4 +1,12 @@
-"""Markup views - lines, arrows, and text labels shared on a pin's or a wiki's map."""
+"""Markup views - annotation items on pin/wiki maps and standalone MarkupMaps.
+
+Three parents can own markup items (see ``PinMarkup``): a Pin (personal
+markup on the pin detail map), a Wiki (shared community markup), or a
+standalone ``MarkupMap`` - the reusable container behind safety check-in
+route maps, comment maps, and visit maps. The MarkupMap routes here also
+cover creating draft maps (so a map can be drawn before its host object
+exists, e.g. on the check-in creation page) and persisting the viewport.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +22,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup, SecurityIndicatorType
+from urbanlens.dashboard.models.markup.model import MapLayerMode, MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
@@ -59,6 +67,21 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
         owner.save(update_fields=[field])
 
 
+def _notify_linked_checkins(markup_map: MarkupMap, message: str) -> None:
+    """Re-notify emergency contacts of check-ins whose route map just changed.
+
+    Editing the route markup after contacts were already alerted is exactly
+    the kind of plan change they need to hear about; ``notify_contacts_of_update``
+    itself rate-limits and no-ops for non-escalated check-ins.
+
+    Args:
+        markup_map: The map that was edited.
+        message: Short human-readable description of the change.
+    """
+    for checkin in SafetyCheckin.objects.filter(markup_map=markup_map):
+        notify_contacts_of_update(checkin, message)
+
+
 _GEOMETRY_TYPES = {
     "line": "LineString",
     "arrow": "LineString",
@@ -96,25 +119,25 @@ def _resolve_owner(
     request: HttpRequest,
     pin_slug: str | None,
     location_slug: str | None,
-    safety_checkin_uuid: str | None = None,
-) -> tuple[Pin | Wiki | SafetyCheckin, QuerySet[PinMarkup]]:
-    """Resolve the markup owner (Pin, Wiki, or SafetyCheckin) from URL kwargs.
+    map_uuid: str | None = None,
+) -> tuple[Pin | Wiki | MarkupMap, QuerySet[PinMarkup]]:
+    """Resolve the markup owner (Pin, Wiki, or MarkupMap) from URL kwargs.
 
-    Exactly one of *pin_slug* / *location_slug* / *safety_checkin_uuid* is
-    expected to be set, matching the three URL patterns these views are
-    mounted under - personal markup under a pin's own map, shared/community
-    markup on a wiki map, or a personal route/plan drawing on a
-    safety check-in. Pin-scoped and check-in-scoped markup both require the
-    caller to own the parent; Wiki-scoped markup is shared data any
-    signed-in user may edit, matching the existing community detail-pin
-    permission model. The community route is keyed by the Location slug and
-    resolves (get-or-creates) that Location's Wiki.
+    Exactly one of *pin_slug* / *location_slug* / *map_uuid* is expected to
+    be set, matching the three URL patterns these views are mounted under -
+    personal markup under a pin's own map, shared/community markup on a wiki
+    map, or a standalone MarkupMap (safety check-in routes, comment/visit
+    maps). Pin-scoped and map-scoped markup both require the caller to own
+    the parent; Wiki-scoped markup is shared data any signed-in user may
+    edit, matching the existing community detail-pin permission model. The
+    community route is keyed by the Location slug and resolves
+    (get-or-creates) that Location's Wiki.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
         pin_slug: Slug of the parent pin, if this is a personal-markup route.
         location_slug: Slug of the parent location, if this is a community-markup route.
-        safety_checkin_uuid: UUID of the parent check-in, if this is a safety-checkin route.
+        map_uuid: UUID of the parent MarkupMap, if this is a standalone-map route.
 
     Returns:
         Tuple of (owner, markup queryset already filtered to that owner).
@@ -122,35 +145,47 @@ def _resolve_owner(
     if pin_slug is not None:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return pin, PinMarkup.objects.for_pin(pin)
-    if safety_checkin_uuid is not None:
-        checkin = get_object_or_404(SafetyCheckin, uuid=safety_checkin_uuid, profile__user=request.user)
-        return checkin, PinMarkup.objects.for_safety_checkin(checkin)
+    if map_uuid is not None:
+        markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        return markup_map, PinMarkup.objects.for_map(markup_map)
     location = get_object_or_404(Location, slug=location_slug)
     wiki, _created = Wiki.objects.get_or_create_for_location(location)
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
 class MarkupJsonView(LoginRequiredMixin, View):
-    """Return all markup items for a pin or location as JSON (for Leaflet rendering).
+    """Return all markup items for a pin, location, or markup map as JSON.
 
     GET /map/pin/<pin_slug>/markup/json/
     GET /location/<location_slug>/wiki/markup/json/
+    GET /markup-maps/<map_uuid>/json/
     """
 
-    def get(self, request, pin_slug=None, location_slug=None, safety_checkin_uuid=None):
-        """Return markup items as a JSON list.
+    def get(self, request, pin_slug=None, location_slug=None, map_uuid=None):
+        """Return markup items (and, for maps, the saved viewport) as JSON.
 
         Args:
             request: HttpRequest.
             pin_slug: UUID/slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
-            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
+            map_uuid: UUID of the parent MarkupMap (standalone-map route).
 
         Returns:
-            JsonResponse with ``markup_items`` list.
+            JsonResponse with ``markup_items`` list, plus ``view`` (centre,
+            zoom, layer_mode, show_borders, title) on the map route.
         """
-        _owner, items = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
-        return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
+        owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
+        payload: dict = {"markup_items": [m.to_json() for m in items.order_by("created")]}
+        if isinstance(owner, MarkupMap):
+            payload["view"] = {
+                "center_lat": owner.center_latitude,
+                "center_lng": owner.center_longitude,
+                "zoom": owner.zoom,
+                "layer_mode": owner.layer_mode,
+                "show_borders": owner.show_borders,
+                "title": owner.title,
+            }
+        return JsonResponse(payload)
 
 
 class SafetyContactMarkupJsonView(View):
@@ -166,7 +201,7 @@ class SafetyContactMarkupJsonView(View):
     """
 
     def get(self, request: HttpRequest, token: str) -> HttpResponse:
-        """Return the linked check-in's markup items as a JSON list.
+        """Return the linked check-in's route-map markup items as a JSON list.
 
         Args:
             request: HttpRequest.
@@ -175,31 +210,155 @@ class SafetyContactMarkupJsonView(View):
         Returns:
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin"), token=token)
-        items = PinMarkup.objects.for_safety_checkin(contact.checkin)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map"), token=token)
+        markup_map = contact.checkin.markup_map
+        if markup_map is None:
+            return JsonResponse({"markup_items": []})
+        items = PinMarkup.objects.for_map(markup_map)
         return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
 
 
+class MarkupMapCreateView(LoginRequiredMixin, View):
+    """Create a new (draft) standalone MarkupMap.
+
+    Used by pages that let the user draw a map before its host object exists
+    (e.g. the safety check-in creation page and the comment/visit composers).
+    The returned uuid is later linked to the host on form submit.
+
+    POST /markup-maps/new/
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        """Create an empty MarkupMap owned by the caller.
+
+        Accepts optional JSON body fields ``center_lat``/``center_lng``/
+        ``zoom``/``layer_mode``/``show_borders``/``title`` for the initial
+        viewport.
+
+        Args:
+            request: HttpRequest.
+
+        Returns:
+            JsonResponse with ``ok`` and the new map's ``uuid``.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        markup_map = MarkupMap.objects.create(profile=profile)
+        _apply_view_state(markup_map, _parse_body(request))
+        return JsonResponse({"ok": True, "uuid": str(markup_map.uuid)})
+
+
+def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
+    """Apply viewport fields from a request body onto *markup_map* and save.
+
+    Ignores fields that are absent or invalid; clamps zoom to Leaflet's range.
+
+    Args:
+        markup_map: The map to update.
+        body: Parsed request body.
+    """
+    updates: list[str] = []
+    for body_key, field in (("center_lat", "center_latitude"), ("center_lng", "center_longitude"), ("zoom", "zoom")):
+        value = body.get(body_key)
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            setattr(markup_map, field, float(value))
+            updates.append(field)
+    if markup_map.zoom is not None:
+        markup_map.zoom = max(1.0, min(22.0, markup_map.zoom))
+    layer_mode = body.get("layer_mode")
+    if layer_mode in MapLayerMode.values:
+        markup_map.layer_mode = layer_mode
+        updates.append("layer_mode")
+    if "show_borders" in body:
+        markup_map.show_borders = bool(body.get("show_borders"))
+        updates.append("show_borders")
+    if "title" in body:
+        markup_map.title = str(body.get("title") or "")[:200]
+        updates.append("title")
+    if updates:
+        markup_map.save(update_fields=[*updates, "updated"])
+
+
+class MarkupMapViewStateView(LoginRequiredMixin, View):
+    """Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
+
+    Autosaved by the map widget on move/zoom/layer changes, so a re-opened
+    map restores exactly how the user left it.
+
+    POST /markup-maps/<map_uuid>/view/
+    """
+
+    def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Update viewport fields from the JSON body.
+
+        Args:
+            request: HttpRequest with JSON body.
+            map_uuid: UUID of the map to update.
+
+        Returns:
+            JsonResponse with ``ok``.
+        """
+        markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        _apply_view_state(markup_map, _parse_body(request))
+        return JsonResponse({"ok": True})
+
+
+class MarkupMapDeleteView(LoginRequiredMixin, View):
+    """Delete a standalone MarkupMap (and, via cascade, its items).
+
+    Host models reference maps with ``on_delete=SET_NULL``, so deleting a map
+    that is still attached simply detaches it from its host.
+
+    POST/DELETE /markup-maps/<map_uuid>/delete/
+    """
+
+    def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Delete the map.
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to delete.
+
+        Returns:
+            Empty 200 response on success.
+        """
+        markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        markup_map.delete()
+        return HttpResponse("", status=200)
+
+    def delete(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Delete the map (DELETE verb alias for :meth:`post`).
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to delete.
+
+        Returns:
+            Empty 200 response on success.
+        """
+        return self.post(request, map_uuid)
+
+
 class MarkupView(LoginRequiredMixin, View):
-    """Create a new markup item for a pin or location.
+    """Create a new markup item for a pin, location, or markup map.
 
     POST /map/pin/<pin_slug>/markup/
     POST /location/<location_slug>/wiki/markup/
+    POST /markup-maps/<map_uuid>/markup/
     """
 
-    def post(self, request, pin_slug=None, location_slug=None, safety_checkin_uuid=None):
+    def post(self, request, pin_slug=None, location_slug=None, map_uuid=None):
         """Create a markup item.
 
         Args:
             request: HttpRequest with JSON body containing markup fields.
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
-            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
+            map_uuid: UUID of the parent MarkupMap (standalone-map route).
 
         Returns:
             JsonResponse with ``ok`` and ``uuid`` on success, error on failure.
         """
-        owner, _qs = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
+        owner, _qs = _resolve_owner(request, pin_slug, location_slug, map_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
 
@@ -230,8 +389,8 @@ class MarkupView(LoginRequiredMixin, View):
 
         if pin_slug is not None:
             owner_kwargs = {"parent_pin": owner}
-        elif safety_checkin_uuid is not None:
-            owner_kwargs = {"parent_safety_checkin": owner}
+        elif map_uuid is not None:
+            owner_kwargs = {"parent_map": owner}
         else:
             owner_kwargs = {"parent_wiki": owner}
         item = PinMarkup.objects.create(
@@ -256,8 +415,8 @@ class MarkupView(LoginRequiredMixin, View):
                 editor=profile,
                 changes={"markup_added": {"from": None, "to": item.label or item.markup_type}},
             )
-        if isinstance(owner, SafetyCheckin):
-            notify_contacts_of_update(owner, "added an annotation to the route map")
+        if isinstance(owner, MarkupMap):
+            _notify_linked_checkins(owner, "added an annotation to the route map")
         return JsonResponse({"ok": True, "uuid": str(item.uuid)})
 
 
@@ -266,14 +425,15 @@ class MarkupEditView(LoginRequiredMixin, View):
 
     POST/DELETE /map/pin/<pin_slug>/markup/<markup_uuid>/
     POST/DELETE /location/<location_slug>/wiki/markup/<markup_uuid>/
+    POST/DELETE /markup-maps/<map_uuid>/markup/<markup_uuid>/
     """
 
-    def _get_item(self, request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid=None) -> tuple[Pin | Wiki | SafetyCheckin, PinMarkup]:
+    def _get_item(self, request, pin_slug, location_slug, markup_uuid, map_uuid=None) -> tuple[Pin | Wiki | MarkupMap, PinMarkup]:
         """Resolve a markup item, ensuring the caller may access its owner."""
-        owner, qs = _resolve_owner(request, pin_slug, location_slug, safety_checkin_uuid)
+        owner, qs = _resolve_owner(request, pin_slug, location_slug, map_uuid)
         return owner, get_object_or_404(qs, uuid=markup_uuid)
 
-    def post(self, request, pin_slug=None, location_slug=None, markup_uuid=None, safety_checkin_uuid=None):
+    def post(self, request, pin_slug=None, location_slug=None, markup_uuid=None, map_uuid=None):
         """Update mutable fields on a markup item.
 
         Args:
@@ -281,12 +441,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
             markup_uuid: UUID of the markup item to update.
-            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
+            map_uuid: UUID of the parent MarkupMap (standalone-map route).
 
         Returns:
             JsonResponse with ``ok`` on success.
         """
-        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid)
+        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
         body = _parse_body(request)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
@@ -312,11 +472,11 @@ class MarkupEditView(LoginRequiredMixin, View):
         item.save()
         if item.security_indicator and isinstance(owner, (Pin, Wiki)):
             _apply_security_indicator(owner, item.security_indicator)
-        if isinstance(owner, SafetyCheckin):
-            notify_contacts_of_update(owner, "updated an annotation on the route map")
+        if isinstance(owner, MarkupMap):
+            _notify_linked_checkins(owner, "updated an annotation on the route map")
         return JsonResponse({"ok": True})
 
-    def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None, safety_checkin_uuid=None):
+    def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None, map_uuid=None):
         """Delete a markup item.
 
         Args:
@@ -324,12 +484,12 @@ class MarkupEditView(LoginRequiredMixin, View):
             pin_slug: Slug of the parent pin (personal markup route).
             location_slug: Slug of the parent location (community markup route).
             markup_uuid: UUID of the markup item to delete.
-            safety_checkin_uuid: UUID of the parent check-in (safety-checkin route).
+            map_uuid: UUID of the parent MarkupMap (standalone-map route).
 
         Returns:
             Empty 200 response on success.
         """
-        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, safety_checkin_uuid)
+        owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
         label = item.label or item.markup_type
         item.delete()
         if location_slug is not None:
@@ -339,6 +499,6 @@ class MarkupEditView(LoginRequiredMixin, View):
                 editor=profile,
                 changes={"markup_removed": {"from": label, "to": None}},
             )
-        if isinstance(owner, SafetyCheckin):
-            notify_contacts_of_update(owner, "removed an annotation from the route map")
+        if isinstance(owner, MarkupMap):
+            _notify_linked_checkins(owner, "removed an annotation from the route map")
         return HttpResponse("", status=200)

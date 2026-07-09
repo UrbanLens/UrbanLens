@@ -45,11 +45,29 @@ class Comment(abstract.FrontendDashboardModel):
     )
     text = models.TextField()
     image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
-    # Snapshot of a Leaflet map attached to this comment.
-    # Schema: {center_lat, center_lng, zoom, detail_pins: [...], markup: [...]}
-    map_data = models.JSONField(null=True, blank=True)
+    # Standalone map (viewport + markup items) attached to this comment.
+    markup_map = models.ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=models.SET_NULL,
+        related_name="comments",
+        null=True,
+        blank=True,
+    )
 
     objects = CommentManager()
+
+    @property
+    def map_data(self) -> dict | None:
+        """Client snapshot of the attached markup map, if any.
+
+        Kept as a property so templates and viewer JS that consumed the old
+        ``map_data`` JSON column keep working against the MarkupMap relation.
+
+        Returns:
+            Snapshot dict ({center_lat, center_lng, zoom, layer_mode,
+            show_borders, markup}) or None when no map is attached.
+        """
+        return self.markup_map.to_snapshot() if self.markup_map else None
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_comments"

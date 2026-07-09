@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
     _sanitize_number,
+    materialize_markup_map,
     parse_map_data as _parse_map_data,
 )
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
@@ -49,11 +50,14 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     pinned = viewer_pinned_uuids(profile)
     top_level_qs = (
         comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user")
+        .select_related("profile__user", "markup_map")
         .prefetch_related(
             "reactions__profile",
             "replies__reactions__profile",
             "replies__profile__user",
+            # comment.map_data derives its snapshot from the markup map's items.
+            "markup_map__items",
+            "replies__markup_map__items",
         )
     )
     # Default to the last page so the most recent activity (comments are
@@ -131,7 +135,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, map_data=map_data)
+        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -152,7 +156,10 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         comment = get_object_or_404(Comment, id=comment_id, pin=pin)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return HttpResponse("", status=200)
 
 
@@ -206,7 +213,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile=profile,
             text=text,
             parent=parent,
-            map_data=map_data,
+            markup_map=materialize_markup_map(profile, map_data),
         )
         if image:
             comment.image = image
@@ -226,7 +233,10 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return HttpResponse("", status=200)
 
 
@@ -317,41 +327,6 @@ def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
         result[r.emoji]["count"] += 1
         result[r.emoji]["reacted_by"].append(r.profile_id)
     return result
-
-
-# -- Comment map pin autocomplete endpoint ------------------------------------
-
-
-class CommentMapPinsView(LoginRequiredMixin, View):
-    """GET /comments/map-pins/?q=... - return user's pins for the comment map center picker."""
-
-    def get(self, request):
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        profile = _profile(request)
-        q = request.GET.get("q", "").strip().lower()
-        qs = Pin.objects.filter(profile=profile).select_related("location")[:200]
-        results = []
-        for pin in qs:
-            lat = pin.effective_latitude
-            lng = pin.effective_longitude
-            if lat is None or lng is None:
-                continue
-            name = pin.effective_name or ""
-            if q and q not in name.lower():
-                continue
-            results.append(
-                {
-                    "uuid": str(pin.uuid),
-                    "slug": pin.slug or str(pin.uuid),
-                    "name": name,
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    "detail_pins_url": f"/map/pin/{pin.slug or pin.uuid}/detail-pins/json/",
-                    "markup_url": f"/map/pin/{pin.slug or pin.uuid}/markup/json/",
-                },
-            )
-        return JsonResponse({"pins": results})
 
 
 # -- Location autocomplete endpoint -------------------------------------------

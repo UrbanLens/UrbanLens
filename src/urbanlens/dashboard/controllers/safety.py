@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyContactOptOutScope
 from urbanlens.dashboard.services.connections import get_connections
@@ -50,11 +51,11 @@ logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
 
-# Safety check-in maps use a single fixed OSM tile layer (no layer switcher),
-# so - unlike the main map page - this attribution never needs to change at
-# runtime; it's rendered as static text in the page footer, matching the main
-# map's "attributionControl: false" + footer-attribution convention.
-_MAP_ATTRIBUTION = "© OpenStreetMap contributors · Leaflet"
+# Safety check-in maps offer the same base layers as the shared map composer
+# (street / satellite / topo, plus the borders overlay). Attribution is
+# rendered as static text in the page footer covering all of them, matching
+# the main map's "attributionControl: false" + footer-attribution convention.
+_MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · © OpenTopoMap (CC-BY-SA) · Leaflet"
 
 
 def _markup_style_context(profile: Profile) -> dict:
@@ -76,6 +77,32 @@ def _markup_style_context(profile: Profile) -> dict:
         "markup_border_color": profile.markup_border_color,
         "markup_border_opacity": profile.markup_border_opacity,
     }
+
+
+def _ensure_markup_map(checkin: SafetyCheckin, profile: Profile) -> MarkupMap:
+    """Return the check-in's route MarkupMap, creating and linking one if missing.
+
+    The map is seeded with the destination as its centre so the route-drawing
+    toolbar opens on the right spot.
+
+    Args:
+        checkin: The check-in needing a route map.
+        profile: The check-in owner (becomes the map owner).
+
+    Returns:
+        The (possibly just-created) MarkupMap linked to the check-in.
+    """
+    if checkin.markup_map is not None:
+        return checkin.markup_map
+    markup_map = MarkupMap.objects.create(
+        profile=profile,
+        center_latitude=float(checkin.destination_latitude) if checkin.destination_latitude is not None else None,
+        center_longitude=float(checkin.destination_longitude) if checkin.destination_longitude is not None else None,
+        zoom=13,
+    )
+    checkin.markup_map = markup_map
+    checkin.save(update_fields=["markup_map"])
+    return markup_map
 
 
 def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[ContactInput]:
@@ -380,7 +407,35 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             )
         except ValueError as exc:
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
+        self._link_markup_map(request, profile, checkin)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
+
+    def _link_markup_map(self, request: HttpRequest, profile: Profile, checkin: SafetyCheckin) -> None:
+        """Attach the draft MarkupMap drawn on the creation page, if any.
+
+        The creation page lazily creates a standalone map the moment the user
+        starts drawing route markup (see ``_markup_toolbar_script.html``) and
+        submits its uuid in the ``markup_map`` field; here it becomes the new
+        check-in's route map. Only the caller's own unattached maps qualify -
+        a stale/foreign uuid is ignored rather than failing the check-in.
+
+        Args:
+            request: The creation-form POST request.
+            profile: The check-in owner.
+            checkin: The freshly created check-in.
+        """
+        map_uuid = request.POST.get("markup_map", "").strip()
+        if not map_uuid:
+            return
+        try:
+            markup_map = MarkupMap.objects.for_profile(profile).unattached().filter(uuid=map_uuid).first()
+        except (ValidationError, ValueError):
+            markup_map = None
+        if markup_map is None:
+            logger.warning("Ignoring markup_map %r on check-in create: not an unattached map owned by profile %s", map_uuid, profile.pk)
+            return
+        checkin.markup_map = markup_map
+        checkin.save(update_fields=["markup_map"])
 
 
 class SafetyCheckinDetailView(LoginRequiredMixin, View):
@@ -411,6 +466,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         except Http404:
             return self._render_community_view(request, checkin_slug)
         checkin.ensure_slug()
+        _ensure_markup_map(checkin, profile)
         contacts = list(checkin.contacts.all())
         return render(
             request,

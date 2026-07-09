@@ -216,6 +216,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         resolved_at: When the check-in concluded, if at all.
         plan_update_notified_at: When contacts were last re-notified of a trip plan/destination/
             route change made after escalation, if at all.
+        markup_map: The standalone MarkupMap holding the route/plan drawing shown on the
+            detail page and contact portal, if any.
         notify_community_wiki: Whether escalation should also post a comment to the destination's
             community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
         wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
@@ -249,12 +251,23 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         blank=True,
         related_name="safety_checkins",
     )
+    # Standalone route/plan map (viewport + markup items). Created on the
+    # check-in creation page (before the check-in exists) or lazily on the
+    # detail page, then linked here.
+    markup_map = ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_checkins",
+    )
 
     objects = SafetyCheckinManager()
 
     if TYPE_CHECKING:
         profile_id: int
         destination_location_id: int | None
+        markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
 

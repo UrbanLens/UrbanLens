@@ -1,19 +1,33 @@
 {% comment %}
 Compact map for safety check-in pages: a draggable destination marker, the
-same floating "jump to" search bar as the main map (window.LocationSearchEngine),
-and - when markup_json_url is set and the map isn't readonly - the exact same
+same floating "jump to" search bar as the main map (window.LocationSearchEngine,
+including local pins, addresses, coordinates, and Google Places), a base-layer
+switcher (street / satellite / topo) with a borders overlay toggle, and - when
+markup endpoints are configured and the map isn't readonly - the exact same
 "Add Detail" markup toolbar/side-panel as the pin detail and Location wiki
 maps (window.MarkupEngine via _markup_toolbar_panel.html/_markup_toolbar_script.html).
 
+The route drawing is backed by a standalone MarkupMap:
+  - The check-in detail page passes markup_map_uuid + the resolved
+    markup_json_url/markup_create_url/markup_edit_url_template for that map,
+    plus markup_map_view_url_template so viewport changes (pan/zoom/layer)
+    autosave onto the map.
+  - The check-in creation page passes no uuid but sets markup_map_create_url
+    (+ the markup_map_*_template vars consumed by _markup_toolbar_script.html):
+    the first drawn annotation creates a draft MarkupMap, whose uuid lands in
+    the hidden "markup_map" input so the create POST can link it.
+
 A readonly map (the contact portal) only ever needs to *view* any existing
 markup, never draw/edit it, so it keeps its own minimal read-only renderer
-instead of pulling in the shared toolbar.
+instead of pulling in the shared toolbar. It still honours the owner's saved
+base layer via map_layer_mode/map_show_borders.
 
 Expects: map_center_lat, map_center_lng, destination_lat, destination_lng
-(either may be blank), markup_json_url/markup_create_url/markup_edit_url_template
-(omit all three to skip markup entirely), markup_fill_color/markup_border_color/
-markup_fill_opacity/markup_border_opacity (optional, profile defaults), readonly
-(true hides all editing controls and the destination marker becomes non-draggable).
+(either may be blank), map_layer_mode/map_show_borders (optional, initial
+layers), the markup context described above (omit it all to skip markup
+entirely), markup_fill_color/markup_border_color/markup_fill_opacity/
+markup_border_opacity (optional, profile defaults), readonly (true hides all
+editing controls and the destination marker becomes non-draggable).
 
 Leaflet itself is loaded by each including page's own {% templatetag openblock %} header {% templatetag closeblock %},
 so it's always available by the time this script runs - no typeof guard needed.
@@ -34,22 +48,38 @@ so it's always available by the time this script runs - no typeof guard needed.
     </div>
     {% endif %}
     <div id="safety-map"></div>
-    {% if markup_json_url and not readonly %}
+    <div class="safety-map-layers" role="group" aria-label="Map layers">
+        <button type="button" class="safety-layer-btn is-active" data-layer="standard" title="Street map">
+            <i class="material-symbols-outlined">map</i>
+        </button>
+        <button type="button" class="safety-layer-btn" data-layer="satellite" title="Satellite">
+            <i class="material-symbols-outlined">globe</i>
+        </button>
+        <button type="button" class="safety-layer-btn" data-layer="topo" title="Topographic">
+            <i class="material-symbols-outlined">terrain</i>
+        </button>
+        <button type="button" class="safety-layer-btn safety-layer-btn--borders" data-overlay="borders" title="Borders overlay">
+            <i class="material-symbols-outlined">public</i>
+        </button>
+    </div>
+    {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
     <div class="map-bottom-controls">
         {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
     </div>
-    {% endif %}
+    {% endif %}{% endif %}
 </div>
-{% if markup_json_url and not readonly %}
+{% if not readonly %}{% if markup_json_url or markup_map_create_url %}
 {# Unified draw/edit panel this dropdown opens - must be a sibling of #}
 {# .map-bottom-controls, not nested inside it, so it positions relative to #}
 {# .safety-map-wrapper instead of that small absolute-positioned button cluster. #}
 {% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
-{% endif %}
+{% endif %}{% endif %}
 {% if not readonly %}
 <input type="hidden" id="safety-destination-lat" name="destination_latitude" value="{{ destination_lat|default:'' }}">
 <input type="hidden" id="safety-destination-lng" name="destination_longitude" value="{{ destination_lng|default:'' }}">
-<p class="form-hint">Click the map or search above to set your destination. Once placed, drag the pin to reposition it - you'll be asked to confirm.</p>
+{% if markup_map_create_url %}
+<input type="hidden" id="markup-map-uuid-field" name="markup_map" value="{{ markup_map_uuid|default:'' }}">
+{% endif %}
 {% endif %}
 <script>
     var centerLat = {{ map_center_lat|default:"39.8283" }};
@@ -57,7 +87,57 @@ so it's always available by the time this script runs - no typeof guard needed.
     // attributionControl: false - attribution renders as static text in the
     // page footer instead (see partials/layout/footer.html's map_attribution).
     var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+    // -- Base layers + borders overlay (same tiles as the shared map composer) --
+    var _TILE_LAYERS = {
+        standard: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', options: { maxZoom: 19 } },
+        satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', options: { maxNativeZoom: 19, maxZoom: 19 } },
+        topo: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', options: { maxNativeZoom: 17, maxZoom: 19 } }
+    };
+    var _layerMode = '{{ map_layer_mode|default:"standard" }}';
+    if (!_TILE_LAYERS[_layerMode]) _layerMode = 'standard';
+    var _showBorders = {{ map_show_borders|yesno:"true,false" }};
+    var _tileLayer = null;
+    var _bordersLayer = L.tileLayer(
+        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        { maxNativeZoom: 19, maxZoom: 19, opacity: 0.6, pane: 'overlayPane' }
+    );
+
+    function _refreshLayerButtons() {
+        document.querySelectorAll('.safety-layer-btn[data-layer]').forEach(function (b) {
+            b.classList.toggle('is-active', b.dataset.layer === _layerMode);
+        });
+        var bordersBtn = document.querySelector('.safety-layer-btn[data-overlay="borders"]');
+        if (bordersBtn) bordersBtn.classList.toggle('is-active', _showBorders);
+    }
+
+    function _setBaseLayer(mode) {
+        if (!_TILE_LAYERS[mode]) return;
+        if (_tileLayer) map.removeLayer(_tileLayer);
+        _layerMode = mode;
+        var cfg = _TILE_LAYERS[mode];
+        _tileLayer = L.tileLayer(cfg.url, cfg.options).addTo(map);
+        _refreshLayerButtons();
+        _saveMapViewSoon();
+    }
+
+    function _setBorders(on) {
+        _showBorders = on;
+        if (on) { _bordersLayer.addTo(map); } else { map.removeLayer(_bordersLayer); }
+        _refreshLayerButtons();
+        _saveMapViewSoon();
+    }
+
+    document.querySelectorAll('.safety-layer-btn[data-layer]').forEach(function (btn) {
+        btn.addEventListener('click', function () { _setBaseLayer(btn.dataset.layer); });
+    });
+    var _bordersBtn = document.querySelector('.safety-layer-btn[data-overlay="borders"]');
+    if (_bordersBtn) _bordersBtn.addEventListener('click', function () { _setBorders(!_showBorders); });
+
+    _tileLayer = L.tileLayer(_TILE_LAYERS[_layerMode].url, _TILE_LAYERS[_layerMode].options).addTo(map);
+    if (_showBorders) _bordersLayer.addTo(map);
+    _refreshLayerButtons();
+
     setTimeout(function () { map.invalidateSize(); }, 300);
     // _markup_toolbar_script.html (included below when markup is enabled) renders
     // every line/arrow/shape into a 'markupPane' - on the pin detail / Location
@@ -66,6 +146,46 @@ so it's always available by the time this script runs - no typeof guard needed.
     // Leaflet throws when adding a shape to a nonexistent pane (the shape never
     // renders - it looks like it "vanishes" the instant a draw gesture finishes).
     map.createPane('markupPane').style.zIndex = 550;
+
+    // -- MarkupMap viewport autosave --------------------------------------------
+    // Persists centre/zoom/layer/borders onto the backing MarkupMap (debounced)
+    // so the map reopens exactly as the user left it. Inactive until a map
+    // exists: on the creation page the uuid arrives via the
+    // 'ul:markup-map-created' event fired by _markup_toolbar_script.html.
+    var _mapViewUrl = null;
+    {% if markup_map_uuid and markup_map_view_url_template %}
+    _mapViewUrl = '{{ markup_map_view_url_template }}'.replaceAll('11111111-1111-1111-1111-111111111111', '{{ markup_map_uuid }}');
+    {% endif %}
+    var _saveViewTimer = null;
+    function _saveMapViewSoon() {
+        if (!_mapViewUrl) return;
+        clearTimeout(_saveViewTimer);
+        _saveViewTimer = setTimeout(function () {
+            var c = map.getCenter();
+            fetch(_mapViewUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': (typeof csrftoken !== 'undefined' ? csrftoken : '') },
+                body: JSON.stringify({
+                    center_lat: c.lat, center_lng: c.lng, zoom: map.getZoom(),
+                    layer_mode: _layerMode, show_borders: _showBorders
+                }),
+            }).catch(function () {});
+        }, 800);
+    }
+    map.on('moveend zoomend', _saveMapViewSoon);
+    {% if markup_map_create_url and markup_map_view_url_template %}
+    document.addEventListener('ul:markup-map-created', function (e) {
+        _mapViewUrl = '{{ markup_map_view_url_template }}'.replaceAll('11111111-1111-1111-1111-111111111111', e.detail.uuid);
+        _saveMapViewSoon();
+    });
+    {% endif %}
+
+    // Initial viewport for a lazily created draft MarkupMap (read by
+    // _markup_toolbar_script.html when it POSTs to markup_map_create_url).
+    function _ulMarkupMapInitialView() {
+        var c = map.getCenter();
+        return { center_lat: c.lat, center_lng: c.lng, zoom: map.getZoom(), layer_mode: _layerMode, show_borders: _showBorders };
+    }
 
     var readonly = {{ readonly|yesno:"true,false" }};
     var destLat = {{ destination_lat|default:"null" }};
@@ -138,7 +258,7 @@ so it's always available by the time this script runs - no typeof guard needed.
         });
     }
 
-    // -- Address / coordinate search (shared window.LocationSearchEngine) ------
+    // -- Address / coordinate / Google Places search (shared engine) -----------
     if (!readonly) {
         (function () {
             function jumpTo(lat, lng, zoom) {
@@ -156,7 +276,9 @@ so it's always available by the time this script runs - no typeof guard needed.
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },
                     osmNominatim: true,
+                    googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
                 },
+                resolvePlaceUrl: '{% url "map.resolve_place" %}',
                 enableMyLocation: true,
                 defaultZoom: 15,
                 onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },
@@ -164,14 +286,15 @@ so it's always available by the time this script runs - no typeof guard needed.
         })();
     }
 </script>
-{% if markup_json_url %}
 {% if not readonly %}
+{% if markup_json_url or markup_map_create_url %}
 <script>
     // Shared with the pin detail / Location wiki maps - see that file's own doc comment.
     const _markupLayer = L.layerGroup().addTo(map);
     {% include "dashboard/partials/layout/_markup_toolbar_script.html" %}
 </script>
-{% else %}
+{% endif %}
+{% elif markup_json_url %}
 {# Readonly (contact portal): view existing markup only, no editing UI. #}
 <script>
     var markupLayer = L.layerGroup().addTo(map);
@@ -201,5 +324,4 @@ so it's always available by the time this script runs - no typeof guard needed.
     }
     loadMarkup();
 </script>
-{% endif %}
 {% endif %}

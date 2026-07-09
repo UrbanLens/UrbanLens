@@ -39,9 +39,16 @@
             <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" placeholder="Route, gear, who you're with..."></textarea>
         </div>
         <div class="form-row form-row--map">
-            <label>Destination</label>
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False %}
-            <p class="form-hint">Route markup (arrows, areas, labels) can be added once the check-in is created.</p>
+            <label>Destination &amp; route</label>
+            {# Route markup drawn here lands on a draft MarkupMap created on first #}
+            {# use; its uuid is submitted in the hidden "markup_map" input and #}
+            {# linked to the check-in on creation. #}
+            {% url 'markup_map.create' as markup_map_create_url %}
+            {% url 'markup_map.json' '11111111-1111-1111-1111-111111111111' as markup_map_json_url_template %}
+            {% url 'markup_map.markup' '11111111-1111-1111-1111-111111111111' as markup_map_markup_url_template %}
+            {% url 'markup_map.markup.edit' '11111111-1111-1111-1111-111111111111' '00000000-0000-0000-0000-000000000000' as markup_map_markup_edit_url_template %}
+            {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
+            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False markup_map_create_url=markup_map_create_url markup_map_json_url_template=markup_map_json_url_template markup_map_markup_url_template=markup_map_markup_url_template markup_map_markup_edit_url_template=markup_map_markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template markup_map_field_id="markup-map-uuid-field" %}
         </div>
         {# Filled in (only) when the picked destination is covered by a community wiki. #}
         <div id="safety-wiki-notify-option"

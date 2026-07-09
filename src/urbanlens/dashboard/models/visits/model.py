@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, Index, JSONField, ManyToManyField, TextChoices, TextField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -44,15 +44,20 @@ class PinVisit(abstract.FrontendDashboardModel):
         notes: Optional free-text note about the visit.
         source: Whether this was entered manually or imported from Google Takeout.
         participants: Other profiles the pin owner says were present for this visit.
-        map_data: Optional Leaflet map snapshot (centre, zoom, freehand markup)
-            the user drew to document the visit. Same schema as
-            ``Comment.map_data``; sanitized via ``services.map_snapshot``.
+        markup_map: Optional standalone MarkupMap (viewport + markup items)
+            the user drew to document the visit.
     """
 
     visited_at = DateTimeField()
     notes = TextField(null=True, blank=True)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
-    map_data = JSONField(null=True, blank=True)
+    markup_map = ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="visits",
+    )
     tentative = BooleanField(default=False)
 
     participants = ManyToManyField(
@@ -78,6 +83,19 @@ class PinVisit(abstract.FrontendDashboardModel):
     if TYPE_CHECKING:
         pin_id: int
         route_id: int | None
+        markup_map_id: int | None
+
+    @property
+    def map_data(self) -> dict | None:
+        """Client snapshot of the attached markup map, if any.
+
+        Kept as a property so templates and viewer JS that consumed the old
+        ``map_data`` JSON column keep working against the MarkupMap relation.
+
+        Returns:
+            Snapshot dict or None when no map is attached.
+        """
+        return self.markup_map.to_snapshot() if self.markup_map else None
 
     def __str__(self) -> str:
         """Return a human-readable description of this visit.

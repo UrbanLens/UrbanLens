@@ -1,6 +1,15 @@
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
+class MapLayerMode(TextChoices):
+    """Base tile layer selected for a MarkupMap viewport."""
+
+    STANDARD = "standard", "Street"
+    SATELLITE = "satellite", "Satellite"
+    TOPO = "topo", "Topographic"
+    DARK = "dark", "Dark"
+
+
 class MarkupType(TextChoices):
     """The visual kind of map annotation."""
 

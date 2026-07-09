@@ -30,16 +30,77 @@ guarded and simply no-op when that panel isn't present (e.g. on the safety
 check-in map, which has no such panel).
 
 Context:
-  markup_json_url, markup_create_url, markup_edit_url_template - required.
+  markup_json_url, markup_create_url, markup_edit_url_template - the markup
+                       endpoints. Required unless the lazy MarkupMap context
+                       below is provided instead.
+  markup_map_uuid    - optional; uuid of the standalone MarkupMap backing this
+                       toolbar (safety check-in routes). Purely informational
+                       here - the *_url vars above should already point at
+                       that map's endpoints.
+  markup_map_create_url, markup_map_json_url_template,
+  markup_map_markup_url_template, markup_map_markup_edit_url_template -
+                       optional "lazy" mode (check-in creation page): no
+                       MarkupMap exists yet, so the first draw POSTs to
+                       markup_map_create_url and the endpoint URLs are then
+                       derived from the *_template vars by replacing the
+                       11111111-... placeholder with the new map's uuid. The
+                       new uuid is written to the hidden input named by
+                       markup_map_field_id (so the enclosing form submits it)
+                       and announced via a 'ul:markup-map-created' event on
+                       document.
   markup_fill_opacity, markup_border_opacity - optional (0-100, default 87/100
                        to match the panel's own slider defaults) - the
                        profile's preferred markup defaults, when available.
 {% endcomment %}
     // -- Markup layer ------------------------------------------------------
-    const _markupJsonUrl  = "{{ markup_json_url }}";
-    const _markupPostUrl  = "{{ markup_create_url }}";
-    const _markupEditBase = "{{ markup_edit_url_template }}"
+    const _MARKUP_MAP_UUID_PLACEHOLDER = '11111111-1111-1111-1111-111111111111';
+    let _markupJsonUrl  = "{{ markup_json_url|default:'' }}";
+    let _markupPostUrl  = "{{ markup_create_url|default:'' }}";
+    let _markupEditBase = "{{ markup_edit_url_template|default:'' }}"
         .replace('00000000-0000-0000-0000-000000000000/', '');
+
+    // Lazy MarkupMap creation (see doc comment above).
+    const _markupMapCreateUrl = "{{ markup_map_create_url|default:'' }}";
+    let _markupMapUuid = "{{ markup_map_uuid|default:'' }}" || null;
+    let _markupMapCreatePromise = null;
+
+    function _applyMarkupMapUuid(uuid) {
+        _markupMapUuid  = uuid;
+        _markupJsonUrl  = "{{ markup_map_json_url_template|default:'' }}".replaceAll(_MARKUP_MAP_UUID_PLACEHOLDER, uuid);
+        _markupPostUrl  = "{{ markup_map_markup_url_template|default:'' }}".replaceAll(_MARKUP_MAP_UUID_PLACEHOLDER, uuid);
+        _markupEditBase = "{{ markup_map_markup_edit_url_template|default:'' }}"
+            .replaceAll(_MARKUP_MAP_UUID_PLACEHOLDER, uuid)
+            .replace('00000000-0000-0000-0000-000000000000/', '');
+    }
+
+    // Resolves once markup endpoints exist, creating the draft MarkupMap on
+    // first use. Static-URL pages (pin detail, wiki, check-in detail) resolve
+    // immediately; only the lazy mode ever hits the network here.
+    function _ensureMarkupTarget() {
+        if (_markupPostUrl) return Promise.resolve();
+        if (!_markupMapCreateUrl) return Promise.reject(new Error('No markup endpoints configured'));
+        if (!_markupMapCreatePromise) {
+            const initialView = (typeof _ulMarkupMapInitialView === 'function') ? _ulMarkupMapInitialView() : {};
+            _markupMapCreatePromise = fetch(_markupMapCreateUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify(initialView),
+            })
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(data => {
+                _applyMarkupMapUuid(data.uuid);
+                const field = document.getElementById('{{ markup_map_field_id|default:"markup-map-uuid-field" }}');
+                if (field) field.value = data.uuid;
+                document.dispatchEvent(new CustomEvent('ul:markup-map-created', { detail: { uuid: data.uuid } }));
+            })
+            .catch(err => {
+                // Allow a retry on the next draw rather than caching the failure.
+                _markupMapCreatePromise = null;
+                throw err;
+            });
+        }
+        return _markupMapCreatePromise;
+    }
 
     // Profile defaults (0-100 percent, converted to 0-1 for Leaflet)
     const _markupDefaultFillOpacity   = {{ markup_fill_opacity|default:87 }}   / 100;
@@ -250,6 +311,7 @@ Context:
     }
 
     function loadMarkup() {
+        if (!_markupJsonUrl) return;  // lazy mode - nothing to load until the map is created
         fetch(_markupJsonUrl)
             .then(r => r.json())
             .then(data => {
@@ -389,14 +451,15 @@ Context:
         const fill_opacity       = parseInt(document.getElementById('markup-panel-fill-opacity').value, 10);
         const border_opacity     = parseInt(document.getElementById('markup-panel-border-opacity').value, 10);
         const security_indicator = markupType === 'text' ? '' : document.getElementById('markup-panel-security').value;
-        fetch(_markupPostUrl, {
+        _ensureMarkupTarget()
+        .then(() => fetch(_markupPostUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
             body: JSON.stringify({
                 markup_type: markupType, geometry, label, color, stroke_width, border_color,
                 fill_opacity, border_opacity, security_indicator,
             }),
-        })
+        }))
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(data => _reloadMarkupAndOpenEdit(data.uuid))
         .catch(() => toastr.error('Failed to save markup.'));

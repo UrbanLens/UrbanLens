@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.map_snapshot import parse_map_data
+from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.visits import (
     add_visited_status,
@@ -65,7 +65,8 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     Returns:
         Rendered HTML partial.
     """
-    page_obj = get_page(request, pin.visit_history.all().prefetch_related("participants", "images"), _VISITS_PAGE_SIZE)
+    # markup_map__items backs visit.map_data (the embedded map snapshot).
+    page_obj = get_page(request, pin.visit_history.all().select_related("markup_map").prefetch_related("participants", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
@@ -249,7 +250,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
             visited_at=visited_at,
             notes=notes,
             source=VisitSource.MANUAL,
-            map_data=map_data,
+            markup_map=materialize_markup_map(pin.profile, map_data),
         )
         sync_last_visited(pin)
         add_visited_status(pin)
@@ -344,7 +345,7 @@ class VisitEditView(LoginRequiredMixin, View):
 
         visit.visited_at = visited_at
         visit.notes = request.POST.get("notes", "").strip() or None
-        visit.map_data = parse_map_data(request)
+        visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map)
         visit.save()
         sync_last_visited(pin)
 
@@ -381,7 +382,10 @@ class VisitDeleteView(LoginRequiredMixin, View):
             pin__profile__user=request.user,
         )
         pin = visit.pin
+        markup_map = visit.markup_map
         visit.delete()
+        if markup_map is not None:
+            markup_map.delete()
         sync_last_visited(pin)
 
         return _render_visit_history(request, pin)

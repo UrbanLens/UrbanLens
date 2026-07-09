@@ -547,13 +547,16 @@
       <div class="comment-map-composer-body">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
-          <div class="cmcc-pin-search-wrap">
-            <input type="text" class="cmcc-pin-search" id="cmcc-search-input"
-                   placeholder="Pin name, address, or lat,lng (Enter to search)" autocomplete="off">
-            <button type="button" class="cmcc-go-btn" id="cmcc-go-btn" title="Go to location">
-              <i class="material-symbols-outlined">search</i>
+          {# Same multi-source jump-to search as the main map: local pins, #}
+          {# addresses (Nominatim), Google Places, coordinates, Plus Codes. #}
+          <div id="cmcc-search-bar" class="addr-search-bar addr-search-bar--composer">
+            <i class="material-icons addr-search-icon">place</i>
+            <input type="text" id="cmcc-search-input" class="addr-search-input"
+                   placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
+            <button type="button" class="addr-search-clear" id="cmcc-search-clear" aria-label="Clear search">
+              <i class="material-symbols-outlined">close</i>
             </button>
-            <div class="cmcc-pin-dropdown" hidden></div>
+            <div id="cmcc-search-suggestions" class="addr-search-suggestions" hidden></div>
           </div>
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
@@ -567,6 +570,9 @@
           </button>
           <button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic">
             <i class="material-symbols-outlined">terrain</i>
+          </button>
+          <button type="button" class="cmc-layer-btn" id="cmc-borders" title="Borders overlay">
+            <i class="material-symbols-outlined">public</i>
           </button>
           <span class="cmc-toolbar-sep"></span>
           <span class="cmc-toolbar-label">Draw:</span>
@@ -599,6 +605,10 @@
           <label class="cmc-color-wrap" title="Markup color">
             <span>Color</span>
             <input type="color" id="cmc-color" value="#e74c3c">
+          </label>
+          <label class="cmc-width-wrap" title="Line width">
+            <span>Width</span>
+            <input type="range" id="cmc-width" min="1" max="12" step="1" value="3">
           </label>
           {# text label input - shown only when text tool is active #}
           <input type="text" id="cmc-text-label" class="cmc-text-label-input"
@@ -689,6 +699,14 @@
             return L.tileLayer(cfg.url, cfg.options);
         }
 
+        // Geopolitical borders overlay (same tiles as the main map's Borders layer).
+        function _makeBordersLayer() {
+            return L.tileLayer(
+                'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+                { attribution: 'Boundaries &copy; Esri', maxZoom: 19, opacity: 0.6, pane: 'overlayPane' }
+            );
+        }
+
         // -- Reference marker --------------------------------------------------
         // A non-interactive pin marker (used to show a PinVisit's location on its
         // map). Uses a divIcon so it needs no external image assets.
@@ -719,13 +737,14 @@
         var _composerMap = null;
         var _composerTileLayer = null;    // active tile layer
         var _composerLayerMode = 'standard';
+        var _composerBordersLayer = null; // borders overlay (created once, toggled)
+        var _composerShowBorders = false;
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
         var _composerRefMarker = null;    // optional pin-location reference marker
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
         var _originForm = null;           // the .comment-compose element that opened the dialog
-        var _pinSearchTimer = null;
-        var _pinCache = [];
+        var _composerSearch = null;       // LocationSearchEngine instance (created lazily)
 
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
@@ -746,7 +765,7 @@
             }
 
             _dialog.showModal();
-            _loadPinsForSearch();
+            _ensureComposerSearch();
 
             // showModal() sets [open] synchronously, but the browser hasn't run
             // style recalculation yet. Reading offsetHeight forces an immediate
@@ -759,16 +778,18 @@
                 _composerMap = L.map(mapEl, { zoomControl: true });
                 _composerTileLayer = _makeTileLayer(_composerLayerMode);
                 _composerTileLayer.addTo(_composerMap);
+                _composerBordersLayer = _makeBordersLayer();
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
+                    getWidth: function () { return _composerWidth(); },
                     getTextLabel: function () {
                         var inp = document.getElementById('cmc-text-label');
                         return inp ? inp.value.trim() : '';
                     },
                     onCommit: function (type, latlngs, extras) {
                         var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                        var s = { type: type, latlngs: latlngs, color: color };
+                        var s = { type: type, latlngs: latlngs, color: color, stroke_width: _composerWidth() };
                         if (type === 'text') {
                             var label = extras.label || '';
                             if (!label) {
@@ -818,11 +839,13 @@
                 if (savedMode !== _composerLayerMode) {
                     _setComposerLayer(savedMode);
                 }
+                _setComposerBorders(!!existing.show_borders);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
                 _composerMap.setView([defLat, defLng], 14);
                 _composerShapes = [];
+                _setComposerBorders(false);
             }
 
             // Show a reference marker at the pin's coordinates when the origin
@@ -849,14 +872,34 @@
             _composerLayerMode = mode;
             _composerTileLayer = _makeTileLayer(mode);
             _composerTileLayer.addTo(_composerMap);
-            document.querySelectorAll('.cmc-layer-btn').forEach(function (b) {
+            document.querySelectorAll('.cmc-layer-btn[data-layer]').forEach(function (b) {
                 b.classList.toggle('is-active', b.dataset.layer === mode);
             });
         }
 
-        document.querySelectorAll('.cmc-layer-btn').forEach(function (btn) {
+        function _setComposerBorders(on) {
+            _composerShowBorders = on;
+            if (_composerMap && _composerBordersLayer) {
+                if (on) { _composerBordersLayer.addTo(_composerMap); }
+                else if (_composerMap.hasLayer(_composerBordersLayer)) { _composerMap.removeLayer(_composerBordersLayer); }
+            }
+            var btn = document.getElementById('cmc-borders');
+            if (btn) btn.classList.toggle('is-active', on);
+        }
+
+        document.querySelectorAll('.cmc-layer-btn[data-layer]').forEach(function (btn) {
             btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
         });
+        document.getElementById('cmc-borders').addEventListener('click', function () {
+            _setComposerBorders(!_composerShowBorders);
+        });
+
+        // Current stroke-width slider value (also font-size fallback for text).
+        function _composerWidth() {
+            var el = document.getElementById('cmc-width');
+            var n = el ? parseInt(el.value, 10) : 3;
+            return isNaN(n) ? 3 : Math.max(1, Math.min(50, n));
+        }
 
         // -- Close / cancel ----------------------------------------------------
         document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
@@ -876,7 +919,7 @@
                 center_lng: center.lng,
                 zoom: _composerMap.getZoom(),
                 layer_mode: _composerLayerMode,
-                detail_pins: [],
+                show_borders: _composerShowBorders,
                 markup: _composerShapes.slice()
             };
             var hiddenField = _originForm.querySelector('.comment-map-data-field');
@@ -938,102 +981,34 @@
             });
         }
 
-        // -- Pin search / address / coordinate autocomplete --------------------
-        function _loadPinsForSearch() {
-            if (_pinCache.length) return;
-            fetch('/dashboard/comments/map-pins/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { return r.json(); })
-                .then(function (d) { _pinCache = d.pins || []; });
-        }
-
-        // Try to interpret the input as a lat,lng string. Returns true and pans
-        // the map if successful; returns false otherwise.
-        function _tryCoordInput(raw) {
-            var parts = raw.split(',');
-            if (parts.length !== 2) return false;
-            var lat = parseFloat(parts[0]);
-            var lng = parseFloat(parts[1]);
-            if (isNaN(lat) || isNaN(lng)) return false;
-            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
-            if (_composerMap) _composerMap.setView([lat, lng], 15);
-            return true;
-        }
-
-        // Geocode a free-text address via the settings endpoint; pan map on success.
-        function _geocodeAndCenter(q) {
+        // -- Jump-to search (shared window.LocationSearchEngine) ----------------
+        // Same multi-source search as the main map and the safety destination
+        // picker: local pins, addresses (Nominatim), Google Places, raw
+        // coordinates, and Plus Codes. Created lazily on first open so pages
+        // without Leaflet never touch it.
+        function _ensureComposerSearch() {
+            if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
             var input = document.getElementById('cmcc-search-input');
-            if (input) input.disabled = true;
-            fetch('/dashboard/settings/geocode/?address=' + encodeURIComponent(q))
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (input) input.disabled = false;
-                    if (d.lat != null && d.lng != null) {
-                        if (_composerMap) _composerMap.setView([d.lat, d.lng], 15);
-                        _closePinDropdown();
-                        if (input) input.value = '';
-                    } else {
-                        toastr.warning('Location not found.');
-                    }
-                })
-                .catch(function () {
-                    if (input) input.disabled = false;
-                    toastr.error('Geocoding failed.');
-                });
+            if (!input) return;
+            _composerSearch = window.LocationSearchEngine.create({
+                input: input,
+                suggestions: document.getElementById('cmcc-search-suggestions'),
+                bar: document.getElementById('cmcc-search-bar'),
+                clearBtn: document.getElementById('cmcc-search-clear'),
+                historyKey: 'ul_composer_search_history_v1',
+                sources: {
+                    localPins: { url: '{% url "map.autocomplete.local" %}' },
+                    osmNominatim: true,
+                    googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
+                },
+                resolvePlaceUrl: '{% url "map.resolve_place" %}',
+                enableMyLocation: true,
+                defaultZoom: 15,
+                onSelect: function (result) {
+                    if (_composerMap) _composerMap.setView([result.lat, result.lng], result.zoom || 15);
+                },
+            });
         }
-
-        function _closePinDropdown() {
-            var dd = document.querySelector('.cmcc-pin-dropdown');
-            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
-        }
-
-        // Called when the user commits a search (Enter key or Go button).
-        function _commitSearch() {
-            var input = document.getElementById('cmcc-search-input');
-            var q = input ? input.value.trim() : '';
-            if (!q) return;
-            _closePinDropdown();
-            if (_tryCoordInput(q)) { input.value = ''; return; }
-            _geocodeAndCenter(q);
-        }
-
-        var _searchInput = document.getElementById('cmcc-search-input');
-
-        _searchInput.addEventListener('input', function () {
-            clearTimeout(_pinSearchTimer);
-            var q = this.value.toLowerCase().trim();
-            var dd = document.querySelector('.cmcc-pin-dropdown');
-            if (!q) { _closePinDropdown(); return; }
-            _pinSearchTimer = setTimeout(function () {
-                var results = _pinCache.filter(function (p) {
-                    return p.name.toLowerCase().includes(q);
-                }).slice(0, 8);
-                dd.innerHTML = '';
-                if (!results.length) { dd.hidden = true; return; }
-                results.forEach(function (p) {
-                    var item = document.createElement('div');
-                    item.className = 'cmcc-pin-option';
-                    item.textContent = p.name;
-                    item.addEventListener('mousedown', function (e) {
-                        e.preventDefault();  // keeps focus on input, preventing premature blur
-                        if (_composerMap) _composerMap.setView([p.lat, p.lng], 15);
-                        _closePinDropdown();
-                        _searchInput.value = p.name;
-                    });
-                    dd.appendChild(item);
-                });
-                dd.hidden = false;
-            }, 150);
-        });
-
-        _searchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); _commitSearch(); }
-        });
-
-        _searchInput.addEventListener('blur', function () {
-            setTimeout(_closePinDropdown, 200);
-        });
-
-        document.getElementById('cmcc-go-btn').addEventListener('click', _commitSearch);
 
         // Belt-and-suspenders: re-invalidate after dialog CSS transitions finish.
         _dialog.addEventListener('transitionend', function () {
@@ -1120,6 +1095,7 @@
 
             var viewMap = L.map(el);
             _makeTileLayer(data.layer_mode || 'standard').addTo(viewMap);
+            if (data.show_borders) _makeBordersLayer().addTo(viewMap);
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
@@ -1158,6 +1134,7 @@
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
                 _makeTileLayer(data.layer_mode || 'standard').addTo(tmap);
+                if (data.show_borders) _makeBordersLayer().addTo(tmap);
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);

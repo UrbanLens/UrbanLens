@@ -801,7 +801,13 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(profile)
-    top_comments = trip.comments.filter(parent__isnull=True).select_related("author__user").prefetch_related("reactions", "replies__reactions", "replies__author__user").order_by("created")
+    top_comments = (
+        trip.comments.filter(parent__isnull=True)
+        .select_related("author__user", "markup_map")
+        # comment.map_data derives its snapshot from the markup map's items.
+        .prefetch_related("reactions", "replies__reactions", "replies__author__user", "markup_map__items", "replies__markup_map__items")
+        .order_by("created")
+    )
 
     rendered: list[_CommentData] = []
     for c in top_comments:
@@ -873,6 +879,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
         from urbanlens.dashboard.controllers.comments import _parse_map_data
+        from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
@@ -883,7 +890,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, map_data=map_data)
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -908,7 +915,10 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
         if profile not in {comment.author, trip.creator}:
             return HttpResponse("You can only delete your own comments.", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return _render_trip_comments(request, trip, profile)
 
 

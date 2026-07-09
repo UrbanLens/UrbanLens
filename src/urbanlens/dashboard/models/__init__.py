@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_place import GooglePlace
 from urbanlens.dashboard.models.images import Image
 from urbanlens.dashboard.models.location import Location
-from urbanlens.dashboard.models.markup import MarkupType, PinMarkup
+from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus

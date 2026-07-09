@@ -1,9 +1,14 @@
 """Shared sanitization for Leaflet map snapshots (``map_data`` JSON blobs).
 
 A map snapshot is a small JSON document capturing a map view plus any freehand
-markup a user drew on it (lines, arrows, shapes, text). It is stored verbatim on
-several models - ``Comment.map_data``, ``PinVisit.map_data`` - and re-rendered
-client-side by the shared ``MarkupEngine`` (see ``partials/_markup_engine.html``).
+markup a user drew on it (lines, arrows, shapes, text). It is the wire format
+between the shared map composer dialog and the server: the composer submits a
+snapshot in a form field, and the server materializes it into a standalone
+:class:`~urbanlens.dashboard.models.markup.model.MarkupMap` (viewport fields +
+``PinMarkup`` item rows) that the host model (comment, visit, trip comment)
+links to. Read-side rendering converts back to this format via
+``MarkupMap.to_snapshot()`` for the shared client-side ``MarkupEngine`` (see
+``partials/_markup_engine.html``).
 
 Because the blob is user-submitted and rendered back into the DOM, every field
 is validated and clamped here before it is trusted. Keeping this logic in one
@@ -17,8 +22,13 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.models.markup.meta import MapLayerMode
+
 if TYPE_CHECKING:
     from django.http import HttpRequest
+
+    from urbanlens.dashboard.models.markup.model import MarkupMap
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +137,8 @@ def sanitize_map_data(data: object) -> dict | None:
         "center_lat": float(center_lat),  # type: ignore[arg-type]
         "center_lng": float(center_lng),  # type: ignore[arg-type]
         "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
-        "layer_mode": layer_mode if isinstance(layer_mode, str) else "standard",
+        "layer_mode": layer_mode if layer_mode in MapLayerMode.values else MapLayerMode.STANDARD.value,
+        "show_borders": bool(data.get("show_borders")),
         "markup": _sanitize_markup_shapes(data.get("markup") or data.get("shapes")),
     }
 
@@ -151,3 +162,38 @@ def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None
         logger.warning("Ignoring malformed map_data in POST field %r", field)
         return None
     return sanitize_map_data(data)
+
+
+def materialize_markup_map(
+    profile: Profile,
+    snapshot: dict | None,
+    existing_map: MarkupMap | None = None,
+) -> MarkupMap | None:
+    """Create/update/delete a MarkupMap so it matches a submitted snapshot.
+
+    The single write-path helper for hosts that attach maps through the
+    snapshot composer (comments, trip comments, pin visits): pass the
+    sanitized snapshot from ``parse_map_data`` plus whatever map the host
+    already links to, then store the returned map on the host FK.
+
+    Args:
+        profile: Owner for a newly created map.
+        snapshot: Sanitized snapshot dict, or None when no map was submitted.
+        existing_map: The map currently linked by the host, if any.
+
+    Returns:
+        The MarkupMap the host should now link to, or None when the map was
+        removed (a now-unreferenced existing map is deleted).
+    """
+    from urbanlens.dashboard.models.markup.model import MarkupMap
+
+    if snapshot is None:
+        if existing_map is not None:
+            existing_map.delete()
+        return None
+    if existing_map is not None and existing_map.profile_id == profile.pk:
+        markup_map = existing_map
+    else:
+        markup_map = MarkupMap.objects.create(profile=profile)
+    markup_map.replace_items_from_snapshot(snapshot)
+    return markup_map

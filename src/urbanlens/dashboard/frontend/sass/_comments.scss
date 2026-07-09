@@ -572,87 +572,16 @@
     white-space: nowrap;
 }
 
-.cmcc-pin-search-wrap {
+// Inline variant of the map pages' floating jump-to search bar: sits in the
+// composer's controls row instead of floating over the map, but reuses all
+// the .addr-search-* internals (input, suggestions dropdown, sections).
+.addr-search-bar--composer {
     position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
     flex: 1;
-    max-width: 400px;
-    display: flex;
-    gap: .35rem;
-}
-
-.cmcc-pin-search {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 6px;
-    padding: .3rem .65rem;
-    font-size: .82rem;
-    font-family: inherit;
-
-    &:focus {
-        outline: none;
-        border-color: $color-indigo-500;
-    }
-
-    &:disabled {
-        opacity: .6;
-        cursor: wait;
-    }
-}
-
-.cmcc-go-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: .3rem .5rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 6px;
-    background: var(--ul-grey-0);
-    color: var(--ul-grey-7);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background .12s, border-color .12s;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        background: $color-indigo-500;
-        border-color: $color-indigo-500;
-        color: var(--ul-grey-5);
-    }
-}
-
-.cmcc-pin-dropdown {
-    position: absolute;
-    top: calc(100% + 3px);
-    left: 0;
-    right: 0;
-    width: 100%;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
-    z-index: 600;
-    max-height: 200px;
-    overflow-y: auto;
-
-    &[hidden] {
-        display: none;
-    }
-}
-
-.cmcc-pin-option {
-    padding: .45rem .75rem;
-    font-size: .83rem;
-    cursor: pointer;
-    color: var(--ul-grey-7);
-
-    &:hover {
-        background: var(--ul-grey-0);
-    }
+    max-width: 460px;
 }
 
 .comment-map-composer-map {
@@ -740,6 +669,21 @@
         border-radius: 4px;
         padding: 1px;
         cursor: pointer;
+    }
+}
+
+.cmc-width-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    input[type="range"] {
+        width: 72px;
+        cursor: pointer;
+        accent-color: $color-indigo-500;
     }
 }
 
