@@ -13,6 +13,7 @@ class DashboardConfig(AppConfig):
 
         from urbanlens.dashboard.models.badges.signals import create_default_tags
         import urbanlens.dashboard.models.location.signals
+        import urbanlens.dashboard.models.notifications.signals
         import urbanlens.dashboard.models.pin.signals
         from urbanlens.dashboard.models.profile.model import Profile
         import urbanlens.dashboard.models.profile.signals

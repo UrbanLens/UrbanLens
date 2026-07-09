@@ -1,0 +1,149 @@
+{% if user.is_authenticated %}
+{# -- Live notification push -------------------------------------------------- #}
+{# Connects to ws/notifications/ (UserNotificationConsumer). Each pushed        #}
+{# notification refreshes the nav bell badge (via the existing HTMX            #}
+{# notifCountRefresh trigger), shows a toast, and - when the tab is hidden and  #}
+{# the user granted permission on the settings page - a desktop Notification.   #}
+{# If the socket can't be established, it degrades to polling the badge every   #}
+{# minute until the connection comes back.                                      #}
+<script>
+(function () {
+    var WS_PATH = '/ws/notifications/';
+    var RETRY_MIN_MS = 1000;
+    var RETRY_MAX_MS = 30000;
+    var POLL_MS = 60000;
+    var FAILURES_BEFORE_POLLING = 2;
+
+    var ws = null;
+    var retryDelay = RETRY_MIN_MS;
+    var failures = 0;
+    var pollTimer = null;
+    var reconnectTimer = null;
+    var stopped = false;   // set on close 4404 (unauthenticated) - retrying won't help
+
+    function refreshBadge() {
+        if (window.htmx) htmx.trigger(document.body, 'notifCountRefresh');
+    }
+
+    // The bell dropdown only fetches once per page load (see header.html); if it
+    // has already been fetched, refetch so the new notification is in the list.
+    function refreshDropdownIfLoaded() {
+        var wrap = document.getElementById('notif-dropdown-wrap');
+        if (wrap && wrap.querySelector('#notif-dropdown')) {
+            document.body.dispatchEvent(new Event('notifOpen'));
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function showToast(n) {
+        if (!window.toastr) return;
+        var toast = n.message
+            ? toastr.info(escapeHtml(n.message), escapeHtml(n.title))
+            : toastr.info(escapeHtml(n.title));
+        if (toast && n.url) {
+            toast.css('cursor', 'pointer');
+            toast.on('click', function () { window.location = n.url; });
+        }
+    }
+
+    function showBrowserNotification(n) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        if (!document.hidden) return;  // tab is visible - the toast is enough
+        try {
+            var note = new Notification(n.title || 'UrbanLens', {
+                body: n.message || '',
+                tag: 'urbanlens-notif-' + n.id,
+                icon: '/static/favicon.ico'
+            });
+            note.onclick = function () {
+                window.focus();
+                if (n.url) window.location = n.url;
+                note.close();
+            };
+        } catch (err) {
+            // Some browsers (notably mobile Chrome) throw on the constructor.
+        }
+    }
+
+    function startPolling() {
+        if (!pollTimer) pollTimer = setInterval(refreshBadge, POLL_MS);
+    }
+
+    function stopPolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    function scheduleReconnect() {
+        if (stopped || reconnectTimer) return;
+        reconnectTimer = setTimeout(function () {
+            reconnectTimer = null;
+            connect();
+        }, retryDelay + Math.floor(Math.random() * 400));
+        retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+    }
+
+    function connect() {
+        if (stopped || ws) return;
+        var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        try {
+            ws = new WebSocket(proto + location.host + WS_PATH);
+        } catch (err) {
+            ws = null;
+            scheduleReconnect();
+            return;
+        }
+
+        ws.onopen = function () {
+            retryDelay = RETRY_MIN_MS;
+            failures = 0;
+            stopPolling();
+            refreshBadge();  // catch anything that arrived while disconnected
+        };
+
+        ws.onmessage = function (e) {
+            var data;
+            try { data = JSON.parse(e.data); } catch (_) { return; }
+            if (!data || data.type !== 'notification' || !data.notification) return;
+            refreshBadge();
+            refreshDropdownIfLoaded();
+            showToast(data.notification);
+            showBrowserNotification(data.notification);
+        };
+
+        ws.onclose = function (e) {
+            ws = null;
+            if (e && e.code === 4404) {  // session no longer authenticated - permanent
+                stopped = true;
+                stopPolling();
+                return;
+            }
+            failures++;
+            if (failures >= FAILURES_BEFORE_POLLING) startPolling();
+            scheduleReconnect();
+        };
+    }
+
+    // Returning to the tab or coming back online is a good moment to retry
+    // immediately instead of waiting out the current backoff.
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && !ws && !stopped) {
+            retryDelay = RETRY_MIN_MS;
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+            connect();
+        }
+    });
+    window.addEventListener('online', function () {
+        if (!ws && !stopped) {
+            retryDelay = RETRY_MIN_MS;
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+            connect();
+        }
+    });
+
+    connect();
+}());
+</script>
+{% endif %}

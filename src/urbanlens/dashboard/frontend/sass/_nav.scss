@@ -908,6 +908,21 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         border: 0;
     }
 
+    &__browser {
+        margin-top: 1.75rem;
+        max-width: 40rem;
+    }
+
+    &__browser-status {
+        font-size: .84rem;
+        color: var(--ul-grey-6);
+        margin: .25rem 0 .6rem;
+
+        &:empty {
+            display: none;
+        }
+    }
+
     &__footer {
         padding: .85rem 0 .2rem;
     }
