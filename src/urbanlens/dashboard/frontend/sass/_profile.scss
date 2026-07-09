@@ -435,6 +435,38 @@
     margin: 0;
 }
 
+// A grouped sub-form within a larger section (e.g. Community/Memories/External
+// Services living under Privacy) - lighter-weight than a full .settings-section-header.
+.settings-subsection {
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--ul-grey-1a);
+
+    &:first-of-type {
+        margin-top: 2rem;
+    }
+
+    > .settings-section-desc {
+        margin-bottom: 1rem;
+    }
+}
+
+.settings-subsection-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    margin: 0 0 0.25rem;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.15rem;
+        color: var(--primary-color);
+    }
+}
+
 .settings-field {
     margin-bottom: 1.25rem;
 

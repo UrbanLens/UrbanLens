@@ -1,3 +1,4 @@
+@use 'sass:color';
 @use 'variables' as *;
 
 // -- Welcome onboarding cards --------------------------------------------------
@@ -39,7 +40,7 @@ $onboarding-card-accents: (
     padding: 1.5rem;
     border: 2px solid var(--ul-grey-1a);
     border-radius: $radius-md;
-    background: var(--ul-grey-0a);
+    background: var(--ul-grey-0);
     cursor: pointer;
     transition: border-color .15s, box-shadow .15s, transform .15s;
 
@@ -52,6 +53,14 @@ $onboarding-card-accents: (
     &:has(.onboarding-card-switch input:focus-visible) {
         outline: 2px solid var(--primary-color);
         outline-offset: 2px;
+    }
+
+    .ul-switch {
+        &__track {
+            &:before, &:after {
+                display: none;
+            }
+        }
     }
 }
 
@@ -84,6 +93,12 @@ $onboarding-card-accents: (
     margin-top: 2px;
 }
 
+.onboarding-card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
 .onboarding-card-title {
     font-size: 1.05rem;
     font-weight: 700;
@@ -97,7 +112,11 @@ $onboarding-card-accents: (
 }
 
 @each $name, $accent in $onboarding-card-accents {
+    $accent-dark: color.adjust($accent, $lightness: -15%);
+
     .onboarding-card--#{$name} {
+        background: rgba($accent-dark, .07);
+
         .onboarding-card-icon {
             background: rgba($accent, .12);
 

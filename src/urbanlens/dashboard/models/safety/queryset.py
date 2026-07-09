@@ -16,15 +16,26 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
     def due_for_reminder(self) -> Self:
         """Return scheduled check-ins whose expected check-in time has arrived.
 
+        Excludes rows already past their grace period - those belong to
+        ``overdue()`` instead, whether or not the reminder ever went out.
+
         Returns:
             Filtered queryset.
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
 
-        return self.filter(status=SafetyCheckinStatus.SCHEDULED, checkin_by__lte=timezone.now())
+        now = timezone.now()
+        return self.annotate(
+            overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
+        ).filter(status=SafetyCheckinStatus.SCHEDULED, checkin_by__lte=now, overdue_at__gt=now)
 
     def overdue(self) -> Self:
         """Return check-ins whose grace period has elapsed with no response.
+
+        Includes check-ins still stuck on SCHEDULED (not just AWAITING_CHECKIN) so a
+        missed or failed ``send_due_checkin_reminders`` run can't prevent escalation -
+        the reminder-send transitions status to AWAITING_CHECKIN only after the
+        notification succeeds (see ``services.safety.send_checkin_reminder``).
 
         Returns:
             Filtered queryset.
@@ -33,7 +44,10 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
         return self.annotate(
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
-        ).filter(status=SafetyCheckinStatus.AWAITING_CHECKIN, overdue_at__lte=timezone.now())
+        ).filter(
+            status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN),
+            overdue_at__lte=timezone.now(),
+        )
 
     def due_for_final_warning(self) -> Self:
         """Return awaiting check-ins about to escalate to emergency contacts.

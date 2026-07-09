@@ -135,18 +135,31 @@ class SafetyCheckinQuerySetTests(TestCase):
     def test_due_for_reminder_only_includes_scheduled_past_due(self):
         due = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
         not_yet = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + datetime.timedelta(hours=1))
+        past_grace = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.SCHEDULED,
+            checkin_by=timezone.now() - datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
         already_reminded = _checkin(self.profile, status=SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
 
         results = set(SafetyCheckin.objects.due_for_reminder().values_list("pk", flat=True))
 
         self.assertIn(due.pk, results)
         self.assertNotIn(not_yet.pk, results)
+        self.assertNotIn(past_grace.pk, results)
         self.assertNotIn(already_reminded.pk, results)
 
-    def test_overdue_only_includes_awaiting_checkin_past_grace_period(self):
+    def test_overdue_includes_unreminded_scheduled_checkins_past_grace_period(self):
         overdue = _checkin(
             self.profile,
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            checkin_by=timezone.now() - datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
+        unreminded_overdue = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.SCHEDULED,
             checkin_by=timezone.now() - datetime.timedelta(hours=2),
             grace_period=datetime.timedelta(hours=1),
         )
@@ -160,6 +173,7 @@ class SafetyCheckinQuerySetTests(TestCase):
         results = set(SafetyCheckin.objects.overdue().values_list("pk", flat=True))
 
         self.assertIn(overdue.pk, results)
+        self.assertIn(unreminded_overdue.pk, results)
         self.assertNotIn(within_grace.pk, results)
 
     def test_active_excludes_only_resolved_statuses(self):
