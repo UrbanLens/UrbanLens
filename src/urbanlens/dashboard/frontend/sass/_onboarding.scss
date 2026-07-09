@@ -1,0 +1,114 @@
+@use 'variables' as *;
+
+// -- Welcome onboarding cards --------------------------------------------------
+// Big, tappable category cards (Memories / Community / External Services) on
+// the first-login /welcome/ page. Each wraps a checkbox so the whole card
+// toggles the setting; the .ul-switch in the corner shows current state.
+
+$onboarding-card-accents: (
+    'memories': $color-indigo-500,
+    'community': $color-teal-500,
+    'external': $color-purple-500,
+);
+
+// .settings-section normally splits into a 240px label column + content column
+// (see _profile.scss) for the tabbed Settings page. The welcome page has no
+// section header/sidebar, so it stays single-column here.
+.settings-section.onboarding-section {
+    @include up($breakpoint-md) {
+        display: block;
+    }
+}
+
+.onboarding-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.onboarding-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 1.5rem;
+    border: 2px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    background: var(--ul-grey-0a);
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+
+    &:hover {
+        border-color: var(--ul-grey-3a);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+        transform: translateY(-2px);
+    }
+
+    &:has(.onboarding-card-switch input:focus-visible) {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.onboarding-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.onboarding-card-icon {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: $radius-sm;
+    background: var(--ul-grey-0);
+    transition: background .15s;
+
+    .material-symbols-outlined {
+        font-size: 1.6rem;
+        color: var(--ul-grey-5);
+        transition: color .15s;
+    }
+}
+
+.onboarding-card-switch {
+    margin-top: 2px;
+}
+
+.onboarding-card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ul-grey-9);
+}
+
+.onboarding-card-desc {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--ul-grey-6);
+}
+
+@each $name, $accent in $onboarding-card-accents {
+    .onboarding-card--#{$name} {
+        .onboarding-card-icon {
+            background: rgba($accent, .12);
+
+            .material-symbols-outlined {
+                color: $accent;
+            }
+        }
+
+        &:has(.onboarding-card-switch input:checked) {
+            border-color: $accent;
+            box-shadow: 0 4px 20px rgba($accent, .12);
+        }
+    }
+}

@@ -11,47 +11,61 @@
         </p>
     </div>
 
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section onboarding-section">
         <form method="post" class="settings-form" id="welcome-onboarding-form">
             {% csrf_token %}
 
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ form.memories_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ form.memories_enabled.label }}</strong>
-                        <span class="settings-help">{{ form.memories_enabled.help_text }}</span>
+            <div class="onboarding-cards">
+                <label class="onboarding-card onboarding-card--memories">
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">history</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.memories_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
                     </span>
+                    <span class="onboarding-card-title">{{ form.memories_enabled.label }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.memories_enabled.id_for_label }}_helptext">{{ form.memories_enabled.help_text }}</span>
+                    {% if form.memories_enabled.errors %}
+                    <span class="settings-error">{{ form.memories_enabled.errors|join:", " }}</span>
+                    {% endif %}
                 </label>
-                {% if form.memories_enabled.errors %}
-                <p class="settings-error">{{ form.memories_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
 
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ form.community_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ form.community_enabled.label }}</strong>
-                        <span class="settings-help">{{ form.community_enabled.help_text }}</span>
+                <label class="onboarding-card onboarding-card--community">
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">groups</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.community_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
                     </span>
+                    <span class="onboarding-card-title">{{ form.community_enabled.label }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.community_enabled.id_for_label }}_helptext">{{ form.community_enabled.help_text }}</span>
+                    {% if form.community_enabled.errors %}
+                    <span class="settings-error">{{ form.community_enabled.errors|join:", " }}</span>
+                    {% endif %}
                 </label>
-                {% if form.community_enabled.errors %}
-                <p class="settings-error">{{ form.community_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
 
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ form.external_apis_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ form.external_apis_enabled.label }}</strong>
-                        <span class="settings-help">{{ form.external_apis_enabled.help_text }}</span>
+                <label class="onboarding-card onboarding-card--external">
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">cloud</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.external_apis_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
                     </span>
+                    <span class="onboarding-card-title">{{ form.external_apis_enabled.label }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.external_apis_enabled.id_for_label }}_helptext">{{ form.external_apis_enabled.help_text }}</span>
+                    {% if form.external_apis_enabled.errors %}
+                    <span class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</span>
+                    {% endif %}
                 </label>
-                {% if form.external_apis_enabled.errors %}
-                <p class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</p>
-                {% endif %}
             </div>
 
             <div class="settings-actions">
