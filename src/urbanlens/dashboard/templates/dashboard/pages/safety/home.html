@@ -26,7 +26,7 @@
         </div>
     </div>
 
-    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, the emergency contacts you choose are notified automatically with your plan details and last known location." %}
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, your emergency contacts are sent your plan details and last known location." %}
 
     {# -- Active/past check-ins --------------------------------------------- #}
     {% if checkins %}
@@ -49,7 +49,7 @@
     <div class="card safety-defaults">
         <div class="card-header">
             <i class="material-symbols-outlined">settings</i>
-            <h3>Defaults for new check-ins</h3>
+            <h3>Defaults</h3>
             <div class="safety-defaults-header-actions">
                 <span class="safety-autosave-status" id="safety-autosave-status" aria-live="polite"></span>
                 <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-edit-btn">

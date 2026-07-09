@@ -226,6 +226,8 @@ $onboarding-card-accents: (
 .page-onboarding-welcome {
     .settings-subtitle {
         color: var(--ul-grey-7);
+        max-width: 40rem;
+        margin-top: 1rem;
     }
 
     .settings-actions {

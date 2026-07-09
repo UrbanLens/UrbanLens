@@ -11,6 +11,21 @@
 .safety-autoexpand {
     overflow-y: hidden;
     resize: none;
+
+    // Modern browsers can grow the box to fit its content with pure CSS - no
+    // need to wait for the safetyAutoExpand() JS fallback (_autoexpand_textareas.html)
+    // to run on load/input. Harmless no-op where unsupported.
+    field-sizing: content;
+}
+
+// `.safety-page textarea.safety-autoexpand` (2 classes) intentionally outranks
+// the sitewide `body div.container textarea` fallback (_base.scss) - that rule's
+// extra type selectors (body, div) give it higher specificity than the plain
+// `.form-row textarea` padding this would otherwise get, leaving these boxes
+// under-padded.
+.safety-page textarea.safety-autoexpand {
+    box-sizing: border-box;
+    padding: .6rem .75rem;
 }
 
 // The shared `.card .card-header` rule is a 4-column CSS grid keyed to specific
@@ -415,6 +430,10 @@
 
 .safety-contact-input {
     width: 100%;
+    // Without this, the sitewide input padding/border (_base.scss) is added on
+    // top of the 100% width instead of being carved out of it, pushing the
+    // right edge past the card boundary.
+    box-sizing: border-box;
 }
 
 .safety-contact-suggestions {

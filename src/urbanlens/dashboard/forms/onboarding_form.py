@@ -20,7 +20,7 @@ class WelcomeOnboardingForm(forms.ModelForm):
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Memories",
-        help_text="Disable saving any data about your activity. This will turn off your visit history journal, and the Memories page. The site will refuse to import visit or location data you upload. Metadata for photos you upload will be stripped.",
+        help_text="Disable features that allow you to record your activities. This will turn off your visit journal and the Memories page. The site will refuse to import visit or location data you upload. Metadata for photos you upload will be stripped.",
     )
     community_enabled = forms.BooleanField(
         required=False,

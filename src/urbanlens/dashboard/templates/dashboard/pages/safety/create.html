@@ -18,11 +18,11 @@
 
     <form method="post" action="{% url 'safety.checkin.create' %}" class="safety-checkin-form" id="safety-create-form">
         {% csrf_token %}
-        <div class="form-row">
+        <div class="form-row form-row--title">
             <label for="title">Title <span class="form-hint-inline">(optional)</span></label>
             <input type="text" name="title" id="title" placeholder="e.g. Solo hike - Eagle Ridge">
         </div>
-        <div class="form-row form-row--two-col">
+        <div class="form-row form-row--two-col form-row--time">
             <div>
                 <label for="checkin_by">Expected check-in time <span class="required">*</span></label>
                 <input type="datetime-local" id="checkin_by" required>
@@ -34,11 +34,11 @@
                 <p class="form-hint" id="safety-grace-end-hint"></p>
             </div>
         </div>
-        <div class="form-row">
+        <div class="form-row form-row--plan">
             <label for="plan_details">Trip plan</label>
             <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" placeholder="Route, gear, who you're with..."></textarea>
         </div>
-        <div class="form-row">
+        <div class="form-row form-row--map">
             <label>Destination</label>
             {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False %}
             <p class="form-hint">Route markup (arrows, areas, labels) can be added once the check-in is created.</p>
@@ -49,7 +49,7 @@
              hx-trigger="change from:#safety-destination-lat"
              hx-include="#safety-destination-lat, #safety-destination-lng, #notify_community_wiki"
              hx-swap="innerHTML"></div>
-        <div class="form-row">
+        <div class="form-row form-row--message">
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>
         </div>
@@ -101,7 +101,7 @@
         var checkinBy = new Date(checkinByInput.value);
         if (isNaN(checkinBy.getTime())) return;
         var endsAt = new Date(checkinBy.getTime() + parseFloat(graceRange.value) * 3600000);
-        endHint.textContent = 'Contacts are notified around ' + endsAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + ' if you haven\'t checked in.';
+        endHint.textContent = 'Contacts will be notified at ' + endsAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
     }
     if (graceRange) graceRange.addEventListener('input', refreshEndHint);
     checkinByInput.addEventListener('input', refreshEndHint);
