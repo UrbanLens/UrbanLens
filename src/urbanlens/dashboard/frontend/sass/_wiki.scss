@@ -269,6 +269,15 @@
         font-weight: 700;
         color: $color-cyan-600;
         line-height: 1;
+
+        // Approximated counts carry a privacy tooltip on hover.
+        &[data-tooltip] { cursor: help; }
+    }
+
+    // "fewer than 3" is prose, not a number - render it smaller.
+    .wiki-stat-value--low {
+        font-size: 1.05rem;
+        line-height: 1.2;
     }
 
     .wiki-stat-label {

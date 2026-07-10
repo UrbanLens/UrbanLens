@@ -16,8 +16,9 @@ from typing import TYPE_CHECKING, Any
 from django.utils import timezone
 
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink
-from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import (
+    ACTIVITY_ID_EVENT_PROPERTY,
     TRIP_UUID_EVENT_PROPERTY,
     CalendarEventNotFoundError,
     GoogleCalendarGateway,
@@ -32,6 +33,10 @@ logger = logging.getLogger(__name__)
 # How far ahead the import dialog looks for events.
 IMPORT_WINDOW_DAYS = 365
 _MAX_TRIP_NAME_LENGTH = 255
+
+# Length of the calendar event created for an activity that has a start time
+# but no explicit end time.
+DEFAULT_ACTIVITY_EVENT_DURATION = datetime.timedelta(hours=2)
 
 
 def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, Any]:
@@ -70,6 +75,74 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, 
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
+
+
+def _activity_location_string(activity: TripActivity) -> str | None:
+    """Human-readable location for an activity's calendar event.
+
+    Respects ``location_hidden`` (secret locations are never exported).
+    Prefers the linked place's address, falling back to coordinates.
+
+    Args:
+        activity: The TripActivity to describe.
+
+    Returns:
+        A location string for the event, or None when nothing shareable exists.
+    """
+    if activity.location_hidden:
+        return None
+    location = activity.location or (activity.pin.location if activity.pin else None)
+    if location is not None and location.address:
+        return location.address
+    lat = activity.lat_override if activity.lat_override is not None else (float(location.latitude) if location else None)
+    lng = activity.lng_override if activity.lng_override is not None else (float(location.longitude) if location else None)
+    if lat is not None and lng is not None:
+        return f"{lat:.6f}, {lng:.6f}"
+    return None
+
+
+def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = None) -> dict[str, Any] | None:
+    """Convert one scheduled trip activity into a timed calendar event payload.
+
+    Activities without a scheduled start cannot be placed on a calendar and
+    yield None. The end time is the activity's ``scheduled_end`` when it is
+    after the start, else start + :data:`DEFAULT_ACTIVITY_EVENT_DURATION`.
+
+    Args:
+        activity: The TripActivity to export (with ``trip`` loaded).
+        trip_url: Optional absolute URL of the trip page to append to the
+            event description.
+
+    Returns:
+        Event resource payload, or None when the activity is unscheduled.
+    """
+    if activity.scheduled_at is None:
+        return None
+    start = activity.scheduled_at
+    end = activity.scheduled_end
+    if end is None or end <= start:
+        end = start + DEFAULT_ACTIVITY_EVENT_DURATION
+
+    description = (activity.notes or "").strip()
+    if trip_url:
+        description = f"{description}\n\n{trip_url}".strip()
+
+    body: dict[str, Any] = {
+        "summary": f"{activity.trip.name}: {activity.effective_title}",
+        "description": description,
+        "start": {"dateTime": start.isoformat()},
+        "end": {"dateTime": end.isoformat()},
+        "extendedProperties": {
+            "private": {
+                TRIP_UUID_EVENT_PROPERTY: str(activity.trip.uuid),
+                ACTIVITY_ID_EVENT_PROPERTY: str(activity.pk),
+            },
+        },
+    }
+    location_string = _activity_location_string(activity)
+    if location_string:
+        body["location"] = location_string
+    return body
 
 
 def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None, bool]:
@@ -252,30 +325,35 @@ def import_events_as_trips(account: GoogleCalendarAccount, event_ids: list[str])
     return created, skipped
 
 
-def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_url: str | None = None) -> TripCalendarLink:
-    """Create or update the calendar event mirroring a trip on the user's calendar.
+def _upsert_event_link(
+    gateway: GoogleCalendarGateway,
+    account: GoogleCalendarAccount,
+    body: dict[str, Any],
+    link: TripCalendarLink | None,
+    *,
+    trip: Trip,
+    activity: TripActivity | None = None,
+) -> TripCalendarLink:
+    """Create or update one calendar event and persist its link row.
 
-    A trip already linked for this profile updates its existing event; if
-    that event was deleted on the Google side, a fresh one is created and the
-    link is repointed.
+    An existing link updates its event in place; if that event was deleted on
+    the Google side, a fresh one is created and the link is repointed.
 
     Args:
+        gateway: Authenticated calendar gateway.
         account: The user's connected calendar account.
-        trip: The trip to export.
-        trip_url: Optional absolute trip URL for the event description.
+        body: Event resource payload to write.
+        link: Existing link row for this trip/activity+profile, if any.
+        trip: The trip the event belongs to.
+        activity: The activity mirrored by this event, or None for the
+            trip-level all-day event.
 
     Returns:
         The up-to-date TripCalendarLink row.
 
     Raises:
-        ValueError: When the trip has no dates to export.
         GatewayRequestError: When the calendar write fails.
     """
-    gateway = GoogleCalendarGateway(account=account)
-    body = trip_to_event_body(trip, trip_url=trip_url)
-    profile = account.profile
-
-    link = TripCalendarLink.objects.filter(trip=trip, profile=profile).first()
     event: dict[str, Any] | None = None
     if link and link.google_event_id:
         try:
@@ -287,7 +365,7 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
         event = gateway.create_event(body)
 
     if link is None:
-        link = TripCalendarLink(trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED)
+        link = TripCalendarLink(trip=trip, activity=activity, profile=account.profile, direction=CalendarSyncDirection.EXPORTED)
     link.google_calendar_id = account.calendar_id
     link.google_event_id = event["id"]
     link.last_synced = timezone.now()
@@ -295,23 +373,106 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
     return link
 
 
-def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> bool:
-    """Delete the calendar event linked to a trip for this user and drop the link.
+def _sync_activity_events(
+    gateway: GoogleCalendarGateway,
+    account: GoogleCalendarAccount,
+    trip: Trip,
+    *,
+    trip_url: str | None = None,
+) -> int:
+    """Mirror every scheduled activity of a trip as a timed event on the user's calendar.
+
+    Creates/updates one event per activity with a start time, and deletes
+    events for activities that were unscheduled since the last export
+    (activities deleted outright cascade their link rows away, so their
+    events are cleaned up by the caller's full-removal path or simply left
+    to the user - Google shows them as normal events).
+
+    Args:
+        gateway: Authenticated calendar gateway.
+        account: The user's connected calendar account.
+        trip: The trip whose activities to mirror.
+        trip_url: Optional absolute trip URL for event descriptions.
+
+    Returns:
+        The number of activity events created or updated.
+
+    Raises:
+        GatewayRequestError: When a calendar write fails.
+    """
+    profile = account.profile
+    activity_links = {link.activity_id: link for link in TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=False)}
+
+    exported = 0
+    scheduled_ids: set[int] = set()
+    for activity in trip.activities.filter(scheduled_at__isnull=False).select_related("trip", "location", "pin__location"):
+        body = activity_to_event_body(activity, trip_url=trip_url)
+        if body is None:
+            continue
+        _upsert_event_link(gateway, account, body, activity_links.get(activity.pk), trip=trip, activity=activity)
+        scheduled_ids.add(activity.pk)
+        exported += 1
+
+    # Activities that lost their schedule since the last export: remove their events.
+    for activity_id, stale_link in activity_links.items():
+        if activity_id not in scheduled_ids:
+            gateway.delete_event(stale_link.google_event_id)
+            stale_link.delete()
+
+    return exported
+
+
+def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_url: str | None = None) -> tuple[TripCalendarLink, int]:
+    """Mirror a trip (all-day event) and its scheduled activities (timed events) to the user's calendar.
+
+    A trip already linked for this profile updates its existing events; events
+    deleted on the Google side are recreated and their links repointed.
 
     Args:
         account: The user's connected calendar account.
-        trip: The trip whose event should be removed.
+        trip: The trip to export.
+        trip_url: Optional absolute trip URL for the event descriptions.
 
     Returns:
-        True when a link existed and was removed.
+        Tuple of (the trip-level TripCalendarLink row, number of activity
+        events created or updated).
 
     Raises:
-        GatewayRequestError: When the calendar delete fails.
+        ValueError: When the trip has no dates to export.
+        GatewayRequestError: When a calendar write fails.
     """
-    link = TripCalendarLink.objects.filter(trip=trip, profile=account.profile).first()
-    if link is None:
+    gateway = GoogleCalendarGateway(account=account)
+    body = trip_to_event_body(trip, trip_url=trip_url)
+    profile = account.profile
+
+    trip_link = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first()
+    trip_link = _upsert_event_link(gateway, account, body, trip_link, trip=trip)
+    activity_count = _sync_activity_events(gateway, account, trip, trip_url=trip_url)
+    return trip_link, activity_count
+
+
+def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> bool:
+    """Delete the calendar events linked to a trip for this user and drop the links.
+
+    Removes the trip-level all-day event and every per-activity event that was
+    exported for this profile. Events already deleted on the Google side are
+    treated as removed.
+
+    Args:
+        account: The user's connected calendar account.
+        trip: The trip whose events should be removed.
+
+    Returns:
+        True when at least one link existed and was removed.
+
+    Raises:
+        GatewayRequestError: When a calendar delete fails.
+    """
+    links = list(TripCalendarLink.objects.filter(trip=trip, profile=account.profile))
+    if not links:
         return False
     gateway = GoogleCalendarGateway(account=account)
-    gateway.delete_event(link.google_event_id)
-    link.delete()
+    for link in links:
+        gateway.delete_event(link.google_event_id)
+        link.delete()
     return True

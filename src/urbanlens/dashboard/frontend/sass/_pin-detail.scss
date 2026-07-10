@@ -683,6 +683,90 @@
         font-weight: 400;
     }
 
+    .visit-participant-row {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+    }
+
+    // Per-participant "send them a visit suggestion" bell toggle.
+    .visit-participant-suggest {
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+        color: var(--ul-grey-5);
+
+        input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .material-symbols-outlined { font-size: 1rem; }
+
+        &:has(input:checked) { color: $color-indigo-500; }
+    }
+
+    // -- External (non-member) participants ---------------------------------
+    .visit-external-existing {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .85rem;
+        padding: .15rem 0;
+
+        .material-symbols-outlined { font-size: 1rem; }
+    }
+
+    .visit-external-chip {
+        font-size: .7rem;
+        font-weight: 600;
+        padding: .1rem .45rem;
+        border-radius: 999px;
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-6);
+    }
+
+    .visit-external-row {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .35rem;
+
+        input[type="text"],
+        input[type="email"] {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    .visit-external-invite {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .78rem;
+        font-weight: 400;
+        white-space: nowrap;
+    }
+
+    .visit-external-add-btn {
+        align-self: flex-start;
+        margin-top: .25rem;
+    }
+
+    .visit-participants--external {
+        color: var(--ul-grey-6);
+        font-size: .82rem;
+    }
+
+    .visit-external-name { white-space: nowrap; }
+
+    .visit-external-invited-icon {
+        font-size: .85rem;
+        vertical-align: -2px;
+        color: $color-indigo-500;
+    }
+
     // -- Existing-photo picker grid -----------------------------------------
     .visit-photo-existing {
         display: flex;

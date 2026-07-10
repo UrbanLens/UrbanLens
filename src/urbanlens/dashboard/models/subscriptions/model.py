@@ -38,6 +38,24 @@ class SubscriptionRole(abstract.DashboardModel):
         blank=True,
         help_text="Storage quota (GB) for users with this role. Blank uses the site default; 0 means unlimited.",
     )
+    # Outbound email caps for this role. Null falls back to the site-wide
+    # default; when a user holds several active roles the largest applicable
+    # limit wins and 0 means unlimited (see services.email_safety).
+    email_limit_per_hour = IntegerField(
+        null=True,
+        blank=True,
+        help_text="Max user-triggered emails per hour for this role. Blank uses the site default; 0 means unlimited.",
+    )
+    email_limit_per_day = IntegerField(
+        null=True,
+        blank=True,
+        help_text="Max user-triggered emails per day for this role. Blank uses the site default; 0 means unlimited.",
+    )
+    email_limit_per_month = IntegerField(
+        null=True,
+        blank=True,
+        help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
+    )
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]

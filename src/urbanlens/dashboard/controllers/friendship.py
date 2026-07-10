@@ -475,8 +475,10 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         from django.core.validators import validate_email
         from django.template.loader import render_to_string
 
+        from urbanlens.dashboard.models.email_log import EmailType
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
         from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
+        from urbanlens.dashboard.services.email_safety import email_rate_limit_error, has_sent_join_email, record_email_sent
 
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
@@ -490,6 +492,13 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         inviter = request.user.profile
         if normalize_email(email) == normalize_email(inviter.email):
             return HttpResponse("That's your own email address.", status=400)
+
+        # Rate limiting must be checked before we know whether the address is
+        # registered - erroring only on the actually-sends-an-email path would
+        # let a capped caller distinguish member from non-member addresses.
+        rate_limit_error = email_rate_limit_error(inviter)
+        if rate_limit_error:
+            return HttpResponse(rate_limit_error, status=429)
 
         subscription_role_slug = request.POST.get("subscription_role", "").strip()
         subscription_duration = request.POST.get("subscription_duration", "")
@@ -532,22 +541,28 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                     duration_months="" if subscription_duration == "indefinite" else subscription_duration,
                 )
 
-            signup_url = request.build_absolute_uri(
-                f"/signup/?invite={invitation.token}",
-            )
-            context = {
-                "inviter": inviter,
-                "signup_url": signup_url,
-            }
-            subject = f"{inviter.username} invited you to join UrbanLens"
-            text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-            html_body = render_to_string("dashboard/email/friend_invite.html", context)
+            # A given user only ever sends one join-the-site email to a given
+            # address - the invitation row above still enables auto-friending
+            # on sign-up, but the mailbox is not contacted again.
+            if not has_sent_join_email(inviter, email):
+                signup_url = request.build_absolute_uri(
+                    f"/signup/?invite={invitation.token}",
+                )
+                context = {
+                    "inviter": inviter,
+                    "signup_url": signup_url,
+                }
+                subject = f"{inviter.username} invited you to join UrbanLens"
+                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+                html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
-            try:
-                msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
-                msg.attach_alternative(html_body, "text/html")
-                msg.send()
-            except (smtplib.SMTPException, OSError):
-                logger.exception("Failed to send friend invitation to %s", email)
+                try:
+                    msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+                    msg.attach_alternative(html_body, "text/html")
+                    msg.send()
+                except (smtplib.SMTPException, OSError):
+                    logger.exception("Failed to send friend invitation to %s", email)
+                else:
+                    record_email_sent(inviter, email, EmailType.JOIN_INVITE)
 
         return render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})

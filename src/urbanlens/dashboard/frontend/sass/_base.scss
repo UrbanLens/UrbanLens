@@ -122,6 +122,10 @@ body div.container {
     }
 }
 
+.dialog-actions {
+    margin-top: 1rem;
+}
+
 @keyframes dialog-appear {
     from {
         opacity: 0;

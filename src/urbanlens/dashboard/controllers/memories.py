@@ -34,6 +34,7 @@ from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_ev
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
+from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
@@ -400,10 +401,14 @@ class MemoriesVisitView(LoginRequiredMixin, View):
         visit.participants.set(participants)
 
         # On a brand-new visit, offer the tagged connections their own suggestion,
-        # mirroring the pin-detail "log a visit" flow.
+        # mirroring the pin-detail "log a visit" flow. Each participant has an
+        # individual "send them a suggestion" toggle in the form.
+        suggest_ids = resolve_suggest_participant_ids(request)
         lat, lng = pin.effective_latitude, pin.effective_longitude
         if created and participants and lat is not None and lng is not None:
             for participant in participants:
+                if participant.pk not in suggest_ids:
+                    continue
                 others = [p for p in participants if p.pk != participant.pk]
                 create_visit_suggestion(
                     suggested_to=participant,
@@ -416,6 +421,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                     origin_visit=visit,
                     origin_pin=pin,
                 )
+
+        sync_external_participants(request, visit)
 
         response = render(
             request,
@@ -453,6 +460,55 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "memories",
+                **_unlogged_band_context(profile),
+            },
+        )
+
+
+class MemoriesSharingView(LoginRequiredMixin, View):
+    """The "Sharing" subpage of Memories - every pin the user has shared.
+
+    Groups the profile's sent :class:`PinShare` rows by pin, listing who each
+    pin was shared with, and how far the share travelled: the chain count
+    follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
+    shares for A's pin).
+
+    GET /memories/sharing/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the sharing history page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Sharing page listing every shared pin with its
+            recipients and chain-wide reshare counts.
+        """
+        from urbanlens.dashboard.models.pin_share import PinShare
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "to_profile__user").order_by("-created")
+
+        groups: dict[int, dict[str, object]] = {}
+        for share in shares:
+            group = groups.setdefault(share.pin_id, {"pin": share.pin, "shares": []})
+            group["shares"].append(share)  # type: ignore[union-attr]
+        for group in groups.values():
+            own_ids = [share.pk for share in group["shares"]]  # type: ignore[union-attr]
+            chain_total = PinShare.chain_share_count(own_ids)
+            group["chain_total"] = chain_total
+            # Shares made further down the chain by other users.
+            group["reshare_count"] = chain_total - len(own_ids)
+
+        return render(
+            request,
+            "dashboard/pages/memories/sharing.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "share_groups": list(groups.values()),
                 **_unlogged_band_context(profile),
             },
         )

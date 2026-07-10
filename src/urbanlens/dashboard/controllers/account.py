@@ -265,6 +265,12 @@ class VerifyEmailView(View):
         invite_token = session_invite_token or verification.pending_invite_token
         _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
 
+        # Deliver any friend requests + visit suggestions that were waiting on
+        # this email address (visit participants tagged before the account existed).
+        from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites
+
+        process_pending_visit_invites(user)
+
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 
 

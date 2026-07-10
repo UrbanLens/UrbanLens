@@ -17,7 +17,7 @@
     </button>
     {% else %}
     <button type="button" class="btn-icon"
-            title="Add this trip to your Google Calendar"
+            title="Add this trip to your Google Calendar (creates an event for the trip and each scheduled activity)"
             hx-post="{% url 'trips.calendar.export' trip.uuid %}"
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML">

@@ -1,8 +1,8 @@
 {% comment %}
-Timeline | Photos | Maps | Visits tab strip for the Memories section.
+Timeline | Photos | Maps | Sharing | Visits tab strip for the Memories section.
 
 Context:
-  active            - "timeline", "photos", "maps", or "visits" (which tab is current)
+  active            - "timeline", "photos", "maps", "sharing", or "visits" (which tab is current)
   unlogged_visits_count - optional count badge shown on the Visits tab; the tab is hidden when zero/missing
 {% endcomment %}
 <nav class="memories-tabs" aria-label="Memories views">
@@ -23,6 +23,12 @@ Context:
        {% if active == 'maps' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">map</i>
         <span>Maps</span>
+    </a>
+    <a href="{% url 'memories.sharing' %}"
+       class="memories-tab {% if active == 'sharing' %}is-active{% endif %}"
+       {% if active == 'sharing' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">ios_share</i>
+        <span>Sharing</span>
     </a>
     {% if unlogged_visits_count %}
     <a href="{% url 'memories.visits' %}"

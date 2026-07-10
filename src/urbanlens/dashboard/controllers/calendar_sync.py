@@ -71,7 +71,7 @@ def calendar_context(profile: Profile, trip=None) -> dict:
     account = GoogleCalendarAccount.objects.filter(profile=profile).first()
     context: dict = {"calendar_account": account}
     if trip is not None:
-        context["calendar_link"] = TripCalendarLink.objects.filter(trip=trip, profile=profile).first() if account else None
+        context["calendar_link"] = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first() if account else None
     return context
 
 
@@ -262,13 +262,17 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
         trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}))
         try:
-            export_trip_to_calendar(account, trip, trip_url=trip_url)
+            _link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
             return self._render_button(request, trip, profile, toast=("warning", str(exc)))
         except GatewayRequestError as exc:
             return self._render_button(request, trip, profile, toast=("error", str(exc)))
 
-        return self._render_button(request, trip, profile, toast=("success", "Trip added to your Google Calendar."))
+        if activity_count:
+            message = f"Trip and {activity_count} activit{'ies' if activity_count != 1 else 'y'} added to your Google Calendar."
+        else:
+            message = "Trip added to your Google Calendar."
+        return self._render_button(request, trip, profile, toast=("success", message))
 
     def delete(self, request, trip_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)

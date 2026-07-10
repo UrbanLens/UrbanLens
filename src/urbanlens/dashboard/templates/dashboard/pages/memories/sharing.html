@@ -1,0 +1,69 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block title %}Sharing{% endblock %}
+
+{% block content %}
+<div id="memories-sharing-page">
+    <div class="memories-header">
+        <div>
+            <h1 class="memories-title"><i class="material-symbols-outlined">ios_share</i> Pins you've shared</h1>
+            <p class="memories-subtitle">Every pin you've shared with friends, who received it, and how far it travelled from there.</p>
+        </div>
+    </div>
+
+    <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="sharing" unlogged_visits_count=unlogged_visits|length %}
+
+        {% if share_groups %}
+        <div class="memories-sharing-list">
+            {% for group in share_groups %}
+            <article class="memories-sharing-card card">
+                <div class="memories-sharing-card-header">
+                    <a class="memories-sharing-pin-link" href="{% url 'pin.details' group.pin.slug %}">
+                        <i class="material-symbols-outlined">location_on</i>
+                        {{ group.pin.effective_name }}
+                    </a>
+                    <span class="memories-sharing-chain"
+                          data-tooltip="Counts every share of this pin down the chain, including friends resharing it with their friends.">
+                        <i class="material-symbols-outlined">account_tree</i>
+                        {{ group.chain_total }} share{{ group.chain_total|pluralize }} down the chain
+                        {% if group.reshare_count %}· reshared {{ group.reshare_count }} time{{ group.reshare_count|pluralize }}{% endif %}
+                    </span>
+                </div>
+                <ul class="memories-sharing-recipients">
+                    {% for share in group.shares %}
+                    <li class="memories-sharing-recipient">
+                        <span class="memories-sharing-recipient-name">
+                            <i class="material-symbols-outlined">person</i>
+                            {{ share.to_profile.username }}
+                        </span>
+                        <span class="memories-sharing-recipient-meta">
+                            shared {{ share.created|date:"M j, Y" }} ·
+                            <span class="memories-sharing-status memories-sharing-status--{{ share.status }}">{{ share.get_status_display }}</span>
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <section class="visits-empty-state" aria-labelledby="sharing-empty-title">
+            <div class="visits-empty-hero">
+                <span class="visits-empty-icon"><i class="material-symbols-outlined">ios_share</i></span>
+                <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
+            </div>
+            <p class="visits-empty-kicker">Nothing here yet</p>
+            <h2 id="sharing-empty-title">You haven't shared any pins.</h2>
+            <p>Share a pin with a friend from its detail page and it will show up here, along with how far it spreads.</p>
+            <div class="visits-empty-actions">
+                <a class="btn btn--primary" href="{% url 'map.view' %}">
+                    <i class="material-symbols-outlined">map</i> Explore your map
+                </a>
+            </div>
+        </section>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -165,7 +165,12 @@ def is_meaningful_name(name: str | None) -> bool:
         return False
     if is_coordinate_name(name):
         return False
-    return stripped.casefold() not in _MEANINGLESS_NAME_PHRASES
+    normalized = stripped.casefold()
+    # "Unnamed Location in Albany, NY" (Location.display_name's area-suffixed
+    # placeholder) is still a placeholder, not a real place name.
+    if normalized.startswith("unnamedlocationin"):
+        return False
+    return normalized not in _MEANINGLESS_NAME_PHRASES
 
 
 def is_address_derived_name(name: str, location: Location) -> bool:

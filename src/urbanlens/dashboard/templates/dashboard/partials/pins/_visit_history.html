@@ -98,6 +98,22 @@
                 {% endif %}
                 {% endwith %}
 
+                {# -- External (non-member) participants -------------------------- #}
+                {% with external_participants=visit.external_participants.all %}
+                {% if external_participants %}
+                <div class="visit-participants visit-participants--external">
+                    <i class="material-symbols-outlined">person_outline</i>
+                    <span class="visit-external-names">
+                        {% for ext in external_participants %}
+                        <span class="visit-external-name" title="{% if ext.matched_profile %}Joined as {{ ext.matched_profile.username }}{% elif ext.invite_sent %}Invited to join UrbanLens{% else %}Not on UrbanLens{% endif %}">
+                            {{ ext.display_name }}{% if ext.invite_sent and not ext.matched_profile %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
+                        </span>{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                {% endwith %}
+
                 {# -- Attached photos: click a thumbnail to open the lightbox ----- #}
                 {% with visit_images=visit.images.all %}
                 {% if visit_images %}

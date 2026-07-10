@@ -308,6 +308,40 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
+            <i class="material-symbols-outlined">outgoing_mail</i>
+            <span>Outbound Email Limits</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="email-limit-per-hour">Emails per hour</label>
+                <p class="form-help">
+                    Caps on emails a single user can trigger to third parties (friend invitations, visit
+                    invitations, ...). Subscription roles can raise these per tier on the
+                    <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.
+                    Set a value to <strong>0</strong> for unlimited.
+                </p>
+                <input type="number" name="email_limit_per_hour" id="email-limit-per-hour"
+                       value="{{ settings.email_limit_per_hour }}" min="0" max="100000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="email-limit-per-day">Emails per day</label>
+                <input type="number" name="email_limit_per_day" id="email-limit-per-day"
+                       value="{{ settings.email_limit_per_day }}" min="0" max="100000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="email-limit-per-month">Emails per month (rolling 30 days)</label>
+                <input type="number" name="email_limit_per_month" id="email-limit-per-month"
+                       value="{{ settings.email_limit_per_month }}" min="0" max="100000" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
             <i class="material-symbols-outlined">lock_clock</i>
             <span>Login Security</span>
         </div>

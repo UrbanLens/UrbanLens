@@ -197,6 +197,11 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if "signup_restricted" in request.POST:
             settings.signup_restricted = request.POST.get("signup_restricted") in {"1", "true", "on", "True"}
 
+        for email_limit_field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
+            if email_limit_field in request.POST:
+                with contextlib.suppress(ValueError, TypeError):
+                    setattr(settings, email_limit_field, max(0, int(request.POST.get(email_limit_field, getattr(settings, email_limit_field)))))
+
         if "storage_quota_gb" in request.POST:
             with contextlib.suppress(ValueError, TypeError):
                 settings.storage_quota_gb = max(0, int(request.POST.get("storage_quota_gb", settings.storage_quota_gb)))
@@ -517,6 +522,23 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                     return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Storage quota must be a whole number of GB."}))
             SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
+
+        if action == "role_email_limits":
+            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            updates: dict[str, int | None] = {}
+            for field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
+                raw = (request.POST.get(field) or "").strip()
+                if raw == "":
+                    updates[field] = None
+                    continue
+                try:
+                    updates[field] = max(0, int(raw))
+                except (ValueError, TypeError):
+                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Email limits must be whole numbers."}))
+            SubscriptionRole.objects.filter(pk=role.pk).update(**updates)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
 
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()

@@ -563,7 +563,7 @@
         // Explicit height so flex children (body, map) have a real reference to
         // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
         // and Leaflet reads a 0px container height.
-        height: min(95vh, 680px);
+        height: min(95vh, 70em);
     }
 }
 

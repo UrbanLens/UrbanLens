@@ -51,6 +51,9 @@ CALENDAR_SCOPES = (
 # Private extended property stamped on every event UrbanLens exports, so
 # imports can recognise (and skip) events that originated as trips.
 TRIP_UUID_EVENT_PROPERTY = "urbanlens_trip_uuid"
+# Additionally stamped on per-activity events so they can be told apart from
+# the trip-level all-day event.
+ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 
 _OAUTH_TIMEOUT = 30
 

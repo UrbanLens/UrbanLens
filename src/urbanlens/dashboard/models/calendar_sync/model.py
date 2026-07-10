@@ -20,6 +20,7 @@ from django.db.models import (
     ForeignKey,
     Index,
     OneToOneField,
+    Q,
     TextChoices,
     TextField,
     UniqueConstraint,
@@ -94,16 +95,28 @@ class GoogleCalendarAccount(abstract.DashboardModel):
 
 
 class TripCalendarLink(abstract.DashboardModel):
-    """Association between a trip and one user's Google Calendar event.
+    """Association between a trip (or one of its activities) and one user's Google Calendar event.
 
     Each member exports a trip to their *own* calendar, so a trip can have
-    one link per profile. The link also dedupes imports: an event that
-    already has a link for this profile is never imported twice.
+    one link per profile. Exports mirror the trip itself as an all-day event
+    (``activity`` is null) plus one timed event per scheduled activity
+    (``activity`` set). The link also dedupes imports: an event that already
+    has a link for this profile is never imported twice.
     """
 
     trip = ForeignKey(
         "dashboard.Trip",
         on_delete=CASCADE,
+        related_name="calendar_links",
+    )
+    # Set when this link mirrors a single scheduled activity rather than the
+    # whole trip. Deleting the activity cascades away its event link (the
+    # orphaned Google event is cleaned up on the next export/removal sync).
+    activity = ForeignKey(
+        "dashboard.TripActivity",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
         related_name="calendar_links",
     )
     profile = ForeignKey(
@@ -119,15 +132,25 @@ class TripCalendarLink(abstract.DashboardModel):
 
     if TYPE_CHECKING:
         trip_id: int
+        activity_id: int | None
         profile_id: int
 
     def __str__(self) -> str:
-        return f"{self.trip} ↔ event {self.google_event_id} ({self.direction}, {self.profile})"
+        subject = self.activity if self.activity_id else self.trip
+        return f"{subject} ↔ event {self.google_event_id} ({self.direction}, {self.profile})"
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_calendar_links"
         constraints = [
-            UniqueConstraint(fields=("trip", "profile"), name="db_trip_calendar_link_unique"),
+            UniqueConstraint(
+                fields=("trip", "profile"),
+                condition=Q(activity__isnull=True),
+                name="db_trip_calendar_link_unique",
+            ),
+            UniqueConstraint(
+                fields=("trip", "profile", "activity"),
+                name="db_trip_calendar_link_activity_unique",
+            ),
         ]
         indexes = [
             Index(fields=["profile", "google_event_id"], name="idxdb_tcl_profile_event"),

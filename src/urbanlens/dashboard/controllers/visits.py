@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits import (
     add_visited_status,
     create_visit_suggestion,
@@ -66,7 +67,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
         Rendered HTML partial.
     """
     # markup_map__items backs visit.map_data (the embedded map snapshot).
-    page_obj = get_page(request, pin.visit_history.all().select_related("markup_map").prefetch_related("participants", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, pin.visit_history.all().select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
@@ -261,9 +262,14 @@ class VisitHistoryView(LoginRequiredMixin, View):
         if participants:
             visit.participants.set(participants)
 
+        # Each tagged member has their own "send them a suggestion" toggle -
+        # unchecked participants stay on the owner's copy without being contacted.
+        suggest_ids = resolve_suggest_participant_ids(request)
         lat, lng = pin.effective_latitude, pin.effective_longitude
         if participants and lat is not None and lng is not None:
             for participant in participants:
+                if participant.pk not in suggest_ids:
+                    continue
                 others = [p for p in participants if p.pk != participant.pk]
                 create_visit_suggestion(
                     suggested_to=participant,
@@ -276,6 +282,8 @@ class VisitHistoryView(LoginRequiredMixin, View):
                     origin_visit=visit,
                     origin_pin=pin,
                 )
+
+        sync_external_participants(request, visit)
 
         response = _render_visit_history(request, pin)
         if uploaded_new:
@@ -351,6 +359,7 @@ class VisitEditView(LoginRequiredMixin, View):
 
         uploaded_new = _sync_visit_photos(request, pin, visit)
         visit.participants.set(_resolve_participants(request, pin))
+        sync_external_participants(request, visit)
 
         response = _render_visit_history(request, pin)
         if uploaded_new:

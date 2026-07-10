@@ -23,9 +23,11 @@ from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.apis.calendar.google import TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
 from urbanlens.dashboard.services.calendar_sync import (
+    DEFAULT_ACTIVITY_EVENT_DURATION,
+    activity_to_event_body,
     event_originated_from_urbanlens,
     event_to_trip_kwargs,
     export_trip_to_calendar,
@@ -228,8 +230,9 @@ class ExportTripTests(_CalendarSyncDBTestCase):
         gateway.create_event.return_value = {"id": "new-evt"}
         trip = self._trip()
 
-        link = export_trip_to_calendar(self.account, trip, trip_url="https://example.com/t/")
+        link, activity_count = export_trip_to_calendar(self.account, trip, trip_url="https://example.com/t/")
 
+        self.assertEqual(activity_count, 0)
         gateway.create_event.assert_called_once()
         body = gateway.create_event.call_args[0][0]
         self.assertEqual(body["summary"], "Export me")
@@ -267,7 +270,7 @@ class ExportTripTests(_CalendarSyncDBTestCase):
             direction=CalendarSyncDirection.EXPORTED,
         )
 
-        link = export_trip_to_calendar(self.account, trip)
+        link, _count = export_trip_to_calendar(self.account, trip)
 
         gateway.create_event.assert_called_once()
         self.assertEqual(link.google_event_id, "evt-new")
@@ -296,6 +299,130 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 
         self.assertFalse(removed)
         gateway.delete_event.assert_not_called()
+
+
+class ActivityEventBodyTests(TestCase):
+    """activity_to_event_body maps scheduled activities to timed event payloads."""
+
+    def _activity(self, **kwargs) -> TripActivity:
+        trip = Trip(name="Mill weekend")
+        return TripActivity(trip=trip, title="Old mill", **kwargs)
+
+    def test_unscheduled_activity_yields_none(self):
+        self.assertIsNone(activity_to_event_body(self._activity(scheduled_at=None)))
+
+    @given(minutes=st.integers(min_value=1, max_value=60 * 24))
+    def test_scheduled_end_used_when_after_start(self, minutes):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        end = start + datetime.timedelta(minutes=minutes)
+        body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=end))
+        self.assertEqual(body["start"]["dateTime"], start.isoformat())
+        self.assertEqual(body["end"]["dateTime"], end.isoformat())
+
+    def test_missing_end_uses_default_duration(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start))
+        self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
+
+    def test_end_before_start_uses_default_duration(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=start - datetime.timedelta(hours=1)))
+        self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
+
+    def test_summary_includes_trip_and_activity_names(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start))
+        self.assertEqual(body["summary"], "Mill weekend: Old mill")
+
+    def test_marks_event_as_urbanlens_export(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start))
+        self.assertTrue(event_originated_from_urbanlens(body))
+        self.assertIn(ACTIVITY_ID_EVENT_PROPERTY, body["extendedProperties"]["private"])
+
+    def test_hidden_location_not_exported(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9))
+        self.assertNotIn("location", body)
+
+    def test_coordinate_override_exported_as_location(self):
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start, lat_override=41.5, lng_override=-73.9))
+        self.assertEqual(body["location"], "41.500000, -73.900000")
+
+
+class ExportActivityEventsTests(_CalendarSyncDBTestCase):
+    """export_trip_to_calendar mirrors scheduled activities as timed events."""
+
+    def _trip_with_activities(self) -> tuple[Trip, TripActivity, TripActivity]:
+        trip = Trip.objects.create(
+            name="Export me",
+            creator=self.profile,
+            start_date=datetime.date(2026, 10, 1),
+            end_date=datetime.date(2026, 10, 3),
+        )
+        scheduled = TripActivity.objects.create(
+            trip=trip,
+            title="Morning mill",
+            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+        )
+        unscheduled = TripActivity.objects.create(trip=trip, title="Maybe later")
+        return trip, scheduled, unscheduled
+
+    def test_export_creates_one_event_per_scheduled_activity(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        trip, scheduled, _unscheduled = self._trip_with_activities()
+
+        link, activity_count = export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(activity_count, 1)
+        self.assertEqual(link.google_event_id, "trip-evt")
+        activity_link = TripCalendarLink.objects.get(trip=trip, profile=self.profile, activity=scheduled)
+        self.assertEqual(activity_link.google_event_id, "act-evt")
+        # Trip-level link + one activity link.
+        self.assertEqual(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).count(), 2)
+
+    def test_re_export_updates_activity_event_in_place(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
+        trip, _scheduled, _unscheduled = self._trip_with_activities()
+
+        export_trip_to_calendar(self.account, trip)
+        export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(gateway.create_event.call_count, 2)
+        self.assertEqual(gateway.update_event.call_count, 2)
+        self.assertEqual(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).count(), 2)
+
+    def test_unscheduling_activity_removes_its_event_on_next_export(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
+        trip, scheduled, _unscheduled = self._trip_with_activities()
+        export_trip_to_calendar(self.account, trip)
+
+        scheduled.scheduled_at = None
+        scheduled.save(update_fields=["scheduled_at", "updated"])
+        _link, activity_count = export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(activity_count, 0)
+        gateway.delete_event.assert_called_once_with("act-evt")
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile, activity__isnull=False).exists())
+
+    def test_remove_deletes_activity_events_too(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        trip, _scheduled, _unscheduled = self._trip_with_activities()
+        export_trip_to_calendar(self.account, trip)
+
+        removed = remove_trip_from_calendar(self.account, trip)
+
+        self.assertTrue(removed)
+        deleted_ids = {call.args[0] for call in gateway.delete_event.call_args_list}
+        self.assertEqual(deleted_ids, {"trip-evt", "act-evt"})
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
 
 
 class CalendarCallbackViewTests(TestCase):

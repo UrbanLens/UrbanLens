@@ -129,11 +129,22 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="detail_pins",
     )
+    # The accepted PinShare this pin was created from, when the owner added it
+    # by accepting a friend's share. Links reshares of this pin back into the
+    # original share chain (see PinShare.parent_share).
+    source_share = ForeignKey(
+        "dashboard.PinShare",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pins_created",
+    )
 
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
         parent_pin_id: int | None
+        source_share_id: int | None
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
         markup_items: DjangoManager[PinMarkup]

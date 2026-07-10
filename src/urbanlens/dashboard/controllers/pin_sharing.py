@@ -33,6 +33,7 @@ def _create_pin_from_share(share: PinShare) -> Pin:
     source = share.pin
     new_pin = Pin.objects.create(
         profile=share.to_profile,
+        source_share=share,
         location=source.location,
         name=source.name,
         name_is_user_provided=source.name_is_user_provided,
@@ -77,6 +78,9 @@ class PinShareCreateView(LoginRequiredMixin, View):
             pin=pin,
             from_profile=sender,
             to_profile=recipient,
+            # If this pin itself arrived via a share, record the lineage so
+            # reshare chains can be counted (see PinShare.chain_share_count).
+            parent_share_id=pin.source_share_id,
             status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
         )
         notification = NotificationLog.objects.create(

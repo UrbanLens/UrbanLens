@@ -102,16 +102,71 @@ pins that were marked visited but never had a dated record.
         <label>Who else was there? <small>(optional)</small></label>
         <div class="visit-participant-picker">
             {% for friend in connections %}
-            <label class="visit-participant-option">
-                <input type="checkbox" name="participant_ids" value="{{ friend.id }}"
-                       {% if friend in visit_participants %}checked{% endif %}>
-                {{ friend.username }}
-            </label>
+            <span class="visit-participant-row">
+                <label class="visit-participant-option">
+                    <input type="checkbox" name="participant_ids" value="{{ friend.id }}"
+                           {% if friend in visit_participants %}checked{% endif %}>
+                    {{ friend.username }}
+                </label>
+                {% if not visit %}
+                <label class="visit-participant-suggest"
+                       data-tooltip="Also send {{ friend.username }} a visit suggestion so they can log this visit too. Uncheck to record them on your copy only, without contacting them.">
+                    <input type="checkbox" name="suggest_participant_ids" value="{{ friend.id }}" checked>
+                    <i class="material-symbols-outlined">notifications</i>
+                </label>
+                {% endif %}
+            </span>
             {% endfor %}
         </div>
     </div>
     {% endwith %}
     {% endif %}
+
+    {# -- External participants: people who aren't on UrbanLens ------------- #}
+    <div class="form-row">
+        <label>Someone not on UrbanLens? <small>(optional)</small></label>
+        {% if visit %}
+        {% for ext in visit.external_participants.all %}
+        <div class="visit-external-existing">
+            <i class="material-symbols-outlined">person</i>
+            <span class="visit-external-existing-name">{{ ext.display_name }}</span>
+            {% if ext.matched_profile %}<span class="visit-external-chip">joined as {{ ext.matched_profile.username }}</span>
+            {% elif ext.invite_sent %}<span class="visit-external-chip">invited</span>{% endif %}
+            <input type="hidden" name="external_remove" value="{{ ext.pk }}" disabled>
+            <button type="button" class="btn btn--icon-sm" title="Remove this person from the visit"
+                    onclick="this.closest('.visit-external-existing').querySelector('input[name=external_remove]').disabled=false;this.closest('.visit-external-existing').hidden=true">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        <div class="visit-external-list"></div>
+        <button type="button" class="btn btn--ghost btn--sm visit-external-add-btn"
+                onclick="urbanlensAddExternalParticipantRow(this)">
+            <i class="material-symbols-outlined">person_add</i> Add a person by name
+        </button>
+        <small class="form-help">If you add their email and leave "invite" checked, they'll be emailed an invitation to join and confirm this visit. Their email address is never stored.</small>
+    </div>
+    <script>
+    if (!window.urbanlensAddExternalParticipantRow) {
+        window.urbanlensAddExternalParticipantRow = function (button) {
+            window._ulExternalRowIndex = (window._ulExternalRowIndex || 0) + 1;
+            const index = window._ulExternalRowIndex;
+            const row = document.createElement('div');
+            row.className = 'visit-external-row';
+            row.innerHTML = `
+                <input type="text" name="external_name_${index}" placeholder="Name" maxlength="100" autocomplete="off">
+                <input type="email" name="external_email_${index}" placeholder="Email (optional)" autocomplete="off">
+                <label class="visit-external-invite" title="Email them an invitation to join UrbanLens and confirm this visit">
+                    <input type="checkbox" name="external_invite_${index}" checked> Invite
+                </label>
+                <button type="button" class="btn btn--icon-sm" title="Remove"><i class="material-symbols-outlined">close</i></button>`;
+            row.querySelector('button').addEventListener('click', () => row.remove());
+            button.closest('.form-row').querySelector('.visit-external-list').appendChild(row);
+            row.querySelector('input').focus();
+        };
+    }
+    </script>
     <div class="form-actions">
         <button type="submit" class="btn btn--primary btn--lg btn--submit">{% if visit %}Save Changes{% else %}Save Visit{% endif %}</button>
         <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>

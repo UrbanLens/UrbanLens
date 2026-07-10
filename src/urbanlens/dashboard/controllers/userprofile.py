@@ -826,6 +826,12 @@ class ProfileEmailVerifyView(View):
             except IntegrityError:
                 messages.error(request, "That email address is already verified on another account.")
             else:
+                # Deliver any friend requests + visit suggestions that were
+                # waiting on this address (visit participants tagged by email
+                # before this account claimed it).
+                from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites
+
+                process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
                 messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
         return redirect("profile.edit")
 

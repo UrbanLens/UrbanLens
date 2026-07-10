@@ -75,6 +75,37 @@
       </div>
     </section>
     <section class="site-admin-card ul-section card">
+      <div class="card-header"><i class="material-symbols-outlined">outgoing_mail</i><span>Role email limits</span></div>
+      <p class="form-help">
+        Outbound email caps (invitations etc.) for users holding each role - the largest applicable
+        limit wins. Leave blank to use the site default, or set <strong>0</strong> for unlimited.
+      </p>
+      <div class="subscription-list">
+        <ul class="subscription-list__items">
+          {% for role in roles %}
+          <li class="subscription-list__item">
+            <form method="post" class="inline-sub-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_email_limits">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              <label for="role-email-hour-{{ role.slug }}">Hour</label>
+              <input type="number" id="role-email-hour-{{ role.slug }}" name="email_limit_per_hour"
+                     value="{{ role.email_limit_per_hour|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <label for="role-email-day-{{ role.slug }}">Day</label>
+              <input type="number" id="role-email-day-{{ role.slug }}" name="email_limit_per_day"
+                     value="{{ role.email_limit_per_day|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <label for="role-email-month-{{ role.slug }}">Month</label>
+              <input type="number" id="role-email-month-{{ role.slug }}" name="email_limit_per_month"
+                     value="{{ role.email_limit_per_month|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <button class="btn btn--ghost" type="submit">Save</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    <section class="site-admin-card ul-section card">
       <div class="card-header">
         <i class="material-symbols-outlined">manage_accounts</i>
         <span>Your active grants</span>

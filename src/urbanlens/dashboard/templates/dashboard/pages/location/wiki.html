@@ -149,8 +149,13 @@
             </div>
             <div class="card__body wiki-stats-grid">
                 <div class="wiki-stat">
-                    <span class="wiki-stat-value">{{ pin_count }}</span>
-                    <span class="wiki-stat-label">{{ pin_count|pluralize:"user has,users have" }} this pinned</span>
+                    {% if pin_count_display.is_low %}
+                    <span class="wiki-stat-value wiki-stat-value--low">fewer than 3</span>
+                    <span class="wiki-stat-label">users have this pinned</span>
+                    {% else %}
+                    <span class="wiki-stat-value" data-tooltip="This number is approximate, to protect user privacy.">about {{ pin_count_display.value }}</span>
+                    <span class="wiki-stat-label">users have this pinned</span>
+                    {% endif %}
                 </div>
                 {% if first_pinned %}
                 <div class="wiki-stat">

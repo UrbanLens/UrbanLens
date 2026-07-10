@@ -218,12 +218,56 @@ class Location(abstract.PublicDashboardModel):
             return self.cached_place_name
         return self.get_place_name()
 
+    # Country spellings reverse-geocoders commonly return for the USA, compared
+    # casefolded with periods stripped (so "U.S.A." matches too).
+    _USA_COUNTRY_NAMES: frozenset[str] = frozenset({"united states", "united states of america", "usa", "us"})
+
+    @property
+    def is_usa(self) -> bool:
+        """Whether this location's country component identifies the USA.
+
+        An empty country is treated as USA for display purposes: the address
+        backfill frequently omits the country for domestic geocoding results,
+        and the [City, State] form it selects reads fine either way.
+
+        Returns:
+            True when the country is blank or a recognized USA spelling.
+        """
+        country = (self.country or "").replace(".", "").strip().casefold()
+        return not country or country in self._USA_COUNTRY_NAMES
+
+    @property
+    def area_label(self) -> str | None:
+        """Short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
+
+        USA locations render as ``City, State``; elsewhere the country replaces
+        the state (``City, Country``), falling back to ``State, Country`` when
+        the city is unknown. Missing components are simply omitted.
+
+        Returns:
+            The area string, or None when no address components are available.
+        """
+        city = (self.city or "").strip()
+        state = (self.state or "").strip()
+        country = (self.country or "").strip()
+        if self.is_usa:
+            parts = [city, state]
+        else:
+            parts = [city or state, country]
+        label = ", ".join(part for part in parts if part)
+        return label or None
+
     @property
     def display_name(self) -> str:
         """Best human-readable name: the community wiki name, else the official name.
 
         Reads the linked Wiki when present (prefetch with
         ``select_related("wiki")`` in bulk to avoid an extra query per row).
+        Unnamed places fall back to "Unnamed Location in {area}" when address
+        components are known, so lists of unnamed pins stay tellable apart.
+        The area-suffixed placeholder is still rejected by
+        :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name`,
+        so it never leaks into external API queries or saved names.
 
         # TODO: This should be assessed for deletion.
         """
@@ -233,7 +277,11 @@ class Location(abstract.PublicDashboardModel):
             wiki = None
         if wiki is not None and wiki.name:
             return wiki.name
-        return self.official_name or "Unnamed Location"
+        if self.official_name:
+            return self.official_name
+        if area := self.area_label:
+            return f"Unnamed Location in {area}"
+        return "Unnamed Location"
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace."""

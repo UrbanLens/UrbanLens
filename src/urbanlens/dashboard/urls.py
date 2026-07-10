@@ -945,6 +945,7 @@ urlpatterns = [
                 path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
                 path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
                 path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
+                path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),

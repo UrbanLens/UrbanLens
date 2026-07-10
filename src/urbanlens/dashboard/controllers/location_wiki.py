@@ -146,8 +146,12 @@ class LocationWikiView(LoginRequiredMixin, View):
             wiki.viewed_by_other = True
 
         # Only count root pins (not detail pins), and count distinct users.
+        # The exact count is never exposed - see services.community_counts.
+        from urbanlens.dashboard.services.community_counts import approximate_pin_count
+
         root_pins = location.pins.filter(parent_pin__isnull=True)
         pin_count = root_pins.values("profile").distinct().count()
+        pin_count_display = approximate_pin_count(wiki.pk, pin_count)
         first_pinned = root_pins.select_related("profile__user").order_by("created").first()
 
         # The requesting user's own pin for this location (used for the back-link).
@@ -189,7 +193,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "wiki": wiki,
                 "location": location,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
-                "pin_count": pin_count,
+                "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
                 "user_pin": user_pin,

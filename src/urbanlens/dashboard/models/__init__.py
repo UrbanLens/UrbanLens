@@ -12,6 +12,7 @@ from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.categories import Category
 from urbanlens.dashboard.models.comments import Comment
+from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_place import GooglePlace
@@ -42,7 +43,7 @@ from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, S
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.models.visits import PinVisit, VisitSource
+from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer, WikiViewSet
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
