@@ -13,6 +13,24 @@
             <p class="trips-subtitle">Your trips, routes, and shared plans in one place.</p>
         </div>
         <div class="trips-header-right">
+            {% if calendar_account %}
+            <button type="button" class="btn btn--ghost"
+                    title="Import events from your Google Calendar as trips"
+                    hx-get="{% url 'trips.calendar.import' %}"
+                    hx-target="#calendar-import-dialog"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
+                <i class="material-symbols-outlined">calendar_month</i>
+                Google Calendar
+                <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
+            </button>
+            {% else %}
+            <a href="{% url 'trips.calendar.connect' %}" class="btn btn--ghost"
+               title="Connect your own Google Calendar to import events as trips and export trips as events">
+                <i class="material-symbols-outlined">calendar_month</i>
+                Connect Google Calendar
+            </a>
+            {% endif %}
             <button type="button" class="btn btn--primary"
                     onclick="document.getElementById('create-trip-dialog').showModal()">
                 <i class="material-symbols-outlined">add</i>
@@ -27,6 +45,9 @@
     </div>
 
 </div>
+
+{# -- Google Calendar import dialog (content loaded via HTMX) --------------- #}
+<dialog id="calendar-import-dialog" class="trip-create-dialog ul-dialog"></dialog>
 
 {# -- Create trip dialog --------------------------------------------------- #}
 <dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">

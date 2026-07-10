@@ -430,15 +430,17 @@ class TripListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
+        from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         trips = _trips_for_list(profile)
         friends = get_connections(profile)
+        calendar_account = GoogleCalendarAccount.objects.filter(profile=profile).first()
         return render(
             request,
             "dashboard/pages/trips/index.html",
-            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends},
+            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends, "calendar_account": calendar_account},
         )
 
 
@@ -494,6 +496,8 @@ class TripDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request, trip_uuid):
+        from urbanlens.dashboard.controllers.calendar_sync import calendar_context
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
@@ -507,6 +511,7 @@ class TripDetailView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "trip-detail",
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                **calendar_context(profile, trip),
                 **profile.get_map_center_template_context(),
             },
         )
@@ -538,6 +543,8 @@ class TripEditView(LoginRequiredMixin, View):
         trip.end_date = body.get("end_date") or None
         trip.save()
 
+        from urbanlens.dashboard.controllers.calendar_sync import calendar_context
+
         return render(
             request,
             "dashboard/partials/trips/trip_header_partial.html",
@@ -545,6 +552,7 @@ class TripEditView(LoginRequiredMixin, View):
                 "trip": trip,
                 "profile": profile,
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                **calendar_context(profile, trip),
             },
         )
 

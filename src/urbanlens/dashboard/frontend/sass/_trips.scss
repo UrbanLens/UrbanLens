@@ -2347,3 +2347,74 @@
         }
     }
 }
+// ---------------------------------------------------------------------------
+// Google Calendar import dialog
+// ---------------------------------------------------------------------------
+
+.calendar-import-account,
+.calendar-import-empty,
+.calendar-import-error p {
+    margin: 0 0 1rem;
+    color: var(--ul-grey-6);
+}
+
+.calendar-import-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    max-height: 20rem;
+    overflow-y: auto;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+}
+
+.calendar-import-item {
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.calendar-import-label {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .75rem;
+    cursor: pointer;
+    font-weight: normal;
+
+    &:has(input:disabled) {
+        cursor: default;
+        opacity: .55;
+    }
+}
+
+.calendar-import-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-import-dates {
+    color: var(--ul-grey-6);
+    font-size: .85em;
+    flex-shrink: 0;
+}
+
+.calendar-import-note {
+    color: var(--ul-grey-6);
+    font-size: .8em;
+    font-style: italic;
+    flex-shrink: 0;
+}
+
+.calendar-import-footer {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-grey-1a);
+    display: flex;
+    justify-content: flex-end;
+}

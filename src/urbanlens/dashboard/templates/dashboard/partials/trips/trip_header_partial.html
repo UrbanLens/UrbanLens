@@ -15,6 +15,7 @@
         {% endif %}
     </div>
     <div class="trip-detail-header-right">
+        {% include "dashboard/partials/trips/_trip_calendar_button.html" %}
         {% if viewer_is_organizer %}
         <button type="button" class="btn-icon"
                 title="Trip settings"

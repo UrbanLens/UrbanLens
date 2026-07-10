@@ -9,6 +9,7 @@ from urbanlens.dashboard.models.badges import COLOR_CHOICES, ICON_CHOICES, Badge
 from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
 from urbanlens.dashboard.models.boundary import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache import GeocodedLocation
+from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.categories import Category
 from urbanlens.dashboard.models.comments import Comment
 from urbanlens.dashboard.models.friendship import Friendship
