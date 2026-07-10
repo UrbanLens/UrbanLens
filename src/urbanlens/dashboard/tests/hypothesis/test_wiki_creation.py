@@ -56,9 +56,11 @@ class WikiCreationServiceTests(TestCase):
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.wiki_id, wiki.pk)
 
-    def test_seeding_pin_name_requires_explicit_choice(self) -> None:
+    def test_pin_name_is_never_seeded_onto_wiki(self) -> None:
+        # "name" isn't a seedable field at all - the wiki's name comes from
+        # external place data, and the pin's name already surfaces as an alias.
         wiki, _created = self._create(include={"name"})
-        self.assertEqual(wiki.name, "My secret mill")
+        self.assertEqual(wiki.name, "Old Mill")
 
     def test_seeds_danger_and_vulnerability_as_initial_votes(self) -> None:
         wiki, _created = self._create(include={"danger", "vulnerability"})
@@ -104,7 +106,7 @@ class WikiCreationServiceTests(TestCase):
     def test_existing_wiki_is_never_overwritten(self) -> None:
         existing = baker.make("dashboard.Wiki", location=self.location, name="Community Name")
 
-        wiki, created = self._create(include={"name", "danger"})
+        wiki, created = self._create(include={"danger"})
 
         self.assertFalse(created)
         self.assertEqual(wiki.pk, existing.pk)
@@ -127,7 +129,8 @@ class SeedableFieldValuesTests(TestCase):
 
         fields = {entry["field"] for entry in seedable_field_values(pin)}
 
-        self.assertIn("name", fields)
+        # Name is never offered - see SEEDABLE_FIELDS.
+        self.assertNotIn("name", fields)
         self.assertNotIn("danger", fields)
         self.assertNotIn("vulnerability", fields)
 

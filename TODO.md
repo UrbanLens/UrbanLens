@@ -273,6 +273,7 @@ Features planned for future releases.
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.
 * Create unit tests for typescript.
 * Markup: Dotted lines.
+* Badge merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

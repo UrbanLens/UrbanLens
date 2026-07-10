@@ -40,6 +40,16 @@
                     <i class="material-symbols-outlined">edit_note</i>
                     Suggest edits
                 </button>
+                {% if can_delete_wiki %}
+                <button type="button" class="wiki-delete-btn btn btn--danger"
+                        hx-delete="{% url 'location.wiki.delete' location.slug %}"
+                        hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
+                        hx-target="body"
+                        title="No one else has viewed this wiki yet, so you can still delete it.">
+                    <i class="material-symbols-outlined">delete</i>
+                    Delete wiki
+                </button>
+                {% endif %}
                 {% if user_pin %}
                 <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
                     <i class="material-symbols-outlined">arrow_back</i> Back to my pin

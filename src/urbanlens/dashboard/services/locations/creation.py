@@ -32,7 +32,10 @@ SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "p
 #: Pin scalar fields a user may copy into a newly created wiki. Keys are the
 #: tokens posted by the create-wiki dialog. Aliases and photos are seeded
 #: separately (per-item selection, see alias_ids/image_ids on create_for_pin).
-SEEDABLE_FIELDS = ("name", "danger", "vulnerability")
+#: Name is deliberately excluded: the wiki's name is resolved from external
+#: place data (see name-resolution plugin), and the pin's own name already
+#: appears as a selectable alias via the Pin.save() name/alias invariant.
+SEEDABLE_FIELDS = ("danger", "vulnerability")
 
 #: Stat fields seeded as the pin owner's own initial WikiStatVote, rather than
 #: a plain scalar copy - a Wiki has no single "danger"/"vulnerability" value of
@@ -75,12 +78,9 @@ class WikiCreationService:
 
         include = {f for f in (include_fields or set()) if f in SEEDABLE_FIELDS}
         location: Location = pin.location
-        defaults: dict = {}
-        if "name" in include and pin.name and pin.name.strip():
-            defaults["name"] = pin.name.strip()
 
         with transaction.atomic():
-            wiki, created = Wiki.objects.get_or_create_for_location(location, defaults=defaults)
+            wiki, created = Wiki.objects.get_or_create_for_location(location, defaults={"created_by": pin.profile})
             if created:
                 for field in _SEEDABLE_VOTE_FIELDS:
                     if field not in include:
@@ -128,8 +128,6 @@ def seedable_field_values(pin: Pin) -> list[dict]:
         one per seedable field that actually has content on this pin.
     """
     candidates: list[dict] = []
-    if pin.name and pin.name.strip():
-        candidates.append({"field": "name", "label": "Name", "value": pin.name.strip()})
     if pin.danger:
         candidates.append({"field": "danger", "label": "Danger", "value": f"{pin.danger} / 5"})
     if pin.vulnerability:

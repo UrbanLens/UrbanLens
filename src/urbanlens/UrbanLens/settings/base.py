@@ -406,7 +406,17 @@ EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).
-SITE_URL = os.getenv("UL_SITE_URL", "http://localhost:21080")
+_site_url_env = os.getenv("UL_SITE_URL")
+SITE_URL = _site_url_env or "http://localhost:21080"
+if not _site_url_env and not _is_dev:
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "UL_SITE_URL is not set outside a local/development environment - falling back to "
+        "%r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to "
+        "this deployment's real public URL.",
+        SITE_URL,
+    )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
 GOOGLE_DOMAIN_RESTRICTED_API_KEY = os.getenv("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY", "")

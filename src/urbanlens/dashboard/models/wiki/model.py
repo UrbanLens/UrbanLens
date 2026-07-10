@@ -20,8 +20,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import DatabaseError
-from django.db.models import CASCADE, RESTRICT, ForeignKey, Index, ManyToManyField, OneToOneField
-from django.db.models.fields import CharField, DateField, IntegerField, SlugField, TextField
+from django.db.models import CASCADE, RESTRICT, SET_NULL, ForeignKey, Index, ManyToManyField, OneToOneField
+from django.db.models.fields import BooleanField, CharField, DateField, IntegerField, SlugField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin.model import PinType
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.model import Badge
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import PinMarkup
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
 
@@ -106,9 +107,24 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         related_name="child_wikis",
     )
 
+    # Attribution only - deleting the creator's profile does not cascade-delete
+    # the wiki. Used solely to gate self-service deletion (see can_be_deleted_by).
+    created_by = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_wikis",
+    )
+    # Flips true the first time a profile other than created_by views the
+    # wiki page (see LocationWikiView.get). Once true, the wiki is community
+    # content and its creator can no longer unilaterally delete it.
+    viewed_by_other = BooleanField(default=False)
+
     if TYPE_CHECKING:
         location_id: int
         parent_wiki_id: int | None
+        created_by_id: int | None
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
 
@@ -196,6 +212,26 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
                 return True
             current = current.parent_wiki
         return False
+
+    # ------------------------------------------------------------------
+    # Self-service deletion
+    # ------------------------------------------------------------------
+
+    def can_be_deleted_by(self, profile: Profile) -> bool:
+        """Whether ``profile`` may delete this wiki outright.
+
+        Only the profile that created the wiki may do so, and only before
+        anyone else has viewed it - once another profile has seen the page,
+        it's community content and deletion should go through normal
+        moderation rather than a unilateral self-service action.
+
+        Args:
+            profile: The profile requesting deletion.
+
+        Returns:
+            True if ``profile`` created this wiki and no one else has viewed it.
+        """
+        return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
 
     # ------------------------------------------------------------------
     # Badge helpers

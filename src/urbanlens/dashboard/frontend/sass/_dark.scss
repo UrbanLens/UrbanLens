@@ -1323,25 +1323,19 @@
     }
 
     .org-bulk-btn {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-        color: var(--ul-grey-8);
-    }
-
-    .org-bulk-btn--edit:hover:not(:disabled) {
-        background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
-    }
-
-    .org-bulk-btn--merge {
-        color: var(--ul-grey-0);
-
-        &:disabled {
-            color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
+        &--edit:hover:not(:disabled) {
+            background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
         }
-    }
 
-    .org-bulk-btn--delete:hover:not(:disabled) {
-        background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
+        &--merge {
+            &:disabled {
+                color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
+            }
+        }
+
+        &--delete:hover:not(:disabled) {
+            background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
+        }
     }
 }
 // Theme-level refinements for shared surfaces and controls. These catch legacy

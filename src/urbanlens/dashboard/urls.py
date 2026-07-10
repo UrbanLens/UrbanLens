@@ -625,6 +625,11 @@ urlpatterns = [
                     name="location.wiki",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/delete/",
+                    location_wiki.LocationWikiDeleteView.as_view(),
+                    name="location.wiki.delete",
+                ),
+                path(
                     "<slug:location_slug>/wiki/edit/",
                     location_wiki.LocationWikiEditView.as_view(),
                     name="location.wiki.edit",

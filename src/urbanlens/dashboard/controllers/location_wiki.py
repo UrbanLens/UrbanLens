@@ -15,8 +15,9 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -26,6 +27,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +139,12 @@ class LocationWikiView(LoginRequiredMixin, View):
         location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
+        # First view by someone other than the creator retires their
+        # self-service delete eligibility (see Wiki.can_be_deleted_by).
+        if wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
+            Wiki.objects.filter(pk=wiki.pk).update(viewed_by_other=True)
+            wiki.viewed_by_other = True
+
         # Only count root pins (not detail pins), and count distinct users.
         root_pins = location.pins.filter(parent_pin__isnull=True)
         pin_count = root_pins.values("profile").distinct().count()
@@ -179,6 +188,7 @@ class LocationWikiView(LoginRequiredMixin, View):
             {
                 "wiki": wiki,
                 "location": location,
+                "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "pin_count": pin_count,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
@@ -205,6 +215,38 @@ class LocationWikiView(LoginRequiredMixin, View):
                 ],
             },
         )
+
+
+class LocationWikiDeleteView(LoginRequiredMixin, View):
+    """Let a wiki's creator delete it, before anyone else has seen it.
+
+    DELETE /location/<slug>/wiki/delete/
+
+    Only available to the profile that created the wiki, and only while
+    ``Wiki.viewed_by_other`` is still false - see ``Wiki.can_be_deleted_by``.
+    Once eligible, deletes the wiki and its full child-wiki subtree (stashed
+    for undo, same as detail-wiki deletion) and unlinks it from the pin.
+    """
+
+    def delete(self, request, location_slug):
+        location, wiki = _resolve_wiki(location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if not wiki.can_be_deleted_by(profile):
+            return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
+
+        user_pin = location.pins.filter(profile=profile).first()
+
+        subtree = with_wiki_descendants([wiki])
+        stash_for_undo("wiki", subtree, profile)
+        for descendant in subtree:
+            descendant.delete()
+
+        redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")
+        response = HttpResponse("", status=200)
+        response["HX-Redirect"] = redirect_url
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Community wiki deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
 
 
 class LocationWikiEditView(LoginRequiredMixin, View):
