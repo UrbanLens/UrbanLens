@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.safety import (
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -704,8 +705,9 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
         checkin = _get_checkin_by_slug(profile, checkin_slug)
         if not checkin.is_resolved:
             check_in(checkin, profile)
+        stash_for_undo("safety_checkin", [checkin], profile)
         checkin.delete()
-        messages.success(request, "Check-in deleted.")
+        messages.success(request, "Check-in deleted. You can undo this from Settings → Undo History within 7 days.")
         return redirect("safety.home")
 
 

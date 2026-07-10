@@ -794,6 +794,25 @@
         </div>
     </section>
 
+    {# -- Undo history ------------------------------------------------------------ #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">history</i>
+            <div>
+                <h2 class="settings-section-title">Undo History</h2>
+                <p class="settings-section-desc">Restore pins, wikis, safety check-ins, and trips you deleted in the last 7 days.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div hx-get="{% url 'undo.history' %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+    </section>
+
     {# -- Danger Zone ----------------------------------------------------------- #}
     <section class="settings-section ul-section settings-section--danger">
         <div class="settings-section-header">

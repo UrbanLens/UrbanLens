@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
@@ -559,8 +560,11 @@ class TripDeleteView(LoginRequiredMixin, View):
         trip = get_object_or_404(Trip, uuid=trip_uuid)
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can delete it.", status=403)
+        stash_for_undo("trip", [trip], profile)
         trip.delete()
-        return HttpResponse("", status=200)
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Trip deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
 
 
 class TripActivitiesView(LoginRequiredMixin, View):

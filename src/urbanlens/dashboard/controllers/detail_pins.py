@@ -16,6 +16,8 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +95,11 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         # (never re-parents an existing one), so a cycle can't actually form here
         # today. Guard anyway so this stays safe if that ever changes, and so a
         # pre-existing corrupted ancestor chain on `parent` is caught rather than
-        # silently extended.
-        if parent.would_create_cycle(parent):
+        # silently extended. Walk from `parent`'s existing parent (not `parent`
+        # itself) - passing `parent` as both self and new_parent would trip the
+        # identity check unconditionally, since any saved pin is trivially its
+        # own pk match against itself.
+        if parent.would_create_cycle(parent.parent_pin):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
         detail_name = body.get("name") or None
@@ -157,8 +162,13 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
     def delete(self, request, pin_slug, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
-        detail_pin.delete()
-        return HttpResponse("", status=200)
+        subtree = list(Pin.objects.filter(pk=detail_pin.pk).with_descendants())
+        stash_for_undo("pin", subtree, detail_pin.profile)
+        for descendant in subtree:
+            descendant.delete()
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
@@ -224,8 +234,9 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         # wiki (never re-parents an existing one), so a cycle can't actually
         # form here today. Guard anyway so this stays safe if that ever
         # changes, and so a pre-existing corrupted ancestor chain on `wiki`
-        # is caught rather than silently extended.
-        if wiki.would_create_cycle(wiki):
+        # is caught rather than silently extended. Walk from `wiki`'s existing
+        # parent (not `wiki` itself) - see the matching Pin check for why.
+        if wiki.would_create_cycle(wiki.parent_wiki):
             return JsonResponse({"ok": False, "error": "Invalid parent wiki."}, status=400)
 
         child_name = body.get("name") or wiki.name
@@ -320,7 +331,10 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 
         child_name = child_wiki.name
 
-        child_wiki.delete()
+        subtree = with_wiki_descendants([child_wiki])
+        stash_for_undo("wiki", subtree, profile)
+        for descendant in subtree:
+            descendant.delete()
 
         WikiEdit.objects.create(
             wiki=wiki,
@@ -328,4 +342,6 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             changes={"child_wiki_removed": {"from": child_name, "to": None}},
         )
 
-        return HttpResponse("", status=200)
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail wiki deleted. Undo within 7 days from Settings → Undo History."}})
+        return response

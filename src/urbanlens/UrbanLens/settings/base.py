@@ -241,6 +241,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.delete_expired_safety_checkins",
         "schedule": 60 * 60,
     },
+    "undo-action-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_expired_undo_actions",
+        "schedule": 60 * 60,
+    },
 }
 
 

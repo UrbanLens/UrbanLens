@@ -536,6 +536,24 @@ def delete_expired_safety_checkins() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def prune_expired_undo_actions() -> int:
+    """Delete UndoAction rows past their retention window.
+
+    The cached payload each row points at has already expired via its own
+    TTL by this point - this just tidies up the DB-side index so the
+    settings page's history list doesn't need to filter expired rows forever.
+    """
+    from urbanlens.dashboard.models.undo import UndoAction
+
+    expired = UndoAction.objects.expired()
+    count = expired.count()
+    expired.delete()
+    if count:
+        logger.info("Pruned %s expired undo action(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile

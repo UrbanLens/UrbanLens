@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -15,7 +16,8 @@ from django.views import View
 from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.pin_undo import restore_pins_from_undo, stash_pins_for_undo
+from urbanlens.dashboard.models.undo import UndoAction
+from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -70,11 +72,11 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
             return HttpResponse("No matching pins.", status=404)
 
         subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
-        token = stash_pins_for_undo(subtree, profile.pk)
+        undo_action = stash_for_undo("pin", subtree, profile)
         for pin in subtree:
             pin.delete()
 
-        return JsonResponse({"ok": True, "undo_token": token, "count": len(pins)})
+        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins)})
 
 
 class PinBulkUndoView(LoginRequiredMixin, View):
@@ -90,8 +92,14 @@ class PinBulkUndoView(LoginRequiredMixin, View):
             return HttpResponse("token is required.", status=400)
 
         profile = _request_profile(request)
-        restored = restore_pins_from_undo(token, profile.pk)
-        if restored is None:
+        try:
+            undo_action = UndoAction.objects.for_profile(profile).get(uuid=token, model_label="pin")
+        except (UndoAction.DoesNotExist, ValueError, ValidationError):
+            return JsonResponse({"ok": False, "error": "This undo has expired."}, status=410)
+
+        try:
+            restored = restore_undo_action(undo_action)
+        except UndoExpiredError:
             return JsonResponse({"ok": False, "error": "This undo has expired."}, status=410)
 
         return JsonResponse({"ok": True, "restored": [{"uuid": str(p.uuid), "name": p.effective_name} for p in restored]})

@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -473,7 +474,10 @@ class PinDeleteView(LoginRequiredMixin, View):
             return result
         pin = result
         logger.info("User %s deleted pin %s", request.user.id, pin.id)
-        pin.delete()
+        subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
+        stash_for_undo("pin", subtree, request.user.profile)
+        for descendant in subtree:
+            descendant.delete()
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = reverse("map.view")
         return response

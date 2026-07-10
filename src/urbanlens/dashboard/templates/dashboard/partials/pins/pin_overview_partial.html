@@ -17,51 +17,52 @@
         {% if pin.location and pin.location.slug %}
         <div class="pin-wiki-box{% if not pin.location.wiki %} pin-wiki-box--nowiki{% endif %}" id="pin-location-section">
             <i class="material-symbols-outlined">{% if pin.location.wiki %}public{% else %}public_off{% endif %}</i>
-            <div class="pin-wiki-box-info">
-                <span class="pin-wiki-box-label">Community Wiki</span>
+            
+            {% if user.profile.community_enabled %}
                 {% if pin.location.wiki %}
-                <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
-                   data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
-                    {{ pin.location.display_name }}
-                    <i class="material-symbols-outlined">open_in_new</i>
-                </a>
-                {% else %}
-                <span class="pin-wiki-box-muted">No community wiki for this place yet.</span>
+                    <div class="pin-wiki-box-info">
+                        <span class="pin-wiki-box-label">Community Wiki</span>
+                        <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
+                        data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
+                            {{ pin.location.display_name }}
+                            <i class="material-symbols-outlined">open_in_new</i>
+                        </a>
+                    </div>
+                    <div class="pin-wiki-box-actions">
+                        {% if overlapping_location_count > 1 %}
+                            <button type="button" class="btn pin-loc-change-btn"
+                                    hx-get="{% url 'pin.link' pin.slug %}"
+                                    hx-target="#pin-location-picker"
+                                    hx-swap="innerHTML"
+                                    data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
+                                    title="Switch to a different shared location">
+                                <i class="material-symbols-outlined">swap_horiz</i>
+                            </button>
+                        {% endif %}
+                    
+                        <button type="button" class="btn pin-loc-detach-btn"
+                                hx-post="{% url 'pin.link' pin.slug %}"
+                                hx-target="#pin-overview"
+                                hx-swap="outerHTML"
+                                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                hx-confirm="Detach from this location? Your pin will move to its own independent location without a community wiki."
+                                data-tooltip="Unlink this pin from the shared location. It gets its own independent location; you can create a wiki for it later."
+                                title="Detach from this shared location">
+                            <i class="material-symbols-outlined">link_off</i>
+                        </button>
+                    </div>
+                {% else %} 
+                    <button type="button" class="btn btn--primary pin-wiki-create-btn"
+                            hx-get="{% url 'pin.wiki.create' pin.slug %}"
+                            hx-target="#pin-wiki-create-dialog-body"
+                            hx-swap="innerHTML"
+                            hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
+                            data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
+                            title="Create a community wiki for this place">
+                        <i class="material-symbols-outlined">add_circle</i> Create Community Wiki
+                    </button>
                 {% endif %}
-            </div>
-            <div class="pin-wiki-box-actions">
-                {% if not pin.location.wiki and user.profile.community_enabled %}
-                <button type="button" class="btn btn--primary pin-wiki-create-btn"
-                        hx-get="{% url 'pin.wiki.create' pin.slug %}"
-                        hx-target="#pin-wiki-create-dialog-body"
-                        hx-swap="innerHTML"
-                        hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
-                        data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
-                        title="Create a community wiki for this place">
-                    <i class="material-symbols-outlined">add_circle</i> Create wiki
-                </button>
-                {% endif %}
-                {% if overlapping_location_count > 1 %}
-                <button type="button" class="btn pin-loc-change-btn"
-                        hx-get="{% url 'pin.link' pin.slug %}"
-                        hx-target="#pin-location-picker"
-                        hx-swap="innerHTML"
-                        data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
-                        title="Switch to a different shared location">
-                    <i class="material-symbols-outlined">swap_horiz</i>
-                </button>
-                {% endif %}
-                <button type="button" class="btn pin-loc-detach-btn"
-                        hx-post="{% url 'pin.link' pin.slug %}"
-                        hx-target="#pin-overview"
-                        hx-swap="outerHTML"
-                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                        hx-confirm="Detach from this location? Your pin will move to its own independent location without a community wiki."
-                        data-tooltip="Unlink this pin from the shared location. It gets its own independent location; you can create a wiki for it later."
-                        title="Detach from this shared location">
-                    <i class="material-symbols-outlined">link_off</i>
-                </button>
-            </div>
+            {% endif %}
             {# Picker panel drops down from here when "Change" is clicked #}
             <div id="pin-location-picker"></div>
         </div>

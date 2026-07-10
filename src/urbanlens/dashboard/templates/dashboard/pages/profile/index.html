@@ -385,6 +385,15 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && overlay.style.display !== 'none') closeDialog();
     });
+
+    var viewAsMenu = document.querySelector('.profile-viewas');
+    if (viewAsMenu) {
+        document.addEventListener('click', function (e) {
+            if (viewAsMenu.open && !viewAsMenu.contains(e.target)) {
+                viewAsMenu.open = false;
+            }
+        });
+    }
 }());
 
 function panToggleEdit(noteId) {

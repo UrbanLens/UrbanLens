@@ -1604,7 +1604,6 @@ body.page-location-details {
         gap: .2rem;
         min-width: 0;
         flex: 1;
-        min-width: max-content;
 
         .field-label {
             width: auto;
@@ -1818,7 +1817,7 @@ body.page-location-details {
 .pin-wiki-box-actions {
     display: flex;
     align-items: center;
-    gap: .2rem;
+    gap: .4rem;
     flex-shrink: 0;
     padding-left: .5rem;
     border-left: 1px solid var(--ul-grey-1a);

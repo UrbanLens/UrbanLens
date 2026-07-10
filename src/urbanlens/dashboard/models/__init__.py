@@ -39,6 +39,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
+from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer, WikiViewSet

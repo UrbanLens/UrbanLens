@@ -38,6 +38,7 @@ from urbanlens.dashboard.controllers import (
     thanks,
     tools,
     trip,
+    undo,
     userprofile,
     visit_suggestions,
     visits,
@@ -497,6 +498,9 @@ urlpatterns = [
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
     path("settings/delete-account/", account_deletion.RequestAccountDeletionView.as_view(), name="account.delete.request"),
     path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
+    path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),
+    path("settings/undo-history/clear/", undo.UndoClearView.as_view(), name="undo.clear"),
+    path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
         include(
