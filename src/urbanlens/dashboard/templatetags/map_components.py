@@ -12,7 +12,7 @@ JavaScript engines bind to it by data attributes:
 
 Because the markup and the JS are single-sourced, every map is guaranteed to
 present layers and search identically. New layers (e.g. from plugins) can be
-added with :func:`register_map_layer`.
+added with `register_map_layer`.
 """
 
 from __future__ import annotations
@@ -194,10 +194,13 @@ register_map_layer(
     MapLayerSpec(
         key="details",
         kind="custom",
-        label="Details",
-        aria_label="Show or hide detail pins and markup",
-        tooltip="Detail pins & markup",
+        label="Markup",
+        aria_label="Show or hide markup and additional pins",
+        tooltip="Markup and additional pins",
         icon="layers",
+        thumb="dashboard/images/map_layer_markup.webp",
+        thumb_alt="Markup Layer",
+        button_id="details-button",
     )
 )
 register_map_layer(
@@ -205,9 +208,12 @@ register_map_layer(
         key="photos",
         kind="custom",
         label="Photos",
-        aria_label="Show or hide photo markers",
-        tooltip="Photo markers",
+        aria_label="Show or hide photos",
+        tooltip="Photos",
         icon="photo_library",
+        thumb="dashboard/images/map_layer_photos.webp",
+        thumb_alt="Photos Layer",
+        button_id="photos-button",
     )
 )
 

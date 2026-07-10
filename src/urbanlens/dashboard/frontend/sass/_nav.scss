@@ -98,8 +98,8 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
         color: var(--ul-black);
     }
 
-    // Current section - stays visually distinct from the transient :hover state.
-    &.app-nav-link--active {
+// Current section - stays visually distinct from the transient :hover state.
+    &--active > .app-nav-link {
         background: rgba(255, 255, 255, 0.14);
         color: #fff;
         font-weight: 700;
