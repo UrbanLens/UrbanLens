@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from typing import TYPE_CHECKING
 
 from django.db import models
 
@@ -16,6 +16,9 @@ class Comment(abstract.FrontendDashboardModel):
     Exactly one of ``pin`` or ``wiki`` must be non-null.
     ``parent`` is set only for replies (depth-1 threading).
     """
+
+    text = models.TextField()
+    image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
 
     pin = models.ForeignKey(
         "dashboard.Pin",
@@ -43,8 +46,6 @@ class Comment(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
-    text = models.TextField()
-    image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
     # Standalone map (viewport + markup items) attached to this comment.
     markup_map = models.ForeignKey(
         "dashboard.MarkupMap",
@@ -53,6 +54,13 @@ class Comment(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+
+    if TYPE_CHECKING:
+        pin_id: int | None
+        wiki_id: int | None
+        profile_id: int
+        parent_id: int | None
+        markup_map_id: int | None
 
     objects = CommentManager()
 

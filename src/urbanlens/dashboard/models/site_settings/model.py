@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from uuid import uuid4
+from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q, UUIDField
+from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
@@ -27,11 +27,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
     """
-
-    # Regenerated each time the database is wiped or the app is redeployed from scratch.
-    # Clients embed this in their local pin cache; a mismatch signals a stale cache that
-    # must be cleared (avoids ghost pins appearing after a DB reset).
-    # uuid = UUIDField(default=uuid4, unique=True, editable=False)
 
     # --- Trip settings ---
 
@@ -286,6 +281,9 @@ class SiteSettings(abstract.FrontendDashboardModel):
         related_name="+",
         help_text="The first user created on this site; receives site admin and a one-time setup redirect.",
     )
+
+    if TYPE_CHECKING:
+        bootstrap_admin_user_id: int | None
 
     objects = SiteSettingsManager()
 

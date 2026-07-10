@@ -192,7 +192,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         profile, wiki = self._get_wiki_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
@@ -220,7 +220,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
 

@@ -271,14 +271,14 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     # portal. See controllers.safety's SafetyCheckinMap*View.
     markup_maps = ManyToManyField("dashboard.MarkupMap", blank=True, related_name="attached_safety_checkins")
 
-    objects = SafetyCheckinManager()
-
     if TYPE_CHECKING:
         profile_id: int
         destination_location_id: int | None
         markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
+
+    objects = SafetyCheckinManager()
 
     @property
     def is_resolved(self) -> bool:

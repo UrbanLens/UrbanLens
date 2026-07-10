@@ -78,12 +78,12 @@ class PinVisit(abstract.FrontendDashboardModel):
         related_name="visits",
     )
 
-    objects = VisitManager()
-
     if TYPE_CHECKING:
         pin_id: int
         route_id: int | None
         markup_map_id: int | None
+
+    objects = VisitManager()
 
     @property
     def map_data(self) -> dict | None:

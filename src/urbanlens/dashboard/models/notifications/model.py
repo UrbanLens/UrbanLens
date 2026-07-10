@@ -48,7 +48,6 @@ class NotificationLog(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int | None
         source_profile_id: int | None
-        pin_share_id: int | None
 
     objects = NotificationManager()
 
@@ -107,6 +106,9 @@ class NotificationPreference(abstract.DashboardModel):
         on_delete=models.CASCADE,
         related_name="notification_preferences",
     )
+
+    if TYPE_CHECKING:
+        profile_id: int
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notification_preferences"

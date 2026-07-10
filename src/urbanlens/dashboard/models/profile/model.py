@@ -277,8 +277,6 @@ class Profile(abstract.PublicDashboardModel):
         on_delete=CASCADE,
     )
 
-    objects = ProfileManager()
-
     if TYPE_CHECKING:
         user_id: int
         trip_activities_added: DjangoManager[TripActivity]
@@ -289,6 +287,8 @@ class Profile(abstract.PublicDashboardModel):
         notifications: DjangoManager[NotificationLog]
         triggered_notifications: DjangoManager[NotificationLog]
         markup_items: DjangoManager[PinMarkup]
+
+    objects = ProfileManager()
 
     def save(self, *args, **kwargs) -> None:
         """Save the profile, forcing visibility settings to their most restrictive value while Community is off.

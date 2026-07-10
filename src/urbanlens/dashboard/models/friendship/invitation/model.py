@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 import uuid
 
 from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, UUIDField
@@ -28,6 +29,9 @@ class FriendInvitation(abstract.DashboardModel):
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        inviter_id: int
 
     objects = FriendInvitationManager()
 

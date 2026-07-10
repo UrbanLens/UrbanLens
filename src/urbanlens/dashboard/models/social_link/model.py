@@ -31,10 +31,10 @@ class SocialLink(abstract.DashboardModel):
         related_name="social_links",
     )
 
-    objects = SocialLinkManager()
-
     if TYPE_CHECKING:
         profile_id: int
+
+    objects = SocialLinkManager()
 
     def __str__(self) -> str:
         return f"{self.profile} - {self.platform}: {self.handle}"

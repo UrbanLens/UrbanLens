@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db.models import CASCADE, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -30,6 +32,11 @@ class ProfileBadgeAssignment(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="profile_assignments",
     )
+
+    if TYPE_CHECKING:
+        author_id: int
+        subject_id: int
+        badge_id: int
 
     objects = ProfileBadgeAssignmentManager()
 

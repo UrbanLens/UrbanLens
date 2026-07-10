@@ -21,9 +21,6 @@ from django.db.models import (
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.routes.queryset import RouteManager
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 class RouteSource(TextChoices):
     """Origin of a Route record.
@@ -87,10 +84,10 @@ class Route(abstract.FrontendDashboardModel):
         related_name="routes",
     )
 
-    objects = RouteManager()
-
     if TYPE_CHECKING:
         profile_id: int
+
+    objects = RouteManager()
 
     def __str__(self) -> str:
         """Return a human-readable description of this route.

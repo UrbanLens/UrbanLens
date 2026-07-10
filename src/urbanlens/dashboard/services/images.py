@@ -83,6 +83,10 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
         return None
     lat = _dms_to_decimal(gps_data["GPSLatitude"], gps_data.get("GPSLatitudeRef", "N"))
     lng = _dms_to_decimal(gps_data["GPSLongitude"], gps_data.get("GPSLongitudeRef", "E"))
+    if not (math.isfinite(lat) and math.isfinite(lng)):
+        # Some cameras/phones write GPS IFDs with zero-denominator rationals
+        # (e.g. "GPS on, no fix yet"), which decode to NaN/Inf - not usable.
+        return None
     return lat, lng
 
 

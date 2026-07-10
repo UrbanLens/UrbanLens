@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 
 from urbanlens.dashboard.models import abstract
@@ -35,6 +37,11 @@ class Reaction(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    if TYPE_CHECKING:
+        profile_id: int
+        comment_id: int | None
+        trip_comment_id: int | None
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_reactions"

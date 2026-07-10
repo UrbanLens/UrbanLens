@@ -9,9 +9,6 @@ from django.db.models import CASCADE, ForeignKey, IntegerField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 
-if __import__("typing").TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 class ProfileTrust(abstract.DashboardModel):
     """A private 1-5 star trust rating one user keeps about another user's profile.

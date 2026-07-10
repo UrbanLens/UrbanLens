@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import CASCADE
 from django.db.models.fields import IntegerField, TextField
@@ -22,6 +24,10 @@ class Review(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="reviews",
     )
+
+    if TYPE_CHECKING:
+        profile_id: int
+        pin_id: int
 
     objects = Manager()
 

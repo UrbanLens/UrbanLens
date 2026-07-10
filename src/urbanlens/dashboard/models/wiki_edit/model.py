@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
 
@@ -53,6 +54,11 @@ class WikiEdit(abstract.DashboardModel):
         blank=True,
         related_name="reverts",
     )
+
+    if TYPE_CHECKING:
+        wiki_id: int
+        editor_id: int | None
+        reverted_by_id: int | None
 
     objects = WikiEditManager()
 

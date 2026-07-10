@@ -1065,8 +1065,8 @@ class TripLocationSearchView(LoginRequiredMixin, View):
             {
                 "uuid": str(pin.uuid),
                 "name": pin.effective_name or "Untitled pin",
-                "locality": pin.locality,
-                "administrative_area_level_1": pin.administrative_area_level_1,
+                "locality": pin.effective_city,
+                "administrative_area_level_1": pin.effective_state,
                 "type": "pin",
             }
             for pin in pin_rows

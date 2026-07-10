@@ -96,6 +96,11 @@ class UserSubscription(abstract.DashboardModel):
     role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="user_subscriptions")
     granted_by = ForeignKey(User, on_delete=CASCADE, related_name="granted_subscriptions")
 
+    if TYPE_CHECKING:
+        user_id: int
+        role_id: int
+        granted_by_id: int
+
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
         constraints = [
@@ -131,6 +136,11 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
     role = ForeignKey(SubscriptionRole, on_delete=CASCADE, related_name="pending_grants")
     granted_by = ForeignKey(User, on_delete=CASCADE, related_name="pending_subscription_grants")
     duration_months = CharField(max_length=20, blank=True, help_text="Blank means indefinite.")
+
+    if TYPE_CHECKING:
+        invitation_id: int
+        role_id: int
+        granted_by_id: int
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]

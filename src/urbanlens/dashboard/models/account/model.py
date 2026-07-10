@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 import uuid
 
 from django.contrib.auth.models import User
@@ -20,11 +21,14 @@ class EmailVerification(DashboardModel):
     entirely since their email is implicitly verified by the OAuth provider.
     """
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="email_verification")
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created = models.DateTimeField(auto_now_add=True)
     verified_at = models.DateTimeField(null=True, blank=True)
     pending_invite_token = models.UUIDField(null=True, blank=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="email_verification")
+
+    if TYPE_CHECKING:
+        user_id: int
 
     objects = EmailVerificationManager()
 

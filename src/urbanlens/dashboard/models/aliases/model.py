@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField
@@ -85,6 +86,9 @@ class PinAlias(_AliasBase):
         related_name="aliases",
     )
 
+    if TYPE_CHECKING:
+        pin_id: int
+
     def __str__(self) -> str:
         return f"{self.name} (pin alias)"
 
@@ -119,6 +123,10 @@ class WikiAlias(_AliasBase):
         blank=True,
         related_name="wiki_aliases_created",
     )
+
+    if TYPE_CHECKING:
+        wiki_id: int
+        created_by_id: int | None
 
     def __str__(self) -> str:
         return f"{self.name} (wiki alias)"

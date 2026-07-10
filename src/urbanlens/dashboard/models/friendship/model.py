@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, CharField, ForeignKey
 
@@ -27,6 +28,10 @@ class Friendship(DashboardModel):
         on_delete=CASCADE,
         related_name="friends_to_me",
     )
+
+    if TYPE_CHECKING:
+        from_profile_id: int
+        to_profile_id: int
 
     objects = Manager()
 

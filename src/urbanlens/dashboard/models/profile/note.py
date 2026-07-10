@@ -8,9 +8,6 @@ from django.db.models import CASCADE, ForeignKey, TextField
 
 from urbanlens.dashboard.models import abstract
 
-if __import__("typing").TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 class ProfileNote(abstract.FrontendDashboardModel):
     """A private note one user keeps about another user's profile.

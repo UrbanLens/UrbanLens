@@ -185,6 +185,26 @@ class ExtractGpsCoordsMockTests(TestCase):
         # seek(0) called in the finally block
         mock_file.seek.assert_called_with(0)
 
+    def test_returns_none_for_nan_gps(self):
+        """Zero-denominator EXIF rationals (some phones write these for 'GPS on, no fix')
+        decode to NaN; that must not reach callers, who store it as a DB decimal."""
+        mock_file, mock_img, _ = self._make_file_with_gps(
+            (float("nan"), 0, 0), "N",
+            (74, 0, 21), "W",
+        )
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_for_infinite_gps(self):
+        mock_file, mock_img, _ = self._make_file_with_gps(
+            (40, 26, 46), "N",
+            (float("inf"), 0, 0), "W",
+        )
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
+        self.assertIsNone(result)
+
 
 # ---------------------------------------------------------------------------
 # extract_taken_at - via mocked PIL

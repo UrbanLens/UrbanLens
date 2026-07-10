@@ -289,6 +289,10 @@ class TripMembership(abstract.DashboardModel):
         related_name="trip_memberships",
     )
 
+    if TYPE_CHECKING:
+        trip_id: int
+        profile_id: int
+
     def __str__(self) -> str:
         return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"
 
@@ -336,6 +340,12 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    if TYPE_CHECKING:
+        markup_map_id: int | None
+        trip_id: int
+        author_id: int | None
+        parent_id: int | None
 
     @property
     def map_data(self) -> dict | None:
@@ -387,6 +397,10 @@ class TripActivityVote(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="activity_votes",
     )
+
+    if TYPE_CHECKING:
+        activity_id: int
+        profile_id: int
 
     def __str__(self) -> str:
         return f"{self.profile} {self.vote} on {self.activity}"
