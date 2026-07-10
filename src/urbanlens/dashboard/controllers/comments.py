@@ -306,6 +306,7 @@ def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text"}
+_ALLOWED_LAYER_MODES = {"standard", "satellite", "topo"}
 
 
 def _is_valid_lat(v: object) -> bool:
@@ -413,7 +414,9 @@ def _parse_map_data(request) -> dict | None:
         "center_lat": float(center_lat),  # type: ignore[arg-type]
         "center_lng": float(center_lng),  # type: ignore[arg-type]
         "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
-        "shapes": _sanitize_markup_shapes(data.get("shapes")),
+        "layer_mode": data.get("layer_mode") if data.get("layer_mode") in _ALLOWED_LAYER_MODES else "standard",
+        "detail_pins": [],
+        "markup": _sanitize_markup_shapes(data.get("markup", data.get("shapes"))),
     }
     return sanitized
 
