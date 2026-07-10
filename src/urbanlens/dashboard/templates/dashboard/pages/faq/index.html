@@ -1,0 +1,379 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="faq-hero">
+    <div class="faq-hero-inner">
+        <p class="faq-eyebrow">Frequently Asked Questions</p>
+        <h1 class="faq-title">Questions, <em>answered.</em></h1>
+        <p class="faq-subtitle">
+            Everything you need to know about pins, privacy, and planning your next expedition.
+            Can't find what you're looking for? Check out our <a href="{% url 'about' %}">About</a>
+            and <a href="{% url 'values' %}">Values</a> pages for more.
+        </p>
+    </div>
+</section>
+
+{# -- Quick jump nav --------------------------------------------------------- #}
+<nav class="faq-jump" aria-label="FAQ categories">
+    <div class="faq-jump-inner">
+        <a href="#getting-started" class="faq-jump-link">Getting started</a>
+        <a href="#privacy-sharing" class="faq-jump-link">Privacy &amp; sharing</a>
+        <a href="#features" class="faq-jump-link">Features</a>
+        <a href="#safety" class="faq-jump-link">Safety</a>
+        <a href="#account-data" class="faq-jump-link">Account &amp; data</a>
+    </div>
+</nav>
+
+{# -- Getting started -------------------------------------------------------- #}
+<section class="faq-section" id="getting-started">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Getting started</div>
+        <h2 class="faq-section-title">The basics.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item" open>
+                <summary class="faq-item-summary">
+                    <span>What is UrbanLens?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        UrbanLens is a private, purpose-built mapping platform for urban explorers, historians,
+                        and photographers who want to document forgotten places responsibly. Drop pins, keep
+                        notes, share selectively, and coordinate trips - all without broadcasting sensitive
+                        locations to the world. Read more on our <a href="{% url 'about' %}">About</a> page.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What's the difference between a Pin and a Location?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        A <strong>Location</strong> is the shared, canonical record of a physical place - its
+                        coordinates, address, and name. A <strong>Pin</strong> is your personal record of that
+                        place: your own notes, custom name, priority, status, and visit history. Many users can
+                        pin the same Location without seeing each other's notes, since Pins are private by default.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is UrbanLens free to use?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. UrbanLens is free, open source, and not funded by ads or data sales. You can
+                        check out the source code on our
+                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Do I need an account to use the map?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        You can browse public content without one, but you'll need a free account to drop pins,
+                        write wiki entries, plan trips, or use safety check-ins.
+                        <a href="{% url 'signup' %}">Create an account</a> or
+                        <a href="{% url 'login' %}">sign in</a> to get started.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>I already have pins saved elsewhere. Can I bring them in?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes - you can import pins from a CSV file. Every imported pin is shown to you for review
+                        before anything is saved, and imports are never made public automatically. See the
+                        <a href="{% url 'help.import_pins' %}">pin import guide</a> for details.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Privacy & sharing -------------------------------------------------------- #}
+<section class="faq-section faq-section--alt" id="privacy-sharing">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Privacy &amp; sharing</div>
+        <h2 class="faq-section-title">Who can see what.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Are my pins public by default?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        No. Every pin is private by default. Sharing is opt-in and granular - you choose whether
+                        to share a pin with specific friends, a trip, or no one at all.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What's a wiki, and is it separate from my pin?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        A location's wiki is a community-editable page for history, architectural notes, hazards,
+                        and access details. It's entirely separate from your personal pin - contributing to a
+                        wiki never exposes your pin's notes, coordinates, or visit history, and participation is
+                        always opt-in.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can other users find me or my pins without my permission?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        No. Other users can't discover you until you take an action to become visible to them.
+                        Even friend requests don't reveal whether an account exists until the request is accepted.
+                        Read more on our <a href="{% url 'values' %}">Values</a> page.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Do you sell location data or run ads?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Never. We don't sell pin, photo, or location data, and we don't run ads. There's nothing
+                        on UrbanLens whose purpose is to monetize what you document.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Features ---------------------------------------------------------------- #}
+<section class="faq-section" id="features">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Features</div>
+        <h2 class="faq-section-title">Maps, trips, and photos.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I plan group trips without revealing exact locations?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Trips support RSVPs, member management, and shared itineraries with per-trip privacy
+                        controls, so you can coordinate an expedition without exposing pin details to anyone who
+                        hasn't been invited.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can UrbanLens create pins automatically from my photos?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        If you opt in, UrbanLens can read GPS coordinates from your photos' EXIF metadata and
+                        suggest a matching pin - or let you create one directly. Photos without GPS data can be
+                        dragged onto the map to assign a location manually.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is there a limit to how much I can upload?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Accounts have a storage quota for photos and attachments, shown on your profile page.
+                        Uploaded images are automatically optimized to help you fit more within your quota
+                        without losing meaningful detail.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Where do the extra details on a pin's page come from (Wikipedia, weather, etc.)?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Pin detail pages can pull in supplementary context from external sources - things like
+                        Wikipedia summaries, historical imagery, weather, and relevant public datasets - to help
+                        you research a location before you visit.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Safety -------------------------------------------------------------------- #}
+<section class="faq-section faq-section--alt" id="safety">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Safety</div>
+        <h2 class="faq-section-title">Staying safe in the field.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What is a safety check-in?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        A safety check-in lets you tell trusted contacts where you're going and when to expect
+                        you back. If you don't check in by your expected return time, it can automatically
+                        escalate and notify the people you've chosen.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can a safety check-in notify people who aren't on UrbanLens?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Safety check-ins support notifying contacts by email in addition to other UrbanLens
+                        users, so the people who need to know you're overdue don't need an account of their own.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I attach hazard notes to a pin?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Pins support structural hazard notes and vulnerability ratings, so you and anyone
+                        you share the pin with can see known risks before heading out.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Account & data -------------------------------------------------------------- #}
+<section class="faq-section" id="account-data">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Account &amp; data</div>
+        <h2 class="faq-section-title">Your data, your rules.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I see everything UrbanLens stores about me?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Any data we store about you is visible on your own profile page - there's no hidden
+                        user data on UrbanLens that isn't displayed back to you.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I delete my account and data?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Account deletion is available from your profile settings and removes your personal
+                        data from UrbanLens.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is UrbanLens open source? Can I contribute?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes - the full source is on
+                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>. Contributions are welcome,
+                        and we ask that any contributed code align with the principles on our
+                        <a href="{% url 'values' %}">Values</a> page.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Who built UrbanLens?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        UrbanLens is built and maintained by one person, not a company. It started as a personal
+                        tool for a small circle of friends and grew from there. Read the full story on our
+                        <a href="{% url 'about' %}">About</a> page.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- CTA ------------------------------------------------------------------ #}
+<section class="faq-cta-section">
+    <div class="faq-cta-inner">
+        <h2 class="faq-cta-title">Still have questions?</h2>
+        <p class="faq-cta-body">Explore what UrbanLens can do, or jump straight in.</p>
+        <div class="faq-cta-actions">
+            {% if not user.is_authenticated %}
+            <a href="{% url 'signup' %}" class="faq-btn btn btn--primary btn--lg">
+                <i class="material-symbols-outlined">rocket_launch</i> Create an account
+            </a>
+            <a href="{% url 'about' %}" class="faq-btn btn btn--ghost btn--lg">Learn more</a>
+            {% else %}
+            <a href="{% url 'map.view' %}" class="faq-btn btn btn--primary btn--lg">
+                <i class="material-symbols-outlined">map</i> Open my map
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{% endblock %}

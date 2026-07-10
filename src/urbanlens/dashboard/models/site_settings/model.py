@@ -120,7 +120,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(256), MaxValueValidator(20_000)],
     )
     image_convert_webp = BooleanField(
-        default=False,
+        default=True,
         help_text="Re-encode processed uploads as WebP for additional storage savings.",
         verbose_name="Convert uploads to WebP",
     )
