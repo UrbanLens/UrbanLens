@@ -18,12 +18,13 @@ import json
 
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateformat import format as format_date
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
-from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, sanitize_map_data
+from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
 
 # Latitudes stay away from the poles so circle radius→edge conversion stays finite.
 _lat = st.floats(min_value=-84, max_value=84, allow_nan=False, allow_infinity=False)
@@ -212,6 +213,25 @@ class MarkupMapSnapshotTests(TestCase):
         self.assertEqual(markup_map.items.count(), 1)
 
 
+class DefaultMarkupMapTitleTests(TestCase):
+    """default_markup_map_title() - date-only, pin-named, and wiki-named defaults."""
+
+    def _today(self) -> str:
+        return format_date(timezone.localdate(), "M j, Y")
+
+    def test_no_context_returns_date_only(self) -> None:
+        self.assertEqual(default_markup_map_title(), self._today())
+
+    def test_pin_context_uses_pin_name_and_date(self) -> None:
+        pin = baker.make("dashboard.Pin", name="Old Mill")
+        self.assertEqual(default_markup_map_title(pin), f"Old Mill - {self._today()}")
+
+    def test_wiki_context_uses_wiki_name_and_date(self) -> None:
+        location = baker.make("dashboard.Location")
+        wiki = baker.make("dashboard.Wiki", location=location, name="Curated Mill")
+        self.assertEqual(default_markup_map_title(wiki), f"Curated Mill - {self._today()}")
+
+
 class MaterializeMarkupMapTests(TestCase):
     """materialize_markup_map create/update/remove semantics."""
 
@@ -227,6 +247,11 @@ class MaterializeMarkupMapTests(TestCase):
         assert markup_map is not None  # nosec B101
         self.assertEqual(markup_map.profile_id, self.profile.pk)
         self.assertEqual(markup_map.items.count(), 2)
+
+    def test_creates_map_with_date_only_default_title(self) -> None:
+        markup_map = materialize_markup_map(self.profile, _snapshot())
+        assert markup_map is not None  # nosec B101
+        self.assertEqual(markup_map.title, format_date(timezone.localdate(), "M j, Y"))
 
     def test_updates_existing_map_in_place(self) -> None:
         existing = materialize_markup_map(self.profile, _snapshot())
@@ -321,6 +346,73 @@ class MarkupMapEndpointTests(TestCase):
         self.assertEqual(len(listing["markup_items"]), 1)
         self.assertEqual(listing["markup_items"][0]["color"], "#123456")
         self.assertEqual(listing["view"]["layer_mode"], "topographic")
+
+    def test_create_with_markup_persists_snapshot_in_one_call(self) -> None:
+        """The standalone "take a screenshot" flow: a full snapshot (viewport + shapes) in one POST."""
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps(_snapshot()),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        markup_map = MarkupMap.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(markup_map.items.count(), 2)
+        self.assertEqual(markup_map.layer_mode, "satellite")
+        self.assertTrue(markup_map.show_borders)
+        self.assertEqual(markup_map.title, format_date(timezone.localdate(), "M j, Y"))
+
+    def test_create_with_invalid_markup_snapshot_returns_400(self) -> None:
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps({"markup": [], "center_lat": "not-a-number"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_with_explicit_title_overrides_default(self) -> None:
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps(_snapshot(title="My Custom Title")),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        markup_map = MarkupMap.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(markup_map.title, "My Custom Title")
+
+    def test_create_with_pin_slug_uses_pin_named_default_title(self) -> None:
+        pin = baker.make("dashboard.Pin", profile=self.profile, name="Old Mill")
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps(_snapshot(pin_slug=pin.slug)),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        markup_map = MarkupMap.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(markup_map.title, f"Old Mill - {format_date(timezone.localdate(), 'M j, Y')}")
+
+    def test_create_with_location_slug_uses_wiki_named_default_title(self) -> None:
+        location = baker.make("dashboard.Location")
+        baker.make("dashboard.Wiki", location=location, name="Curated Mill")
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps(_snapshot(location_slug=location.slug)),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        markup_map = MarkupMap.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(markup_map.title, f"Curated Mill - {format_date(timezone.localdate(), 'M j, Y')}")
+
+    def test_create_with_another_users_pin_slug_falls_back_to_date_only(self) -> None:
+        other_user = baker.make("auth.User")
+        other_pin = baker.make("dashboard.Pin", profile=other_user.profile, name="Not Yours")
+        response = self.client.post(
+            reverse("markup_map.create"),
+            data=json.dumps(_snapshot(pin_slug=other_pin.slug)),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        markup_map = MarkupMap.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(markup_map.title, format_date(timezone.localdate(), "M j, Y"))
 
     def test_view_state_endpoint_updates_viewport(self) -> None:
         map_uuid = self._create_map()

@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 
 if TYPE_CHECKING:
@@ -219,32 +220,82 @@ class SafetyContactMarkupJsonView(View):
         return JsonResponse({"markup_items": [m.to_json() for m in items.order_by("created")]})
 
 
-class MarkupMapCreateView(LoginRequiredMixin, View):
-    """Create a new (draft) standalone MarkupMap.
+def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | None:
+    """Resolve the optional Pin/Wiki a standalone-map creation is scoped to.
 
-    Used by pages that let the user draw a map before its host object exists
-    (e.g. the safety check-in creation page and the comment/visit composers).
-    The returned uuid is later linked to the host on form submit.
+    Lets the "take a screenshot" toolbar buttons on the pin detail and wiki
+    pages tell the server which pin/wiki they were opened from, purely for
+    ``default_markup_map_title()`` purposes - unlike the personal/community
+    markup routes, ownership is never enforced against this (a new MarkupMap
+    is always its own thing, owned by the caller).
+
+    Args:
+        request: HttpRequest (used to scope the pin lookup to its owner).
+        body: Parsed request body, optionally carrying ``pin_slug`` or
+            ``location_slug``.
+
+    Returns:
+        The matching Pin or Wiki, or None when neither slug was given/found.
+    """
+    pin_slug = body.get("pin_slug")
+    if pin_slug:
+        return Pin.objects.filter(slug=pin_slug, profile__user=request.user).first()
+    location_slug = body.get("location_slug")
+    if location_slug:
+        location = Location.objects.filter(slug=location_slug).first()
+        return Wiki.objects.filter(location=location).first() if location else None
+    return None
+
+
+class MarkupMapCreateView(LoginRequiredMixin, View):
+    """Create a new standalone MarkupMap - either a draft, or a fully-drawn one.
+
+    Used two ways:
+
+    - As a lazy draft, by pages that let the user draw a map before its host
+      object exists (e.g. the safety check-in creation page) - no ``markup``/
+      ``shapes`` key is sent, so only the initial viewport is applied.
+    - As a one-shot save, by the shared map composer's standalone mode (the
+      "take a screenshot" toolbar buttons) - a ``markup`` (or ``shapes``) list
+      is sent alongside the viewport, so the map is fully populated and
+      immediately browsable (e.g. from Memories > Maps) without needing a
+      host object to attach to at all.
 
     POST /markup-maps/new/
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Create an empty MarkupMap owned by the caller.
+        """Create a MarkupMap owned by the caller, optionally fully populated.
 
         Accepts optional JSON body fields ``center_lat``/``center_lng``/
         ``zoom``/``layer_mode``/``show_borders``/``title`` for the initial
-        viewport.
+        viewport, plus ``pin_slug``/``location_slug`` (used only to pick a
+        sensible default title) and ``markup``/``shapes`` (a full snapshot's
+        markup list, which switches this into the one-shot save mode).
 
         Args:
             request: HttpRequest.
 
         Returns:
-            JsonResponse with ``ok`` and the new map's ``uuid``.
+            JsonResponse with ``ok`` and the new map's ``uuid``, or a 400 with
+            ``ok: False`` when a submitted snapshot fails validation.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        markup_map = MarkupMap.objects.create(profile=profile)
-        _apply_view_state(markup_map, _parse_body(request))
+        body = _parse_body(request)
+        context = _resolve_title_context(request, body)
+        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context))
+
+        if isinstance(body.get("markup"), list) or isinstance(body.get("shapes"), list):
+            snapshot = sanitize_map_data(body)
+            if snapshot is None:
+                return JsonResponse({"ok": False, "error": "Invalid map data"}, status=400)
+            explicit_title = str(body.get("title") or "").strip()[:200]
+            if explicit_title:
+                markup_map.title = explicit_title
+            markup_map.replace_items_from_snapshot(snapshot)
+        else:
+            _apply_view_state(markup_map, body)
+
         return JsonResponse({"ok": True, "uuid": str(markup_map.uuid)})
 
 

@@ -28,12 +28,22 @@ interface HtmxApi {
     ajax(verb: string, url: string, options: Record<string, unknown>): void;
 }
 
+interface CommentMapComposerOptions {
+    form?: HTMLElement;
+    context?: { pinSlug?: string; locationSlug?: string } | null;
+    onSaved?: (uuid: string) => void;
+}
+
 declare global {
     interface Window {
         toastr: Toastr;
         confirmDialog?: (options: ConfirmDialogOptions) => Promise<boolean>;
         htmx?: HtmxApi;
         csrftoken: string;
+        // The shared map composer dialog (base.html) - opened with a host form
+        // element (legacy comment/visit/trip-comment usage) or an options
+        // object with no form, which switches it into standalone save mode.
+        _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
     }
 
     const toastr: Toastr;

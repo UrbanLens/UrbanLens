@@ -53,6 +53,8 @@ function readConfig(el: HTMLElement) {
     return {
         mapCenterLat: Number.parseFloat(d.mapCenterLat ?? "0"),
         mapCenterLng: Number.parseFloat(d.mapCenterLng ?? "0"),
+        pinSlug: d.pinSlug || "",
+        locationSlug: d.locationSlug || "",
         defaultMapView: d.defaultMapView || "satellite",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
@@ -87,6 +89,13 @@ function init(): void {
     // Expose for the comment map composer's default center.
     window._commentMapDefaultLat = mapCenterLat;
     window._commentMapDefaultLng = mapCenterLng;
+
+    // "Take a screenshot" toolbar button - opens the shared standalone map
+    // composer (base.html) scoped to whichever of pin/wiki this page is.
+    window._openMapScreenshot = function () {
+        const context = cfg.pinSlug ? { pinSlug: cfg.pinSlug } : cfg.locationSlug ? { locationSlug: cfg.locationSlug } : null;
+        window._openCommentMapComposer({ context });
+    };
 
     const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
     window.map = map;
@@ -1415,6 +1424,10 @@ declare global {
         deleteMarkupEdit: () => Promise<void>;
         openMarkupEditDialog: (item: MarkupItem) => void;
         loadMarkup: () => void;
+
+        // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
+        // opens the shared standalone map composer pre-scoped to this pin/wiki.
+        _openMapScreenshot: () => void;
 
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
         openAddPinDialog: () => void;

@@ -13,9 +13,9 @@
 // already on window.
 declare const L: typeof import("leaflet");
 
-type LatLngTuple = [number, number];
+export type LatLngTuple = [number, number];
 
-interface ShapeSpec {
+export interface ShapeSpec {
     type: "line" | "arrow" | "circle" | "rect" | "polygon" | "text";
     latlngs: LatLngTuple[];
     color?: string;

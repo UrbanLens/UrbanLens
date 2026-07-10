@@ -41,6 +41,9 @@ so it's always available by the time this script runs - no typeof guard needed.
     <div id="safety-map"></div>
     <div class="map-bottom-controls">
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="safety-map-layers" extra_class="map-layers-panel--inline" %}
+        <button type="button" id="safety-map-download-btn" class="btn btn--ghost map-overlay-btn" title="Download this map as a JPEG">
+            <i class="material-symbols-outlined">download</i> Download
+        </button>
         {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
         {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
         {% endif %}{% endif %}
@@ -69,7 +72,7 @@ so it's always available by the time this script runs - no typeof guard needed.
     // -- Layers: shared engine + panel (same component as the main map) --------
     var _layerMode = '{{ map_layer_mode|default:"street" }}';
     var _showBorders = {{ map_show_borders|yesno:"true,false" }};
-    window.MapLayers.create(map, {
+    var _safetyMapLayers = window.MapLayers.create(map, {
         root: document.getElementById('safety-map-layers'),
         defaultBase: _layerMode,
         initialOverlays: _showBorders ? ['borders'] : [],
@@ -78,6 +81,18 @@ so it's always available by the time this script runs - no typeof guard needed.
             _showBorders = state.borders;
             _saveMapViewSoon();
         },
+    });
+
+    // -- Download current view as JPEG ------------------------------------------
+    // _getSafetyMapShapes is (re)defined below, once whichever markup source
+    // (editable toolbar or readonly viewer) this page uses is set up.
+    var _getSafetyMapShapes = function () { return []; };
+    document.getElementById('safety-map-download-btn').addEventListener('click', function () {
+        window.MapExport.download(map, {
+            layers: _safetyMapLayers,
+            getShapes: _getSafetyMapShapes,
+            filename: 'checkin-route.jpg',
+        });
     });
 
     setTimeout(function () { map.invalidateSize(); }, 300);
@@ -255,25 +270,34 @@ so it's always available by the time this script runs - no typeof guard needed.
     // Read by this file's own map-click handler above (see "Skip while the
     // markup toolbar ... is actively drawing").
     var _drawSession = { isBusy: _markupToolbar.isDrawBusy };
+    _getSafetyMapShapes = _markupToolbar.getShapesForExport;
 </script>
 {% endif %}
 {% elif markup_json_url %}
 {# Readonly (contact portal): view existing markup only, no editing UI. #}
 <script>
     var markupLayer = L.layerGroup().addTo(map);
+    var _safetyReadonlyShapes = [];
+    _getSafetyMapShapes = function () { return _safetyReadonlyShapes; };
     function loadMarkup() {
         fetch('{{ markup_json_url }}').then(function (r) { return r.json(); }).then(function (data) {
             markupLayer.clearLayers();
+            _safetyReadonlyShapes = [];
             (data.markup_items || []).forEach(function (item) {
                 var geom = item.geometry;
                 var shape = { type: item.markup_type, label: item.label, color: item.color,
                     stroke_width: item.stroke_width, border_color: item.border_color,
                     fill_opacity: item.fill_opacity, border_opacity: item.border_opacity };
                 if (geom.type === 'Circle') {
-                    shape.latlngs = [[geom.coordinates[1], geom.coordinates[0]], null];
                     var center = L.latLng(geom.coordinates[1], geom.coordinates[0]);
+                    // Reconstruct an "edge" point due east of the centre so the export's
+                    // two-point circle format round-trips the radius (mirrors
+                    // PinMarkup.to_snapshot_shape()'s server-side conversion).
+                    var dlng = geom.radius / (111320 * Math.max(Math.cos(center.lat * Math.PI / 180), 1e-6));
                     shape.type = 'circle';
+                    shape.latlngs = [[center.lat, center.lng], [center.lat, center.lng + dlng]];
                     L.circle(center, { radius: geom.radius, color: shape.color, weight: shape.stroke_width }).addTo(markupLayer);
+                    _safetyReadonlyShapes.push(shape);
                     return;
                 }
                 if (geom.type === 'Point') {
@@ -282,6 +306,7 @@ so it's always available by the time this script runs - no typeof guard needed.
                     shape.latlngs = geom.coordinates.map(function (c) { return [c[1], c[0]]; });
                 }
                 window.MarkupEngine.renderShape(shape, markupLayer, map.getZoom());
+                _safetyReadonlyShapes.push(shape);
             });
         }).catch(function () {});
     }

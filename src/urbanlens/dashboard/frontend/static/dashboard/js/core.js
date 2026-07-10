@@ -1620,6 +1620,232 @@
     window.MarkupEngine = MarkupEngine;
   }
 
+  // src/urbanlens/dashboard/frontend/ts/shared/map-export.ts
+  var TILE_SIZE = 256;
+  var TILE_LOAD_TIMEOUT_MS = 8000;
+  function activeBaseKey(layers) {
+    const key = layers.baseKey();
+    return key === "street" && layers.isDarkActive() ? "dark" : key;
+  }
+  function loadTileImage(url) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (result) => {
+        if (settled)
+          return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+      const timer = setTimeout(() => done(null), TILE_LOAD_TIMEOUT_MS);
+      const img = new Image;
+      img.crossOrigin = "anonymous";
+      img.onload = () => done(img);
+      img.onerror = () => done(null);
+      img.src = url;
+    });
+  }
+  async function drawTileLayerGrid(ctx, map, tileLayer2, zoom) {
+    const bounds = map.getBounds();
+    const nw = map.project(bounds.getNorthWest(), zoom).divideBy(TILE_SIZE).floor();
+    const se = map.project(bounds.getSouthEast(), zoom).divideBy(TILE_SIZE).ceil();
+    const jobs = [];
+    for (let x = nw.x;x < se.x; x++) {
+      for (let y = nw.y;y < se.y; y++) {
+        const worldPoint = L.point(x, y).multiplyBy(TILE_SIZE);
+        const point = map.latLngToContainerPoint(map.unproject(worldPoint, zoom));
+        jobs.push({ x, y, point });
+      }
+    }
+    if (!jobs.length)
+      return;
+    const images = await Promise.allSettled(jobs.map((job) => {
+      const coords = L.point(job.x, job.y);
+      coords.z = zoom;
+      return loadTileImage(tileLayer2.getTileUrl(coords));
+    }));
+    jobs.forEach((job, i) => {
+      const result = images[i];
+      const img = result && result.status === "fulfilled" ? result.value : null;
+      if (img)
+        ctx.drawImage(img, job.point.x, job.point.y, TILE_SIZE, TILE_SIZE);
+    });
+  }
+  function toContainerPoint(map, ll) {
+    return map.latLngToContainerPoint(L.latLng(ll[0], ll[1]));
+  }
+  function drawArrowhead(ctx, tip, deg, color, size, opacity) {
+    const rad = deg * Math.PI / 180;
+    const tipLen = size * 0.43;
+    const bx = size * 0.36;
+    const by = size * 0.29;
+    const local = [
+      [0, -tipLen],
+      [bx, by],
+      [-bx, by]
+    ];
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    ctx.beginPath();
+    local.forEach(([lx, ly], i) => {
+      const x = tip.x + lx * cos - ly * sin;
+      const y = tip.y + lx * sin + ly * cos;
+      if (i === 0)
+        ctx.moveTo(x, y);
+      else
+        ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  function drawShape(ctx, map, s, zoom) {
+    const color = s.color || "#e74c3c";
+    const weight = s.stroke_width ?? s.weight ?? 3;
+    const fillOpacity = (s.fill_opacity ?? 87) / 100;
+    const borderOpacity = (s.border_opacity ?? 100) / 100;
+    const hasBorder = !!(s.border_color && s.border_color !== "none");
+    const strokeColor = hasBorder ? s.border_color : color;
+    function strokePath(pts, close) {
+      ctx.beginPath();
+      pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      if (close)
+        ctx.closePath();
+    }
+    switch (s.type) {
+      case "line":
+      case "arrow": {
+        const pts = s.latlngs.map((ll) => toContainerPoint(map, ll));
+        strokePath(pts, false);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = weight;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.globalAlpha = fillOpacity;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        if (s.type === "arrow" && pts.length >= 2) {
+          const n = pts.length;
+          const deg = MarkupEngine.bearing(s.latlngs[n - 2], s.latlngs[n - 1]);
+          drawArrowhead(ctx, pts[n - 1], deg, color, MarkupEngine.arrowheadSize(zoom), fillOpacity);
+        }
+        break;
+      }
+      case "circle": {
+        const c = toContainerPoint(map, s.latlngs[0]);
+        const e = toContainerPoint(map, s.latlngs[1]);
+        const r = Math.hypot(e.x - c.x, e.y - c.y);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = fillOpacity;
+        ctx.fill();
+        if (hasBorder) {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = weight;
+          ctx.globalAlpha = borderOpacity;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "rect": {
+        const p1 = toContainerPoint(map, s.latlngs[0]);
+        const p2 = toContainerPoint(map, s.latlngs[1]);
+        const x = Math.min(p1.x, p2.x);
+        const y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x);
+        const h = Math.abs(p2.y - p1.y);
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = fillOpacity;
+        ctx.fill();
+        if (hasBorder) {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = weight;
+          ctx.globalAlpha = borderOpacity;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "polygon": {
+        const pts = s.latlngs.map((ll) => toContainerPoint(map, ll));
+        strokePath(pts, true);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = fillOpacity;
+        ctx.fill();
+        if (hasBorder) {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = weight;
+          ctx.globalAlpha = borderOpacity;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "text": {
+        const p = toContainerPoint(map, s.latlngs[0]);
+        const fontSize = Math.max(8, Math.min(96, weight || 16));
+        ctx.font = `600 ${fontSize}px sans-serif`;
+        const label = s.label || "";
+        const paddingX = fontSize * 0.35;
+        const paddingY = fontSize * 0.25;
+        const boxW = ctx.measureText(label).width + paddingX * 2;
+        const boxH = fontSize + paddingY * 2;
+        if (!hasBorder || s.border_color !== "none") {
+          ctx.fillStyle = hasBorder ? strokeColor : "rgba(255,255,255,0.92)";
+          ctx.fillRect(p.x, p.y, boxW, boxH);
+        }
+        ctx.fillStyle = color;
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, p.x + paddingX, p.y + boxH / 2);
+        break;
+      }
+    }
+  }
+  var MapExport = {
+    async download(map, options) {
+      const size = map.getSize();
+      const canvas = document.createElement("canvas");
+      canvas.width = size.x;
+      canvas.height = size.y;
+      const ctx = canvas.getContext("2d");
+      if (!ctx)
+        return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const zoom = Math.round(map.getZoom());
+      await drawTileLayerGrid(ctx, map, MapLayers.tileLayer(activeBaseKey(options.layers)), zoom);
+      if (options.layers.getState().borders) {
+        await drawTileLayerGrid(ctx, map, MapLayers.bordersOverlay(), zoom);
+      }
+      const shapes = options.getShapes ? options.getShapes() : [];
+      shapes.forEach((s) => drawShape(ctx, map, s, zoom));
+      const filename = options.filename || `map-${Date.now()}.jpg`;
+      await new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          }
+          resolve();
+        }, "image/jpeg", 0.92);
+      });
+    }
+  };
+  function installGlobalMapExport() {
+    window.MapExport = MapExport;
+  }
+
   // src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
   function getCsrfToken() {
     return window.csrftoken ?? "";
@@ -1648,6 +1874,64 @@
   };
 
   // src/urbanlens/dashboard/frontend/ts/shared/markup-toolbar.ts
+  var METERS_PER_DEGREE_LAT = 111320;
+  function markupItemToShapeSpec(item) {
+    const geometry = item.geometry;
+    const coordinates = geometry?.coordinates;
+    if (coordinates == null)
+      return null;
+    const shape = {
+      type: item.markup_type === "square" ? "rect" : item.markup_type,
+      latlngs: [],
+      color: item.color,
+      stroke_width: item.stroke_width,
+      fill_opacity: item.fill_opacity,
+      border_opacity: item.border_opacity
+    };
+    if (item.border_color)
+      shape.border_color = item.border_color;
+    if (item.label)
+      shape.label = item.label;
+    try {
+      if (item.markup_type === "line" || item.markup_type === "arrow") {
+        shape.latlngs = coordinates.map((c) => [c[1], c[0]]);
+      } else if (item.markup_type === "text") {
+        const latlngs = [[coordinates[1], coordinates[0]]];
+        const boxCorner = geometry.box_corner;
+        if (boxCorner)
+          latlngs.push([boxCorner[1], boxCorner[0]]);
+        shape.latlngs = latlngs;
+        shape.label = item.label || "";
+      } else if (item.markup_type === "circle") {
+        const [lng, lat] = coordinates;
+        const radius = geometry.radius || 0;
+        const dlng = radius / (METERS_PER_DEGREE_LAT * Math.max(Math.cos(lat * Math.PI / 180), 0.000001));
+        shape.latlngs = [
+          [lat, lng],
+          [lat, lng + dlng]
+        ];
+      } else if (item.markup_type === "square") {
+        const ring = coordinates[0];
+        shape.latlngs = [
+          [ring[0][1], ring[0][0]],
+          [ring[2][1], ring[2][0]]
+        ];
+      } else if (item.markup_type === "polygon") {
+        const ring = coordinates[0];
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+        const points = ring.length > 1 && first[0] === last[0] && first[1] === last[1] ? ring.slice(0, -1) : ring;
+        shape.latlngs = points.map((c) => [c[1], c[0]]);
+      } else {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+    if (!shape.latlngs.length)
+      return null;
+    return shape;
+  }
   var MARKUP_MAP_UUID_PLACEHOLDER = "11111111-1111-1111-1111-111111111111";
   function createMarkupToolbar(map, markupLayer, config) {
     let markupJsonUrl = config.markupJsonUrl ?? "";
@@ -2203,6 +2487,7 @@
       deleteMarkupEdit,
       openMarkupEditDialog,
       getMarkupItems: () => markupItems,
+      getShapesForExport: () => markupItems.map(markupItemToShapeSpec).filter((s) => s !== null),
       isDrawBusy: () => drawSession.isBusy()
     };
   }
@@ -2211,5 +2496,6 @@
   installGlobalLocationSearchEngine();
   installGlobalMapLayers();
   installGlobalMarkupEngine();
+  installGlobalMapExport();
   window.createMarkupToolbar = createMarkupToolbar;
 })();

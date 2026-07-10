@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Self
 
 from django.db.models import DateTimeField, ExpressionWrapper, F
+from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -79,6 +80,12 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         The window is a per-profile ``SafetyPreference.auto_delete_after_days`` setting;
         a null value means "never auto-delete" and excludes the profile's check-ins here.
 
+        The window counts from whichever is later, ``resolved_at`` or ``created`` -
+        the undo-delete framework (``services.undo.handlers.safety_checkin``) recreates
+        a restored check-in as a brand-new row carrying its *original* ``resolved_at``,
+        so counting from ``resolved_at`` alone could make a just-restored check-in
+        immediately due again on the next sweep, silently undoing the undo.
+
         Returns:
             Filtered queryset.
         """
@@ -90,7 +97,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
             profile__safety_preference__auto_delete_after_days__isnull=False,
         ).annotate(
             delete_at=ExpressionWrapper(
-                F("resolved_at") + F("profile__safety_preference__auto_delete_after_days") * timedelta(days=1),
+                Greatest(F("resolved_at"), F("created")) + F("profile__safety_preference__auto_delete_after_days") * timedelta(days=1),
                 output_field=DateTimeField(),
             ),
         ).filter(delete_at__lte=timezone.now())

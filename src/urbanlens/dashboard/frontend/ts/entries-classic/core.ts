@@ -18,6 +18,7 @@
  * site already depends on.
  */
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
+import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
@@ -25,6 +26,7 @@ import { createMarkupToolbar } from "../shared/markup-toolbar";
 installGlobalLocationSearchEngine();
 installGlobalMapLayers();
 installGlobalMarkupEngine();
+installGlobalMapExport();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

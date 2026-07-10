@@ -228,7 +228,6 @@ Do not create unit tests for trivial code, such as __init__.py, or to test that 
 These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
 
 - **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
-- **UI modernization**: Current UI is functional but dated. Move toward a sleek, professional, modern aesthetic
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
 - **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
 - **Hypothesis unit tests**: Add property-based tests wherever possible.
@@ -245,3 +244,7 @@ These are planned features - treat any missing implementation as a gap to fill, 
 2. Always `prefetch_related` for M2M, `select_related` for FK to avoid N+1 queries
 3. PostGIS geo queries use django-gis operators (`__distance_lte`, `__contains`, etc.)
 4. Settings are split: Django config in `settings/base.py`, app-level env-driven config in `settings/app.py` (Pydantic)
+
+## Testing
+
+When the user points out incorrect behavior and bugs, and you plan to replicate the behavior, you should do that by creating a unit tests via TDD. That unit test will then be useful after fixing the problem to ensure the behavior does not return.

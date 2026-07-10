@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyContactOptOutScope
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
     ContactInput,
@@ -98,6 +99,7 @@ def _ensure_markup_map(checkin: SafetyCheckin, profile: Profile) -> MarkupMap:
         return checkin.markup_map
     markup_map = MarkupMap.objects.create(
         profile=profile,
+        title=default_markup_map_title(),
         center_latitude=float(checkin.destination_latitude) if checkin.destination_latitude is not None else None,
         center_longitude=float(checkin.destination_longitude) if checkin.destination_longitude is not None else None,
         zoom=13,

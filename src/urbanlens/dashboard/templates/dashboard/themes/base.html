@@ -561,6 +561,14 @@
           {# coordinates, Plus Codes.                                          #}
           {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
         </div>
+        {# Title field - only shown in standalone mode (the "take a screenshot" #}
+        {# buttons), where the map isn't attached to a comment/visit/trip form  #}
+        {# and needs its own identity for browsing later on Memories > Maps.   #}
+        <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
+          <label class="cmcc-label" for="cmc-title-input">Title</label>
+          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200"
+                 placeholder="Leave blank to use a default title">
+        </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">
           <span class="cmc-toolbar-label">Layer:</span>
@@ -592,6 +600,9 @@
           </button>
           <button type="button" class="cmc-clear-btn" id="cmc-clear" title="Clear all markup">
             <i class="material-symbols-outlined">delete_sweep</i>
+          </button>
+          <button type="button" class="cmc-download-btn" id="cmc-download" title="Download current view as JPEG">
+            <i class="material-symbols-outlined">download</i>
           </button>
           <span class="cmc-toolbar-sep"></span>
           <label class="cmc-color-wrap" title="Markup color">
@@ -712,22 +723,47 @@
         var _originForm = null;           // the .comment-compose element that opened the dialog
         var _composerSearch = null;       // LocationSearchEngine instance (created lazily)
 
+        // -- Standalone mode -----------------------------------------------------
+        // Opened without a host form (the "take a screenshot" toolbar buttons on
+        // the main map / pin detail / wiki pages): Save persists a brand-new,
+        // standalone MarkupMap directly instead of writing to a hidden form field.
+        var _standaloneMode = false;
+        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | null
+        var _standaloneOnSaved = null;    // optional callback(uuid)
+
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
+        var _saveBtn = document.getElementById('comment-map-composer-save');
+        var _titleRow = document.getElementById('cmc-title-row');
+        var _titleInput = document.getElementById('cmc-title-input');
 
         // -- Open composer -----------------------------------------------------
-        window._openCommentMapComposer = function (form) {
+        // Accepts either a host form element (existing comment/visit/trip-comment
+        // usage - back-compat) or an options object { form, context, onSaved }
+        // with no form, which switches on standalone mode.
+        window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
                 toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
                 return;
             }
+            var opts = (formOrOptions instanceof HTMLElement) ? { form: formOrOptions } : (formOrOptions || {});
+            var form = opts.form || null;
             _originForm = form;
+            _standaloneMode = !form;
+            _standaloneContext = opts.context || null;
+            _standaloneOnSaved = opts.onSaved || null;
+
+            _titleRow.hidden = !_standaloneMode;
+            _titleInput.value = '';
+            _saveBtn.textContent = _standaloneMode ? 'Save map' : 'Attach map';
 
             // Restore existing map_data if the form already has one
             var existing = null;
-            var hiddenField = form.querySelector('.comment-map-data-field');
-            if (hiddenField && hiddenField.value) {
-                try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+            if (form) {
+                var hiddenField = form.querySelector('.comment-map-data-field');
+                if (hiddenField && hiddenField.value) {
+                    try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+                }
             }
 
             _dialog.showModal();
@@ -851,8 +887,8 @@
         }
 
         // -- Save --------------------------------------------------------------
-        document.getElementById('comment-map-composer-save').addEventListener('click', function () {
-            if (!_composerMap || !_originForm) return;
+        _saveBtn.addEventListener('click', function () {
+            if (!_composerMap) return;
             var center = _composerMap.getCenter();
             var snapshot = {
                 center_lat: center.lat,
@@ -862,6 +898,32 @@
                 show_borders: _composerShowBorders,
                 markup: _composerShapes.slice()
             };
+
+            if (_standaloneMode) {
+                var title = _titleInput.value.trim();
+                if (title) snapshot.title = title;
+                if (_standaloneContext && _standaloneContext.pinSlug) snapshot.pin_slug = _standaloneContext.pinSlug;
+                if (_standaloneContext && _standaloneContext.locationSlug) snapshot.location_slug = _standaloneContext.locationSlug;
+
+                _saveBtn.disabled = true;
+                fetch('{% url "markup_map.create" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify(snapshot)
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.ok) throw new Error();
+                        toastr.success('Map saved.');
+                        if (_standaloneOnSaved) _standaloneOnSaved(data.uuid);
+                        _closeComposer();
+                    })
+                    .catch(function () { toastr.error('Failed to save map.'); })
+                    .finally(function () { _saveBtn.disabled = false; });
+                return;
+            }
+
+            if (!_originForm) return;
             var hiddenField = _originForm.querySelector('.comment-map-data-field');
             if (hiddenField) hiddenField.value = JSON.stringify(snapshot);
 
@@ -872,6 +934,16 @@
             _closeComposer();
         });
 
+        // -- Download current view as JPEG -------------------------------------
+        document.getElementById('cmc-download').addEventListener('click', function () {
+            if (!_composerMap) return;
+            window.MapExport.download(_composerMap, {
+                layers: _composerLayers,
+                getShapes: function () { return _composerShapes; },
+                filename: 'map-screenshot.jpg',
+            });
+        });
+
         // -- Clear attached map from a form ------------------------------------
         window._clearCommentMap = function (form) {
             var hf = form && form.querySelector('.comment-map-data-field');
@@ -879,6 +951,20 @@
             var chip = form && form.querySelector('.comment-map-chip');
             if (chip) chip.hidden = true;
         };
+
+        // Wire the read-only viewer's Download button (event delegation - the
+        // dialog is rendered per-map-id and may be swapped in dynamically).
+        document.addEventListener('click', function (e) {
+            var downloadBtn = e.target.closest('.comment-map-download-btn');
+            if (!downloadBtn) return;
+            var cached = _viewerMaps[downloadBtn.dataset.mapId];
+            if (!cached) return;
+            window.MapExport.download(cached.map, {
+                layers: cached.layers,
+                getShapes: function () { return cached.shapes; },
+                filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
+            });
+        });
 
         // Wire chip buttons (event delegation - forms are dynamic via HTMX)
         document.addEventListener('click', function (e) {
@@ -1031,7 +1117,7 @@
             var viewMap = L.map(el);
             // The layer strip is server-rendered inside the dialog by the
             // shared _map_view_dialog.html partial ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %}).
-            window.MapLayers.create(viewMap, {
+            var viewLayers = window.MapLayers.create(viewMap, {
                 root: dlg.querySelector('.map-layers-strip'),
                 defaultBase: data.layer_mode || 'street',
                 initialOverlays: data.show_borders ? ['borders'] : [],
@@ -1045,7 +1131,7 @@
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
 
             viewMap.invalidateSize();
-            _viewerMaps[commentId] = { map: viewMap };
+            _viewerMaps[commentId] = { map: viewMap, layers: viewLayers, shapes: data.markup || [] };
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {

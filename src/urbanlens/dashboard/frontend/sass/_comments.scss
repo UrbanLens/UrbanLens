@@ -590,6 +590,24 @@
     white-space: nowrap;
 }
 
+// Standalone-mode title field (the "take a screenshot" flow) - hidden for
+// the form-bound comment/visit/trip-comment usage of this same dialog.
+.cmcc-title-row {
+    border-bottom: none;
+    padding-top: 0;
+}
+
+.cmcc-title-input {
+    flex: 1;
+    max-width: 460px;
+    padding: .35rem .6rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    font-size: .85rem;
+}
+
 // Inline variant of the map pages' floating jump-to search bar: sits in the
 // composer's controls row instead of floating over the map, but reuses all
 // the .addr-search-* internals (input, suggestions dropdown, sections).
@@ -645,7 +663,8 @@
 .map-layers-strip-btn,
 .cmc-tool-btn,
 .cmc-undo-btn,
-.cmc-clear-btn {
+.cmc-clear-btn,
+.cmc-download-btn {
     background: none;
     border: 1px solid var(--ul-grey-1a);
     border-radius: 6px;

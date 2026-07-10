@@ -22,13 +22,18 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
+from django.utils.dateformat import format as format_date
+
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.markup.model import MarkupMap
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +168,27 @@ def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None
     return sanitize_map_data(data)
 
 
+def default_markup_map_title(context: Pin | Wiki | None = None) -> str:
+    """Return the default MarkupMap title to use when none was explicitly given.
+
+    Args:
+        context: The Pin or Wiki this map was created from, if known.
+
+    Returns:
+        ``"<pin/wiki name> - <date>"`` when a Pin/Wiki context is given,
+        otherwise just the creation date (e.g. ``"Jul 10, 2026"``).
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    date_str = format_date(timezone.localdate(), "M j, Y")
+    if isinstance(context, Pin):
+        return f"{context.effective_name} - {date_str}"
+    if isinstance(context, Wiki):
+        return f"{context.name} - {date_str}"
+    return date_str
+
+
 def materialize_markup_map(
     profile: Profile,
     snapshot: dict | None,
@@ -193,6 +219,6 @@ def materialize_markup_map(
     if existing_map is not None and existing_map.profile_id == profile.pk:
         markup_map = existing_map
     else:
-        markup_map = MarkupMap.objects.create(profile=profile)
+        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title())
     markup_map.replace_items_from_snapshot(snapshot)
     return markup_map

@@ -274,6 +274,9 @@ Features planned for future releases.
 * Create unit tests for typescript.
 * Markup: Dotted lines.
 * Badge merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist.
+* On pin details page, allow dragging map vertically bigger, which saves between sessions.
+* Turning off the markup layer on a map should turn off showing boundaries.
+* Allow exporting data as other formats: KML, GPX, GeoJSON, CSV.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

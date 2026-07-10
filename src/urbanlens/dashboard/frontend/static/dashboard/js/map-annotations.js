@@ -435,6 +435,8 @@ function readConfig(el) {
   return {
     mapCenterLat: Number.parseFloat(d.mapCenterLat ?? "0"),
     mapCenterLng: Number.parseFloat(d.mapCenterLng ?? "0"),
+    pinSlug: d.pinSlug || "",
+    locationSlug: d.locationSlug || "",
     defaultMapView: d.defaultMapView || "satellite",
     openweathermapApiKey: d.openweathermapApiKey || "",
     mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
@@ -461,6 +463,10 @@ function init() {
   const mapCenterLng = cfg.mapCenterLng;
   window._commentMapDefaultLat = mapCenterLat;
   window._commentMapDefaultLng = mapCenterLng;
+  window._openMapScreenshot = function() {
+    const context = cfg.pinSlug ? { pinSlug: cfg.pinSlug } : cfg.locationSlug ? { locationSlug: cfg.locationSlug } : null;
+    window._openCommentMapComposer({ context });
+  };
   const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
   window.map = map;
   map.createPane("markupPane").style.zIndex = "550";
