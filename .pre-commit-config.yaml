@@ -37,3 +37,13 @@ repos:
       - id: ruff-format
         always_run: true
         pass_filenames: false
+
+# TYPESCRIPT
+-   repo: local
+    hooks:
+      - id: tsc
+        name: tsc (typescript typecheck)
+        entry: bun run typecheck
+        language: system
+        files: '\.tsx?$'
+        pass_filenames: false
