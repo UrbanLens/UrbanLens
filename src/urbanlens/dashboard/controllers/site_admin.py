@@ -108,6 +108,16 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
+
+        # Ranked sources first, in the admin's configured priority order, followed
+        # by any remaining available sources (unranked, falling back to plugin
+        # order at resolution time).
+        priority_slugs = settings.name_source_priority_list
+        providers_by_slug = {provider.source: provider.verbose_name for provider in plugin_registry.name_providers()}
+        name_source_order = [(slug, providers_by_slug[slug], True) for slug in priority_slugs if slug in providers_by_slug]
+        ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
+        name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
+
         return render(
             request,
             "dashboard/pages/site_admin.html",
@@ -119,7 +129,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
-                "available_name_sources": [(provider.source, provider.verbose_name) for provider in plugin_registry.name_providers()],
+                "name_source_order": name_source_order,
             },
         )
 
