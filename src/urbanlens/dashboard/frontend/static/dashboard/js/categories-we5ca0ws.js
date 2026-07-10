@@ -1,3 +1,7 @@
+import {
+  htmxProcess
+} from "./categories-agkcnzxy.js";
+
 // src/urbanlens/dashboard/frontend/ts/shared/icon-picker.ts
 var MATERIAL_ICON_NAME = /^[a-z_]+$/;
 var IconPicker = {
@@ -129,33 +133,6 @@ function installGlobalColorPicker() {
   window.pickColor = pickColor;
 }
 
-// src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
-async function confirmAction(options) {
-  if (window.confirmDialog) {
-    return window.confirmDialog(options);
-  }
-  return window.confirm(options.message ?? "Are you sure?");
-}
-var toast = {
-  success(message) {
-    window.toastr.success(message);
-  },
-  error(message) {
-    window.toastr.error(message);
-  },
-  warning(message) {
-    window.toastr.warning(message);
-  }
-};
-function htmxProcess(element) {
-  window.htmx?.process(element);
-}
-
-// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
-function getCsrfToken() {
-  return window.csrftoken ?? "";
-}
-
 // src/urbanlens/dashboard/frontend/ts/shared/tree-view.ts
 var DEFAULT_TREE_ROOT_CLASS = "tag-tree-root";
 function renderTreeView(rows, config) {
@@ -236,4 +213,4 @@ function renderTreeView(rows, config) {
   htmxProcess(treeRoot);
 }
 
-export { confirmAction, toast, htmxProcess, getCsrfToken, IconPicker, renderIconGlyphHtml, resetIconPicker, installGlobalIconPicker, resetColorPicker, installGlobalColorPicker, renderTreeView };
+export { IconPicker, renderIconGlyphHtml, resetIconPicker, installGlobalIconPicker, resetColorPicker, installGlobalColorPicker, renderTreeView };

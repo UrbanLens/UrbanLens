@@ -10,7 +10,9 @@ inside it - `.map-dialog--side` positions itself absolutely relative to that
 map wrapper ancestor, and nesting it inside `.map-bottom-controls` (which is
 itself `position: absolute`) makes it position relative to that small
 button cluster instead. Pair with _markup_toolbar_panel.html (the "Add
-Detail" dropdown that opens this) and _markup_toolbar_script.html.
+Detail" dropdown that opens this) and ts/shared/markup-toolbar.ts's
+createMarkupToolbar factory (called from ts/entries/map-annotations.ts and
+inline from _safety_map_script.html).
 
 Context:
   markup_fill_color, markup_border_color - optional initial swatch values

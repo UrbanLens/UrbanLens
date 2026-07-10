@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -297,7 +298,21 @@
 {% url 'location.wiki.detail_pin.edit' location.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
 {% url 'location.wiki.boundary' location.slug as boundary_url %}
 {% url 'location.wiki.gallery.json' location.slug as photo_gallery_json_url %}
-{% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=location.latitude map_center_lng=location.longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
+<div id="map-annotations-config" hidden
+     data-map-center-lat="{{ location.latitude }}"
+     data-map-center-lng="{{ location.longitude }}"
+     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-create-url="{{ markup_create_url }}"
+     data-markup-edit-url-template="{{ markup_edit_url_template }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pin-create-url="{{ detail_pin_create_url }}"
+     data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-boundary-url="{{ boundary_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
+     data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+<script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {

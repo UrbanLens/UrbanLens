@@ -1170,7 +1170,595 @@
     window.MarkupEngine = MarkupEngine;
   }
 
+  // src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
+  function getCsrfToken() {
+    return window.csrftoken ?? "";
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
+  async function confirmAction(options) {
+    if (window.confirmDialog) {
+      return window.confirmDialog(options);
+    }
+    return window.confirm(options.message ?? "Are you sure?");
+  }
+  var toast = {
+    success(message) {
+      window.toastr.success(message);
+    },
+    error(message) {
+      window.toastr.error(message);
+    },
+    warning(message) {
+      window.toastr.warning(message);
+    },
+    info(message) {
+      window.toastr.info(message);
+    }
+  };
+
+  // src/urbanlens/dashboard/frontend/ts/shared/markup-toolbar.ts
+  var MARKUP_MAP_UUID_PLACEHOLDER = "11111111-1111-1111-1111-111111111111";
+  function createMarkupToolbar(map, markupLayer, config) {
+    let markupJsonUrl = config.markupJsonUrl ?? "";
+    let markupPostUrl = config.markupCreateUrl ?? "";
+    let markupEditBase = (config.markupEditUrlTemplate ?? "").replace("00000000-0000-0000-0000-000000000000/", "");
+    const markupMapCreateUrl = config.markupMapCreateUrl ?? "";
+    let markupMapCreatePromise = null;
+    function applyMarkupMapUuid(uuid) {
+      markupJsonUrl = (config.markupMapJsonUrlTemplate ?? "").replaceAll(MARKUP_MAP_UUID_PLACEHOLDER, uuid);
+      markupPostUrl = (config.markupMapMarkupUrlTemplate ?? "").replaceAll(MARKUP_MAP_UUID_PLACEHOLDER, uuid);
+      markupEditBase = (config.markupMapMarkupEditUrlTemplate ?? "").replaceAll(MARKUP_MAP_UUID_PLACEHOLDER, uuid).replace("00000000-0000-0000-0000-000000000000/", "");
+    }
+    function ensureMarkupTarget() {
+      if (markupPostUrl)
+        return Promise.resolve();
+      if (!markupMapCreateUrl)
+        return Promise.reject(new Error("No markup endpoints configured"));
+      if (!markupMapCreatePromise) {
+        const initialView = config.getInitialView ? config.getInitialView() : {};
+        markupMapCreatePromise = fetch(markupMapCreateUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+          body: JSON.stringify(initialView)
+        }).then((r) => {
+          if (!r.ok)
+            throw new Error;
+          return r.json();
+        }).then((data) => {
+          applyMarkupMapUuid(data.uuid);
+          const field = document.getElementById(config.markupMapFieldId ?? "markup-map-uuid-field");
+          if (field)
+            field.value = data.uuid;
+          document.dispatchEvent(new CustomEvent("ul:markup-map-created", { detail: { uuid: data.uuid } }));
+        }).catch((err) => {
+          markupMapCreatePromise = null;
+          throw err;
+        });
+      }
+      return markupMapCreatePromise;
+    }
+    const markupDefaultFillOpacity = (config.markupFillOpacity ?? 87) / 100;
+    const markupDefaultBorderOpacity = (config.markupBorderOpacity ?? 100) / 100;
+    let markupItems = [];
+    let markupDrawType = null;
+    let editingMarkupItem = null;
+    const markupPalette = ["#e53e3e", "#1d4ed8", "#16a34a", "#d97706", "#7c3aed", "#0f172a", "#f8fafc"];
+    const borderOnlyPalette = ["#0f172a", "#f8fafc"];
+    function arrowheadSize2() {
+      return window.MarkupEngine.arrowheadSize(map.getZoom());
+    }
+    function escapeMarkupLabel(s) {
+      const div = document.createElement("div");
+      div.textContent = s || "";
+      return div.innerHTML;
+    }
+    function textFontSize(item) {
+      const base = item.stroke_width || 16;
+      const z = map.getZoom();
+      const scale = 2 ** ((z - 16) * 0.5);
+      return Math.max(8, Math.min(72, Math.round(base * scale)));
+    }
+    function textBackground(item) {
+      if (item.border_color === "none")
+        return "transparent";
+      if (item.border_color)
+        return item.border_color;
+      return "rgba(255,255,255,0.94)";
+    }
+    function textBoxPixelRect(item) {
+      const bc = item.geometry.box_corner;
+      if (!bc)
+        return null;
+      const c1 = item.geometry.coordinates;
+      const p1 = map.latLngToLayerPoint([c1[1], c1[0]]);
+      const p2 = map.latLngToLayerPoint([bc[1], bc[0]]);
+      return {
+        w: Math.max(24, Math.abs(p2.x - p1.x)),
+        h: Math.max(18, Math.abs(p2.y - p1.y)),
+        anchorX: p2.x < p1.x ? Math.abs(p2.x - p1.x) : 0,
+        anchorY: p2.y < p1.y ? Math.abs(p2.y - p1.y) : 0
+      };
+    }
+    function textLabelHtml2(item, overrideLabel) {
+      const label = overrideLabel !== undefined ? overrideLabel : item.label || "";
+      const bg = textBackground(item);
+      const rect = textBoxPixelRect(item);
+      const sz = textFontSize(item);
+      if (rect) {
+        return `<span class="map-text-label map-text-label--box" style="color:${item.color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+      }
+      return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+    }
+    function textIcon(item) {
+      const rect = textBoxPixelRect(item);
+      return rect ? L.divIcon({ className: "", html: textLabelHtml2(item), iconSize: [rect.w, rect.h], iconAnchor: [rect.anchorX, rect.anchorY] }) : L.divIcon({ className: "", html: textLabelHtml2(item), iconSize: undefined, iconAnchor: [0, 0] });
+    }
+    function shapeOptions(item) {
+      const bc = item.border_color;
+      const strokeColor = bc && bc !== "none" ? bc : "white";
+      const hasBorder = !!(bc && bc !== "none");
+      const fillOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
+      const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+      return {
+        pane: "markupPane",
+        color: strokeColor,
+        fillColor: item.color,
+        fillOpacity: fillOp,
+        weight: hasBorder ? item.stroke_width || 2 : 0,
+        opacity: borderOp
+      };
+    }
+    function renderMarkupItem(item) {
+      const layers = [];
+      const type = item.markup_type;
+      if (type === "text") {
+        const c = item.geometry.coordinates;
+        const textMarker = L.marker([c[1], c[0]], { icon: textIcon(item) });
+        layers.push(textMarker);
+        item._textMarker = textMarker;
+      } else if (type === "line" || type === "arrow") {
+        const latlngs = item.geometry.coordinates.map((c) => L.latLng(c[1], c[0]));
+        const w = item.stroke_width || 3;
+        const isArrow = type === "arrow";
+        const fillOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
+        const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
+        const outlineColor = item.border_color && item.border_color !== "none" ? item.border_color : "white";
+        if (isArrow) {
+          layers.push(L.polyline(latlngs, { pane: "markupPane", color: outlineColor, weight: w + 4, opacity: borderOp * 0.75, interactive: false }));
+        } else if (item.border_color && item.border_color !== "none") {
+          layers.push(L.polyline(latlngs, { pane: "markupPane", color: item.border_color, weight: w + 3, opacity: borderOp * 0.7, interactive: false }));
+        }
+        layers.push(L.polyline(latlngs, { pane: "markupPane", color: item.color, weight: isArrow ? w + 2 : w, opacity: fillOp }));
+        if (isArrow && latlngs.length >= 2) {
+          const deg = window.MarkupEngine.bearing(latlngs[latlngs.length - 2], latlngs[latlngs.length - 1]);
+          const sz = arrowheadSize2();
+          const arrowMarker = L.marker(latlngs[latlngs.length - 1], {
+            icon: L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(item.color, deg, sz, fillOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
+            interactive: false
+          });
+          layers.push(arrowMarker);
+          item._arrowheadMarker = arrowMarker;
+          item._arrowheadDeg = deg;
+        }
+        if (item.label) {
+          const mid = latlngs[Math.floor(latlngs.length / 2)];
+          layers.push(L.marker(mid, {
+            icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label map-text-label--line">${escapeMarkupLabel(item.label)}</span>` }),
+            interactive: false
+          }));
+        }
+      } else if (type === "square" || type === "polygon") {
+        const rings = item.geometry.coordinates.map((ring) => ring.map((c) => L.latLng(c[1], c[0])));
+        const polygon = L.polygon(rings, shapeOptions(item));
+        layers.push(polygon);
+        if (item.label) {
+          const center = polygon.getBounds().getCenter();
+          layers.push(L.marker(center, {
+            icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label">${escapeMarkupLabel(item.label)}</span>` }),
+            interactive: false
+          }));
+        }
+      } else if (type === "circle") {
+        const [lng, lat] = item.geometry.coordinates;
+        const circle = L.circle([lat, lng], { radius: item.geometry.radius, ...shapeOptions(item) });
+        layers.push(circle);
+      }
+      layers.forEach((l) => l.addTo(markupLayer));
+      item._layers = layers;
+      layers.forEach((l) => {
+        const interactive = l;
+        if (!interactive.on)
+          return;
+        interactive.on("click", () => openMarkupEditDialog(item));
+        if (item.label && interactive.bindTooltip) {
+          interactive.bindTooltip(item.label, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        }
+      });
+    }
+    function loadMarkup() {
+      if (!markupJsonUrl)
+        return;
+      fetch(markupJsonUrl).then((r) => r.json()).then((data) => {
+        markupLayer.clearLayers();
+        markupItems = [];
+        (data.markup_items || []).forEach((item) => {
+          renderMarkupItem(item);
+          markupItems.push(item);
+        });
+        config.onBuildDetailList?.();
+      }).catch((err) => console.warn("Could not load markup:", err));
+    }
+    const lineFinishTipKey = "ul_onboarding_v1_markup_line_finish_tip_dismissed";
+    function lineFinishTipDismissed() {
+      if (config.lineFinishTipDismissed?.())
+        return true;
+      try {
+        return localStorage.getItem(lineFinishTipKey) === "1";
+      } catch {
+        return true;
+      }
+    }
+    function dismissLineFinishTip() {
+      try {
+        localStorage.setItem(lineFinishTipKey, "1");
+      } catch {}
+      document.getElementById("markup-line-finish-tip")?.remove();
+    }
+    function maybeShowLineFinishTip() {
+      if (lineFinishTipDismissed() || document.getElementById("markup-line-finish-tip"))
+        return;
+      const wrapper = document.querySelector(".map-wrapper") || document.querySelector(".safety-map-wrapper");
+      if (!wrapper)
+        return;
+      const el = document.createElement("div");
+      el.id = "markup-line-finish-tip";
+      el.className = "markup-line-finish-tip";
+      el.innerHTML = '<i class="material-icons markup-line-finish-tip__icon">gesture</i>' + '<span class="markup-line-finish-tip__text">Click that <strong>last point</strong> again to finish the shape</span>' + `<button type="button" class="markup-line-finish-tip__close" aria-label="Got it, don't show this again">` + '<i class="material-symbols-outlined">close</i></button>';
+      el.querySelector(".markup-line-finish-tip__close")?.addEventListener("click", dismissLineFinishTip);
+      wrapper.appendChild(el);
+      setTimeout(dismissLineFinishTip, 8000);
+    }
+    const drawSession = window.MarkupEngine.createDrawSession(map, {
+      getColor: () => document.getElementById("markup-panel-color").value,
+      getWidth: () => Number.parseInt(document.getElementById("markup-panel-width").value || "3", 10),
+      getTextLabel: () => document.getElementById("markup-panel-label").value.trim(),
+      onCommit: onDrawCommit,
+      onHintChange: (hint) => {
+        const el = document.getElementById("markup-panel-hint-text");
+        if (el)
+          el.textContent = hint;
+      },
+      onPointCountChange: (tool, n) => {
+        if ((tool === "line" || tool === "arrow") && n === 2)
+          maybeShowLineFinishTip();
+      },
+      onToolChange: (tool) => {
+        markupDrawType = tool;
+        if (!tool && !editingMarkupItem) {
+          document.getElementById("markup-panel").style.display = "none";
+        }
+      }
+    });
+    let addDetailOpen = false;
+    function toggleAddDetailMenu() {
+      addDetailOpen = !addDetailOpen;
+      document.getElementById("add-detail-menu").style.display = addDetailOpen ? "" : "none";
+      document.querySelector(".add-detail-chevron")?.classList.toggle("open", addDetailOpen);
+    }
+    function closeAddDetailMenu() {
+      addDetailOpen = false;
+      document.getElementById("add-detail-menu").style.display = "none";
+      document.querySelector(".add-detail-chevron")?.classList.remove("open");
+    }
+    document.addEventListener("click", (e) => {
+      if (addDetailOpen && !document.getElementById("add-detail-wrap")?.contains(e.target)) {
+        closeAddDetailMenu();
+      }
+    });
+    const MARKUP_TOOL_TITLES = {
+      line: "Draw Line",
+      arrow: "Draw Arrow",
+      text: "Add Text Label",
+      rect: "Draw Square",
+      circle: "Draw Circle",
+      polygon: "Draw Polygon"
+    };
+    function configureMarkupPanelForTool(tool) {
+      config.onCloseDetailPinPanel?.();
+      const isText = tool === "text";
+      editingMarkupItem = null;
+      document.getElementById("markup-panel-title").textContent = MARKUP_TOOL_TITLES[tool] ?? "Draw";
+      document.getElementById("markup-panel-label-caption").textContent = isText ? "Text" : "Label";
+      document.getElementById("markup-panel-color-label").textContent = isText ? "Text Color" : "Fill Color";
+      document.getElementById("markup-panel-border-label").textContent = isText ? "Background" : "Border Color";
+      document.getElementById("markup-panel-fill-opacity-label-text").textContent = isText ? "Text Opacity" : "Fill Opacity";
+      document.getElementById("markup-panel-width-label-text").textContent = isText ? "Font Size" : "Width";
+      document.getElementById("markup-panel-security-row").hidden = isText;
+      rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
+      const widthEl = document.getElementById("markup-panel-width");
+      widthEl.min = isText ? "10" : "1";
+      widthEl.max = isText ? "48" : "8";
+      widthEl.value = isText ? "16" : "3";
+      document.getElementById("markup-panel-width-label").textContent = widthEl.value;
+      document.getElementById("markup-panel-label").value = "";
+      document.getElementById("markup-panel-hint").hidden = false;
+      document.getElementById("markup-panel-draw-actions").hidden = false;
+      document.getElementById("markup-panel-edit-actions").hidden = true;
+      document.getElementById("markup-panel").style.display = "";
+    }
+    function createMarkupItem(markupType, geometry) {
+      const label = document.getElementById("markup-panel-label").value.trim();
+      const color = document.getElementById("markup-panel-color").value;
+      const border_color = document.getElementById("markup-panel-border").value;
+      const stroke_width = Number.parseInt(document.getElementById("markup-panel-width").value, 10);
+      const fill_opacity = Number.parseInt(document.getElementById("markup-panel-fill-opacity").value, 10);
+      const border_opacity = Number.parseInt(document.getElementById("markup-panel-border-opacity").value, 10);
+      const security_indicator = markupType === "text" ? "" : document.getElementById("markup-panel-security").value;
+      ensureMarkupTarget().then(() => fetch(markupPostUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ markup_type: markupType, geometry, label, color, stroke_width, border_color, fill_opacity, border_opacity, security_indicator })
+      })).then((r) => {
+        if (!r.ok)
+          throw new Error;
+        return r.json();
+      }).then((data) => reloadMarkupAndOpenEdit(data.uuid)).catch(() => toast.error("Failed to save markup."));
+    }
+    function onDrawCommit(type, latlngs, extras) {
+      drawSession.deactivate();
+      if (type === "line" || type === "arrow") {
+        const coords = latlngs.map((ll) => [ll[1], ll[0]]);
+        createMarkupItem(type, { type: "LineString", coordinates: coords });
+        return;
+      }
+      if (type === "circle") {
+        const center = L.latLng(latlngs[0][0], latlngs[0][1]);
+        const edge = L.latLng(latlngs[1][0], latlngs[1][1]);
+        createMarkupItem("circle", { type: "Circle", coordinates: [latlngs[0][1], latlngs[0][0]], radius: center.distanceTo(edge) });
+        return;
+      }
+      if (type === "rect") {
+        const [n, w] = [latlngs[0][0], latlngs[0][1]];
+        const [s, e] = [latlngs[1][0], latlngs[1][1]];
+        createMarkupItem("square", {
+          type: "Polygon",
+          coordinates: [
+            [
+              [w, n],
+              [e, n],
+              [e, s],
+              [w, s],
+              [w, n]
+            ]
+          ]
+        });
+        return;
+      }
+      if (type === "polygon") {
+        const coords = latlngs.map((ll) => [ll[1], ll[0]]);
+        coords.push(coords[0]);
+        createMarkupItem("polygon", { type: "Polygon", coordinates: [coords] });
+        return;
+      }
+      if (type === "text") {
+        const ll = L.latLng(latlngs[0][0], latlngs[0][1]);
+        const geometry = { type: "Point", coordinates: [ll.lng, ll.lat] };
+        if (latlngs.length > 1) {
+          const corner = L.latLng(latlngs[1][0], latlngs[1][1]);
+          geometry.box_corner = [corner.lng, corner.lat];
+        }
+        createMarkupItem("text", geometry);
+      }
+    }
+    function startMarkupDraw(type) {
+      closeAddDetailMenu();
+      configureMarkupPanelForTool(type);
+      drawSession.startTool(type);
+    }
+    function reloadMarkupAndOpenEdit(newUuid) {
+      return fetch(markupJsonUrl).then((r) => r.json()).then((markupData) => {
+        markupLayer.clearLayers();
+        markupItems = [];
+        (markupData.markup_items || []).forEach((item) => {
+          renderMarkupItem(item);
+          markupItems.push(item);
+        });
+        config.onBuildDetailList?.();
+        const newItem = markupItems.find((i) => i.uuid === newUuid);
+        if (newItem)
+          openMarkupEditDialog(newItem);
+      });
+    }
+    function startShapeDraw(type) {
+      closeAddDetailMenu();
+      const tool = type === "square" ? "rect" : type;
+      configureMarkupPanelForTool(tool);
+      drawSession.startTool(tool);
+    }
+    function closeMarkupPanel() {
+      flushMarkupAutoSave();
+      if (drawSession?.getCurrentTool()) {
+        drawSession.deactivate();
+      } else {
+        document.getElementById("markup-panel").style.display = "none";
+      }
+      editingMarkupItem = null;
+    }
+    function closeOrFinishDraw() {
+      if (drawSession?.canFinish()) {
+        drawSession.finishCurrent();
+      } else {
+        closeMarkupPanel();
+      }
+    }
+    function rebuildEditSwatch(containerId, inputId, withNone, palette) {
+      const cont = document.getElementById(containerId);
+      const input = document.getElementById(inputId);
+      cont.innerHTML = "";
+      if (withNone) {
+        const nb = document.createElement("button");
+        nb.type = "button";
+        nb.title = "None";
+        nb.className = `markup-color-swatch markup-color-swatch--none${!input.value || input.value === "none" ? " markup-color-swatch--active" : ""}`;
+        nb.style.cssText = "background:transparent;border:1px solid #cbd5e1;position:relative;";
+        nb.innerHTML = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#9ca3af">∅</span>';
+        nb.addEventListener("click", () => {
+          cont.querySelectorAll(".markup-color-swatch").forEach((b) => b.classList.remove("markup-color-swatch--active"));
+          nb.classList.add("markup-color-swatch--active");
+          input.value = "none";
+          liveApplyMarkupEdit();
+        });
+        cont.appendChild(nb);
+      }
+      (palette ?? markupPalette).forEach((color) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `markup-color-swatch${color === input.value ? " markup-color-swatch--active" : ""}`;
+        btn.style.cssText = `background:${color};${color === "#f8fafc" ? "border:1px solid #cbd5e1;" : ""}`;
+        btn.addEventListener("click", () => {
+          cont.querySelectorAll(".markup-color-swatch").forEach((b) => b.classList.remove("markup-color-swatch--active"));
+          btn.classList.add("markup-color-swatch--active");
+          input.value = color;
+          liveApplyMarkupEdit();
+        });
+        cont.appendChild(btn);
+      });
+    }
+    function liveApplyMarkupEdit() {
+      if (!editingMarkupItem)
+        return;
+      const item = editingMarkupItem;
+      const isText = item.markup_type === "text";
+      item.label = document.getElementById("markup-panel-label").value.trim();
+      item.color = document.getElementById("markup-panel-color").value;
+      item.border_color = document.getElementById("markup-panel-border").value;
+      item.stroke_width = Number.parseInt(document.getElementById("markup-panel-width").value, 10);
+      item.fill_opacity = Number.parseInt(document.getElementById("markup-panel-fill-opacity").value, 10);
+      item.border_opacity = Number.parseInt(document.getElementById("markup-panel-border-opacity").value, 10);
+      item.security_indicator = isText ? "" : document.getElementById("markup-panel-security").value;
+      item._layers?.forEach((l) => markupLayer.removeLayer(l));
+      renderMarkupItem(item);
+      scheduleMarkupAutoSave(item);
+    }
+    let markupAutoSaveTimer;
+    let markupAutoSaveItem = null;
+    function scheduleMarkupAutoSave(item) {
+      clearTimeout(markupAutoSaveTimer);
+      markupAutoSaveItem = item;
+      markupAutoSaveTimer = setTimeout(flushMarkupAutoSave, 500);
+    }
+    function flushMarkupAutoSave() {
+      clearTimeout(markupAutoSaveTimer);
+      const item = markupAutoSaveItem;
+      markupAutoSaveItem = null;
+      if (!item)
+        return;
+      fetch(`${markupEditBase}${item.uuid}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({
+          label: item.label,
+          color: item.color,
+          border_color: item.border_color,
+          stroke_width: item.stroke_width,
+          fill_opacity: item.fill_opacity,
+          border_opacity: item.border_opacity,
+          security_indicator: item.security_indicator
+        })
+      }).catch(() => toast.error("Failed to save annotation changes."));
+    }
+    function openMarkupEditDialog(item) {
+      config.onCloseDetailPinPanel?.();
+      editingMarkupItem = item;
+      const isText = item.markup_type === "text";
+      document.getElementById("markup-panel-title").textContent = `Edit ${isText ? "Text Label" : "Annotation"}`;
+      document.getElementById("markup-panel-label-caption").textContent = isText ? "Text" : "Label";
+      document.getElementById("markup-panel-label").value = item.label || "";
+      const widthEl = document.getElementById("markup-panel-width");
+      widthEl.min = isText ? "10" : "1";
+      widthEl.max = isText ? "48" : "8";
+      widthEl.value = String(item.stroke_width || (isText ? 16 : 3));
+      document.getElementById("markup-panel-width-label").textContent = String(item.stroke_width || (isText ? 16 : 3));
+      document.getElementById("markup-panel-width-label-text").textContent = isText ? "Font Size" : "Width";
+      document.getElementById("markup-panel-color-label").textContent = isText ? "Text Color" : "Fill Color";
+      document.getElementById("markup-panel-border-label").textContent = isText ? "Background" : "Border Color";
+      document.getElementById("markup-panel-fill-opacity-label-text").textContent = isText ? "Text Opacity" : "Fill Opacity";
+      const fillOpEl = document.getElementById("markup-panel-fill-opacity");
+      const fillOpVal = item.fill_opacity != null ? item.fill_opacity : 87;
+      fillOpEl.value = String(fillOpVal);
+      document.getElementById("markup-panel-fill-opacity-val").textContent = String(fillOpVal);
+      const borderOpEl = document.getElementById("markup-panel-border-opacity");
+      const borderOpVal = item.border_opacity != null ? item.border_opacity : 100;
+      borderOpEl.value = String(borderOpVal);
+      document.getElementById("markup-panel-border-opacity-val").textContent = String(borderOpVal);
+      document.getElementById("markup-panel-color").value = item.color || "#e53e3e";
+      document.getElementById("markup-panel-border").value = item.border_color || "";
+      rebuildEditSwatch("markup-panel-color-swatches", "markup-panel-color", false);
+      rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
+      document.getElementById("markup-panel-security-row").hidden = isText;
+      document.getElementById("markup-panel-security").value = item.security_indicator || "";
+      document.getElementById("markup-panel-hint").hidden = true;
+      document.getElementById("markup-panel-draw-actions").hidden = true;
+      document.getElementById("markup-panel-edit-actions").hidden = false;
+      document.getElementById("markup-panel").style.display = "";
+      if (isText)
+        document.getElementById("markup-panel-label").focus();
+    }
+    async function deleteMarkupEdit() {
+      if (!editingMarkupItem)
+        return;
+      if (!await confirmAction({ title: "Delete Annotation", message: "Delete this annotation?", confirmLabel: "Delete" }))
+        return;
+      if (markupAutoSaveItem === editingMarkupItem) {
+        clearTimeout(markupAutoSaveTimer);
+        markupAutoSaveItem = null;
+      }
+      fetch(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => {
+        if (!r.ok)
+          throw new Error;
+        closeMarkupPanel();
+        loadMarkup();
+        toast.success("Annotation deleted.");
+      }).catch(() => toast.error("Failed to delete annotation."));
+    }
+    map.on("zoomend", () => {
+      const sz = arrowheadSize2();
+      markupItems.forEach((item) => {
+        if (item._arrowheadMarker) {
+          const itemOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
+          item._arrowheadMarker.setIcon(L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(item.color, item._arrowheadDeg, sz, itemOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
+        }
+        if (item._textMarker) {
+          item._textMarker.setIcon(textIcon(item));
+        }
+      });
+    });
+    function startTextPlacement() {
+      closeAddDetailMenu();
+      configureMarkupPanelForTool("text");
+      drawSession.startTool("text");
+    }
+    rebuildEditSwatch("markup-panel-color-swatches", "markup-panel-color", false);
+    rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, borderOnlyPalette);
+    loadMarkup();
+    return {
+      loadMarkup,
+      startMarkupDraw,
+      startShapeDraw,
+      startTextPlacement,
+      toggleAddDetailMenu,
+      closeMarkupPanel,
+      closeOrFinishDraw,
+      deleteMarkupEdit,
+      openMarkupEditDialog,
+      getMarkupItems: () => markupItems,
+      isDrawBusy: () => drawSession.isBusy()
+    };
+  }
+
   // src/urbanlens/dashboard/frontend/ts/entries-classic/core.ts
   installGlobalLocationSearchEngine();
   installGlobalMarkupEngine();
+  window.createMarkupToolbar = createMarkupToolbar;
 })();

@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -471,7 +472,24 @@
 {% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
 {% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
-{% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=pin.effective_latitude|default:"42.6525" map_center_lng=pin.effective_longitude|default:"-73.7579" main_marker_owner_uuid=pin.uuid default_map_view=default_map_view openweathermap_api_key=openweathermap_api_key markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
+<div id="map-annotations-config" hidden
+     data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
+     data-map-center-lng="{{ pin.effective_longitude|default:"-73.7579" }}"
+     data-main-marker-owner-uuid="{{ pin.uuid }}"
+     data-default-map-view="{{ default_map_view }}"
+     data-openweathermap-api-key="{{ openweathermap_api_key }}"
+     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-create-url="{{ markup_create_url }}"
+     data-markup-edit-url-template="{{ markup_edit_url_template }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pin-create-url="{{ detail_pin_create_url }}"
+     data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-boundary-url="{{ boundary_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
+     data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+<script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 
 

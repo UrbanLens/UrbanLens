@@ -5,7 +5,8 @@ including local pins, addresses, coordinates, and Google Places), a base-layer
 switcher (street / satellite / topo) with a borders overlay toggle, and - when
 markup endpoints are configured and the map isn't readonly - the exact same
 "Add Detail" markup toolbar/side-panel as the pin detail and Location wiki
-maps (window.MarkupEngine via _markup_toolbar_panel.html/_markup_toolbar_script.html).
+maps (_markup_toolbar_panel.html + window.createMarkupToolbar, see
+ts/shared/markup-toolbar.ts).
 
 The route drawing is backed by a standalone MarkupMap:
   - The check-in detail page passes markup_map_uuid + the resolved
@@ -13,7 +14,7 @@ The route drawing is backed by a standalone MarkupMap:
     plus markup_map_view_url_template so viewport changes (pan/zoom/layer)
     autosave onto the map.
   - The check-in creation page passes no uuid but sets markup_map_create_url
-    (+ the markup_map_*_template vars consumed by _markup_toolbar_script.html):
+    (+ the markup_map_*_template vars consumed by createMarkupToolbar below):
     the first drawn annotation creates a draft MarkupMap, whose uuid lands in
     the hidden "markup_map" input so the create POST can link it.
 
@@ -139,11 +140,11 @@ so it's always available by the time this script runs - no typeof guard needed.
     _refreshLayerButtons();
 
     setTimeout(function () { map.invalidateSize(); }, 300);
-    // _markup_toolbar_script.html (included below when markup is enabled) renders
-    // every line/arrow/shape into a 'markupPane' - on the pin detail / Location
-    // wiki maps that pane is created by _map_annotations_script.html, but this
-    // page never includes that file, so it must create the pane itself or
-    // Leaflet throws when adding a shape to a nonexistent pane (the shape never
+    // window.createMarkupToolbar (below, when markup is enabled) renders every
+    // line/arrow/shape into a 'markupPane' - on the pin detail / Location wiki
+    // maps that pane is created by ts/entries/map-annotations.ts, but this page
+    // never runs that entry, so it must create the pane itself or Leaflet
+    // throws when adding a shape to a nonexistent pane (the shape never
     // renders - it looks like it "vanishes" the instant a draw gesture finishes).
     map.createPane('markupPane').style.zIndex = 550;
 
@@ -151,7 +152,7 @@ so it's always available by the time this script runs - no typeof guard needed.
     // Persists centre/zoom/layer/borders onto the backing MarkupMap (debounced)
     // so the map reopens exactly as the user left it. Inactive until a map
     // exists: on the creation page the uuid arrives via the
-    // 'ul:markup-map-created' event fired by _markup_toolbar_script.html.
+    // 'ul:markup-map-created' event fired by createMarkupToolbar.
     var _mapViewUrl = null;
     {% if markup_map_uuid and markup_map_view_url_template %}
     _mapViewUrl = '{{ markup_map_view_url_template }}'.replaceAll('11111111-1111-1111-1111-111111111111', '{{ markup_map_uuid }}');
@@ -181,7 +182,7 @@ so it's always available by the time this script runs - no typeof guard needed.
     {% endif %}
 
     // Initial viewport for a lazily created draft MarkupMap (read by
-    // _markup_toolbar_script.html when it POSTs to markup_map_create_url).
+    // createMarkupToolbar's getInitialView hook when it POSTs to markup_map_create_url).
     function _ulMarkupMapInitialView() {
         var c = map.getCenter();
         return { center_lat: c.lat, center_lng: c.lng, zoom: map.getZoom(), layer_mode: _layerMode, show_borders: _showBorders };
@@ -289,9 +290,35 @@ so it's always available by the time this script runs - no typeof guard needed.
 {% if not readonly %}
 {% if markup_json_url or markup_map_create_url %}
 <script>
-    // Shared with the pin detail / Location wiki maps - see that file's own doc comment.
-    const _markupLayer = L.layerGroup().addTo(map);
-    {% include "dashboard/partials/layout/_markup_toolbar_script.html" %}
+    // Shared with the pin detail / Location wiki maps - see ts/shared/markup-toolbar.ts's
+    // own doc comment (that module also backs _map_annotations_script.html's TS port).
+    var _markupLayer = L.layerGroup().addTo(map);
+    var _markupToolbar = window.createMarkupToolbar(map, _markupLayer, {
+        markupJsonUrl: "{{ markup_json_url|default:'' }}",
+        markupCreateUrl: "{{ markup_create_url|default:'' }}",
+        markupEditUrlTemplate: "{{ markup_edit_url_template|default:'' }}",
+        markupMapCreateUrl: "{{ markup_map_create_url|default:'' }}",
+        markupMapUuid: {% if markup_map_uuid %}"{{ markup_map_uuid }}"{% else %}null{% endif %},
+        markupMapJsonUrlTemplate: "{{ markup_map_json_url_template|default:'' }}",
+        markupMapMarkupUrlTemplate: "{{ markup_map_markup_url_template|default:'' }}",
+        markupMapMarkupEditUrlTemplate: "{{ markup_map_markup_edit_url_template|default:'' }}",
+        markupMapFieldId: "{{ markup_map_field_id|default:'markup-map-uuid-field' }}",
+        markupFillOpacity: {{ markup_fill_opacity|default:87 }},
+        markupBorderOpacity: {{ markup_border_opacity|default:100 }},
+        lineFinishTipDismissed: function () { return {% if not request.user.profile.show_onboarding_tips %}true{% else %}false{% endif %}; },
+        getInitialView: function () { return _ulMarkupMapInitialView(); },
+    });
+    var startMarkupDraw = _markupToolbar.startMarkupDraw;
+    var startShapeDraw = _markupToolbar.startShapeDraw;
+    var startTextPlacement = _markupToolbar.startTextPlacement;
+    var toggleAddDetailMenu = _markupToolbar.toggleAddDetailMenu;
+    var closeMarkupPanel = _markupToolbar.closeMarkupPanel;
+    var _closeMarkupDraw = _markupToolbar.closeOrFinishDraw;
+    var deleteMarkupEdit = _markupToolbar.deleteMarkupEdit;
+    var loadMarkup = _markupToolbar.loadMarkup;
+    // Read by this file's own map-click handler above (see "Skip while the
+    // markup toolbar ... is actively drawing").
+    var _drawSession = { isBusy: _markupToolbar.isDrawBusy };
 </script>
 {% endif %}
 {% elif markup_json_url %}

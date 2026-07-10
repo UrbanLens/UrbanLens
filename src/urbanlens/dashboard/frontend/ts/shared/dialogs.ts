@@ -23,6 +23,9 @@ export const toast = {
     warning(message: string): void {
         window.toastr.warning(message);
     },
+    info(message: string): void {
+        window.toastr.info(message);
+    },
 };
 
 /** Re-scans dynamically injected HTML (cloned tree-view nodes, innerHTML swaps) for hx-* attributes. */
