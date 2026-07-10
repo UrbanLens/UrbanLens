@@ -557,7 +557,8 @@
 }
 
 #safety-map {
-    height: 360px;
+    height: calc(100vh - 51rem);
+    min-height: 360px;
     border-radius: 12px;
     overflow: hidden;
 }

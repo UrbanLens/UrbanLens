@@ -2059,23 +2059,26 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-.addr-search-input {
-    flex: 1;
-    min-width: 0;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--ul-grey-8);
-    font-size: 0.78rem;
-    padding: 6px 0;
+// Specificity needed to override border in base. TODO will fix border declaration.
+div.container .addr-search-bar {
+    input.addr-search-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--ul-grey-8);
+        font-size: 0.78rem;
+        padding: 6px 0;
 
-    &::placeholder {
-        color: var(--ul-grey-6);
-    }
+        &::placeholder {
+            color: var(--ul-grey-6);
+        }
 
-    @include up($breakpoint-sm) {
-        font-size: 0.84rem;
-        padding: 10px 0;
+        @include up($breakpoint-sm) {
+            font-size: 0.84rem;
+            padding: 10px 0;
+        }
     }
 }
 

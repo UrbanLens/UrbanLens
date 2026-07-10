@@ -88,12 +88,15 @@ function notifBrowserRender() {
     if (Notification.permission === 'granted') {
         status.textContent = "Enabled - you'll get desktop notifications while UrbanLens is open in a background tab.";
         btn.hidden = true;
+        btn.style.display = 'none';
     } else if (Notification.permission === 'denied') {
         status.textContent = 'Blocked - allow notifications for this site in your browser settings to turn them on.';
         btn.hidden = true;
+        btn.style.display = 'none';
     } else {
         status.textContent = '';
         btn.hidden = false;
+        btn.style.display = 'block';
     }
 }
 function notifBrowserEnable() {

@@ -6,11 +6,14 @@ import datetime
 from decimal import Decimal
 from unittest import mock
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 
@@ -123,6 +126,135 @@ class CreatePinAndLogVisitTests(TestCase):
         with self.assertRaises(ValueError):
             create_pin_and_log_visit(self.profile, photo)
 
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_files_same_day_sibling_photos_directly(self, _mock_enqueue, _mock_resolve_name):
+        # A second photo from the same drop, close enough to match the pin the
+        # first photo is about to create, taken the same day. create_visit_suggestion
+        # would silently no-op here (a visit already exists for that day/place and
+        # no new participants would be added), so it must be filed directly instead
+        # of left stuck offering "create a pin" for a place that already has one.
+        sibling = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            latitude=Decimal(str(_LAT + 0.0003)),
+            longitude=Decimal(str(_LNG + 0.0003)),
+            taken_at=self.taken_at,
+        )
+
+        pin, visit = create_pin_and_log_visit(self.profile, self.photo)
+
+        sibling.refresh_from_db()
+        self.assertEqual(sibling.pin_id, pin.pk)
+        self.assertIsNotNone(sibling.visit_id)
+        self.assertNotEqual(sibling.visit_id, visit.pk)
+        self.assertEqual(PinVisit.objects.filter(pin=pin).count(), 2)
+        # The photo that was directly turned into the pin isn't re-suggested.
+        self.assertFalse(VisitSuggestion.objects.filter(origin_image=self.photo).exists())
+
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_resuggests_nearby_photos_from_a_different_day(self, _mock_enqueue, _mock_resolve_name):
+        # A photo at the same spot but from an earlier trip - not obviously the
+        # same visit, so it should get a normal confirmable suggestion instead
+        # of being silently filed.
+        older_taken_at = self.taken_at - datetime.timedelta(days=30)
+        older_photo = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            latitude=Decimal(str(_LAT + 0.0003)),
+            longitude=Decimal(str(_LNG + 0.0003)),
+            taken_at=older_taken_at,
+        )
+
+        pin, _visit = create_pin_and_log_visit(self.profile, self.photo)
+
+        suggestion = VisitSuggestion.objects.filter(origin_image=older_photo).first()
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.location_id, pin.location_id)
+        older_photo.refresh_from_db()
+        self.assertIsNone(older_photo.pin_id)
+
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_does_not_resuggest_photos_already_filed_or_dismissed(self, _mock_enqueue, _mock_resolve_name):
+        filed = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=baker.make("dashboard.Pin", profile=self.profile),
+            wiki=None,
+            latitude=Decimal(str(_LAT + 0.0002)),
+            longitude=Decimal(str(_LNG + 0.0002)),
+            taken_at=self.taken_at,
+        )
+        dismissed = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            organize_dismissed=True,
+            latitude=Decimal(str(_LAT + 0.0002)),
+            longitude=Decimal(str(_LNG + 0.0002)),
+            taken_at=self.taken_at,
+        )
+
+        create_pin_and_log_visit(self.profile, self.photo)
+
+        self.assertFalse(VisitSuggestion.objects.filter(origin_image=filed).exists())
+        self.assertFalse(VisitSuggestion.objects.filter(origin_image=dismissed).exists())
+
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_reuses_existing_pin_instead_of_colliding(self, _mock_enqueue, _mock_resolve_name):
+        # Simulates the staging bug: a second, unrelated photo resolves to the
+        # same Location as one that already has a pin (e.g. a stale "create a
+        # pin" card the resuggestion path didn't reach, or two photos just
+        # happening to land on the same spot) - it must reuse that pin rather
+        # than violate db_pin_unique_location_per_profile. Created only after
+        # the first call completes so it isn't itself swept up by that call's
+        # own resuggestion pass (covered separately above).
+        first_pin, first_visit = create_pin_and_log_visit(self.profile, self.photo)
+
+        second_photo = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            # Close enough that Location.objects.get_for_point() resolves to the
+            # same Location (50 m proximity fallback) as the first photo.
+            latitude=Decimal(str(_LAT + 0.0001)),
+            longitude=Decimal(str(_LNG + 0.0001)),
+            taken_at=self.taken_at,
+        )
+        second_pin, second_visit = create_pin_and_log_visit(self.profile, second_photo)
+
+        self.assertEqual(second_pin.pk, first_pin.pk)
+        self.assertEqual(Pin.objects.filter(profile=self.profile, location_id=first_pin.location_id).count(), 1)
+        self.assertNotEqual(second_visit.pk, first_visit.pk)
+        self.assertEqual(PinVisit.objects.filter(pin=first_pin).count(), 2)
+
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    def test_reused_pin_keeps_its_existing_name(self, _mock_enqueue, _mock_resolve_name):
+        create_pin_and_log_visit(self.profile, self.photo, name="Old Water Tower")
+
+        second_photo = baker.make(
+            "dashboard.Image",
+            profile=self.profile,
+            pin=None,
+            wiki=None,
+            latitude=Decimal(str(_LAT + 0.0001)),
+            longitude=Decimal(str(_LNG + 0.0001)),
+            taken_at=self.taken_at,
+        )
+        second_pin, _visit = create_pin_and_log_visit(self.profile, second_photo, name="Different Name")
+
+        self.assertEqual(second_pin.name, "Old Water Tower")
+
 
 class PhotoPinConfirmViewTests(TestCase):
     """The confirm-pin dialog GET, and the create-pin POST honouring its placement."""
@@ -140,6 +272,7 @@ class PhotoPinConfirmViewTests(TestCase):
             latitude=Decimal(str(_LAT)),
             longitude=Decimal(str(_LNG)),
             taken_at=timezone.make_aware(datetime.datetime(2024, 5, 4, 9, 0, 0)),
+            image=SimpleUploadedFile("photo.jpg", b"photo-bytes", content_type="image/jpeg"),
         )
 
     def test_confirm_dialog_renders_map_seeded_with_photo_coords(self):
@@ -169,10 +302,42 @@ class PhotoPinConfirmViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("refreshQueue", response["HX-Trigger"])
         self.photo.refresh_from_db()
         self.assertIsNotNone(self.photo.pin_id)
         self.assertEqual(self.photo.pin.name, "Ridge Overlook")
         self.assertEqual(Decimal(str(self.photo.pin.location.latitude)), Decimal("42.25"))
+
+    def test_create_pin_post_is_a_no_op_when_already_filed(self):
+        from django.urls import reverse
+
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        self.photo.pin = pin
+        self.photo.visit = baker.make("dashboard.PinVisit", pin=pin)
+        self.photo.save(update_fields=["pin", "visit"])
+
+        response = self.client.post(
+            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            {"latitude": "42.250000", "longitude": "-71.750000"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("already been filed", response["HX-Trigger"])
+        self.assertEqual(PinVisit.objects.filter(pin=pin).count(), 1)
+
+    @mock.patch("urbanlens.dashboard.controllers.photos.create_pin_and_log_visit", side_effect=RuntimeError("boom"))
+    def test_create_pin_post_surfaces_unexpected_errors_as_a_toast(self, _mock_create):
+        from django.urls import reverse
+
+        response = self.client.post(
+            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            {"latitude": "42.250000", "longitude": "-71.750000"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Something went wrong", response["HX-Trigger"])
+        self.photo.refresh_from_db()
+        self.assertIsNone(self.photo.pin_id)
 
 
 class LogVisitOnPinTests(TestCase):

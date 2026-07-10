@@ -171,6 +171,26 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
     return pin.visit_history.filter(visited_at__date=visited_at.date()).order_by("-visited_at").first()
 
 
+def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal) -> Location:
+    """Return the shared Location for a point, creating one with a canonical name if none exists yet.
+
+    Args:
+        latitude: Point latitude.
+        longitude: Point longitude.
+
+    Returns:
+        The existing or newly created Location.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.get_for_point(float(latitude), float(longitude))
+    if location is None:
+        from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+        location = _create_location_with_canonical_name(float(latitude), float(longitude))
+    return location
+
+
 def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Create a bare pin for a profile at a place, deliberately copying nothing private.
 
@@ -186,13 +206,7 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
         The newly created Pin.
     """
     if location is None:
-        from urbanlens.dashboard.models.location.model import Location
-
-        location = Location.objects.get_for_point(float(latitude), float(longitude))
-        if location is None:
-            from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
-
-            location = _create_location_with_canonical_name(float(latitude), float(longitude))
+        location = resolve_location_for_point(latitude, longitude)
     return Pin.objects.create(profile=profile, location=location)
 
 

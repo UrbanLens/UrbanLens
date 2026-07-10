@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
@@ -75,7 +75,7 @@ def _attention_cards(profile: Profile) -> list[dict]:
     return cards
 
 
-def _toast(message: str, level: str = "success", *, status: int = 200) -> HttpResponse:
+def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
     Uses the global ``showToast`` HX-Trigger handler wired up in ``themes/base.html``.
@@ -84,13 +84,21 @@ def _toast(message: str, level: str = "success", *, status: int = 200) -> HttpRe
         message: Text to display in the toast.
         level: toastr level (``success``/``info``/``warning``/``error``).
         status: HTTP status code.
+        refresh_queue: When True, also fires ``refreshQueue`` so the whole
+            organize queue re-fetches - used when an action may have changed
+            *other* cards too (e.g. creating a pin can retroactively file or
+            suggest other unfiled photos at the same place), not just the one
+            being swapped out here.
 
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
         ``outerHTML`` removes the card from the queue while the toast fires.
     """
+    triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
+    if refresh_queue:
+        triggers["refreshQueue"] = True
     response = HttpResponse("", status=status)
-    response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": level}})
+    response["HX-Trigger"] = json.dumps(triggers)
     return response
 
 
@@ -275,6 +283,12 @@ class PhotoActionView(LoginRequiredMixin, View):
         and an optional ``name``. When those are absent - e.g. a legacy one-click
         request - the photo's own coordinates are used.
         """
+        if image.pin_id:
+            # Another card's create-pin/log-visit call can retroactively file this
+            # photo out from under a queue the client hasn't refreshed yet (see
+            # create_pin_and_log_visit's resuggestion pass) - avoid logging a
+            # redundant second visit for a stale click.
+            return _toast("This photo has already been filed.", "info", refresh_queue=True)
         lat = _parse_float(request.POST.get("latitude"))
         lng = _parse_float(request.POST.get("longitude"))
         if lat is None or lng is None:
@@ -285,8 +299,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         # TODO: We must sanitize the name to prevent XSS attacks.
         _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
         if visit is None:
-            return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info")
-        return _toast("Pin created and visit logged.")
+            return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)
+        return _toast("Pin created and visit logged.", refresh_queue=True)
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Log a visit on the pin the user chose in the manual search."""
@@ -334,7 +348,14 @@ class PhotoActionView(LoginRequiredMixin, View):
         if handler is None:
             raise Http404
         image, profile = self._get_image(request, image_id)
-        return handler(self, request, image, profile)
+        try:
+            return handler(self, request, image, profile)
+        except Exception:
+            # Any of these handlers can hit an unexpected DB/API failure - always
+            # surface it as a toast (per project UI standards) instead of letting
+            # it fall through to a bare 500 the client may not report cleanly.
+            logger.exception("Photo action '%s' failed for image %s", action, image_id)
+            return _render_card(request, image, toast="Something went wrong. Please try again.", level="error")
 
 
 class PhotoPinSearchView(LoginRequiredMixin, View):

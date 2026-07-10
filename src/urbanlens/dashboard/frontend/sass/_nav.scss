@@ -79,6 +79,18 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     padding: 0;
     gap: 0.25rem;
     flex: 1;
+    
+    > li {
+        &:not(.app-nav-link--active):hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        &:hover {
+            a {
+                color: #fff;
+            }
+        }
+    }
 }
 
 .app-nav-link {
@@ -93,22 +105,11 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
-    &:hover {
-        background: rgba(255, 255, 255, 0.3);
-        color: var(--ul-black);
-    }
-
-// Current section - stays visually distinct from the transient :hover state.
-    &--active > .app-nav-link {
-        background: rgba(255, 255, 255, 0.14);
-        color: #fff;
+    // Current section - stays visually distinct from the transient :hover state.
+    &--active {
+        background: rgba(255, 255, 255, 0.05);
         font-weight: 700;
         box-shadow: inset 0 -2px 0 var(--ul-primary-color);
-
-        &:hover {
-            background: rgba(255, 255, 255, 0.3);
-            color: var(--ul-black);
-        }
     }
 }
 
