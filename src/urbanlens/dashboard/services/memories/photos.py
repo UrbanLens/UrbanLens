@@ -97,9 +97,9 @@ def create_pin_and_log_visit(
     """Create a pin for a geotagged photo and log a visit there in one step.
 
     Used for a photo that has GPS but matches none of the user's existing pins.
-    A minimal pin is created (copying nothing private) and a background task
-    resolves its shared Location/address; a photo-sourced PinVisit is logged and
-    the photo is attached to both the new pin and that visit.
+    A minimal pin is created (copying nothing private), its shared Location is
+    resolved synchronously, and a photo-sourced PinVisit is logged; the photo
+    is attached to both the new pin and that visit.
 
     The caller may override where the pin is placed and give it a name - the
     Memories confirmation dialog lets the user drag the marker and name the pin

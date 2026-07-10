@@ -1,0 +1,53 @@
+{% comment %}
+One community stat item (danger / vulnerability / priority / rating) on a Wiki.
+Shows the community composite (average of every profile's vote) alongside the
+viewer's own vote, which is a clickable star widget just like the pin
+equivalent - clicking casts a vote and only ever recalculates the composite.
+
+Usage:
+  {% include "dashboard/partials/pins/_wiki_stat_rating_item.html" with wiki=wiki field="danger" label="Danger" help="..." modifier="danger" wide=False my_vote=my_vote composite=composite %}
+{% endcomment %}
+<div class="wiki-stat-item" id="wiki-stat-{{ field }}">
+    <span class="field-label">
+        {% include "dashboard/partials/ui/_tooltip_label.html" with label=label help=help wide=wide %}
+    </span>
+    <div class="wiki-stat-rows">
+        <div class="wiki-stat-row wiki-stat-row--composite">
+            <span class="wiki-stat-row-label">Community</span>
+            <span class="star-rating-display{% if modifier %} star-rating-display--{{ modifier }}{% endif %}"
+                  title="{% if composite.count %}{{ composite.exact }} average from {{ composite.count }} vote{{ composite.count|pluralize }}{% else %}No votes yet{% endif %}">
+                {% for i in "12345" %}
+                <span class="sr-star-static{% if composite.rounded and forloop.counter <= composite.rounded %} sr-star-static--on{% endif %}">★</span>
+                {% endfor %}
+            </span>
+            {% if composite.count %}
+            <span class="wiki-stat-count">{{ composite.exact }} · {{ composite.count }} vote{{ composite.count|pluralize }}</span>
+            {% else %}
+            <span class="wiki-stat-count wiki-stat-count--empty">No votes yet</span>
+            {% endif %}
+        </div>
+        <div class="wiki-stat-row wiki-stat-row--mine">
+            <span class="wiki-stat-row-label">Your vote</span>
+            <span class="star-rating-interactive{% if modifier %} star-rating-interactive--{{ modifier }}{% endif %}">
+                {% for i in "12345"|make_list %}
+                <button type="button"
+                        class="sr-star-btn{% if my_vote and forloop.counter <= my_vote %} sr-star-btn--on{% endif %}"
+                        hx-post="{% url 'location.wiki.stat_vote' wiki.location.slug field %}"
+                        hx-target="#wiki-stat-{{ field }}"
+                        hx-swap="outerHTML"
+                        hx-vals='{"value": {{ forloop.counter }}}'
+                        title="{{ label }} {{ forloop.counter }}">★</button>
+                {% endfor %}
+                {% if my_vote %}
+                <button type="button"
+                        class="sr-star-clear"
+                        hx-post="{% url 'location.wiki.stat_vote' wiki.location.slug field %}"
+                        hx-target="#wiki-stat-{{ field }}"
+                        hx-swap="outerHTML"
+                        hx-vals='{"value": 0}'
+                        title="Clear your {{ label|lower }} vote">x</button>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>

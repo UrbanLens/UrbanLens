@@ -75,6 +75,10 @@ class WelcomeRedirectChainTests(TestCase):
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
+        # A prior user absorbs the first-user site-admin bootstrap promotion
+        # (see promote_first_user_if_needed) so the users under test here
+        # exercise only the welcome/profile-setup redirect chain.
+        baker.make(User)
 
     def _get_redirect(self, user: User) -> str:
         request = self.factory.get(reverse("post_login"))

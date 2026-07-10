@@ -276,6 +276,55 @@
         color: var(--ul-grey-5);
     }
 
+    // -- Community ratings (composite + your own vote per field) -----------
+    .wiki-ratings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .wiki-stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+        padding-bottom: .85rem;
+        border-bottom: 1px solid var(--ul-grey-1a);
+
+        &:last-child {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+    }
+
+    .wiki-stat-rows {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+    }
+
+    .wiki-stat-row {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+
+    .wiki-stat-row-label {
+        font-size: .74rem;
+        font-weight: 600;
+        color: var(--ul-grey-5);
+        min-width: 5.5rem;
+    }
+
+    .wiki-stat-count {
+        font-size: .76rem;
+        color: var(--ul-grey-5);
+
+        &--empty {
+            font-style: italic;
+        }
+    }
+
     // -- Location map card -------------------------------------------------
     .location-map .map-wrapper {
         position: relative;

@@ -190,7 +190,14 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
+        location = get_object_or_404(Location, slug=location_slug)
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            # A location with no wiki yet simply has no child wikis to show -
+            # the map overlay shouldn't error just because nobody has created
+            # a wiki page for this spot.
+            return JsonResponse({"detail_pins": []})
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
 

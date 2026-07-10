@@ -10,7 +10,8 @@ Context:
 {% for img in images %}
 <li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.image.url }}">
     <button type="button" class="photo-tile-btn" onclick="photosOpenLightbox({{ img.pk }})">
-        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
         {% if img.latitude and img.longitude %}
         <span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>
         {% endif %}

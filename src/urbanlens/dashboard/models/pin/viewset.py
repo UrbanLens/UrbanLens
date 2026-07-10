@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -67,5 +68,9 @@ class PinViewSet(viewsets.ModelViewSet):
                 instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
+        subtree = list(Pin.objects.filter(pk=instance.pk).with_descendants())
+        stash_for_undo("pin", subtree, instance.profile)
+        for descendant in subtree:
+            descendant.delete()
         logger.info("Pin with id %s deleted", instance.id)
-        return super().destroy(request, *args, **kwargs)
+        return Response(status=status.HTTP_204_NO_CONTENT)

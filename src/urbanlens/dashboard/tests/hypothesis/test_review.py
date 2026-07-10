@@ -47,7 +47,7 @@ class ReviewRatingBoundsTests(TestCase):
     @given(valid_rating)
     @_db_settings
     def test_valid_rating_passes_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
+        review = Review(rating=rating, profile=self.profile, pin=self.pin)
         try:
             review.full_clean()  # must not raise
         except ValidationError as exc:
@@ -56,14 +56,14 @@ class ReviewRatingBoundsTests(TestCase):
     @given(invalid_rating_low)
     @_db_settings
     def test_rating_below_zero_fails_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
+        review = Review(rating=rating, profile=self.profile, pin=self.pin)
         with self.assertRaises(ValidationError, msg=f"Rating {rating} should fail validation"):
             review.full_clean()
 
     @given(invalid_rating_high)
     @_db_settings
     def test_rating_above_five_fails_validation(self, rating: int) -> None:
-        review = Review(rating=rating, review="test", profile=self.profile, pin=self.pin)
+        review = Review(rating=rating, profile=self.profile, pin=self.pin)
         with self.assertRaises(ValidationError, msg=f"Rating {rating} should fail validation"):
             review.full_clean()
 

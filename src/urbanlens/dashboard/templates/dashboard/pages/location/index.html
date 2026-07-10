@@ -903,18 +903,6 @@
         });
     }());
 
-    // Swap a broken/missing thumbnail <img> for an icon tile instead of
-    // hiding its wrapper - keeps records with no (or a dead) preview image
-    // visible, and their row/tile the same size as ones that have an image,
-    // instead of collapsing and breaking the grid/row's consistent styling.
-    window.urbanlensMediaThumbFallback = function (img, icon, className) {
-        var span = document.createElement('span');
-        span.className = className || 'media-item-thumb media-item-thumb-fallback';
-        span.setAttribute('aria-hidden', 'true');
-        span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
-        img.replaceWith(span);
-    };
-
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one
     // slow provider never blocks the others from appearing. Each loader is a

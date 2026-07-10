@@ -12,7 +12,8 @@ Context:
 {% endcomment %}
 <article class="photo-card photo-card--{{ state }}" id="photo-card-{{ image.pk }}">
     <a class="photo-card-thumb" href="{{ image.image.url }}" target="_blank" rel="noopener">
-        <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy">
+        <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy"
+             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-card-thumb-fallback')">
     </a>
 
     <div class="photo-card-body">

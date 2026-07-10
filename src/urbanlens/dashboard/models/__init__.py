@@ -44,3 +44,4 @@ from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitS
 from urbanlens.dashboard.models.visits import PinVisit, VisitSource
 from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer, WikiViewSet
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote

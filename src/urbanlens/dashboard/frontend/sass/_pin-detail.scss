@@ -1542,6 +1542,27 @@
     }
 }
 
+// -- Read-only star display (wiki community composite) ---------------------
+.star-rating-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.sr-star-static {
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--ul-grey-3);
+
+    &--on {
+        color: $color-amber-500;
+    }
+}
+
+.star-rating-display--priority .sr-star-static--on { color: $color-indigo-500; }
+.star-rating-display--vulnerability .sr-star-static--on { color: $color-red-500; }
+.star-rating-display--danger .sr-star-static--on { color: $color-orange-500; }
+
 .sr-star-clear {
     background: none;
     border: none;
@@ -1722,10 +1743,72 @@ body.page-location-details {
     }
 }
 
-// -- Create-community-wiki dialog (seed-field picker) -----------------------
+// -- Create-community-wiki dialog (seed-field/alias/photo picker) -----------
 
 .pin-wiki-create-dialog {
-    max-width: 460px;
+    max-width: 560px;
+
+    .ul-dialog-body {
+        padding: 1.25rem 1.4rem 1.4rem;
+    }
+}
+
+.wiki-create-intro {
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+    margin: 0 0 .9rem;
+    line-height: 1.5;
+}
+
+.wiki-create-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    background: var(--ul-color-accent-bg, rgba(99, 102, 241, .07));
+    border-radius: $radius-md;
+    padding: .6rem .75rem;
+    margin: 0 0 1.1rem;
+    line-height: 1.45;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        margin-top: .1rem;
+        color: var(--ul-color-accent-fg, $color-indigo-500);
+    }
+}
+
+.wiki-create-section {
+    margin-bottom: 1.15rem;
+
+    &:last-of-type {
+        margin-bottom: 0;
+    }
+}
+
+.wiki-create-section-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0 0 .1rem;
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: var(--primary-color);
+    }
+}
+
+.wiki-create-section-hint {
+    margin: .1rem 0 .5rem;
+    font-size: .76rem;
+    color: var(--ul-grey-5);
 }
 
 .wiki-seed-hint {
@@ -1736,26 +1819,45 @@ body.page-location-details {
 
 .wiki-seed-list {
     list-style: none;
-    margin: 0 0 .8rem;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
     gap: .35rem;
-    max-height: 45vh;
+    max-height: 40vh;
     overflow-y: auto;
 
     label {
         display: flex;
-        align-items: baseline;
-        gap: .5rem;
-        padding: .4rem .6rem;
+        align-items: center;
+        gap: .55rem;
+        padding: .5rem .7rem;
         border: 1px solid var(--ul-grey-1a);
         border-radius: $radius-md;
         cursor: pointer;
+        transition: border-color .12s, background .12s;
 
         &:hover {
             background: var(--ul-grey-1b);
+            border-color: var(--ul-grey-2b);
         }
+    }
+
+    input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 1.05rem;
+        height: 1.05rem;
+        accent-color: var(--primary-color);
+    }
+}
+
+.wiki-seed-item--locked label {
+    cursor: default;
+    background: var(--ul-grey-1a);
+
+    &:hover {
+        background: var(--ul-grey-1a);
+        border-color: var(--ul-grey-1a);
     }
 }
 
@@ -1772,6 +1874,108 @@ body.page-location-details {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.wiki-seed-badge {
+    margin-left: auto;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ul-color-accent-fg, $color-indigo-600);
+    background: var(--ul-color-accent-bg, rgba(99, 102, 241, .1));
+    padding: .15rem .45rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+// -- Photo picker: thumbnail grid with a checkbox overlay per photo ---------
+
+.wiki-seed-photo-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: .5rem;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.wiki-seed-photo {
+    aspect-ratio: 1 / 1;
+    border-radius: $radius-md;
+    overflow: hidden;
+    position: relative;
+
+    label {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        position: relative;
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: opacity .12s;
+    }
+
+    input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .wiki-seed-photo-check {
+        position: absolute;
+        top: .3rem;
+        right: .3rem;
+        width: 1.2rem;
+        height: 1.2rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, .45);
+        border: 1.5px solid rgba(255, 255, 255, .85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s, border-color .12s;
+
+        .material-symbols-outlined {
+            font-size: .8rem;
+            color: transparent;
+            transition: color .12s;
+        }
+    }
+
+    input[type="checkbox"]:checked ~ .wiki-seed-photo-check {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+
+        .material-symbols-outlined {
+            color: #fff;
+        }
+    }
+
+    input[type="checkbox"]:focus-visible ~ .wiki-seed-photo-check {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.wiki-seed-photo-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 1.4rem; }
 }
 
 .pin-wiki-box-info {

@@ -173,6 +173,18 @@
             document.addEventListener('click', _guard, true);
             document.addEventListener('submit', _guard, true);
         }());
+
+        // Swap a broken/missing thumbnail <img> for an icon tile instead of
+        // hiding its wrapper - keeps records with no (or a dead) preview image
+        // visible, and their row/tile the same size as ones that have an image,
+        // instead of collapsing and breaking the grid/row's consistent styling.
+        window.urbanlensMediaThumbFallback = function (img, icon, className) {
+            var span = document.createElement('span');
+            span.className = className || 'media-item-thumb media-item-thumb-fallback';
+            span.setAttribute('aria-hidden', 'true');
+            span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
+            img.replaceWith(span);
+        };
     </script>
     <script>
     // -- Comment utilities -----------------------------------------------------
@@ -1060,7 +1072,70 @@
         }
 
         // -- Comment map viewer ------------------------------------------------
-        var _viewerMaps = {};   // commentId → L.Map
+        // commentId → { map, tileLayer, bordersLayer, mode, showBorders }
+        var _viewerMaps = {};
+
+        // Builds (once per dialog) the read-only layer-switch toolbar shown below
+        // the expanded map: view-only (no draw tools), but lets the viewer flip
+        // between street/satellite/topo and toggle the borders overlay, same as
+        // the composer's own layer buttons.
+        function _ensureViewerToolbar(dlg, commentId) {
+            var existing = dlg.querySelector('.comment-map-view-toolbar');
+            if (existing) return existing;
+
+            var toolbar = document.createElement('div');
+            toolbar.className = 'comment-map-view-toolbar';
+            toolbar.innerHTML =
+                '<span class="cmc-toolbar-label">Layer:</span>' +
+                '<button type="button" class="cmc-layer-btn" data-layer="standard" title="Street map"><i class="material-symbols-outlined">map</i></button>' +
+                '<button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite"><i class="material-symbols-outlined">globe</i></button>' +
+                '<button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic"><i class="material-symbols-outlined">terrain</i></button>' +
+                '<span class="cmc-toolbar-sep"></span>' +
+                '<button type="button" class="cmc-layer-btn" data-borders-toggle title="Borders overlay"><i class="material-symbols-outlined">public</i></button>';
+
+            var el = document.getElementById('comment-map-view-' + commentId);
+            el.insertAdjacentElement('afterend', toolbar);
+
+            toolbar.querySelectorAll('[data-layer]').forEach(function (btn) {
+                btn.addEventListener('click', function () { _setViewerLayer(commentId, btn.dataset.layer); });
+            });
+            toolbar.querySelector('[data-borders-toggle]').addEventListener('click', function () {
+                var v = _viewerMaps[commentId];
+                if (v) _setViewerBorders(commentId, !v.showBorders);
+            });
+            return toolbar;
+        }
+
+        function _syncViewerToolbar(dlg, commentId) {
+            var v = _viewerMaps[commentId];
+            if (!v) return;
+            dlg.querySelectorAll('.comment-map-view-toolbar [data-layer]').forEach(function (b) {
+                b.classList.toggle('is-active', b.dataset.layer === v.mode);
+            });
+            var bordersBtn = dlg.querySelector('.comment-map-view-toolbar [data-borders-toggle]');
+            if (bordersBtn) bordersBtn.classList.toggle('is-active', v.showBorders);
+        }
+
+        function _setViewerLayer(commentId, mode) {
+            var v = _viewerMaps[commentId];
+            if (!v || !_TILE_LAYERS[mode]) return;
+            v.map.removeLayer(v.tileLayer);
+            v.mode = mode;
+            v.tileLayer = _makeTileLayer(mode);
+            // Tile layers must render below the markup/reference-marker panes.
+            v.tileLayer.addTo(v.map);
+            v.tileLayer.bringToBack();
+            _syncViewerToolbar(document.getElementById('comment-map-dialog-' + commentId), commentId);
+        }
+
+        function _setViewerBorders(commentId, on) {
+            var v = _viewerMaps[commentId];
+            if (!v) return;
+            v.showBorders = on;
+            if (on) { v.bordersLayer.addTo(v.map); }
+            else if (v.map.hasLayer(v.bordersLayer)) { v.map.removeLayer(v.bordersLayer); }
+            _syncViewerToolbar(document.getElementById('comment-map-dialog-' + commentId), commentId);
+        }
 
         window._expandCommentMap = function (commentId) {
             if (typeof L === 'undefined') return;
@@ -1072,8 +1147,8 @@
             // Reuse cached map only when its container is still in the live document.
             // After an HTMX swap the old element is detached, so we must reinitialise.
             var cached = _viewerMaps[commentId];
-            if (cached && document.body.contains(cached.getContainer())) {
-                cached.invalidateSize();
+            if (cached && document.body.contains(cached.map.getContainer())) {
+                cached.map.invalidateSize();
                 return;
             }
             delete _viewerMaps[commentId];
@@ -1091,8 +1166,11 @@
             el.style.minHeight = '300px';
 
             var viewMap = L.map(el);
-            _makeTileLayer(data.layer_mode || 'standard').addTo(viewMap);
-            if (data.show_borders) _makeBordersLayer().addTo(viewMap);
+            var mode = data.layer_mode || 'standard';
+            var tileLayer = _makeTileLayer(mode);
+            tileLayer.addTo(viewMap);
+            var bordersLayer = _makeBordersLayer();
+            if (data.show_borders) bordersLayer.addTo(viewMap);
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
@@ -1102,7 +1180,16 @@
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
 
             viewMap.invalidateSize();
-            _viewerMaps[commentId] = viewMap;
+            _viewerMaps[commentId] = {
+                map: viewMap,
+                tileLayer: tileLayer,
+                bordersLayer: bordersLayer,
+                mode: mode,
+                showBorders: !!data.show_borders,
+            };
+
+            _ensureViewerToolbar(dlg, commentId);
+            _syncViewerToolbar(dlg, commentId);
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {
@@ -1117,6 +1204,18 @@
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
+
+                // Clicking anywhere on the preview (not just the "Expand" button)
+                // opens the read-only, larger map viewer.
+                if (!preview.dataset.expandBound) {
+                    preview.dataset.expandBound = '1';
+                    preview.classList.add('comment-map-preview--clickable');
+                    preview.addEventListener('click', function (e) {
+                        if (e.target.closest('.comment-map-expand-btn')) return;
+                        if (id) window._expandCommentMap(id);
+                    });
+                }
+
                 if (!thumb || thumb.dataset.initialized) return;
                 var script = document.getElementById('comment-map-data-' + id);
                 if (!script) return;

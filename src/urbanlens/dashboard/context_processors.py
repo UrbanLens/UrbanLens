@@ -101,14 +101,31 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
         return {"env_indicator_type": "", "env_indicator_label": ""}
 
 
+#: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
+#: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
+_NAV_SECTION_ALIASES = {"pin": "map"}
+
+
 def add_page_name(request: HttpRequest) -> dict[str, str]:
+    """Expose the current page and nav-bar section to every template.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``page_name`` (the resolved URL name, sanitized for use as a
+        CSS class) and ``nav_section`` (the URL name's leading ``section.``
+        segment, used by the nav bar to highlight the active link).
+    """
     resolver_match = request.resolver_match
     if resolver_match is None:
-        return {"page_name": ""}
-    page_name = resolver_match.url_name or ""
+        return {"page_name": "", "nav_section": ""}
+    url_name = resolver_match.url_name or ""
     # This will be a className, so replace anything that would trip up css
-    page_name = re.sub(r"[^a-zA-Z0-9]", "-", page_name)
-    return {"page_name": page_name}
+    page_name = re.sub(r"[^a-zA-Z0-9]", "-", url_name)
+    section = url_name.split(".", 1)[0] if url_name else ""
+    nav_section = _NAV_SECTION_ALIASES.get(section, section)
+    return {"page_name": page_name, "nav_section": nav_section}
 
 
 def add_distance_units(request: HttpRequest) -> dict[str, str]:

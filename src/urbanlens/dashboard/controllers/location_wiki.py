@@ -15,7 +15,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,58 @@ _WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vp
 # security/dates live on the Wiki; latitude/longitude repoint the Wiki to a
 # different (find-or-created) Location rather than mutating a shared row.
 _WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
+
+# Metadata for the four community stat votes (danger / vulnerability / priority /
+# rating) shown on the wiki page - the shared-place equivalent of a pin's own
+# STAT_FIELD_META (see controllers/pin_edit.py), reworded for a community voice
+# since these are a composite of every contributing profile's vote, not one
+# person's opinion.
+WIKI_STAT_FIELD_META = {
+    "danger": {
+        "label": "Danger",
+        "help": "How hazardous this site feels to explorers - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme).",
+        "modifier": "danger",
+        "wide": True,
+    },
+    "priority": {
+        "label": "Priority",
+        "help": "How urgently the community feels this place deserves a visit (1 = low, 5 = must visit soon).",
+        "modifier": "priority",
+        "wide": False,
+    },
+    "rating": {
+        "label": "Rating",
+        "help": "The community's overall quality rating for this place.",
+        "modifier": "",
+        "wide": False,
+    },
+    "vulnerability": {
+        "label": "Vulnerability",
+        "help": "How at-risk or fragile this site feels to the community - useful for planning and sharing responsibly.",
+        "modifier": "vulnerability",
+        "wide": True,
+    },
+}
+
+
+def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
+    """Build the template context for one community stat item.
+
+    Args:
+        wiki: The wiki the vote/composite belongs to.
+        field: One of :class:`WikiStatField`'s values.
+        profile: The viewing profile, used to look up their own vote.
+
+    Returns:
+        Dict with the composite, the viewer's own vote, and that field's
+        label/help/modifier/wide metadata.
+    """
+    return {
+        "field": field,
+        "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
+        "composite": WikiStatVote.objects.composite(wiki, field),
+        **WIKI_STAT_FIELD_META[field],
+    }
 
 
 def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
@@ -128,6 +181,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "location": location,
                 "pin_count": pin_count,
                 "first_pinned": first_pinned,
+                "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -372,3 +426,36 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         target_edit.delete()
 
         return _render_history(request, location, wiki)
+
+
+class WikiStatVoteView(LoginRequiredMixin, View):
+    """Cast or clear the requester's vote on one community stat field.
+
+    POST /location/<slug>/wiki/stat/<field>/vote/
+    Body: ``value`` (1-5) to cast a vote, or 0/absent to clear it.
+
+    Re-renders just that stat item - both the recalculated composite and the
+    viewer's own vote - never a full page reload.
+    """
+
+    def post(self, request, location_slug, field):
+        if field not in WikiStatField.values:
+            raise Http404
+        _location, wiki = _resolve_wiki(location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        try:
+            value = int(request.POST.get("value") or 0)
+        except (TypeError, ValueError):
+            value = 0
+
+        if 1 <= value <= 5:
+            WikiStatVote.objects.update_or_create(wiki=wiki, profile=profile, field=field, defaults={"value": value})
+        else:
+            WikiStatVote.objects.filter(wiki=wiki, profile=profile, field=field).delete()
+
+        return render(
+            request,
+            "dashboard/partials/pins/_wiki_stat_rating_item.html",
+            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile)},
+        )

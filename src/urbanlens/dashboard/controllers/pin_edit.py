@@ -361,7 +361,7 @@ class PinEditView(LoginRequiredMixin, View):
             Review.objects.update_or_create(
                 profile=request.user.profile,
                 pin=pin,
-                defaults={"rating": rating, "review": ""},
+                defaults={"rating": rating},
             )
         elif rating == 0:
             Review.objects.filter(profile=request.user.profile, pin=pin).delete()

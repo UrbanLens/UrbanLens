@@ -716,6 +716,11 @@ urlpatterns = [
                     image_gallery.WikiImageView.as_view(),
                     name="location.wiki.gallery.image",
                 ),
+                path(
+                    "<slug:location_slug>/wiki/stat/<str:field>/vote/",
+                    location_wiki.WikiStatVoteView.as_view(),
+                    name="location.wiki.stat_vote",
+                ),
             ],
         ),
     ),

@@ -15,10 +15,13 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_stat_vote import WikiStatVote
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
@@ -26,16 +29,29 @@ logger = logging.getLogger(__name__)
 #: Security fields shared between Pin and Wiki (both inherit SecurityModel).
 SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
-#: Pin fields (or field groups) a user may copy into a newly created wiki.
-#: Keys are the tokens posted by the create-wiki dialog.
-SEEDABLE_FIELDS = ("name", "description", "date_abandoned", "date_last_active", "security", "badges")
+#: Pin scalar fields a user may copy into a newly created wiki. Keys are the
+#: tokens posted by the create-wiki dialog. Aliases and photos are seeded
+#: separately (per-item selection, see alias_ids/image_ids on create_for_pin).
+SEEDABLE_FIELDS = ("name", "danger", "vulnerability")
+
+#: Stat fields seeded as the pin owner's own initial WikiStatVote, rather than
+#: a plain scalar copy - a Wiki has no single "danger"/"vulnerability" value of
+#: its own, only the composite of every contributing profile's vote.
+_SEEDABLE_VOTE_FIELDS = ("danger", "vulnerability")
 
 
 @dataclass(slots=True)
 class WikiCreationService:
     """Create the community Wiki for a pin's Location, seeded from chosen pin fields."""
 
-    def create_for_pin(self, pin: Pin, *, include_fields: set[str] | None = None) -> tuple[Wiki, bool]:
+    def create_for_pin(
+        self,
+        pin: Pin,
+        *,
+        include_fields: set[str] | None = None,
+        alias_ids: set[int] | None = None,
+        image_ids: set[int] | None = None,
+    ) -> tuple[Wiki, bool]:
         """Create (or fetch) the Wiki for a pin's Location and link the pin to it.
 
         Args:
@@ -44,6 +60,9 @@ class WikiCreationService:
                 copy from their pin into the new wiki. Ignored when the wiki
                 already exists (never overwrite community content with
                 personal data).
+            alias_ids: PKs of the pin's own (non-official) aliases to copy in
+                as wiki aliases, on top of official ones (always copied).
+            image_ids: PKs of the pin's own photos to also attach to the wiki.
 
         Returns:
             Tuple of (Wiki, created).
@@ -59,22 +78,18 @@ class WikiCreationService:
         defaults: dict = {}
         if "name" in include and pin.name and pin.name.strip():
             defaults["name"] = pin.name.strip()
-        if "description" in include and pin.description:
-            defaults["description"] = pin.description
-        if "date_abandoned" in include and pin.date_abandoned:
-            defaults["date_abandoned"] = pin.date_abandoned
-        if "date_last_active" in include and pin.date_last_active:
-            defaults["date_last_active"] = pin.date_last_active
-        if "security" in include:
-            for field in SECURITY_FIELDS:
-                value = getattr(pin, field, None)
-                if value and value != "unknown":
-                    defaults[field] = value
 
         with transaction.atomic():
             wiki, created = Wiki.objects.get_or_create_for_location(location, defaults=defaults)
-            if created and "badges" in include:
-                wiki.badges.set(pin.badges.all())
+            if created:
+                for field in _SEEDABLE_VOTE_FIELDS:
+                    if field not in include:
+                        continue
+                    value = getattr(pin, field, 0)
+                    if value:
+                        WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
+                self._seed_aliases(pin, wiki, alias_ids or set())
+                self._seed_photos(pin, wiki, image_ids or set())
             # Link the pin (and any of the user's other pins on this location
             # that aren't linked yet) to the community wiki.
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
@@ -89,9 +104,21 @@ class WikiCreationService:
             transaction.on_commit(_enqueue)
         return wiki, created
 
+    def _seed_aliases(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
+        """Copy the pin's official aliases (always) plus any chosen extras into the wiki."""
+        official = pin.aliases.filter(kind=AliasType.OFFICIAL)
+        chosen = pin.aliases.filter(pk__in=alias_ids).exclude(kind=AliasType.OFFICIAL)
+        for alias in list(official) + list(chosen):
+            WikiAlias.objects.get_or_create(wiki=wiki, name=alias.name, defaults={"kind": alias.kind, "source": alias.source})
+
+    def _seed_photos(self, pin: Pin, wiki: Wiki, image_ids: set[int]) -> None:
+        """Attach the chosen photos to the wiki's gallery, keeping their pin link intact."""
+        if image_ids:
+            pin.images.filter(pk__in=image_ids).update(wiki=wiki)
+
 
 def seedable_field_values(pin: Pin) -> list[dict]:
-    """Describe which pin fields have values worth offering in the create-wiki dialog.
+    """Describe which pin scalar fields have values worth offering in the create-wiki dialog.
 
     Args:
         pin: The pin whose fields are candidates for seeding.
@@ -103,16 +130,22 @@ def seedable_field_values(pin: Pin) -> list[dict]:
     candidates: list[dict] = []
     if pin.name and pin.name.strip():
         candidates.append({"field": "name", "label": "Name", "value": pin.name.strip()})
-    if pin.description:
-        candidates.append({"field": "description", "label": "Description", "value": pin.description})
-    if pin.date_abandoned:
-        candidates.append({"field": "date_abandoned", "label": "Date abandoned", "value": pin.date_abandoned.strftime("%b %d, %Y") if hasattr(pin.date_abandoned, "strftime") else str(pin.date_abandoned)})
-    if pin.date_last_active:
-        candidates.append({"field": "date_last_active", "label": "Last active", "value": pin.date_last_active.strftime("%b %d, %Y") if hasattr(pin.date_last_active, "strftime") else str(pin.date_last_active)})
-    known_security = [field for field in SECURITY_FIELDS if getattr(pin, field, "unknown") not in (None, "", "unknown")]
-    if known_security:
-        candidates.append({"field": "security", "label": "Security details", "value": ", ".join(known_security)})
-    badge_names = list(pin.badges.values_list("name", flat=True))
-    if badge_names:
-        candidates.append({"field": "badges", "label": "Tags & categories", "value": ", ".join(badge_names[:8])})
+    if pin.danger:
+        candidates.append({"field": "danger", "label": "Danger", "value": f"{pin.danger} / 5"})
+    if pin.vulnerability:
+        candidates.append({"field": "vulnerability", "label": "Vulnerability", "value": f"{pin.vulnerability} / 5"})
     return candidates
+
+
+def seedable_aliases(pin: Pin) -> list[PinAlias]:
+    """Every alias on the pin, for the create-wiki dialog's per-alias picker.
+
+    Official aliases are included so the dialog can show them (always copied,
+    not deselectable); the template distinguishes them via ``alias.kind``.
+    """
+    return list(pin.aliases.all())
+
+
+def seedable_photos(pin: Pin) -> list[Image]:
+    """The pin's own photos, for the create-wiki dialog's per-photo picker."""
+    return list(pin.images.all())

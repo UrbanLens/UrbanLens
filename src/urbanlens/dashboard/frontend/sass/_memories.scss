@@ -571,6 +571,19 @@ $memories-type-colors: (
     img { width: 100%; height: 100%; object-fit: cover; display: block; }
 }
 
+// Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
+// file is missing (e.g. removed from storage independently of its DB row).
+.photo-card-thumb-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 2rem; }
+}
+
 .photo-card-body {
     padding: .75rem .85rem .85rem;
     display: flex;
@@ -805,6 +818,19 @@ $memories-type-colors: (
     background: var(--ul-grey-1a);
 
     &:hover .photo-tile-del { opacity: 1; }
+}
+
+// Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
+// file is missing (e.g. removed from storage independently of its DB row).
+.photo-tile-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 1.6rem; }
 }
 
 .photo-tile-btn {

@@ -95,9 +95,15 @@ class WikiUndoHandler(UndoHandler):
 
         for entry, wiki in zip(payload, restored, strict=True):
             old_parent_pk = entry["parent_wiki_old_pk"]
-            if old_parent_pk and old_parent_pk in old_to_new:
-                wiki.parent_wiki = old_to_new[old_parent_pk]
-                wiki.save(update_fields=["parent_wiki"])
+            if old_parent_pk:
+                # The parent may have been restored in this same batch (its
+                # pk changed), or it may never have been deleted at all (only
+                # a child subtree was stashed) - in which case its old pk is
+                # still the current one.
+                parent = old_to_new.get(old_parent_pk) or Wiki.objects.filter(pk=old_parent_pk).first()
+                if parent is not None:
+                    wiki.parent_wiki = parent
+                    wiki.save(update_fields=["parent_wiki"])
             if entry["badge_ids"]:
                 wiki.badges.set(entry["badge_ids"])
 

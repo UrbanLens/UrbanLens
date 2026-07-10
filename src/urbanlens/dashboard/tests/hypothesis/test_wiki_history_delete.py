@@ -50,6 +50,8 @@ class WikiEditDeleteViewTests(TestCase):
         self.assertFalse(WikiEdit.objects.filter(pk=edit.pk).exists())
 
     def test_forbidden_for_someone_elses_edit(self):
+        self.wiki.name = "Renamed"
+        self.wiki.save(update_fields=["name"])
         other_profile = baker.make("dashboard.Profile")
         edit = baker.make(
             "dashboard.WikiEdit",

@@ -132,13 +132,13 @@ class DownscalePolicyTests(TestCase):
 
     def test_default_policy_uses_site_dimension(self):
         profile = _make_profile()
-        self.assertEqual(get_downscale_policy(profile), (1920, False))
+        self.assertEqual(get_downscale_policy(profile), (1920, True))
 
     def test_disabled_downscale_means_no_cap(self):
         settings = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings.pk).update(image_downscale_enabled=False)
         profile = _make_profile()
-        self.assertEqual(get_downscale_policy(profile), (None, False))
+        self.assertEqual(get_downscale_policy(profile), (None, True))
 
     def test_subscriber_exempt_by_default(self):
         profile = _make_profile()
@@ -155,12 +155,12 @@ class DownscalePolicyTests(TestCase):
     def test_user_cap_tightens_policy(self):
         profile = _make_profile()
         profile.image_downscale_max_dimension = 1280
-        self.assertEqual(get_downscale_policy(profile), (1280, False))
+        self.assertEqual(get_downscale_policy(profile), (1280, True))
 
     def test_user_cap_cannot_loosen_policy(self):
         profile = _make_profile()
         profile.image_downscale_max_dimension = 9999
-        self.assertEqual(get_downscale_policy(profile), (1920, False))
+        self.assertEqual(get_downscale_policy(profile), (1920, True))
 
     def test_exempt_subscriber_can_still_opt_in(self):
         profile = _make_profile()

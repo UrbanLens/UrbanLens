@@ -13,7 +13,7 @@
 {% block content %}
 <div id="photos-page"
      data-upload-url="{% url 'memories.photos.upload' %}"
-     data-action-base="/memories/photos/">
+     data-action-base="{% url 'memories.photos' %}">
 
     <div class="memories-header">
         <div>

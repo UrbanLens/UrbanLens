@@ -151,6 +151,19 @@
             </div>
         </div>
 
+        {# -- Community ratings: composite + your own vote, per stat field ---- #}
+        <div class="card wiki-card wiki-ratings" data-collapse-scope="wiki" data-collapse-section="ratings">
+            <div class="card-header">
+                <i class="material-symbols-outlined">groups</i>
+                <h2>Community Ratings</h2>
+            </div>
+            <div class="card__body wiki-ratings-grid">
+                {% for stat in wiki_stats %}
+                {% include "dashboard/partials/pins/_wiki_stat_rating_item.html" with wiki=wiki field=stat.field label=stat.label help=stat.help modifier=stat.modifier wide=stat.wide my_vote=stat.my_vote composite=stat.composite %}
+                {% endfor %}
+            </div>
+        </div>
+
         {# -- Location map (boundary editor + community detail pins + markup) -- #}
         <div class="location-map pin-map card">
             <div class="card-header">
