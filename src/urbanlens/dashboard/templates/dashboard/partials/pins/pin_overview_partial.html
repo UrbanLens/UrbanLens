@@ -14,12 +14,12 @@
             <div class="collapse-restore-menu"></div>
         </div>
 
-        {% if pin.location and pin.location.slug %}
-        <div class="pin-wiki-box{% if not pin.location.wiki %} pin-wiki-box--nowiki{% endif %}" id="pin-location-section">
-            <i class="material-symbols-outlined">{% if pin.location.wiki %}public{% else %}public_off{% endif %}</i>
-            
-            {% if user.profile.community_enabled %}
+        {% if user.profile.community_enabled %}
+            {% if pin.location and pin.location.slug %}
                 {% if pin.location.wiki %}
+                <div class="pin-wiki-box{% if not pin.location.wiki %} pin-wiki-box--nowiki{% endif %}" id="pin-location-section">
+                    <i class="material-symbols-outlined">public</i>
+            
                     <div class="pin-wiki-box-info">
                         <span class="pin-wiki-box-label">Community Wiki</span>
                         <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-wiki-box-link"
@@ -51,6 +51,9 @@
                             <i class="material-symbols-outlined">link_off</i>
                         </button>
                     </div>
+                    {# Picker panel drops down from here when "Change" is clicked #}
+                    <div id="pin-location-picker"></div>
+                </div>
                 {% else %} 
                     <button type="button" class="btn btn--primary pin-wiki-create-btn"
                             hx-get="{% url 'pin.wiki.create' pin.slug %}"
@@ -63,9 +66,6 @@
                     </button>
                 {% endif %}
             {% endif %}
-            {# Picker panel drops down from here when "Change" is clicked #}
-            <div id="pin-location-picker"></div>
-        </div>
         {% elif pin.effective_latitude %}
         <div class="pin-wiki-box pin-wiki-box--unlinked">
             <i class="material-symbols-outlined">link_off</i>
