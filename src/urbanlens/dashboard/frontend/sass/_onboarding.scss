@@ -223,6 +223,46 @@ $onboarding-card-accents: (
     }
 }
 
+// -- TOS agreement block ---------------------------------------------------
+// Plain-language snippet + required checkbox shown at the end of the /welcome/
+// form, right before the submit button. Kept visually distinct from the
+// Memories/Community/External-Services cards above since checking it isn't a
+// feature toggle - it's a one-time, non-reversible agreement.
+
+.onboarding-tos {
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    background: var(--ul-grey-1);
+    margin-bottom: 1.75rem;
+}
+
+.onboarding-tos-summary {
+    font-size: .9rem;
+    line-height: 1.65;
+    color: var(--ul-grey-7);
+    margin: 0 0 1rem;
+}
+
+.onboarding-tos-agree {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--ul-grey-9);
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        margin-top: .2rem;
+        flex-shrink: 0;
+    }
+
+    a {
+        font-weight: 700;
+    }
+}
+
 .page-onboarding-welcome {
     .settings-subtitle {
         color: var(--ul-grey-7);

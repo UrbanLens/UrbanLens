@@ -1,18 +1,22 @@
 """Form for the first-login /welcome/ page: bulk Memories/Community/External-APIs toggles."""
 
 from django import forms
+from django.utils import timezone
 
 from urbanlens.dashboard.models.profile.model import Profile
 
 
 class WelcomeOnboardingForm(forms.ModelForm):
-    """One checkbox per category, each checked (fully-featured) by default.
+    """One checkbox per feature category, plus a required Terms of Service agreement.
 
-    Unchecking a box disables that category - the label/help text/tooltip copy is written from
-    that "turn this off to disable it" angle. None of the three fields are bound to ``Profile``
-    via ``Meta.fields`` - each is bulk-applied to several underlying settings on ``save()``. Those
-    settings remain independently adjustable afterward from the settings page; this form only
-    offers the bulk "leave on/turn off" choice for a quick first impression.
+    The three category checkboxes are each checked (fully-featured) by default; unchecking one
+    disables that category, and the label/help text/tooltip copy is written from that "turn this
+    off to disable it" angle. ``tos_agreed`` is the exception - it defaults unchecked, since
+    agreement has to be an explicit action rather than something left on by default. None of the
+    four fields are bound to ``Profile`` via ``Meta.fields`` - each is bulk-applied to one or more
+    underlying settings on ``save()``. The category settings remain independently adjustable
+    afterward from the settings page; this form only offers the bulk "leave on/turn off" choice
+    for a quick first impression.
     """
 
     memories_enabled = forms.BooleanField(
@@ -35,6 +39,15 @@ class WelcomeOnboardingForm(forms.ModelForm):
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="External Services",
         help_text="Disable all external services (weather, geocoding, place data, web searches, AI). No research data will be displayed, unless it has already been cached from another user's request. This will prevent you from getting alerts about places you research.",
+    )
+    # Unlike the toggles above, this defaults unchecked - agreement has to be an
+    # explicit action, not something a user "leaves on" by not noticing it.
+    tos_agreed = forms.BooleanField(
+        required=True,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="I have read and agree to the Terms of Service",
+        error_messages={"required": "You need to agree to the Terms of Service to continue."},
     )
 
     class Meta:
@@ -62,6 +75,8 @@ class WelcomeOnboardingForm(forms.ModelForm):
             instance.places_nps_enabled = False
             instance.places_wikipedia_enabled = False
             instance.ai_enabled = False
+
+        instance.tos_accepted_at = timezone.now()
 
         if commit:
             instance.save()

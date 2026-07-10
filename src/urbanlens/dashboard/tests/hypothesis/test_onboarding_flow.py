@@ -103,3 +103,40 @@ class WelcomeRedirectChainTests(TestCase):
         Profile.objects.filter(pk=user.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=False)
         user.refresh_from_db()
         self.assertEqual(self._get_redirect(user), reverse("profile.edit"))
+
+
+class WelcomeTosAgreementTests(TestCase):
+    """The /welcome/ form will not complete onboarding without tos_agreed checked."""
+
+    def _post(self, user: User, **overrides) -> object:
+        self.client.force_login(user)
+        data = {
+            "memories_enabled": "on",
+            "community_enabled": "on",
+            "external_apis_enabled": "on",
+            "tos_agreed": "on",
+        }
+        data.update(overrides)
+        return self.client.post(reverse("onboarding.welcome"), data)
+
+    def test_missing_tos_agreement_does_not_complete_onboarding(self) -> None:
+        user: User = baker.make(User)
+        self.client.force_login(user)
+        data = {"memories_enabled": "on", "community_enabled": "on", "external_apis_enabled": "on"}
+
+        response = self.client.post(reverse("onboarding.welcome"), data)
+
+        self.assertEqual(response.status_code, 200)
+        user.profile.refresh_from_db()
+        self.assertFalse(user.profile.welcome_onboarding_complete)
+        self.assertIsNone(user.profile.tos_accepted_at)
+
+    def test_agreeing_completes_onboarding_and_stamps_tos_accepted_at(self) -> None:
+        user: User = baker.make(User)
+
+        response = self._post(user)
+
+        self.assertEqual(response.status_code, 302)
+        user.profile.refresh_from_db()
+        self.assertTrue(user.profile.welcome_onboarding_complete)
+        self.assertIsNotNone(user.profile.tos_accepted_at)

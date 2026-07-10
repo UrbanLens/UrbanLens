@@ -107,6 +107,14 @@ urlpatterns = [
         ),
         name="faq",
     ),
+    path(
+        "terms/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/legal/terms.html",
+            extra_context={"page_name": "terms"},
+        ),
+        name="terms",
+    ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
         "help/import-pins/",

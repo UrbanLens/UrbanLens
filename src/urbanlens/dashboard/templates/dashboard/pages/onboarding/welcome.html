@@ -83,6 +83,31 @@
                 </label>
             </div>
 
+            <h2 class="onboarding-section-title">
+                <i class="material-symbols-outlined">gavel</i>
+                Terms of Service
+            </h2>
+
+            <div class="onboarding-tos">
+                <p class="onboarding-tos-summary">
+                    The short version: UrbanLens is run by one person, not a company - please be
+                    reasonable. Don't use the site to plan or advocate anything illegal, like trespassing.
+                    Safety Check-In and other safety tools are <strong>best-effort</strong>, not a
+                    guarantee that anyone will see an alert or that help will arrive in time. What you do
+                    with the information you find here is your own decision and your own responsibility.
+                </p>
+                <label class="onboarding-tos-agree">
+                    {{ form.tos_agreed }}
+                    <span>
+                        I have read and agree to the
+                        <a href="{% url 'terms' %}" target="_blank" rel="noopener">Terms of Service</a>.
+                    </span>
+                </label>
+                {% if form.tos_agreed.errors %}
+                <span class="settings-error">{{ form.tos_agreed.errors|join:", " }}</span>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Continue</button>
             </div>

@@ -104,6 +104,10 @@ class Profile(abstract.PublicDashboardModel):
     # signup-path race; the migration that adds this field backfills existing
     # rows to True so pre-existing accounts never see it.
     welcome_onboarding_complete = BooleanField(default=False)
+    # Set the moment the user checks the "I agree" box on /welcome/. Null means
+    # never agreed - existing accounts are backfilled to their profile creation
+    # date (accepting terms is implied by having used the site already).
+    tos_accepted_at = DateTimeField(null=True, blank=True)
     bio = TextField(null=True, blank=True)
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)

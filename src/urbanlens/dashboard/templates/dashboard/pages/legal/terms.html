@@ -1,0 +1,193 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="terms-hero">
+    <div class="terms-hero-inner">
+        <p class="terms-eyebrow">Legal</p>
+        <h1 class="terms-title">Terms of Service</h1>
+        <p class="terms-subtitle">Last updated July 10, 2026.</p>
+    </div>
+</section>
+
+{# -- Plain-language summary ------------------------------------------------- #}
+<section class="terms-section">
+    <div class="terms-section-inner">
+        <div class="terms-tldr">
+            <div class="terms-tldr-label">
+                <i class="material-symbols-outlined">summarize</i> The short version
+            </div>
+            <p>
+                UrbanLens is built and run by one person, not a company with a legal department -
+                please be reasonable. Don't use the site to plan or advocate anything illegal, like
+                trespassing. Safety Check-In and every other safety tool here are <strong>best-effort</strong>:
+                they're built to help, but nothing on this site is a guarantee that anyone will see an
+                alert, respond in time, or that help will arrive. What you do with the information you
+                find or share here is your decision and your responsibility. Read the full terms below
+                for the details.
+            </p>
+        </div>
+    </div>
+</section>
+
+{# -- Full terms ------------------------------------------------------------- #}
+<section class="terms-list-section">
+    <div class="terms-section-inner">
+
+        <div class="terms-item">
+            <div class="terms-item-num">1</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Acceptance of these terms</h3>
+                <p>
+                    By creating an account or otherwise using UrbanLens ("the site", "we", "us"), you agree
+                    to these Terms of Service and to our <a href="{% url 'values' %}">Values</a>, which
+                    describe the principles the site is built around. If you don't agree, please don't use
+                    the site.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">2</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Who can use UrbanLens</h3>
+                <p>
+                    You must be at least 18 years old, or the age of majority where you live, to create an
+                    account. You're responsible for making sure your use of the site complies with the laws
+                    that apply to you, wherever you're located.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">3</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Your account</h3>
+                <p>
+                    You're responsible for the security of your account and everything that happens under
+                    it. Keep your credentials to yourself, and let us know if you think your account has
+                    been compromised. We reserve the right to suspend or remove accounts that violate these
+                    terms.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">4</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Acceptable use</h3>
+                <p>
+                    UrbanLens exists to help you document and research places responsibly - not to
+                    encourage anyone to break the law. For legal reasons, we do not condone, encourage, or
+                    advocate trespassing or any other illegal activity, and nothing on this site should be
+                    read as instructions or authorization to do so. Entering private, restricted, or
+                    condemned property without permission is illegal in most places and carries real risk
+                    to your safety; any decision to do so is yours alone, made with your own judgment about
+                    the law and the risk involved.
+                </p>
+                <p>
+                    In addition, you agree not to use the site to harass, endanger, or dox other people or
+                    property owners; upload content you don't have the right to share; interfere with the
+                    site's operation (scraping, abuse of rate limits, attempting to bypass access
+                    controls); or use the site for anything illegal.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">5</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Content you contribute</h3>
+                <p>
+                    You keep ownership of the pins, notes, photos, wiki edits, and comments you create. By
+                    posting content, you grant us the license we need to store it and show it back to you
+                    and to whoever you've chosen to share it with, per your privacy settings. You're
+                    responsible for the accuracy and legality of what you post. We don't sell your data or
+                    your content to anyone.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">6</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Safety features are best-effort</h3>
+                <p>
+                    Safety Check-In and any related notification, escalation, or contact-alert features are
+                    provided as a convenience, on a best-effort basis. They are <strong>not</strong> a
+                    monitored emergency service, and we cannot guarantee that a check-in will be seen,
+                    that an overdue alert will reach anyone, or that help will arrive in time. These tools
+                    do not replace calling local emergency services, and you should not rely on them as
+                    your only safety plan.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">7</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">No warranty</h3>
+                <p>
+                    UrbanLens is provided "as is," without warranties of any kind. Location data, wiki
+                    content, hazard notes, and vulnerability ratings are contributed by users and external
+                    sources - we don't independently verify them, and we don't guarantee they're accurate,
+                    current, or complete. Use your own judgment before relying on anything you read here.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">8</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Limitation of liability</h3>
+                <p>
+                    UrbanLens is built and maintained by one person, as a hobby project. To the fullest
+                    extent permitted by law, we are not liable for any injury, loss, property damage, legal
+                    consequence, or other harm arising from your use of the site, your reliance on content
+                    posted here, or your decision to visit any location referenced on it. That includes
+                    harm resulting from trespassing, structural hazards, or any other risk you choose to
+                    take on when you visit a real-world place. Please don't sue us - we're doing our best,
+                    with the resources of one developer, not a company.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">9</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Termination</h3>
+                <p>
+                    You can delete your account at any time from Settings. We may suspend or terminate
+                    accounts that violate these terms, misuse the site, or put other users at risk.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">10</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Changes to these terms</h3>
+                <p>
+                    We may update these terms as the site grows. Material changes will be reflected here
+                    with an updated "last updated" date. Continuing to use UrbanLens after a change means
+                    you accept the updated terms.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">11</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Contact</h3>
+                <p>
+                    Questions about these terms? Reach out through the
+                    <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

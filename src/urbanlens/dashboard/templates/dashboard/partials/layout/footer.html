@@ -18,12 +18,16 @@ way the main map page's live tile attribution does.
         <p class="page-footer__github">
             <i class="material-icons" aria-hidden="true">code</i>
             <span class="page-footer__github-text">This project is open source. Check out our</span> <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>
+            <span aria-hidden="true"> &middot; </span>
+            <a href="{% url 'terms' %}">Terms of Service</a>
         </p>
     </div>
     {% else %}
     <p class="page-footer__github">
         <i class="material-icons" aria-hidden="true">code</i>
         This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>.
+        <span aria-hidden="true"> &middot; </span>
+        <a href="{% url 'terms' %}">Terms of Service</a>
     </p>
     {% endif %}
 </footer>
