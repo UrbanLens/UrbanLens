@@ -932,7 +932,35 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
     };
 }
 
-export const LocationSearchEngine = { create };
+export type LocationSearchAttachOptions = Omit<LocationSearchOptions, "input" | "suggestions" | "bar" | "clearBtn" | "historyBtn">;
+
+/**
+ * Binds the engine to a search bar rendered by the shared
+ * {% map_search_bar prefix %} template tag (see
+ * dashboard/templatetags/map_components.py). The tag emits a fixed id scheme
+ * - `{prefix}-search-bar/-input/-history/-clear/-suggestions` - so callers
+ * only supply the prefix and the page-specific callbacks.
+ *
+ * @param prefix - The id prefix passed to the template tag.
+ * @param options - Engine options minus the element references.
+ * @returns The engine instance, or null when the bar isn't on the page.
+ */
+function attach(prefix: string, options: LocationSearchAttachOptions): LocationSearchEngineInstance | null {
+    const byId = (suffix: string) => document.getElementById(`${prefix}-search-${suffix}`);
+    const input = byId("input") as HTMLInputElement | null;
+    const suggestions = byId("suggestions");
+    if (!input || !suggestions) return null;
+    return create({
+        input,
+        suggestions,
+        bar: document.getElementById(`${prefix}-search-bar`),
+        clearBtn: byId("clear"),
+        historyBtn: byId("history"),
+        ...options,
+    });
+}
+
+export const LocationSearchEngine = { create, attach };
 
 export function installGlobalLocationSearchEngine(): void {
     window.LocationSearchEngine = LocationSearchEngine;

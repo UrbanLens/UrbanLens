@@ -1,12 +1,12 @@
 {% comment %}
 Compact map for safety check-in pages: a draggable destination marker, the
-same floating "jump to" search bar as the main map (window.LocationSearchEngine,
-including local pins, addresses, coordinates, and Google Places), a base-layer
-switcher (street / satellite / topo) with a borders overlay toggle, and - when
-markup endpoints are configured and the map isn't readonly - the exact same
-"Add Detail" markup toolbar/side-panel as the pin detail and Location wiki
-maps (_markup_toolbar_panel.html + window.createMarkupToolbar, see
-ts/shared/markup-toolbar.ts).
+shared "jump to" search bar ({% templatetag openblock %} map_search_bar {% templatetag closeblock %} + window.LocationSearchEngine,
+including local pins, addresses, coordinates, and Google Places), the shared
+layers panel ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %} + window.MapLayers - the exact same
+component as the main map), and - when markup endpoints are configured and
+the map isn't readonly - the exact same "Add Detail" markup toolbar/side-panel
+as the pin detail and Location wiki maps (_markup_toolbar_panel.html +
+window.createMarkupToolbar, see ts/shared/markup-toolbar.ts).
 
 The route drawing is backed by a standalone MarkupMap:
   - The check-in detail page passes markup_map_uuid + the resolved
@@ -33,41 +33,18 @@ editing controls and the destination marker becomes non-draggable).
 Leaflet itself is loaded by each including page's own {% templatetag openblock %} header {% templatetag closeblock %},
 so it's always available by the time this script runs - no typeof guard needed.
 {% endcomment %}
+{% load map_components %}
 <div class="safety-map-wrapper">
     {% if not readonly %}
-    <div id="safety-map-search-bar" class="addr-search-bar">
-        <i class="material-icons addr-search-icon">place</i>
-        <input type="text" id="safety-map-search" class="addr-search-input"
-               placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
-        <button type="button" class="addr-search-history" id="safety-map-search-history" aria-label="Previous searches">
-            <i class="material-symbols-outlined">arrow_upward</i>
-        </button>
-        <button type="button" class="addr-search-clear" id="safety-map-search-clear" aria-label="Clear search">
-            <i class="material-symbols-outlined">close</i>
-        </button>
-        <div id="safety-map-search-suggestions" class="addr-search-suggestions" hidden></div>
-    </div>
+    {% map_search_bar prefix="safety-map" %}
     {% endif %}
     <div id="safety-map"></div>
-    <div class="safety-map-layers" role="group" aria-label="Map layers">
-        <button type="button" class="safety-layer-btn is-active" data-layer="standard" title="Street map">
-            <i class="material-symbols-outlined">map</i>
-        </button>
-        <button type="button" class="safety-layer-btn" data-layer="satellite" title="Satellite">
-            <i class="material-symbols-outlined">globe</i>
-        </button>
-        <button type="button" class="safety-layer-btn" data-layer="topo" title="Topographic">
-            <i class="material-symbols-outlined">terrain</i>
-        </button>
-        <button type="button" class="safety-layer-btn safety-layer-btn--borders" data-overlay="borders" title="Borders overlay">
-            <i class="material-symbols-outlined">public</i>
-        </button>
-    </div>
-    {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
     <div class="map-bottom-controls">
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="safety-map-layers" extra_class="map-layers-panel--inline" %}
+        {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
         {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
+        {% endif %}{% endif %}
     </div>
-    {% endif %}{% endif %}
 </div>
 {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
 {# Unified draw/edit panel this dropdown opens - must be a sibling of #}
@@ -89,55 +66,22 @@ so it's always available by the time this script runs - no typeof guard needed.
     // page footer instead (see partials/layout/footer.html's map_attribution).
     var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
 
-    // -- Base layers + borders overlay (same tiles as the shared map composer) --
-    var _TILE_LAYERS = {
-        standard: { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', options: { maxZoom: 19 } },
-        satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', options: { maxNativeZoom: 19, maxZoom: 19 } },
-        topo: { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', options: { maxNativeZoom: 17, maxZoom: 19 } }
-    };
+    // -- Layers: shared engine + panel (same component as the main map) --------
+    // layer_mode persists on the backing MarkupMap using the legacy values
+    // ("standard"/"topo"/"satellite"), so engine state maps back through
+    // MapLayers.legacyBase before saving.
     var _layerMode = '{{ map_layer_mode|default:"standard" }}';
-    if (!_TILE_LAYERS[_layerMode]) _layerMode = 'standard';
     var _showBorders = {{ map_show_borders|yesno:"true,false" }};
-    var _tileLayer = null;
-    var _bordersLayer = L.tileLayer(
-        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        { maxNativeZoom: 19, maxZoom: 19, opacity: 0.6, pane: 'overlayPane' }
-    );
-
-    function _refreshLayerButtons() {
-        document.querySelectorAll('.safety-layer-btn[data-layer]').forEach(function (b) {
-            b.classList.toggle('is-active', b.dataset.layer === _layerMode);
-        });
-        var bordersBtn = document.querySelector('.safety-layer-btn[data-overlay="borders"]');
-        if (bordersBtn) bordersBtn.classList.toggle('is-active', _showBorders);
-    }
-
-    function _setBaseLayer(mode) {
-        if (!_TILE_LAYERS[mode]) return;
-        if (_tileLayer) map.removeLayer(_tileLayer);
-        _layerMode = mode;
-        var cfg = _TILE_LAYERS[mode];
-        _tileLayer = L.tileLayer(cfg.url, cfg.options).addTo(map);
-        _refreshLayerButtons();
-        _saveMapViewSoon();
-    }
-
-    function _setBorders(on) {
-        _showBorders = on;
-        if (on) { _bordersLayer.addTo(map); } else { map.removeLayer(_bordersLayer); }
-        _refreshLayerButtons();
-        _saveMapViewSoon();
-    }
-
-    document.querySelectorAll('.safety-layer-btn[data-layer]').forEach(function (btn) {
-        btn.addEventListener('click', function () { _setBaseLayer(btn.dataset.layer); });
+    window.MapLayers.create(map, {
+        root: document.getElementById('safety-map-layers'),
+        defaultBase: _layerMode,
+        initialOverlays: _showBorders ? ['borders'] : [],
+        onStateChange: function (state) {
+            _layerMode = window.MapLayers.legacyBase(state.base);
+            _showBorders = state.borders;
+            _saveMapViewSoon();
+        },
     });
-    var _bordersBtn = document.querySelector('.safety-layer-btn[data-overlay="borders"]');
-    if (_bordersBtn) _bordersBtn.addEventListener('click', function () { _setBorders(!_showBorders); });
-
-    _tileLayer = L.tileLayer(_TILE_LAYERS[_layerMode].url, _TILE_LAYERS[_layerMode].options).addTo(map);
-    if (_showBorders) _bordersLayer.addTo(map);
-    _refreshLayerButtons();
 
     setTimeout(function () { map.invalidateSize(); }, 300);
     // window.createMarkupToolbar (below, when markup is enabled) renders every
@@ -267,12 +211,7 @@ so it's always available by the time this script runs - no typeof guard needed.
                 setDestination(lat, lng);
             }
 
-            window.LocationSearchEngine.create({
-                input: document.getElementById('safety-map-search'),
-                suggestions: document.getElementById('safety-map-search-suggestions'),
-                bar: document.getElementById('safety-map-search-bar'),
-                clearBtn: document.getElementById('safety-map-search-clear'),
-                historyBtn: document.getElementById('safety-map-search-history'),
+            window.LocationSearchEngine.attach('safety-map', {
                 historyKey: 'ul_safety_dest_history_v1',
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },

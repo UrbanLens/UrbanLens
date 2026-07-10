@@ -642,7 +642,7 @@
     pointer-events: none;
 }
 
-.cmc-layer-btn,
+.map-layers-strip-btn,
 .cmc-tool-btn,
 .cmc-undo-btn,
 .cmc-clear-btn {
@@ -665,7 +665,8 @@
         background: var(--ul-grey-0);
     }
 
-    &.is-active {
+    &.is-active,
+    &.active {
         background: var(--ul-accent-purple-bg);
         border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);

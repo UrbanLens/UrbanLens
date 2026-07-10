@@ -3481,6 +3481,30 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
 }
 
+// Inline variant: docks the panel inside a .map-bottom-controls flex row
+// (pin detail, wiki, safety maps) instead of floating it over the map itself.
+// The flyout menu still positions against the panel, opening up/right.
+.map-layers-panel--inline {
+    position: relative;
+    bottom: auto;
+    left: auto;
+}
+
+// Compact strip variant of the shared layers component
+// ({% map_layers_panel variant="strip" %}): a small icon-button row used
+// inside dialogs. Inside the comment-map toolbars it dissolves into the
+// toolbar row so the layer buttons align with the drawing tools.
+.map-layers-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.comment-map-composer-toolbar .map-layers-strip,
+.comment-map-view-toolbar .map-layers-strip {
+    display: contents;
+}
+
 .map-layers-toggle {
     display: flex;
     align-items: center;

@@ -18,10 +18,12 @@
  * site already depends on.
  */
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
+import { installGlobalMapLayers } from "../shared/map-layers";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 
 installGlobalLocationSearchEngine();
+installGlobalMapLayers();
 installGlobalMarkupEngine();
 
 window.createMarkupToolbar = createMarkupToolbar;

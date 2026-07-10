@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
 
-    {% load static %}
+    {% load static map_components %}
     <script src="{% static 'dashboard/js/core.js' %}"></script>
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
@@ -556,33 +556,16 @@
       <div class="comment-map-composer-body">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
-          {# Same multi-source jump-to search as the main map: local pins, #}
-          {# addresses (Nominatim), Google Places, coordinates, Plus Codes. #}
-          <div id="cmcc-search-bar" class="addr-search-bar addr-search-bar--composer">
-            <i class="material-icons addr-search-icon">place</i>
-            <input type="text" id="cmcc-search-input" class="addr-search-input"
-                   placeholder="Search pins, addresses, coordinates..." autocomplete="off" spellcheck="false">
-            <button type="button" class="addr-search-clear" id="cmcc-search-clear" aria-label="Clear search">
-              <i class="material-symbols-outlined">close</i>
-            </button>
-            <div id="cmcc-search-suggestions" class="addr-search-suggestions" hidden></div>
-          </div>
+          {# Shared jump-to search component - same multi-source search as the #}
+          {# main map: local pins, addresses (Nominatim), Google Places,       #}
+          {# coordinates, Plus Codes.                                          #}
+          {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">
           <span class="cmc-toolbar-label">Layer:</span>
-          <button type="button" class="cmc-layer-btn is-active" data-layer="standard" title="Street map">
-            <i class="material-symbols-outlined">map</i>
-          </button>
-          <button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite">
-            <i class="material-symbols-outlined">globe</i>
-          </button>
-          <button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic">
-            <i class="material-symbols-outlined">terrain</i>
-          </button>
-          <button type="button" class="cmc-layer-btn" id="cmc-borders" title="Borders overlay">
-            <i class="material-symbols-outlined">public</i>
-          </button>
+          {# Shared layers component (compact strip variant), driven by window.MapLayers. #}
+          {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="cmc-layers" %}
           <span class="cmc-toolbar-sep"></span>
           <span class="cmc-toolbar-label">Draw:</span>
           <button type="button" class="cmc-tool-btn" data-tool="arrow" title="Arrow">
@@ -687,34 +670,9 @@
     {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // -- Shared tile layer factory -----------------------------------------
-        var _TILE_LAYERS = {
-            standard: {
-                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                options: { attribution: '© OpenStreetMap contributors', maxZoom: 19 }
-            },
-            satellite: {
-                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                options: { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
-            },
-            topo: {
-                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-                options: { attribution: '© OpenTopoMap contributors', maxZoom: 17 }
-            }
-        };
-
-        function _makeTileLayer(mode) {
-            var cfg = _TILE_LAYERS[mode] || _TILE_LAYERS.standard;
-            return L.tileLayer(cfg.url, cfg.options);
-        }
-
-        // Geopolitical borders overlay (same tiles as the main map's Borders layer).
-        function _makeBordersLayer() {
-            return L.tileLayer(
-                'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-                { attribution: 'Boundaries &copy; Esri', maxZoom: 19, opacity: 0.6, pane: 'overlayPane' }
-            );
-        }
+        // Tile layers come from the shared window.MapLayers factory
+        // (ts/shared/map-layers.ts) - the same canonical sources as every
+        // other map on the site.
 
         // -- Reference marker --------------------------------------------------
         // A non-interactive pin marker (used to show a PinVisit's location on its
@@ -744,9 +702,8 @@
 
         // -- Composer state ----------------------------------------------------
         var _composerMap = null;
-        var _composerTileLayer = null;    // active tile layer
+        var _composerLayers = null;       // shared MapLayers engine instance
         var _composerLayerMode = 'standard';
-        var _composerBordersLayer = null; // borders overlay (created once, toggled)
         var _composerShowBorders = false;
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
@@ -785,9 +742,17 @@
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
                 _composerMap = L.map(mapEl, { zoomControl: true });
-                _composerTileLayer = _makeTileLayer(_composerLayerMode);
-                _composerTileLayer.addTo(_composerMap);
-                _composerBordersLayer = _makeBordersLayer();
+                // Shared layers engine bound to the strip rendered by
+                // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} in this dialog.
+                // The snapshot saved with the comment stores the legacy
+                // layer_mode values, hence legacyBase.
+                _composerLayers = window.MapLayers.create(_composerMap, {
+                    root: document.getElementById('cmc-layers'),
+                    onStateChange: function (state) {
+                        _composerLayerMode = window.MapLayers.legacyBase(state.base);
+                        _composerShowBorders = state.borders;
+                    },
+                });
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
@@ -844,17 +809,14 @@
             if (existing) {
                 _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
                 _composerShapes = existing.markup || [];
-                var savedMode = existing.layer_mode || 'standard';
-                if (savedMode !== _composerLayerMode) {
-                    _setComposerLayer(savedMode);
-                }
-                _setComposerBorders(!!existing.show_borders);
+                _composerLayers.setBase(existing.layer_mode || 'standard');
+                _composerLayers.setOverlay('borders', !!existing.show_borders);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
                 _composerMap.setView([defLat, defLng], 14);
                 _composerShapes = [];
-                _setComposerBorders(false);
+                _composerLayers.setOverlay('borders', false);
             }
 
             // Show a reference marker at the pin's coordinates when the origin
@@ -873,35 +835,6 @@
             _redrawMarkup();
             if (_composerSession) _composerSession.deactivate();
         };
-
-        // -- Layer switching ---------------------------------------------------
-        function _setComposerLayer(mode) {
-            if (!_composerMap || !_TILE_LAYERS[mode]) return;
-            if (_composerTileLayer) _composerMap.removeLayer(_composerTileLayer);
-            _composerLayerMode = mode;
-            _composerTileLayer = _makeTileLayer(mode);
-            _composerTileLayer.addTo(_composerMap);
-            document.querySelectorAll('.cmc-layer-btn[data-layer]').forEach(function (b) {
-                b.classList.toggle('is-active', b.dataset.layer === mode);
-            });
-        }
-
-        function _setComposerBorders(on) {
-            _composerShowBorders = on;
-            if (_composerMap && _composerBordersLayer) {
-                if (on) { _composerBordersLayer.addTo(_composerMap); }
-                else if (_composerMap.hasLayer(_composerBordersLayer)) { _composerMap.removeLayer(_composerBordersLayer); }
-            }
-            var btn = document.getElementById('cmc-borders');
-            if (btn) btn.classList.toggle('is-active', on);
-        }
-
-        document.querySelectorAll('.cmc-layer-btn[data-layer]').forEach(function (btn) {
-            btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
-        });
-        document.getElementById('cmc-borders').addEventListener('click', function () {
-            _setComposerBorders(!_composerShowBorders);
-        });
 
         // Current stroke-width slider value (also font-size fallback for text).
         function _composerWidth() {
@@ -997,13 +930,7 @@
         // without Leaflet never touch it.
         function _ensureComposerSearch() {
             if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
-            var input = document.getElementById('cmcc-search-input');
-            if (!input) return;
-            _composerSearch = window.LocationSearchEngine.create({
-                input: input,
-                suggestions: document.getElementById('cmcc-search-suggestions'),
-                bar: document.getElementById('cmcc-search-bar'),
-                clearBtn: document.getElementById('cmcc-search-clear'),
+            _composerSearch = window.LocationSearchEngine.attach('cmcc', {
                 historyKey: 'ul_composer_search_history_v1',
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },
@@ -1072,69 +999,33 @@
         }
 
         // -- Comment map viewer ------------------------------------------------
-        // commentId → { map, tileLayer, bordersLayer, mode, showBorders }
+        // commentId → { map }
         var _viewerMaps = {};
 
         // Builds (once per dialog) the read-only layer-switch toolbar shown below
-        // the expanded map: view-only (no draw tools), but lets the viewer flip
-        // between street/satellite/topo and toggle the borders overlay, same as
-        // the composer's own layer buttons.
+        // the expanded map. The strip markup mirrors the shared
+        // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} component (it can't be
+        // server-rendered here because the dialog templates predate the
+        // component); window.MapLayers.create() drives it exactly like every
+        // other map's layer buttons.
         function _ensureViewerToolbar(dlg, commentId) {
-            var existing = dlg.querySelector('.comment-map-view-toolbar');
+            var existing = dlg.querySelector('.comment-map-view-toolbar .map-layers-strip');
             if (existing) return existing;
 
             var toolbar = document.createElement('div');
             toolbar.className = 'comment-map-view-toolbar';
             toolbar.innerHTML =
                 '<span class="cmc-toolbar-label">Layer:</span>' +
-                '<button type="button" class="cmc-layer-btn" data-layer="standard" title="Street map"><i class="material-symbols-outlined">map</i></button>' +
-                '<button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite"><i class="material-symbols-outlined">globe</i></button>' +
-                '<button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic"><i class="material-symbols-outlined">terrain</i></button>' +
-                '<span class="cmc-toolbar-sep"></span>' +
-                '<button type="button" class="cmc-layer-btn" data-borders-toggle title="Borders overlay"><i class="material-symbols-outlined">public</i></button>';
+                '<div class="map-layers-strip" role="group" aria-label="Map layers">' +
+                '<button type="button" class="map-layers-strip-btn" data-map-layer="street" data-layer-kind="base" title="Street map" aria-label="Street Map"><i class="material-symbols-outlined">map</i></button>' +
+                '<button type="button" class="map-layers-strip-btn" data-map-layer="satellite" data-layer-kind="base" title="Satellite map" aria-label="Satellite Map"><i class="material-symbols-outlined">globe</i></button>' +
+                '<button type="button" class="map-layers-strip-btn" data-map-layer="terrain" data-layer-kind="base" title="Terrain map" aria-label="Topography Map"><i class="material-symbols-outlined">terrain</i></button>' +
+                '<button type="button" class="map-layers-strip-btn" data-map-layer="borders" data-layer-kind="overlay" title="Borders layer" aria-label="Toggle Geopolitical boundaries"><i class="material-symbols-outlined">public</i></button>' +
+                '</div>';
 
             var el = document.getElementById('comment-map-view-' + commentId);
             el.insertAdjacentElement('afterend', toolbar);
-
-            toolbar.querySelectorAll('[data-layer]').forEach(function (btn) {
-                btn.addEventListener('click', function () { _setViewerLayer(commentId, btn.dataset.layer); });
-            });
-            toolbar.querySelector('[data-borders-toggle]').addEventListener('click', function () {
-                var v = _viewerMaps[commentId];
-                if (v) _setViewerBorders(commentId, !v.showBorders);
-            });
-            return toolbar;
-        }
-
-        function _syncViewerToolbar(dlg, commentId) {
-            var v = _viewerMaps[commentId];
-            if (!v) return;
-            dlg.querySelectorAll('.comment-map-view-toolbar [data-layer]').forEach(function (b) {
-                b.classList.toggle('is-active', b.dataset.layer === v.mode);
-            });
-            var bordersBtn = dlg.querySelector('.comment-map-view-toolbar [data-borders-toggle]');
-            if (bordersBtn) bordersBtn.classList.toggle('is-active', v.showBorders);
-        }
-
-        function _setViewerLayer(commentId, mode) {
-            var v = _viewerMaps[commentId];
-            if (!v || !_TILE_LAYERS[mode]) return;
-            v.map.removeLayer(v.tileLayer);
-            v.mode = mode;
-            v.tileLayer = _makeTileLayer(mode);
-            // Tile layers must render below the markup/reference-marker panes.
-            v.tileLayer.addTo(v.map);
-            v.tileLayer.bringToBack();
-            _syncViewerToolbar(document.getElementById('comment-map-dialog-' + commentId), commentId);
-        }
-
-        function _setViewerBorders(commentId, on) {
-            var v = _viewerMaps[commentId];
-            if (!v) return;
-            v.showBorders = on;
-            if (on) { v.bordersLayer.addTo(v.map); }
-            else if (v.map.hasLayer(v.bordersLayer)) { v.map.removeLayer(v.bordersLayer); }
-            _syncViewerToolbar(document.getElementById('comment-map-dialog-' + commentId), commentId);
+            return toolbar.querySelector('.map-layers-strip');
         }
 
         window._expandCommentMap = function (commentId) {
@@ -1166,11 +1057,11 @@
             el.style.minHeight = '300px';
 
             var viewMap = L.map(el);
-            var mode = data.layer_mode || 'standard';
-            var tileLayer = _makeTileLayer(mode);
-            tileLayer.addTo(viewMap);
-            var bordersLayer = _makeBordersLayer();
-            if (data.show_borders) bordersLayer.addTo(viewMap);
+            window.MapLayers.create(viewMap, {
+                root: _ensureViewerToolbar(dlg, commentId),
+                defaultBase: data.layer_mode || 'standard',
+                initialOverlays: data.show_borders ? ['borders'] : [],
+            });
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
@@ -1180,16 +1071,7 @@
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
 
             viewMap.invalidateSize();
-            _viewerMaps[commentId] = {
-                map: viewMap,
-                tileLayer: tileLayer,
-                bordersLayer: bordersLayer,
-                mode: mode,
-                showBorders: !!data.show_borders,
-            };
-
-            _ensureViewerToolbar(dlg, commentId);
-            _syncViewerToolbar(dlg, commentId);
+            _viewerMaps[commentId] = { map: viewMap };
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {
@@ -1229,8 +1111,8 @@
                 thumb.style.width = '100%';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                _makeTileLayer(data.layer_mode || 'standard').addTo(tmap);
-                if (data.show_borders) _makeBordersLayer().addTo(tmap);
+                window.MapLayers.tileLayer(data.layer_mode || 'standard').addTo(tmap);
+                if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);

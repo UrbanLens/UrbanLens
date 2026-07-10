@@ -1,5 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load dashboard_tags static %}
+{% load dashboard_tags map_components static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -51,80 +51,14 @@
         </div>
     </div>
 
-    {# -- Layers panel (bottom-left, Google-Maps style) ------------------------ #}
-    <div class="map-layers-panel" id="map-layers-panel">
-        <button class="map-layers-toggle" id="map-layers-toggle"
-                onclick="_toggleLayersPanel()"
-                aria-label="Toggle map layers"
-                aria-expanded="false">
-            <span class="map-layer-thumb map-layers-toggle-thumb">
-                <img src="{% static 'dashboard/images/map_layers.jpg' %}" alt="" loading="lazy">
-            </span>
-            <i class="material-icons map-layers-toggle-icon">layers</i>
-            <span class="map-layers-label">Layers</span>
-        </button>
-        {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
-        <div class="map-layers-menu" id="map-layers-menu" hidden aria-hidden="true">
-            <button id="street-button" class="map-layer-btn"
-                    onclick="toggleStreetView();" aria-label="Street Map" data-tooltip="Street map" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street Layer" loading="lazy">
-                </span>
-                <span>Street</span>
-            </button>
-            <button id="topography-button" class="map-layer-btn"
-                    onclick="toggleTopographyView();" aria-label="Topography Map" data-tooltip="Terrain map (T)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="Terrain Layer" loading="lazy">
-                </span>
-                <span>Terrain</span>
-            </button>
-            <button id="satellite-button" class="map-layer-btn"
-                    onclick="toggleSatelliteView();" aria-label="Satellite Map" data-tooltip="Satellite map (S)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite Imagery Layer" loading="lazy">
-                </span>
-                <span>Satellite</span>
-            </button>
-            <button id="weather-button" class="map-layer-btn"
-                    onclick="toggleWeatherView();" aria-label="Weather overlay" data-tooltip="Weather overlay (W)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather Layer" loading="lazy">
-                </span>
-                <span>Weather</span>
-            </button>
-            <button id="toggle-pins-button" class="map-layer-btn"
-                    onclick="togglePins();" aria-label="Show or hide pins" data-tooltip="Show or hide pins (P)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins Layer" loading="lazy">
-                </span>
-                <span>Pins</span>
-            </button>
-            <button id="dark-mode-button" class="map-layer-btn"
-                    onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode" data-tooltip="Dark mode (D)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode" loading="lazy">
-                </span>
-                <span>Dark</span>
-            </button>
-            <button id="boundaries-button" class="map-layer-btn"
-                    onclick="toggleBoundariesLayer();" aria-label="Toggle Geopolitical boundaries" data-tooltip="Borders layer (B)" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_borders.jpg' %}" alt="Borders Layer" loading="lazy">
-                </span>
-                <span>Borders</span>
-            </button>
-            {% if show_places_layer %}
-            <button id="places-button" class="map-layer-btn"
-                    onclick="togglePlacesLayer();" aria-label="Toggle Places layer" data-tooltip="Places layer" data-tooltip-float="true" data-tooltip-pos="top">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_places.jpg' %}" alt="Places Layer" loading="lazy">
-                </span>
-                <span>Places</span>
-            </button>
-            {% endif %}
-        </div>
-    </div>
+    {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
+    {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
+    {# window.MapLayers - the same code every other map on the site uses.       #}
+    {% if show_places_layer %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders,places" %}
+    {% else %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders" %}
+    {% endif %}
 
     {# -- Place info panel (shown when user clicks "More information" on a Places marker) #}
     {% if show_places_layer %}
@@ -143,22 +77,8 @@
     {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
 
-    {# -- Floating address search bar ------------------------------------- #}
-    <div id="addr-search-bar" class="addr-search-bar">
-        <i class="material-icons addr-search-icon">place</i>
-        <input type="text" id="address-search-input" class="addr-search-input"
-               placeholder="Search pins, addresses, coordinates..."
-               autocomplete="off" spellcheck="false">
-        <button type="button" class="addr-search-history" id="addr-search-history"
-                aria-label="Previous searches">
-            <i class="material-symbols-outlined">arrow_upward</i>
-        </button>
-        <button type="button" class="addr-search-clear" id="addr-search-clear"
-                aria-label="Clear search">
-            <i class="material-symbols-outlined">close</i>
-        </button>
-        <div id="addr-search-suggestions" class="addr-search-suggestions" hidden></div>
-    </div>
+    {# -- Floating address search bar (shared component) -------------------- #}
+    {% map_search_bar prefix="addr" %}
 
     {# -- Filter panel ---------------------------------------------------- #}
     <div id="filter-panel">
@@ -733,9 +653,6 @@
     // maxZoom is higher than any layer's native tile depth; layers set maxNativeZoom so their
     // tiles upscale past that depth (Google-like) instead of the layer disappearing.
     const map = L.map('map', { maxZoom: 21, minZoom: 2, attributionControl: false }).setView(_initialCenter, _initialZoom);
-    // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
-    map.createPane('topoPane');
-    map.getPane('topoPane').style.zIndex = 401;
     window.map = map;
     window.pin = null;
 
@@ -1467,9 +1384,9 @@
             body: 'Topographic, satellite, and weather overlays can reveal access, terrain, and conditions.',
             button: 'Show satellite',
             target: 'satellite-button',
-            shouldShow: () => !map.hasLayer(satelliteLayer),
+            shouldShow: () => _mapLayers.baseKey() !== 'satellite',
             watchSelector: '#satellite-button',
-            action: () => { if (!map.hasLayer(satelliteLayer)) toggleSatelliteView(); },
+            action: () => { if (_mapLayers.baseKey() !== 'satellite') _mapLayers.setBase('satellite'); },
         },
     ];
 
@@ -1766,183 +1683,51 @@
         setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();
 
-    const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxNativeZoom: 19,
-        maxZoom: 21,
-    });
-    const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        // OpenTopoMap only renders tiles up to zoom 17; upscale beyond that.
-        maxNativeZoom: 17,
-        maxZoom: 21,
-        pane: 'topoPane',
-    });
-    // ESRI Satellite tile layer. maxNativeZoom caps tile requests at ESRI's globally-available
-    // depth; maxZoom lets Leaflet upscale those tiles further so satellite never drops out when
-    // the user zooms past the native depth.
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxNativeZoom: 19,
-        maxZoom: 21,
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-    });
-    // CartoDB Dark Matter - used when map dark mode is active (street/topographic base only)
-    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxNativeZoom: 20,
-        maxZoom: 21,
-    });
-    // OpenWeatherMap tile layer
-    const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
-        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
-        layer: 'precipitation_new',
-        maxZoom: 21,
-    });
-    const cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
-        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
-        layer: 'clouds_new',
-        maxZoom: 21,
-    });
-    // Geopolitical boundaries (OpenStreetMap-based, off by default)
-    const boundariesLayer = L.tileLayer(
-        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        {
-            attribution: 'Boundaries &copy; Esri',
-            maxNativeZoom: 19,
-            maxZoom: 21,
-            opacity: 0.6,
-            pane: 'overlayPane',
-        }
-    );
     // Places layer group (landmarks from external APIs, including Google Places)
     const _placesLayerGroup = L.layerGroup();
     const _placesMarkerMap = new Map();  // place_id → L.Marker
     let _placesLayerActive = false;
     const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
-    // -- Dark map mode helpers -------------------------------------------------
-    function _isDarkMapActive() {
-        if (_MAP_DARK_MODE === 'dark') return true;
-        if (_MAP_DARK_MODE === 'light') return false;
-        return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-
-    // Apply invert filter to the topo pane when dark map mode is active.
-    function _applyTopoFilter() {
-        const pane = map.getPane('topoPane');
-        if (!pane) return;
-        pane.style.filter = (_isDarkMapActive() && map.hasLayer(topographyLayer))
-            ? 'invert(100%) hue-rotate(180deg) brightness(90%)'
-            : '';
-    }
-
-    // Expose effective map style on #map for SCSS (e.g. #map[data-map-style="dark"]).
-    function _syncMapStyleAttribute() {
-        map.getContainer().dataset.mapStyle = _isDarkMapActive() ? 'dark' : 'light';
-    }
-
-    // Swap between standardLayer and darkLayer without touching satellite/topo.
-    function _syncBaseLayer() {
-        const useDark = _isDarkMapActive();
-        if (useDark) {
-            if (map.hasLayer(standardLayer)) map.removeLayer(standardLayer);
-            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
-        } else {
-            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
-            if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
-        }
-        _applyTopoFilter();
-        _syncMapStyleAttribute();
-    }
-
-    // Re-apply topo filter when the topo layer is toggled.
-    map.on('layeradd layerremove', function(e) {
-        if (e.layer === topographyLayer) _applyTopoFilter();
+    // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
+    // Tile layers, the layers flyout panel, dark map mode, "remember"
+    // persistence, tile-loading feedback, and footer attribution all live in
+    // window.MapLayers - the exact same code every other map on the site runs.
+    // This page only contributes its own custom toggles (pins, places).
+    const _mapLayers = window.MapLayers.create(map, {
+        root: document.getElementById('map-layers-panel'),
+        apiKey: '{{ openweathermap_api_key }}',
+        darkMode: _MAP_DARK_MODE,
+        defaultBase: _DEFAULT_MAP_VIEW,
+        storageKey: _LAYER_CACHE_KEY,
+        loadingTarget: document.getElementById('map'),
+        // Footer attribution replaces Leaflet's on-map control (see {% templatetag openblock %} block footer {% templatetag closeblock %}).
+        onAttribution: function (text) {
+            const el = document.getElementById('map-footer-attribution-text');
+            if (el) el.textContent = text;
+        },
+        // Persist dark mode to the server so the preference survives page refresh.
+        onDarkModeChange: function (mode) {
+            _MAP_DARK_MODE = mode;
+            const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+            fetch('{% url "settings.save_map_dark_mode" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `mode=${encodeURIComponent(mode)}`,
+            }).catch(() => {});
+        },
+        custom: {
+            // The pins button highlights when pins are HIDDEN (activeWhenOff).
+            pins:   { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
+            places: { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
+        },
     });
-
-    // In system mode, re-sync whenever the OS preference changes.
-    if (_MAP_DARK_MODE === 'system') {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
-    }
-
-    // -- Footer attribution (replaces Leaflet's on-map control) ----------------
-    function _updateFooterAttribution() {
-        const el = document.getElementById('map-footer-attribution-text');
-        if (!el) return;
-        const parts = [];
-        if (map.hasLayer(satelliteLayer)) {
-            parts.push('© Esri');
-        } else if (map.hasLayer(topographyLayer)) {
-            parts.push('© OpenTopoMap');
-        } else if (map.hasLayer(darkLayer)) {
-            parts.push('© OSM · CARTO');
-        } else {
-            parts.push('© OpenStreetMap');
-        }
-        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            parts.push('© OpenWeatherMap');
-        }
-        if (map.hasLayer(boundariesLayer) && !map.hasLayer(satelliteLayer)) {
-            parts.push('© Esri');
-        }
-        parts.push('Leaflet');
-        el.textContent = parts.join(' · ');
-    }
-
-    map.on('layeradd layerremove', _updateFooterAttribution);
 
     // Dev toolbar: apply map dark mode without a full page reload.
     window.applyMapDarkMode = function (mode) {
         _MAP_DARK_MODE = mode;
-        _syncBaseLayer();
+        _mapLayers.setDarkMode(mode);
     };
-
-    // -- Apply initial base layer from user preference -------------------------
-    // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.
-    _syncBaseLayer();
-    (function _applyInitialLayers() {
-        let baseView = _DEFAULT_MAP_VIEW;
-        let weatherOn = false;
-
-        if (baseView === 'remember') {
-            try {
-                const saved = JSON.parse(localStorage.getItem(_LAYER_CACHE_KEY) || 'null');
-                if (saved) { baseView = saved.base || 'street'; weatherOn = !!saved.weather; }
-                else { baseView = 'street'; }
-            } catch (_) { baseView = 'street'; }
-        }
-
-        if (baseView === 'satellite') {
-            satelliteLayer.addTo(map);
-        } else if (baseView === 'topographic') {
-            topographyLayer.addTo(map);
-        }
-
-        if (weatherOn) {
-            rainLayer.addTo(map);
-            cloudLayer.addTo(map);
-            document.querySelector('#weather-button')?.classList.add('active');
-        }
-
-        _syncBaseViewButtons();
-    }());
-
-    // -- Tile loading visual feedback ------------------------------------------
-    // Grey-dim the tile pane while map tiles are downloading; restore when done.
-    // Each layer tracks its own loading state via a counter so that swapping
-    // layers doesn't leave the map permanently dimmed.
-    let _tileLoadingCount = 0;
-    function _onTileLayerLoading() {
-        _tileLoadingCount++;
-        document.getElementById('map').classList.add('tiles-loading');
-    }
-    function _onTileLayerLoad() {
-        _tileLoadingCount = Math.max(0, _tileLoadingCount - 1);
-        if (_tileLoadingCount === 0) document.getElementById('map').classList.remove('tiles-loading');
-    }
-    [standardLayer, topographyLayer, satelliteLayer, darkLayer].forEach(layer => {
-        layer.on('loading', _onTileLayerLoading);
-        layer.on('load',    _onTileLayerLoad);
-        layer.on('error',   _onTileLayerLoad);
-    });
 
     map.on('popupopen', function() {
         // -- Rating stars -------------------------------------------------------
@@ -2292,6 +2077,9 @@
         });
     }());
 
+    // Pins visibility is page-specific state (the cluster layer), registered
+    // with the shared layers engine as the "pins" custom toggle - the engine
+    // owns the button state, this owns the layer.
     function togglePins() {
         if (pinsVisible) {
             map.removeLayer(pinsLayerGroup);
@@ -2299,88 +2087,7 @@
             pinsLayerGroup.addTo(map);
         }
         pinsVisible = !pinsVisible;
-        const pinBtn = document.querySelector('#toggle-pins-button');
-        if (pinBtn) pinBtn.classList.toggle('active', !pinsVisible);
         updatePinCounter();
-    }
-
-    function toggleMapView( layer ) {
-        // Check if this layer is already present
-        if (map.hasLayer(layer)) {
-            // Turn it off, and the standard layer back on
-            map.removeLayer(layer);
-            return;
-        }
-
-        // Add the selected layer
-        layer.addTo(map);
-    }
-
-    // Persist active layers to localStorage when the user has chosen "Remember".
-    function _saveLayerState() {
-        if (_DEFAULT_MAP_VIEW !== 'remember') return;
-        try {
-            const base = map.hasLayer(satelliteLayer) ? 'satellite'
-                       : map.hasLayer(topographyLayer) ? 'topographic'
-                       : 'street';
-            const weather = map.hasLayer(rainLayer) || map.hasLayer(cloudLayer);
-            localStorage.setItem(_LAYER_CACHE_KEY, JSON.stringify({ base, weather }));
-        } catch (_) {}
-    }
-
-    function _syncBaseViewButtons() {
-        const streetActive = !map.hasLayer(satelliteLayer) && !map.hasLayer(topographyLayer);
-        document.querySelector('#street-button')?.classList.toggle('active', streetActive);
-        document.querySelector('#topography-button')?.classList.toggle('active', map.hasLayer(topographyLayer));
-        document.querySelector('#satellite-button')?.classList.toggle('active', map.hasLayer(satelliteLayer));
-    }
-
-    function toggleStreetView() {
-        if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
-        if (map.hasLayer(topographyLayer)) map.removeLayer(topographyLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleTopographyView() {
-        // Satellite and topography are mutually exclusive
-        if (map.hasLayer(satelliteLayer)) {
-            map.removeLayer(satelliteLayer);
-        }
-        toggleMapView(topographyLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleSatelliteView() {
-        // Satellite and topography are mutually exclusive
-        if (map.hasLayer(topographyLayer)) {
-            map.removeLayer(topographyLayer);
-        }
-        toggleMapView(satelliteLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleWeatherView() {
-        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            map.removeLayer(rainLayer);
-            map.removeLayer(cloudLayer);
-        } else {
-            rainLayer.addTo(map);
-            cloudLayer.addTo(map);
-        }
-        document.querySelector('#weather-button').classList.toggle('active', map.hasLayer(rainLayer));
-        _saveLayerState();
-    }
-
-    function toggleBoundariesLayer() {
-        if (map.hasLayer(boundariesLayer)) {
-            map.removeLayer(boundariesLayer);
-        } else {
-            boundariesLayer.addTo(map);
-        }
-        document.querySelector('#boundaries-button')?.classList.toggle('active', map.hasLayer(boundariesLayer));
     }
 
     // -- Places layer (VIP only) -----------------------------------------------
@@ -2644,85 +2351,6 @@
     map.on('moveend zoomend', function () {
         if (_placesLayerActive) _schedulePlacesFetch();
     });
-
-    const _LAYERS_PANEL_MS = 220;
-    let _layersPanelCloseTimer = null;
-
-    function _isLayersPanelOpen() {
-        return document.getElementById('map-layers-panel')?.classList.contains('is-open') ?? false;
-    }
-
-    function _closeLayersPanel() {
-        const panel = document.getElementById('map-layers-panel');
-        const menu = document.getElementById('map-layers-menu');
-        const toggle = document.getElementById('map-layers-toggle');
-        if (!panel?.classList.contains('is-open')) return;
-
-        panel.classList.remove('is-open');
-        if (toggle) {
-            toggle.classList.remove('active');
-            toggle.setAttribute('aria-expanded', 'false');
-        }
-        if (menu) {
-            menu.setAttribute('aria-hidden', 'true');
-            let closed = false;
-            const finishClose = (e) => {
-                if (e && e.target !== menu) return;
-                if (closed || panel.classList.contains('is-open')) return;
-                closed = true;
-                if (_layersPanelCloseTimer) {
-                    window.clearTimeout(_layersPanelCloseTimer);
-                    _layersPanelCloseTimer = null;
-                }
-                menu.hidden = true;
-                menu.removeEventListener('transitionend', finishClose);
-            };
-            menu.addEventListener('transitionend', finishClose);
-            _layersPanelCloseTimer = window.setTimeout(finishClose, _LAYERS_PANEL_MS + 40);
-        }
-    }
-
-    function _openLayersPanel() {
-        const panel = document.getElementById('map-layers-panel');
-        const menu = document.getElementById('map-layers-menu');
-        const toggle = document.getElementById('map-layers-toggle');
-        if (_layersPanelCloseTimer) {
-            window.clearTimeout(_layersPanelCloseTimer);
-            _layersPanelCloseTimer = null;
-        }
-        if (menu) {
-            menu.hidden = false;
-            menu.setAttribute('aria-hidden', 'false');
-        }
-        if (menu) void menu.offsetWidth;
-        if (panel) panel.classList.add('is-open');
-        if (toggle) {
-            toggle.classList.add('active');
-            toggle.setAttribute('aria-expanded', 'true');
-        }
-    }
-
-    // -- Map dark mode toggle --------------------------------------------------
-    function _toggleMapDarkMode() {
-        const currentMode = _MAP_DARK_MODE;
-        const newMode = (currentMode === 'dark') ? 'light' : 'dark';
-        _MAP_DARK_MODE = newMode;
-        _syncBaseLayer();
-        const btn = document.getElementById('dark-mode-button');
-        if (btn) btn.classList.toggle('active', newMode === 'dark');
-        // Persist to server so the preference survives page refresh
-        const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-        fetch('{% url "settings.save_map_dark_mode" %}', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `mode=${encodeURIComponent(newMode)}`,
-        }).catch(() => {});
-    }
-    // Sync initial state of dark-mode button
-    (function _initDarkModeBtn() {
-        const btn = document.getElementById('dark-mode-button');
-        if (btn) btn.classList.toggle('active', _isDarkMapActive());
-    }());
 
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
@@ -3124,15 +2752,6 @@
         this.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
     });
 
-    // -- Layers panel toggle ---------------------------------------------------
-    function _toggleLayersPanel() {
-        if (_isLayersPanelOpen()) { _closeLayersPanel(); } else { _openLayersPanel(); }
-    }
-    document.addEventListener('click', function (e) {
-        const panel = document.getElementById('map-layers-panel');
-        if (panel && !panel.contains(e.target)) { _closeLayersPanel(); }
-    });
-
     // -- Keyboard shortcuts (only when map is visible, not in input fields) ------
     document.addEventListener('keydown', function (e) {
         // Skip if focus is inside a text/date input or textarea
@@ -3162,15 +2781,15 @@
                 break;
             }
             case 'j':                                                // J - Jump to location
-                document.getElementById('address-search-input')?.focus();
+                document.getElementById('addr-search-input')?.focus();
                 break;
-            case 'p': togglePins(); break;                           // P - Toggle pins
-            case 'b': toggleBoundariesLayer(); break;                // B - Toggle borders
-            case 'l': _toggleLayersPanel(); break;                   // L - Layers
-            case 's': toggleSatelliteView(); break;                  // S - Satellite view
-            case 't': toggleTopographyView(); break;                 // T - Topography view
-            case 'w': toggleWeatherView(); break;                    // W - Weather view
-            case 'd': toggleMapDarkMode(); break;                       // D - Dark mode
+            case 'p': _mapLayers.toggleCustom('pins'); break;        // P - Toggle pins
+            case 'b': _mapLayers.toggleBorders(); break;             // B - Toggle borders
+            case 'l': _mapLayers.togglePanel(); break;               // L - Layers
+            case 's': _mapLayers.toggleBase('satellite'); break;     // S - Satellite view
+            case 't': _mapLayers.toggleBase('topographic'); break;   // T - Topography view
+            case 'w': _mapLayers.toggleWeather(); break;             // W - Weather view
+            case 'd': _mapLayers.toggleDark(); break;                // D - Dark mode
             case 'escape':
                 if (_selectMode) {
                     exitSelectMode();
@@ -3178,8 +2797,8 @@
                     toggleFilterPanel();
                 } else if (document.getElementById('pin-list-panel')?.classList.contains('open')) {
                     _togglePinListPanel();
-                } else if (_isLayersPanelOpen()) {
-                    _closeLayersPanel();
+                } else if (_mapLayers.isPanelOpen()) {
+                    _mapLayers.closePanel();
                 }
                 break;
         }
@@ -3519,10 +3138,10 @@
 
     // -- Floating address search bar --------------------------------------
     // Uses the shared window.LocationSearchEngine (see
-    // partials/layout/_location_search_engine.html); this page supplies the
-    // map-specific callbacks (panning, temp markers, opening pin popups) and
-    // keeps the pin-recently-viewed tracking, which is specific to this page's
-    // marker/popup model.
+    // ts/shared/location-search-engine.ts) bound to the {% templatetag openblock %} map_search_bar {% templatetag closeblock %}
+    // component; this page supplies the map-specific callbacks (panning, temp
+    // markers, opening pin popups) and keeps the pin-recently-viewed tracking,
+    // which is specific to this page's marker/popup model.
     const _homeLat  = _SERVER_CENTER_LAT !== null ? _SERVER_CENTER_LAT : _GPS_FALLBACK_LAT;
     const _homeLng  = _SERVER_CENTER_LNG !== null ? _SERVER_CENTER_LNG : _GPS_FALLBACK_LNG;
     const _searchHome = (_homeLat !== null && _homeLng !== null && _MAP_CENTER_MODE !== 'gps')
@@ -3598,12 +3217,7 @@
         }
     }
 
-    const _addrSearch = window.LocationSearchEngine.create({
-        input: document.getElementById('address-search-input'),
-        suggestions: document.getElementById('addr-search-suggestions'),
-        bar: document.getElementById('addr-search-bar'),
-        clearBtn: document.getElementById('addr-search-clear'),
-        historyBtn: document.getElementById('addr-search-history'),
+    const _addrSearch = window.LocationSearchEngine.attach('addr', {
         historyKey: 'ul_addr_history_v1',
         recentPinsKey: 'ul_recent_pins_v1',
         sources: {

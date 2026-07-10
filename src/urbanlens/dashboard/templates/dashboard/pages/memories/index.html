@@ -135,7 +135,7 @@
 
     // -- Map setup ------------------------------------------------------------
     var map = L.map('memories-map', { attributionControl: false }).setView([mapLat, mapLng], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    window.MapLayers.tileLayer('street').addTo(map);
 
     var routesPane = map.createPane('memoriesRoutesPane');
     routesPane.style.zIndex = 410;

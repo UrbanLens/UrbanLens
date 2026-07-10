@@ -35,7 +35,7 @@
   const lng = {{ pin.effective_longitude|default:'null' }};
   if (lat === null || lng === null) return;
   const map = L.map('shared-pin-map').setView([lat, lng], 16);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19}).addTo(map);
+  window.MapLayers.tileLayer('street').addTo(map);
   L.marker([lat, lng]).addTo(map).bindPopup('{{ pin.display_label|escapejs }}').openPopup();
 })();
 </script>

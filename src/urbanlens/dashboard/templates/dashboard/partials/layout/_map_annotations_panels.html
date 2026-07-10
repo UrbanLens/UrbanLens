@@ -10,6 +10,7 @@ No page-specific (pin vs location) values are referenced here - see
 ts/entries/map-annotations.ts for the parameterized JS half (config read from
 a sibling #map-annotations-config element, not from this partial).
 {% endcomment %}
+{% load map_components %}
 
 {# -- Map sidebar panel (Details + Photos tabs) -- #}
 <div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
@@ -40,6 +41,10 @@ a sibling #map-annotations-config element, not from this partial).
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
+    {# Shared layers panel - same component and engine as the main map. The  #}
+    {# details/photos buttons are page-registered toggles (see the `custom`  #}
+    {# option in ts/entries/map-annotations.ts).                             #}
+    {% map_layers_panel "street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
     <div id="edit-boundary-btns" class="map-overlay-btn-group">
         <button id="edit-property-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditBoundary('property')"
                 title="Draw or reshape the property (grounds/parcel) boundary">

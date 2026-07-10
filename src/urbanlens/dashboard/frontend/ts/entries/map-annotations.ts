@@ -11,6 +11,7 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction } from "../shared/dialogs";
+import { createMapLayers } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -112,22 +113,6 @@ function init(): void {
         map.scrollWheelZoom.disable();
     });
 
-    const stdLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
-    const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles &copy; Esri", maxZoom: 19 });
-    const topoLayer = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 17 });
-
-    (cfg.defaultMapView === "satellite" ? satLayer : cfg.defaultMapView === "topographic" ? topoLayer : stdLayer).addTo(map);
-
-    const baseLayers = { Street: stdLayer, Satellite: satLayer, Topographic: topoLayer };
-    const overlays: Record<string, L.Layer> = {};
-
-    if (cfg.openweathermapApiKey) {
-        const rainLayer = L.tileLayer(`https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid=${cfg.openweathermapApiKey}`, { layer: "precipitation_new" as never, opacity: 0.7, attribution: "&copy; OpenWeatherMap" } as never);
-        const cloudLayer = L.tileLayer(`https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid=${cfg.openweathermapApiKey}`, { layer: "clouds_new" as never, opacity: 0.5, attribution: "&copy; OpenWeatherMap" } as never);
-        overlays.Rain = rainLayer;
-        overlays.Clouds = cloudLayer;
-    }
-
     const markerIcon = L.icon({
         iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
         shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
@@ -190,12 +175,27 @@ function init(): void {
     const detailPinLayer = L.layerGroup();
     const markupLayer = L.layerGroup();
     const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
-    overlays.Details = detailsLayer;
 
     const photoLayer = L.layerGroup().addTo(map);
-    overlays.Photos = photoLayer;
 
-    L.control.layers(baseLayers, overlays, { position: "topright", collapsed: true }).addTo(map);
+    // Shared layers engine + panel - the exact same component as the main map
+    // (see {% map_layers_panel %} in _map_annotations_panels.html). Details and
+    // Photos are this page's own layer groups, registered as custom toggles.
+    createMapLayers(map, {
+        root: document.getElementById("detail-map-layers"),
+        apiKey: cfg.openweathermapApiKey || null,
+        defaultBase: cfg.defaultMapView,
+        custom: {
+            details: {
+                isActive: () => map.hasLayer(detailsLayer),
+                toggle: () => (map.hasLayer(detailsLayer) ? map.removeLayer(detailsLayer) : detailsLayer.addTo(map)),
+            },
+            photos: {
+                isActive: () => map.hasLayer(photoLayer),
+                toggle: () => (map.hasLayer(photoLayer) ? map.removeLayer(photoLayer) : photoLayer.addTo(map)),
+            },
+        },
+    });
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end.
     const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");

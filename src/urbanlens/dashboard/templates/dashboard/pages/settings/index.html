@@ -923,39 +923,22 @@ function applyGuidancePreview(level) {
     // Fallback when there is no server-provided center yet (new user with no pins).
     if (previewLat === null) { previewLat = 40.7128; previewLng = -74.0060; }
 
-    // Tile layer URLs for each view mode.
-    var _TILE_URLS = {
-        street:      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        satellite:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        topographic: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    };
-    var _TILE_ATTRIBS = {
-        street:      '© OpenStreetMap contributors',
-        satellite:   'Tiles © Esri',
-        topographic: '© OpenTopoMap contributors',
-    };
-
     // Detect the user's current default map view from the selected radio.
     var _currentMapViewTile = (function () {
         var checked = document.querySelector('input[name="default_map_view"]:checked');
         return checked ? checked.value : 'satellite';
     }());
 
-    // Initialise the preview Leaflet map.
+    // Initialise the preview Leaflet map. Tiles come from the shared
+    // window.MapLayers factory so the preview always matches the real maps.
     var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
-    var _previewTileLayer = L.tileLayer(_TILE_URLS[_currentMapViewTile] || _TILE_URLS.street, {
-        attribution: _TILE_ATTRIBS[_currentMapViewTile] || _TILE_ATTRIBS.street,
-        maxZoom: 19,
-    }).addTo(previewMap);
+    var _previewTileLayer = window.MapLayers.tileLayer(_currentMapViewTile).addTo(previewMap);
 
     // Switch the preview tile layer when the user picks a different map view.
     document.querySelectorAll('input[name="default_map_view"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
-            var view = radio.value;
-            var url  = _TILE_URLS[view] || _TILE_URLS.street;
-            var attr = _TILE_ATTRIBS[view] || _TILE_ATTRIBS.street;
-            _previewTileLayer.setUrl(url);
-            previewMap.attributionControl.addAttribution(attr);
+            previewMap.removeLayer(_previewTileLayer);
+            _previewTileLayer = window.MapLayers.tileLayer(radio.value).addTo(previewMap);
         });
     });
 

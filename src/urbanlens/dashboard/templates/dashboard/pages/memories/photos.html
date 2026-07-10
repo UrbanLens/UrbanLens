@@ -128,7 +128,7 @@
 
         if (confirmMap) { confirmMap.remove(); confirmMap = null; }
         confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(confirmMap);
+        window.MapLayers.tileLayer('street').addTo(confirmMap);
         var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
 
         var latInput = document.getElementById('photo-pin-confirm-lat');

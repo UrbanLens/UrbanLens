@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load map_components %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -19,6 +20,8 @@
     {# -- Activity map ---------------------------------------------------- #}
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
+        {# Shared layers panel - same component and engine as the main map. #}
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
         <div class="trip-map-overlay">
             <button type="button" class="btn btn--icon trip-map-past-btn" id="trip-map-completed-toggle"
                     onclick="window.tripToggleShowCompleted()"
@@ -611,23 +614,12 @@
     }
 
     function _initMap() {
-        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19,
-        });
-        var satellite = L.tileLayer(
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-            maxZoom: 18,
-        });
-        var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
-            maxZoom: 17,
-        });
-
         _map = L.map('trip-map', {contextmenu: false});
-        osm.addTo(_map);
-        L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(_map);
+        // Shared layers engine + panel - the exact same component as the main
+        // map (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in this page's map wrapper).
+        window.MapLayers.create(_map, {
+            root: document.getElementById('trip-map-layers'),
+        });
         _markersGroup = L.layerGroup().addTo(_map);
 
         // Right-click on map → context menu to add activity at those coords

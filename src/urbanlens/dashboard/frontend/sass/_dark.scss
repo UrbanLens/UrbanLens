@@ -957,7 +957,7 @@
         border-color: var(--ul-grey-1a);
     }
 
-    .cmc-layer-btn,
+    .map-layers-strip-btn,
     .cmc-tool-btn,
     .cmc-undo-btn,
     .cmc-clear-btn {
@@ -967,7 +967,8 @@
             background: var(--ul-hover-bg);
         }
 
-        &.is-active {
+        &.is-active,
+        &.active {
             background: rgba($color-indigo-700, .25);
             border-color: $color-indigo-600;
             color: $color-indigo-300;
