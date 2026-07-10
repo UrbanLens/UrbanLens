@@ -625,6 +625,11 @@ urlpatterns = [
                     name="location.wiki.revert",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/history/<int:edit_id>/delete/",
+                    location_wiki.LocationWikiEditDeleteView.as_view(),
+                    name="location.wiki.history.delete",
+                ),
+                path(
                     "<slug:location_slug>/wiki/detail-pins/json/",
                     detail_pins.LocationDetailPinJsonView.as_view(),
                     name="location.wiki.detail_pins.json",

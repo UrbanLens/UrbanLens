@@ -486,6 +486,11 @@
         @include truncate;
     }
 
+    .wiki-history-actions {
+        display: flex;
+        gap: .5rem;
+    }
+
     .wiki-revert-btn {
         @include btn-base;
         padding: .3rem .7rem;
@@ -498,6 +503,19 @@
 
         &:hover {
             border-color: $color-red-600;
+            opacity: 1;
+        }
+    }
+
+    .wiki-delete-btn {
+        background: $color-red-600;
+        border-color: $color-red-600;
+        color: #fff;
+        opacity: .85;
+
+        &:hover {
+            background: $color-red-700;
+            border-color: $color-red-700;
             opacity: 1;
         }
     }

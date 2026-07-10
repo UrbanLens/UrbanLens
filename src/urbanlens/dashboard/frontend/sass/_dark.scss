@@ -1249,6 +1249,17 @@
             }
         }
 
+        .wiki-delete-btn {
+            background: $color-red-700;
+            border-color: $color-red-700;
+            color: #fff;
+
+            &:hover {
+                background: $color-red-600;
+                border-color: $color-red-600;
+            }
+        }
+
         .wiki-history-empty {
             color: var(--ul-grey-6);
         }

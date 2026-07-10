@@ -234,6 +234,69 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "changes": list(changes.keys())})
 
 
+def _render_history(request, location: Location, wiki: Wiki):
+    """Render the edit-history partial, including the requester's own profile.
+
+    Shared by the history list view and the revert/delete actions below so a
+    successful action re-renders the up-to-date list in place, instead of
+    leaving a stale row (or a raw JSON body) swapped into the DOM.
+    """
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
+    return render(
+        request,
+        "dashboard/pages/location/wiki_history.html",
+        {"location": location, "wiki": wiki, "edits": edits, "current_profile": profile},
+    )
+
+
+def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> dict[str, dict]:
+    """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
+
+    Mutates ``wiki`` (and any associated Boundary rows) in place - the caller
+    is responsible for calling ``wiki.save()`` afterwards.
+
+    Returns:
+        A diff dict in the same ``{"field": {"from": ..., "to": ...}}`` shape
+        used by ``WikiEdit.changes``, computed against the values as they
+        stood right before this call.
+    """
+    revert_changes: dict[str, dict] = {}
+    for field, diff in target_edit.changes.items():
+        old_val = diff.get("from")
+        if field == "bounding_box" or field.startswith("boundary_"):
+            # "bounding_box" is the legacy audit key from the single-boundary
+            # era; treat it as the property boundary.
+            boundary_type = field.removeprefix("boundary_") if field.startswith("boundary_") else BoundaryType.PROPERTY
+            if boundary_type not in BoundaryType.values:
+                continue
+            row = Boundary.objects.row_for_wiki(wiki, boundary_type)
+            current_val = row.polygon.wkt if row and row.polygon else None
+            revert_changes[field] = {"from": current_val, "to": old_val}
+            if old_val:
+                restored = GEOSGeometry(old_val, srid=4326)
+                if isinstance(restored, Polygon):
+                    restored = MultiPolygon(restored, srid=restored.srid)
+                if row is None:
+                    row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
+                row.polygon = restored
+                row.save()
+            elif row is not None:
+                row.delete()
+        elif field in {"latitude", "longitude"}:
+            # Coordinate reverts repoint the Location; skip silently if the
+            # target place is unavailable. Handled together below.
+            current_val = getattr(wiki, field, None)
+            revert_changes[field] = {"from": str(current_val), "to": old_val}
+            with contextlib.suppress(TypeError, ValueError):
+                _apply_coordinate_change(wiki, {field: float(old_val)})
+        else:
+            current_val = getattr(wiki, field, None)
+            revert_changes[field] = {"from": current_val, "to": old_val}
+            setattr(wiki, field, old_val)
+    return revert_changes
+
+
 class LocationWikiHistoryView(LoginRequiredMixin, View):
     """HTMX partial: edit history list for a wiki.
 
@@ -242,12 +305,7 @@ class LocationWikiHistoryView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location, wiki = _resolve_wiki(location_slug)
-        edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
-        return render(
-            request,
-            "dashboard/pages/location/wiki_history.html",
-            {"location": location, "wiki": wiki, "edits": edits},
-        )
+        return _render_history(request, location, wiki)
 
 
 class LocationWikiRevertView(LoginRequiredMixin, View):
@@ -266,40 +324,7 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
 
-        revert_changes: dict[str, dict] = {}
-        for field, diff in target_edit.changes.items():
-            old_val = diff.get("from")
-            if field == "bounding_box" or field.startswith("boundary_"):
-                # "bounding_box" is the legacy audit key from the single-boundary
-                # era; treat it as the property boundary.
-                boundary_type = field.removeprefix("boundary_") if field.startswith("boundary_") else BoundaryType.PROPERTY
-                if boundary_type not in BoundaryType.values:
-                    continue
-                row = Boundary.objects.row_for_wiki(wiki, boundary_type)
-                current_val = row.polygon.wkt if row and row.polygon else None
-                revert_changes[field] = {"from": current_val, "to": old_val}
-                if old_val:
-                    restored = GEOSGeometry(old_val, srid=4326)
-                    if isinstance(restored, Polygon):
-                        restored = MultiPolygon(restored, srid=restored.srid)
-                    if row is None:
-                        row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
-                    row.polygon = restored
-                    row.save()
-                elif row is not None:
-                    row.delete()
-            elif field in {"latitude", "longitude"}:
-                # Coordinate reverts repoint the Location; skip silently if the
-                # target place is unavailable. Handled together below.
-                current_val = getattr(wiki, field, None)
-                revert_changes[field] = {"from": str(current_val), "to": old_val}
-                with contextlib.suppress(TypeError, ValueError):
-                    _apply_coordinate_change(wiki, {field: float(old_val)})
-            else:
-                current_val = getattr(wiki, field, None)
-                revert_changes[field] = {"from": current_val, "to": old_val}
-                setattr(wiki, field, old_val)
-
+        revert_changes = _revert_edit_fields(location, wiki, target_edit)
         wiki.save()
 
         revert_edit = WikiEdit.objects.create(
@@ -311,4 +336,39 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         target_edit.reverted_by = revert_edit
         target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
-        return JsonResponse({"ok": True})
+        return _render_history(request, location, wiki)
+
+
+class LocationWikiEditDeleteView(LoginRequiredMixin, View):
+    """Permanently erase one of the requesting user's own wiki edits.
+
+    POST /location/<slug>/wiki/history/<edit_id>/delete/
+
+    Unlike a plain revert (which keeps the edit visible in history, just
+    flagged as reverted), this restores the fields to their pre-edit values
+    (if not already reverted) and hard-deletes the WikiEdit row - and its
+    revert record, if any, since that also carries the original value as its
+    "from" - so no copy of the data lingers anywhere. Intended for cases like
+    accidentally pasting private information into a public wiki field.
+
+    Only the editor who made the original edit may delete it.
+    """
+
+    def post(self, request, location_slug, edit_id: int):
+        location, wiki = _resolve_wiki(location_slug)
+        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if target_edit.editor_id != profile.id:
+            return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
+
+        if not target_edit.reverted:
+            _revert_edit_fields(location, wiki, target_edit)
+            wiki.save()
+
+        revert_record = target_edit.reverted_by
+        if revert_record is not None:
+            revert_record.delete()
+        target_edit.delete()
+
+        return _render_history(request, location, wiki)
