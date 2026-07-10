@@ -49,8 +49,7 @@ class Route(abstract.FrontendDashboardModel):
     how aggressively the display geometry was simplified.
 
     Unlike Pin/Location, routes are personal GPS data with no shared/wiki
-    analog, so they are always scoped to the owning profile - there is no
-    ``is_private`` flag.
+    analog, so they are always scoped to the owning profile.
 
     Attributes:
         profile: Owning profile - routes are never shared between profiles.

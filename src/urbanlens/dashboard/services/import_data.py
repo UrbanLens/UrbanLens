@@ -387,15 +387,13 @@ def _import_pins(
 ) -> None:
     """Import user pins.
 
-    Pins are imported as bare coordinates with no Location link, exactly as if
-    the user had dropped a new pin manually or imported a Google Takeout file.
-    Location resolution (matching an existing shared Location nearby, or
-    creating a new one) is handled by the same asynchronous machinery that
-    covers those flows: the ``enqueue_location_creation`` post_save signal on
-    Pin enqueues ``create_location_for_pin``, which runs
-    ``LocationCreationService.create_for_pin``. This avoids re-creating
-    community wiki data (name, address, description) from a personal export,
-    which may be stale or duplicate what's already on this instance.
+    Pins are imported as bare coordinates, exactly as if the user had dropped
+    a new pin manually or imported a Google Takeout file. Location resolution
+    (matching an existing shared Location nearby, or creating a new one)
+    happens inside ``Pin.objects.get_nearby_or_create``. No community wiki,
+    boundary, or external-API work happens at import time: wikis are created
+    explicitly by the user from the pin detail page, and default boundaries
+    are generated lazily when a pin detail page is first viewed.
 
     Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create``
     (the same helper the Google Takeout importer uses) rather than inserted
@@ -438,7 +436,6 @@ def _import_pins(
             "icon": row.get("icon") or None,
             "color": row.get("color") or None,
             "priority": int(row.get("priority", 0)),
-            "is_private": bool(row.get("is_private", False)),
             "pin_type": row.get("pin_type", "location"),
             "detail_bg_color": row.get("detail_bg_color") or None,
             "detail_bg_opacity": int(row.get("detail_bg_opacity", 80)),

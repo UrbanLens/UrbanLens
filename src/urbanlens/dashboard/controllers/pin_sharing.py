@@ -34,7 +34,6 @@ def _create_pin_from_share(share: PinShare) -> Pin:
     new_pin = Pin.objects.create(
         profile=share.to_profile,
         location=source.location,
-        is_private=source.is_private,
         name=source.name,
         name_is_user_provided=source.name_is_user_provided,
         icon=source.icon,

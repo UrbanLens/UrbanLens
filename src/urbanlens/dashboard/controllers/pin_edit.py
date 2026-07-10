@@ -536,11 +536,10 @@ class PinRelinkView(LoginRequiredMixin, View):
         if location_slug:
             location = get_object_or_404(Location, slug=location_slug)
         else:
-            # Detach: create a new bare Location at this pin's coordinates so
-            # the pin retains its own independent community wiki page.
+            # Detach: create a new bare Location at this pin's coordinates.
             # Use the existing location's canonical name if available; otherwise
             # fetch the Google place name.  Never fall back to pin.name -
-            # that is personal data and must not become a community wiki title.
+            # that is personal data and must not become a community place name.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
             if pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
@@ -554,9 +553,10 @@ class PinRelinkView(LoginRequiredMixin, View):
 
                 location = _create_location_with_canonical_name(lat, lng)
 
-        wiki, _ = Wiki.objects.get_or_create_for_location(location)
+        # Wikis are user-created only: link to the location's wiki when one
+        # exists, otherwise leave the pin wiki-less until someone creates one.
         pin.location = location
-        pin.wiki = wiki
+        pin.wiki = Wiki.objects.get_for_location(location)
         pin.save(update_fields=["location", "wiki"])
         pin.refresh_from_db()
 

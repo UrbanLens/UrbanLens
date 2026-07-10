@@ -249,7 +249,7 @@ class BuiltinDiscoveryTests(TestCase):
         from urbanlens.dashboard.services.external_data import panel_sources
 
         sources = panel_sources()
-        for key in ("campus", "satellite", "street_view"):
+        for key in ("boundary", "satellite", "street_view"):
             self.assertIn(key, sources, f"core panel '{key}' missing")
         for key in ("wikipedia", "nominatim", "usgs_topo", "nps", "loopnet", "smithsonian", "wikimedia", "loc"):
             self.assertIn(key, sources, f"plugin panel '{key}' missing")

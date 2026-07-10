@@ -64,7 +64,7 @@ def test_schedule_panel_fetch_skipped_when_external_apis_disabled() -> None:
     pin.profile.save(update_fields=["external_apis_enabled"])
 
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
-        result = schedule_panel_fetch("campus", pin)
+        result = schedule_panel_fetch("boundary", pin)
 
     assert result is False
     fetch_task.delay.assert_not_called()
@@ -78,7 +78,7 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
     assert pin.profile.external_apis_enabled
 
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
-        result = schedule_panel_fetch("campus", pin)
+        result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
     fetch_task.delay.assert_called_once()

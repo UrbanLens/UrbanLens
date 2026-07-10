@@ -39,11 +39,12 @@ class RecordGeolocationPinVisitsTests(TestCase):
             location=self.location,
         )
         baker.make(
-            "dashboard.Campus",
+            "dashboard.Boundary",
             location=self.location,
             pin=self.pin,
             profile=self.profile,
-            generated_polygon=_square_around(-74.0, 40.0),
+            boundary_type="property",
+            polygon=_square_around(-74.0, 40.0),
         )
 
     def test_creates_geolocation_visit_when_point_is_inside_pin_boundary(self):

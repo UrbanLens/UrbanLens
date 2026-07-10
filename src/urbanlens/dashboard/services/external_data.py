@@ -1,7 +1,7 @@
 """Background-fetch orchestration for the pin detail page's external-data panels.
 
 Every external-data panel (Wikipedia, media archives, satellite imagery,
-campus boundary, ...) used to fetch its upstream data inside the HTTP request
+default boundaries, ...) used to fetch its upstream data inside the HTTP request
 that rendered it, bounded only by a wall-clock deadline. That kept slow
 providers from hanging a single request, but the work still happened on the
 web worker: a cold pin page fired ~10 upstream fetches through the request
@@ -154,7 +154,7 @@ class PanelSource(ABC):
         """Fetch from the upstream provider(s) and persist to the panel's store.
 
         Runs inside a Celery worker, never on the request path. Implementations
-        persist their own results (LocationCache row, Campus column, Django
+        persist their own results (LocationCache row, Boundary column, Django
         cache entries) including an explicit empty result when the provider
         genuinely found nothing -- an absent store entry means "not fetched
         yet", and an empty one means "fetched, nothing there".
@@ -244,42 +244,50 @@ class MediaPanelSource(LocationCachePanelSource):
         gateway.get_media(pin.location, terms)
 
 
-class CampusBoundaryPanelSource(PanelSource):
-    """Auto-generated campus boundary stored on the pin's Campus row."""
+class BoundaryPanelSource(PanelSource):
+    """Auto-generated default boundaries stored on the Location's Boundary rows.
 
-    key = "campus"
+    Location-scoped: the generated property/building boundaries are shared
+    place data, so one fetch serves every pin (and the wiki page) at that
+    Location. This is the lazy path that replaced eager generation on pin
+    creation - the provider chain only runs when someone actually views a pin
+    detail page (or creates a wiki).
+    """
+
+    key = "boundary"
 
     def scope(self, pin: Pin) -> str:
-        """Pin-scoped: campus boundaries are keyed by Pin, not Location."""
-        return f"pin{pin.pk}"
+        """Location-scoped: default boundaries are keyed by Location."""
+        return f"loc{pin.location_id}"
 
     def is_ready(self, pin: Pin) -> bool:
-        """True when the pin's Campus row has a generated boundary."""
-        from urbanlens.dashboard.models.campus.model import Campus
+        """True when the provider chain has run for the pin's Location.
 
-        return Campus.objects.filter(pin=pin, generated_polygon__isnull=False).exists()
+        ``generated_at`` is stamped even when no polygon was found, so a
+        fruitless run doesn't retrigger the chain on every page view.
+        """
+        from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+
+        if pin.location_id is None:
+            return True
+        row = Boundary.objects.row_for_location(pin.location, BoundaryType.PROPERTY)
+        return row is not None and row.generated_at is not None
 
     def fetch(self, pin: Pin) -> None:
-        """Run the boundary provider chain and persist the generated polygon.
+        """Run the boundary provider chain and persist generated polygons.
 
         The chain's heavy steps (downloading and gunzipping building-footprint
         shards, shapely geometry work) are exactly why this runs in Celery: on
         the request path that CPU work blocked the entire gevent event loop.
-        Persistence uses a single-column queryset ``update()`` so it can never
-        clobber other Campus fields saved concurrently by the web request.
+        Persistence uses queryset ``update()`` calls (see
+        ``generate_location_boundaries``) so it can never clobber geometry
+        saved concurrently by the web request.
         """
-        from urbanlens.dashboard.models.campus.model import Campus
-        from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
+        from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries
 
-        campus = Campus.objects.filter(pin=pin).first()
-        if campus is None or campus.generated_polygon is not None:
+        if pin.location_id is None or self.is_ready(pin):
             return
-        lat = pin.effective_latitude
-        lon = pin.effective_longitude
-        if lat is None or lon is None:
-            return
-        poly = boundary_as_multipolygon(float(lat), float(lon), name=pin.effective_name)
-        Campus.objects.filter(pk=campus.pk).update(generated_polygon=poly, updated=timezone.now())
+        generate_location_boundaries(pin.location, name=pin.effective_name)
 
 
 def _satellite_gateways() -> list[SatelliteViewProvider]:
@@ -424,10 +432,10 @@ class StreetViewPanelSource(SlidesPanelSource):
 
 
 #: Panels that belong to the core application rather than any one plugin:
-#: the campus boundary and the two imagery carousels (which aggregate
+#: the default boundaries and the two imagery carousels (which aggregate
 #: plugin-contributed providers but are themselves core features).
 _CORE_PANEL_SOURCES: tuple[PanelSource, ...] = (
-    CampusBoundaryPanelSource(),
+    BoundaryPanelSource(),
     SatellitePanelSource(),
     StreetViewPanelSource(),
 )

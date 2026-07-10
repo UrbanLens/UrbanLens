@@ -1,6 +1,6 @@
 {% comment %}
 Shared map annotations script - markup drawing/editing, the unified detail-pin
-side panel, the Campus-based boundary editor (+ its context menu), and the
+side panel, the typed boundary editor (+ its context menu), and the
 Details/Photos layers list panel. Used identically by the pin detail page and
 the Location wiki page; a fix here lands on both.
 
@@ -42,16 +42,16 @@ markup_border_color, markup_border_opacity.
     const map = L.map('map', { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
     window.map = map;
 
-    // Dedicated panes keep markup shapes clickable even when a campus boundary
+    // Dedicated panes keep markup shapes clickable even when a boundary
     // polygon visually overlaps them - without this, both layer groups share the
     // default overlayPane and whichever one's SVG was appended to the DOM last
-    // (campus, since it loads after markup) silently swallows clicks meant for
-    // the markup shape underneath.
+    // (boundaries, since they load after markup) silently swallows clicks meant
+    // for the markup shape underneath.
     // Both stay below the default markerPane (600) so our own arrowhead/text/label
     // markers still render on top of their own shapes, but above the default
     // overlayPane (400) that any unrelated vector layer would otherwise share.
     map.createPane('markupPane').style.zIndex = 550;
-    map.createPane('campusPane').style.zIndex = 540;
+    map.createPane('boundaryPane').style.zIndex = 540;
 
     // Enable scroll-wheel zoom only after the user has hovered over the map
     // for a moment, so normal page scrolling is not hijacked.
@@ -577,12 +577,30 @@ markup_border_color, markup_border_opacity.
         })
         .catch(err => console.warn('Could not load gallery photos for panel:', err));
 
-    // -- Campus boundary editor ------------------------------------------------
-    const campusApiUrl = "{{ boundary_url }}";
-    const campusItems = new L.FeatureGroup().addTo(map);
-    const campusStyle = { pane: 'campusPane', color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 };
-    let campusDrawControl = null;
-    let _savedCampusGeoJSON = null;
+    // -- Boundary editor (property + building) ---------------------------------
+    // Two typed boundaries render in different colors: the property boundary
+    // (parcel/grounds, red) and the building boundary (footprint, blue). Each
+    // is fetched, drawn, and edited independently against the same endpoint.
+    const boundaryApiUrl = "{{ boundary_url }}";
+    const BOUNDARY_STYLES = {
+        property: { pane: 'boundaryPane', color: '#cc2200', fillColor: '#ff4422', fillOpacity: 0.2, weight: 2 },
+        building: { pane: 'boundaryPane', color: '#1d4ed8', fillColor: '#3b82f6', fillOpacity: 0.22, weight: 2 },
+    };
+    // The synthesized default circle is display-only context, not real
+    // geometry - dashed and faint, with the main marker left visible.
+    const CIRCLE_STYLE = Object.assign({}, BOUNDARY_STYLES.property, { dashArray: '6 6', fillOpacity: 0.06 });
+    // Building boundaries drawn on this pin's detail pins (display-only here).
+    const DETAIL_BUILDING_STYLE = Object.assign({}, BOUNDARY_STYLES.building, { dashArray: '4 4', fillOpacity: 0.12 });
+    const boundaryGroups = {
+        property: new L.FeatureGroup().addTo(map),
+        building: new L.FeatureGroup().addTo(map),
+    };
+    const detailBuildingItems = new L.FeatureGroup().addTo(map);
+    let boundaryDrawControl = null;
+    let _editingBoundaryType = null;
+    const _savedBoundaries = { property: null, building: null };   // GeoJSON as last returned by the server
+    const _boundarySources = { property: null, building: null };   // pin|wiki|inherited|generated|circle|null
+    let _boundaryBoundsFitted = false;
 
     // Clicking an already-active draw-toolbar tool cancels it instead of no-op re-enabling it.
     if (!window._boundaryDrawToggleWired) {
@@ -604,60 +622,88 @@ markup_border_color, markup_border_opacity.
         }
     }
 
-    function _loadSavedCampus(geojson) {
-        campusItems.clearLayers();
-        if (geojson) {
-            // Split MultiPolygon into individual L.Polygon layers so Leaflet.Draw
-            // can edit each sub-polygon independently.
-            const rings = geojson.type === 'MultiPolygon'
-                ? geojson.coordinates
-                : geojson.type === 'Polygon'
-                    ? [geojson.coordinates]
-                    : null;
-            if (rings) {
-                rings.forEach(ringSet => {
-                    // GeoJSON coords are [lng, lat]; Leaflet wants [lat, lng].
-                    campusItems.addLayer(
-                        L.polygon(ringSet.map(ring => ring.map(c => [c[1], c[0]])), campusStyle)
-                    );
-                });
-            } else {
-                // FeatureCollection fallback
-                L.geoJSON(geojson, { style: campusStyle }).eachLayer(l => campusItems.addLayer(l));
-            }
-            if (campusItems.getLayers().length) {
-                map.fitBounds(campusItems.getBounds().pad(0.25));
-            }
-            _setMainMarkerVisible(false);
+    function _addGeoJSONPolygons(group, geojson, style) {
+        // Split MultiPolygon into individual L.Polygon layers so Leaflet.Draw
+        // can edit each sub-polygon independently.
+        const rings = geojson.type === 'MultiPolygon'
+            ? geojson.coordinates
+            : geojson.type === 'Polygon'
+                ? [geojson.coordinates]
+                : null;
+        if (rings) {
+            rings.forEach(ringSet => {
+                // GeoJSON coords are [lng, lat]; Leaflet wants [lat, lng].
+                group.addLayer(L.polygon(ringSet.map(ring => ring.map(c => [c[1], c[0]])), style));
+            });
         } else {
-            _setMainMarkerVisible(true);
+            // FeatureCollection fallback
+            L.geoJSON(geojson, { style: style }).eachLayer(l => group.addLayer(l));
+        }
+    }
+
+    function _loadBoundary(type, geojson, source) {
+        const group = boundaryGroups[type];
+        group.clearLayers();
+        _savedBoundaries[type] = geojson || null;
+        _boundarySources[type] = geojson ? (source || null) : null;
+        if (!geojson) return;
+        const style = (type === 'property' && source === 'circle') ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
+        _addGeoJSONPolygons(group, geojson, style);
+    }
+
+    function _boundaryHasRealPolygon(type) {
+        return Boolean(_savedBoundaries[type]) && _boundarySources[type] !== 'circle';
+    }
+
+    function _applyBoundaryPayload(data) {
+        const boundaries = data.boundaries || {};
+        ['property', 'building'].forEach(type => {
+            const entry = boundaries[type] || {};
+            _loadBoundary(type, entry.polygon || null, entry.source || null);
+        });
+        // Buildings drawn on detail pins keep the building layer meaningful even
+        // when this pin has no building boundary of its own. When neither
+        // exists, no building layer is shown at all ("no known building here").
+        detailBuildingItems.clearLayers();
+        (data.detail_buildings || []).forEach(entry => {
+            if (entry.polygon) _addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE);
+        });
+        // The center marker stays visible unless a real (non-circle) property
+        // polygon marks the place's extent.
+        _setMainMarkerVisible(!_boundaryHasRealPolygon('property'));
+        if (!_boundaryBoundsFitted) {
+            const fitGroup = _boundaryHasRealPolygon('property') ? boundaryGroups.property
+                : (_boundaryHasRealPolygon('building') ? boundaryGroups.building : null);
+            if (fitGroup && fitGroup.getLayers().length) {
+                map.fitBounds(fitGroup.getBounds().pad(0.25));
+                _boundaryBoundsFitted = true;
+            }
         }
         map.invalidateSize();
-        if (typeof _attachCampusClickHandlers === 'function') _attachCampusClickHandlers();
+        if (typeof _attachBoundaryClickHandlers === 'function') _attachBoundaryClickHandlers();
     }
 
     // Boundary generation happens in a background task on first view (see
     // services/external_data.py) - while the server reports pending, poll
-    // until the generated polygon lands rather than blocking the page load.
-    function _fetchCampus(attempt) {
-        fetch(campusApiUrl)
+    // until the generated polygons land rather than blocking the page load.
+    function _fetchBoundaries(attempt) {
+        fetch(boundaryApiUrl)
             .then(r => r.json())
             .then(data => {
-                if (data.pending) {
-                    if ((attempt || 0) < 30) setTimeout(() => _fetchCampus((attempt || 0) + 1), 2000);
-                    return;
+                _applyBoundaryPayload(data);
+                if (data.pending && (attempt || 0) < 30) {
+                    setTimeout(() => _fetchBoundaries((attempt || 0) + 1), 2000);
                 }
-                _savedCampusGeoJSON = data.polygon || null;
-                _loadSavedCampus(_savedCampusGeoJSON);
             })
-            .catch(err => console.warn('Could not load campus:', err));
+            .catch(err => console.warn('Could not load boundaries:', err));
     }
-    _fetchCampus(0);
+    _fetchBoundaries(0);
 
     function _attachEditRightClickDelete() {
         // Walk the edit handler's marker group and fire a click (delete) on right-click
         setTimeout(() => {
-            campusItems.eachLayer(layer => {
+            if (!_editingBoundaryType) return;
+            boundaryGroups[_editingBoundaryType].eachLayer(layer => {
                 if (layer.editing && layer.editing._markerGroup) {
                     layer.editing._markerGroup.eachLayer(m => {
                         m.off('contextmenu.rcdelete');
@@ -671,116 +717,148 @@ markup_border_color, markup_border_opacity.
         }, 100);
     }
 
-    function startEditCampus() {
-        if (campusDrawControl) return;
-        // Editing the boundary is its own exclusive map-interaction mode - close
+    function _setBoundaryEditButtonsVisible(visible) {
+        const btns = document.getElementById('edit-boundary-btns');
+        const controls = document.getElementById('boundary-save-controls');
+        if (btns) btns.style.display = visible ? '' : 'none';
+        if (controls) controls.style.display = visible ? 'none' : '';
+    }
+
+    function startEditBoundary(type) {
+        if (boundaryDrawControl || !boundaryGroups[type]) return;
+        _editingBoundaryType = type;
+        // Editing a boundary is its own exclusive map-interaction mode - close
         // whichever side panel happens to be open first (autosave makes this safe).
         if (typeof closeMarkupPanel === 'function') closeMarkupPanel();
         if (typeof closeDetailPinPanel === 'function') closeDetailPinPanel();
-        // While actively editing the boundary, campus polygons need to catch clicks/drags
+        // While actively editing, boundary polygons need to catch clicks/drags
         // ahead of markup shapes - temporarily swap the pane stacking order for that.
-        map.getPane('campusPane').style.zIndex = 560;
-        campusDrawControl = new L.Control.Draw({
+        map.getPane('boundaryPane').style.zIndex = 560;
+
+        const group = boundaryGroups[type];
+        // The dashed default circle is display-only context, not editable
+        // geometry - drop it so the user draws their real boundary from scratch.
+        if (type === 'property' && _boundarySources.property === 'circle') group.clearLayers();
+
+        boundaryDrawControl = new L.Control.Draw({
             draw: {
                 polygon: {
                     allowIntersection: false,
                     drawError: { color: '#ffcc00', message: 'Boundaries cannot intersect!' },
-                    shapeOptions: campusStyle,
+                    shapeOptions: BOUNDARY_STYLES[type],
                     showArea: true,
                 },
                 marker: false, circle: false, rectangle: false, polyline: false, circlemarker: false,
             },
-            edit: { featureGroup: campusItems, remove: false },
+            edit: { featureGroup: group, remove: false },
         });
-        map.addControl(campusDrawControl);
+        map.addControl(boundaryDrawControl);
         map.on(L.Draw.Event.CREATED, function (e) {
             // Add the new polygon to the existing set - never clear others.
-            campusItems.addLayer(e.layer);
-            _setMainMarkerVisible(false);
-            saveCampus({ exitEdit: false });
+            group.addLayer(e.layer);
+            saveBoundary({ exitEdit: false });
         });
         // Re-attach right-click delete whenever edit mode is activated by toolbar click
         map.on(L.Draw.Event.EDITSTART, _attachEditRightClickDelete);
-        map.on(L.Draw.Event.EDITED, () => saveCampus({ exitEdit: false }));
-        map.on(L.Draw.Event.DELETED, () => saveCampus({ exitEdit: false }));
-        campusItems.eachLayer(layer => layer.on('edit', _scheduleCampusAutoSave));
+        map.on(L.Draw.Event.EDITED, () => saveBoundary({ exitEdit: false }));
+        map.on(L.Draw.Event.DELETED, () => saveBoundary({ exitEdit: false }));
+        group.eachLayer(layer => layer.on('edit', _scheduleBoundaryAutoSave));
 
         // Auto-activate the right tool immediately after the control renders
         setTimeout(() => {
-            if (_savedCampusGeoJSON || campusItems.getLayers().length > 0) {
-                campusDrawControl._toolbars.edit._modes.edit.handler.enable();
+            if (group.getLayers().length > 0) {
+                boundaryDrawControl._toolbars.edit._modes.edit.handler.enable();
                 _attachEditRightClickDelete();
                 toastr.info('Drag vertices to reshape, click a vertex to delete it, or right-click to delete.');
             } else {
-                campusDrawControl._toolbars.draw._modes.polygon.handler.enable();
+                boundaryDrawControl._toolbars.draw._modes.polygon.handler.enable();
             }
         }, 50);
 
-        document.getElementById('edit-campus-btn').style.display = 'none';
-        document.getElementById('campus-save-controls').style.display = '';
+        _setBoundaryEditButtonsVisible(false);
     }
 
-    let _campusAutoSaveTimer = null;
+    let _boundaryAutoSaveTimer = null;
 
-    function _scheduleCampusAutoSave() {
-        if (!campusDrawControl) return;
-        clearTimeout(_campusAutoSaveTimer);
-        _campusAutoSaveTimer = setTimeout(() => saveCampus({ exitEdit: false, quiet: true }), 600);
+    function _scheduleBoundaryAutoSave() {
+        if (!boundaryDrawControl) return;
+        clearTimeout(_boundaryAutoSaveTimer);
+        _boundaryAutoSaveTimer = setTimeout(() => saveBoundary({ exitEdit: false, quiet: true }), 600);
     }
 
-    function saveCampus(options = {}) {
-        const layers = campusItems.getLayers();
+    function _boundaryTypeOfLayer(layer) {
+        if (boundaryGroups.property.hasLayer(layer)) return 'property';
+        if (boundaryGroups.building.hasLayer(layer)) return 'building';
+        return null;
+    }
+
+    function saveBoundary(options = {}) {
+        const type = options.type || _editingBoundaryType;
+        if (!type) return;
+        const layers = boundaryGroups[type].getLayers();
         const geometry = layers.length === 0 ? null : {
             type: 'MultiPolygon',
             coordinates: layers.map(l => l.toGeoJSON().geometry.coordinates),
         };
-        fetch(campusApiUrl, {
+        fetch(boundaryApiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-            body: JSON.stringify({ polygon: geometry }),
+            body: JSON.stringify({ boundary_type: type, polygon: geometry }),
         })
-        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(async r => {
+            if (!r.ok) {
+                let msg = 'HTTP ' + r.status;
+                try { msg = (await r.json()).error || msg; } catch (e) { /* keep default */ }
+                throw new Error(msg);
+            }
+            return r.json();
+        })
         .then(data => {
-            _savedCampusGeoJSON = data.polygon || geometry || null;
-            if (!geometry && data.polygon) _loadSavedCampus(data.polygon);
-            // Reset with no generated default yet: the server queued background
-            // generation - poll until the default boundary lands, then draw it.
-            if (!geometry && !data.polygon && data.pending) _fetchCampus(0);
+            const exiting = options.exitEdit !== false;
+            if (exiting) _exitBoundaryEdit();
+            // The server responds with the full refreshed payload (the clear
+            // path falls back down the resolution chain server-side); only
+            // redraw from it outside active editing so in-progress vertex
+            // edits aren't clobbered.
+            if (exiting || !boundaryDrawControl) _applyBoundaryPayload(data);
+            if (data.pending) _fetchBoundaries(0);
             if (!options.quiet) toastr.success(geometry ? 'Boundary saved.' : 'Boundary reset to the default.');
-            if (options.exitEdit !== false) _exitCampusEdit();
         })
-        .catch(() => toastr.error('Failed to save campus boundary.'));
+        .catch(err => toastr.error('Failed to save boundary: ' + err.message));
     }
 
-    async function clearCampus() {
+    async function clearBoundary() {
+        if (!_editingBoundaryType) return;
         if (!await confirmDialog({title:'Clear Boundary', message:'Reset this boundary to its default?', confirmLabel:'Clear'})) return;
-        campusItems.clearLayers();
-        _setMainMarkerVisible(true);
-        saveCampus();
+        boundaryGroups[_editingBoundaryType].clearLayers();
+        saveBoundary();
     }
 
-    function _exitCampusEdit() {
-        if (campusDrawControl) { map.removeControl(campusDrawControl); campusDrawControl = null; }
+    function _exitBoundaryEdit() {
+        if (boundaryDrawControl) { map.removeControl(boundaryDrawControl); boundaryDrawControl = null; }
         map.off(L.Draw.Event.CREATED);
         map.off(L.Draw.Event.EDITED);
         map.off(L.Draw.Event.DELETED);
-        campusItems.eachLayer(layer => layer.off('edit', _scheduleCampusAutoSave));
-        map.getPane('campusPane').style.zIndex = 540;
-        document.getElementById('edit-campus-btn').style.display = '';
-        document.getElementById('campus-save-controls').style.display = 'none';
-        _attachCampusClickHandlers();
+        if (_editingBoundaryType) {
+            boundaryGroups[_editingBoundaryType].eachLayer(layer => layer.off('edit', _scheduleBoundaryAutoSave));
+        }
+        _editingBoundaryType = null;
+        map.getPane('boundaryPane').style.zIndex = 540;
+        _setBoundaryEditButtonsVisible(true);
+        _attachBoundaryClickHandlers();
     }
 
-    function cancelCampusEdit() {
-        _exitCampusEdit();
-        _loadSavedCampus(_savedCampusGeoJSON);
+    function cancelBoundaryEdit() {
+        const type = _editingBoundaryType;
+        _exitBoundaryEdit();
+        if (type) _loadBoundary(type, _savedBoundaries[type], _boundarySources[type]);
     }
 
-    function finishCampusEdit() {
+    function finishBoundaryEdit() {
         // Edits already autosave as they happen - just flush any pending debounced
         // save so the very last tweak isn't dropped, then leave edit mode.
-        clearTimeout(_campusAutoSaveTimer);
-        saveCampus();
+        clearTimeout(_boundaryAutoSaveTimer);
+        saveBoundary();
     }
 
     // -- Circle-style swatch builder (bg/border for detail pins) --------------
@@ -1109,13 +1187,13 @@ markup_border_color, markup_border_opacity.
             .catch(() => toastr.error('Failed to delete detail pin.'));
     });
 
-    // -- Campus boundary: click a polygon for an Edit/Delete context menu -----
+    // -- Boundaries: click a polygon for an Edit/Delete context menu ----------
     // Leaflet's event system has no jQuery-style dot-namespacing - a listener
     // registered for the literal string 'click.openEditor' never matches a real
     // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
     // handler under the real event name instead.
     function _onBoundaryLayerClick(e) {
-        if (campusDrawControl) return;
+        if (boundaryDrawControl) return;
         // Don't hijack a click that's actually meant to draw a shape onto (or drop
         // a detail pin inside) this boundary - without this, clicking a boundary
         // while a tool is armed always opened the context menu instead of placing
@@ -1126,10 +1204,12 @@ markup_border_color, markup_border_opacity.
         L.DomEvent.stopPropagation(e);
         _openBoundaryCtxMenu(e.target, e.latlng);
     }
-    function _attachCampusClickHandlers() {
-        campusItems.eachLayer(layer => {
-            layer.off('click', _onBoundaryLayerClick);
-            layer.on('click', _onBoundaryLayerClick);
+    function _attachBoundaryClickHandlers() {
+        ['property', 'building'].forEach(type => {
+            boundaryGroups[type].eachLayer(layer => {
+                layer.off('click', _onBoundaryLayerClick);
+                layer.on('click', _onBoundaryLayerClick);
+            });
         });
     }
 
@@ -1148,11 +1228,13 @@ markup_border_color, markup_border_opacity.
         const content = document.createElement('div');
         content.className = 'boundary-ctx-menu';
 
+        const layerType = _boundaryTypeOfLayer(layer);
+
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.className = 'boundary-ctx-menu__item';
         editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i> Edit';
-        editBtn.addEventListener('click', () => { map.closePopup(); startEditCampus(); });
+        editBtn.addEventListener('click', () => { map.closePopup(); if (layerType) startEditBoundary(layerType); });
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
@@ -1160,10 +1242,11 @@ markup_border_color, markup_border_opacity.
         delBtn.innerHTML = '<i class="material-symbols-outlined">delete_outline</i> Delete';
         delBtn.addEventListener('click', async () => {
             map.closePopup();
+            if (!layerType) return;
             if (!await confirmDialog({ title: 'Delete Boundary', message: 'Delete this boundary polygon?', confirmLabel: 'Delete' })) return;
-            campusItems.removeLayer(layer);
-            if (campusItems.getLayers().length === 0) _setMainMarkerVisible(true);
-            saveCampus({ exitEdit: false });
+            boundaryGroups[layerType].removeLayer(layer);
+            if (layerType === 'property' && boundaryGroups.property.getLayers().length === 0) _setMainMarkerVisible(true);
+            saveBoundary({ exitEdit: false, type: layerType });
         });
 
         content.append(editBtn, delBtn);

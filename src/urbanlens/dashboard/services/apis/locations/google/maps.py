@@ -723,9 +723,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             - ``create_category`` (bool): create a ``kind="category"`` badge from *stem*.
             - ``badge_ids`` (list[int]): badge IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, ``badge_ids`` (list[int]), and optionally
-              ``is_private`` (bool) fields.  Private pins are never linked to a
-              shared Location and do not create a community wiki entry.
+              ``description``, ``cid``, and ``badge_ids`` (list[int]) fields.
+              Imports never create community wiki entries or hit external APIs;
+              wikis are created explicitly by the user from the pin detail page.
 
         Yields:
             str: SSE-formatted data lines (same event shapes as ``import_pins_streaming``).
@@ -774,17 +774,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     description = pin_dict.get("description") or ""
                     cid = pin_dict.get("cid")
                     pin_badge_ids = pin_dict.get("badge_ids") or []
-                    is_private = bool(pin_dict.get("is_private", False))
 
                     try:
-                        # Private pins are never linked to a shared wiki.
                         location = Location.objects.by_cid(cid).first() if cid else None
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,
                             "name": pin_name,
                             "description": description,
-                            "is_private": is_private,
                         }
 
                         if location:

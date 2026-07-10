@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models import (
         Badge,
         BadgeCustomization,
-        Campus,
+        Boundary,
         Comment,
         EmailVerification,
         Friendship,
@@ -128,30 +128,24 @@ badge_customization: Recipe[BadgeCustomization] = Recipe(
     badge=foreign_key("dashboard.badge"),
 )
 
-# -- Campus --------------------------------------------------------------------
+# -- Boundary --------------------------------------------------------------------
 
-# Location-level default campus (profile=None, pin=None) - community wiki boundary.
-campus: Recipe[Campus] = Recipe(
-    "dashboard.Campus",
+# Location-default property boundary (profile=None, pin=None, wiki=None) - the
+# shared, API-generated geometry used for point matching.
+boundary: Recipe[Boundary] = Recipe(
+    "dashboard.Boundary",
     location=foreign_key("dashboard.location"),
+    wiki=None,
     profile=None,
     pin=None,
+    boundary_type="property",
     default_radius_meters=50,
 )
 
-# Alias kept for clarity in tests that explicitly want the location default.
-admin_campus: Recipe[Campus] = Recipe(
-    "dashboard.Campus",
-    location=foreign_key("dashboard.location"),
-    profile=None,
-    pin=None,
-    default_radius_meters=100,
-)
-
-# Pin-scoped campuses must be created via baker.make() directly so that
+# Pin-scoped boundaries must be created via baker.make() directly so that
 # location and profile can be wired to match the pin:
-#   baker.make("dashboard.Campus", pin=my_pin, location=my_pin.location,
-#              profile=my_pin.profile)
+#   baker.make("dashboard.Boundary", pin=my_pin, location=my_pin.location,
+#              profile=my_pin.profile, boundary_type="property")
 
 # -- Pin -----------------------------------------------------------------------
 

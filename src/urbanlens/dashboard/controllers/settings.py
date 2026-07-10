@@ -26,7 +26,6 @@ from urbanlens.dashboard.forms.settings_form import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.community import bulk_privatize_pins
 from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
 
 if TYPE_CHECKING:
@@ -193,12 +192,9 @@ class SettingsView(LoginRequiredMixin, View):
                 return redirect("settings.view")
 
         elif section == "community":
-            was_enabled = profile.community_enabled
             community_form = CommunitySettingsForm(request.POST, instance=profile)
             if community_form.is_valid():
                 community_form.save()
-                if was_enabled and not profile.community_enabled:
-                    bulk_privatize_pins(profile)
                 messages.success(request, "Community settings saved.")
                 return redirect("settings.view")
 

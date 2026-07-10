@@ -58,44 +58,43 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         distance = R * c
         return self.filter(distance__lte=distance)
 
-    def _campus_polygon_q(self, pt) -> Q:
-        """Q expression matching Locations whose default Campus *generated* polygon contains pt.
+    def _boundary_polygon_q(self, pt) -> Q:
+        """Q expression matching Locations whose default Boundary *generated* polygon contains pt.
 
-        Only `generated_polygon` (API-derived) is used for matching. The
-        user-editable `polygon` is excluded so a location's boundary can't be
-        inflated by a community edit to capture unrelated pins.
+        Only location-default rows and only `generated_polygon` (API-derived)
+        are used for matching. User/community-drawn polygons are excluded so a
+        boundary can't be inflated by an edit to capture unrelated pins. Both
+        property and building boundaries count - a point inside a building is
+        on that building's property.
         """
-        return Q(wiki__campuses__pin__isnull=True) & Q(wiki__campuses__profile__isnull=True) & Q(wiki__campuses__generated_polygon__contains=pt)
+        return Q(boundaries__pin__isnull=True) & Q(boundaries__wiki__isnull=True) & Q(boundaries__profile__isnull=True) & Q(boundaries__generated_polygon__contains=pt)
 
-    def _locations_without_campus_polygon(self):
-        """Return locations that have no default *generated* campus polygon."""
+    def _locations_without_boundary_polygon(self):
+        """Return locations that have no default *generated* boundary polygon."""
         from django.db.models import Subquery
 
-        from urbanlens.dashboard.models.campus.model import Campus
+        from urbanlens.dashboard.models.boundary.model import Boundary
 
-        with_polygon = Campus.objects.filter(
-            pin__isnull=True,
-            profile__isnull=True,
-            generated_polygon__isnull=False,
-        ).values("wiki__location_id")
+        with_polygon = Boundary.objects.location_defaults().filter(generated_polygon__isnull=False).values("location_id")
         return self.exclude(pk__in=Subquery(with_polygon))
 
     def within_bounding_box(self, latitude: float, longitude: float):
-        """Return Locations whose default Campus *generated* polygon contains this coordinate.
+        """Return Locations whose default Boundary *generated* polygon contains this coordinate.
 
-        Only the API-derived `generated_polygon` is considered, never the
-        user-editable `polygon`. A community-drawn boundary can be inflated to
-        capture unrelated pins, so it must not influence location matching.
-        Falls back to a 50 m proximity check for Locations that have no campus
-        polygon at all, mirroring ``LocationManager.get_all_for_point``.
+        Only the API-derived `generated_polygon` on location-default Boundary
+        rows is considered, never a user/community-drawn `polygon`. A drawn
+        boundary can be inflated to capture unrelated pins, so it must not
+        influence location matching. Falls back to a 50 m proximity check (the
+        default circle boundary) for Locations that have no generated polygon
+        at all, mirroring ``LocationManager.get_all_for_point``.
         """
         from django.contrib.gis.geos import Point as GEOSPoint
 
         pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
-        in_campus = self.filter(self._campus_polygon_q(pt)).distinct()
-        if in_campus.exists():
-            return in_campus
-        return self._locations_without_campus_polygon().filter(point__distance_lte=(pt, D(m=50))).distinct()
+        in_boundary = self.filter(self._boundary_polygon_q(pt)).distinct()
+        if in_boundary.exists():
+            return in_boundary
+        return self._locations_without_boundary_polygon().filter(point__distance_lte=(pt, D(m=50))).distinct()
 
     def filter_by_criteria(self, criteria):
         query = Q()
@@ -105,21 +104,21 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
 
 
 class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_for_point to find a Location whose Campus polygon contains a coordinate."""
+    """Manager for Location. Use get_for_point to find a Location whose Boundary polygon contains a coordinate."""
 
     def get_for_point(self, latitude: float, longitude: float):
-        """Return the first Location whose default Campus generated polygon contains (lat, lon), or None.
+        """Return the first Location whose default Boundary generated polygon contains (lat, lon), or None.
 
-        Falls back to a 50 m proximity check for Locations that have no campus polygon.
+        Falls back to a 50 m proximity check for Locations that have no boundary polygon.
         """
         return self.within_bounding_box(latitude, longitude).first()
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
-        """Return ALL Locations whose default Campus generated polygon contains (lat, lon) as a QuerySet.
+        """Return ALL Locations whose default Boundary generated polygon contains (lat, lon) as a QuerySet.
 
         Unlike get_for_point, this returns every match so callers can detect when a
-        coordinate falls inside multiple campus polygons (ambiguous location).  Falls
-        back to 50 m proximity for Locations without a campus polygon only when there
+        coordinate falls inside multiple boundary polygons (ambiguous location).  Falls
+        back to 50 m proximity for Locations without a boundary polygon only when there
         are no polygon matches at all.
 
         Args:

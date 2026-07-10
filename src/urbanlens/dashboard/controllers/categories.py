@@ -509,7 +509,7 @@ def _resolve_wiki(location_slug: str):
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     location = get_object_or_404(Location, slug=location_slug)
-    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    wiki = get_object_or_404(Wiki, location=location)
     return location, wiki
 
 

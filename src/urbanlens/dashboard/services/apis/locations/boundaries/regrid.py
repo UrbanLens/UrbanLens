@@ -55,6 +55,7 @@ class RegridGateway(Gateway, BoundaryProvider):
 
     service_key: ClassVar[str | None] = "regrid"
     paid_service: ClassVar[bool] = True
+    boundary_kind: ClassVar[str] = "property"
 
     BASE_URL: ClassVar[str] = "https://app.regrid.com"
 

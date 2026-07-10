@@ -41,6 +41,85 @@ _METERS_PER_DEGREE_LAT = 111_320.0
 _LAYER_MODES = {"standard", "satellite", "topo", "dark"}
 
 
+def reshape_boundary_rows(apps, schema_editor):
+    """Split legacy campus rows into location-default / wiki / pin boundary rows.
+
+    Legacy wiki-default rows (pin=None, profile=None, wiki set) carried both the
+    API-generated polygon and any community-drawn polygon. The generated
+    geometry stays on the row, which becomes a location-default; a drawn
+    polygon moves to a fresh wiki-keyed row. Legacy pin rows carried their own
+    generated polygon cache; that moves to the location default (when the
+    location has none yet), and pin rows without a user drawing are deleted.
+    All rows are typed PROPERTY - historic campus polygons served as property
+    boundaries, and ambiguity resolves to property.
+    """
+    Boundary = apps.get_model("dashboard", "Boundary")
+
+    # --- Legacy wiki-default rows → location defaults (+ wiki rows for drawings)
+    wiki_defaults = Boundary.objects.filter(pin__isnull=True, profile__isnull=True, wiki__isnull=False).select_related("wiki")
+    for row in wiki_defaults.iterator():
+        location_id = row.location_id or row.wiki.location_id
+        if location_id is None:
+            row.delete()
+            continue
+        if row.polygon is not None:
+            Boundary.objects.create(
+                wiki_id=row.wiki_id,
+                location_id=location_id,
+                boundary_type="property",
+                polygon=row.polygon,
+                default_radius_meters=row.default_radius_meters,
+            )
+        Boundary.objects.filter(pk=row.pk).update(
+            wiki=None,
+            location_id=location_id,
+            polygon=None,
+            boundary_type="property",
+            generated_at=row.updated if row.generated_polygon is not None else None,
+        )
+
+    # --- Dedupe location defaults (two legacy wikis can no longer share a
+    # location after 0002, but be safe before the unique constraint lands).
+    seen: dict[tuple[int, str], int] = {}
+    defaults = Boundary.objects.filter(pin__isnull=True, profile__isnull=True, wiki__isnull=True, location__isnull=False).order_by("pk")
+    for row in defaults.iterator():
+        key = (row.location_id, row.boundary_type)
+        if key not in seen:
+            seen[key] = row.pk
+            continue
+        keeper = Boundary.objects.get(pk=seen[key])
+        if keeper.generated_polygon is None and row.generated_polygon is not None:
+            Boundary.objects.filter(pk=keeper.pk).update(generated_polygon=row.generated_polygon, generated_at=row.generated_at)
+        row.delete()
+
+    # --- Legacy pin rows: generated cache moves to the location default;
+    # rows without a user drawing were pure cache and are dropped.
+    pin_rows = Boundary.objects.filter(pin__isnull=False).select_related("pin")
+    for row in pin_rows.iterator():
+        location_id = row.pin.location_id or row.location_id
+        if row.generated_polygon is not None and location_id is not None:
+            default, created = Boundary.objects.get_or_create(
+                location_id=location_id,
+                boundary_type="property",
+                pin=None,
+                wiki=None,
+                profile=None,
+                defaults={"generated_polygon": row.generated_polygon, "generated_at": row.updated},
+            )
+            if not created and default.generated_polygon is None:
+                Boundary.objects.filter(pk=default.pk).update(generated_polygon=row.generated_polygon, generated_at=row.updated)
+        if row.polygon is None:
+            row.delete()
+        else:
+            Boundary.objects.filter(pk=row.pk).update(
+                generated_polygon=None,
+                generated_at=None,
+                boundary_type="property",
+                location_id=location_id,
+            )
+
+
+
 def backfill_campus_wiki(apps, schema_editor):
     """Attach default campuses to their community Wiki rows."""
     Campus = apps.get_model("dashboard", "Campus")
@@ -1539,5 +1618,90 @@ class Migration(migrations.Migration):
             model_name='safetypreference',
             name='auto_delete_after_days',
             field=models.IntegerField(blank=True, null=True),
+        ),
+        
+        # Wikis are user-created now; the private flag gated nothing.
+        migrations.RemoveField(
+            model_name="pin",
+            name="is_private",
+        ),
+        # Drop the campus-era constraints before reshaping rows.
+        migrations.RemoveConstraint(
+            model_name="campus",
+            name="campus_unique_wiki_default",
+        ),
+        migrations.RemoveConstraint(
+            model_name="campus",
+            name="campus_unique_pin",
+        ),
+        migrations.RenameModel(
+            old_name="Campus",
+            new_name="Boundary",
+        ),
+        migrations.AlterModelTable(
+            name="boundary",
+            table="dashboard_boundaries",
+        ),
+        migrations.AlterModelOptions(
+            name="boundary",
+            options={"get_latest_by": "updated", "verbose_name_plural": "boundaries"},
+        ),
+        migrations.AddField(
+            model_name="boundary",
+            name="boundary_type",
+            field=models.CharField(choices=[("property", "Property"), ("building", "Building")], default="property", max_length=20),
+        ),
+        migrations.AddField(
+            model_name="boundary",
+            name="generated_at",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AlterField(
+            model_name="boundary",
+            name="location",
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="boundaries", to="dashboard.location"),
+        ),
+        migrations.AlterField(
+            model_name="boundary",
+            name="wiki",
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="boundaries", to="dashboard.wiki"),
+        ),
+        migrations.AlterField(
+            model_name="boundary",
+            name="pin",
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="boundaries", to="dashboard.pin"),
+        ),
+        migrations.AlterField(
+            model_name="boundary",
+            name="profile",
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="boundaries", to="dashboard.profile"),
+        ),
+        migrations.RunPython(
+            code=reshape_boundary_rows,
+            reverse_code=migrations.RunPython.noop,
+        ),
+        migrations.AddConstraint(
+            model_name="boundary",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("pin__isnull", True), ("profile__isnull", True), ("wiki__isnull", True)),
+                fields=("location", "boundary_type"),
+                name="boundary_unique_location_default",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="boundary",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("pin__isnull", True), ("wiki__isnull", False)),
+                fields=("wiki", "boundary_type"),
+                name="boundary_unique_wiki",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="boundary",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("pin__isnull", False)),
+                fields=("pin", "boundary_type"),
+                name="boundary_unique_pin",
+            ),
         ),
     ]

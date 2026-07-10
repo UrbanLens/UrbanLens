@@ -61,13 +61,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     priority, and the marker coordinates.
     """
 
-    # When True this pin is entirely personal: it will not be linked to a shared
-    # Location and will never contribute to the community wiki.  User-specific
-    # data (name, description, coordinates) must not be surfaced to others
-    # regardless of this flag, but is_private=True is the explicit opt-out from
-    # having any community presence at these coordinates.
-    is_private = BooleanField(default=False)
-
     # True when ``name`` was explicitly typed by the user. External API naming
     # refreshes may replace placeholder/auto-generated labels only while this is False.
     name_is_user_provided = BooleanField(
@@ -177,16 +170,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         the current one - so whenever a meaningful ``name`` is persisted, an
         alias row for it is ensured. This single enforcement point covers
         every write path (HTMX controllers, REST serializer, Django admin).
-
-        Also enforces that a pin can never be saved as non-private while its
-        owner has disabled Community - covers every write path the same way.
         """
         update_fields = kwargs.get("update_fields")
-        if self.profile_id and not self.is_private and not self.profile.community_enabled:
-            self.is_private = True
-            if update_fields is not None and "is_private" not in update_fields:
-                kwargs["update_fields"] = [*update_fields, "is_private"]
-
         super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return

@@ -39,17 +39,24 @@ _map_annotations_script.html for the parameterized JS half.
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
-    <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
-        <i class="material-symbols-outlined">pentagon</i> Edit Boundary
-    </button>
-    <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
+    <div id="edit-boundary-btns" class="map-overlay-btn-group">
+        <button id="edit-property-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditBoundary('property')"
+                title="Draw or reshape the property (grounds/parcel) boundary">
+            <i class="material-symbols-outlined">pentagon</i> Property
+        </button>
+        <button id="edit-building-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--building" onclick="startEditBoundary('building')"
+                title="Draw or reshape the building footprint boundary">
+            <i class="material-symbols-outlined">home_work</i> Building
+        </button>
+    </div>
+    <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear
         </button>
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelBoundaryEdit()">
             <i class="material-symbols-outlined">close</i> Cancel
         </button>
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" onclick="finishCampusEdit()">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" onclick="finishBoundaryEdit()">
             <i class="material-symbols-outlined">check</i> Done
         </button>
     </div>

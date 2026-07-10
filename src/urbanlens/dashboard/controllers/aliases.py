@@ -140,9 +140,9 @@ class PinAliasToggleNicknameView(LoginRequiredMixin, View):
 
 
 def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its (lazily-created) Wiki."""
+    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
     location = get_object_or_404(Location, slug=location_slug)
-    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    wiki = get_object_or_404(Wiki, location=location)
     return location, wiki
 
 

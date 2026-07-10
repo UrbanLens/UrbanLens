@@ -310,7 +310,6 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "icon": pin.icon or "",
                 "color": pin.color or "",
                 "priority": pin.priority,
-                "is_private": pin.is_private,
                 "pin_type": pin.pin_type,
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,

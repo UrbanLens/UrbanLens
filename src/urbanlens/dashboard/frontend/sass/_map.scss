@@ -172,6 +172,16 @@
         color: $color-blue-600;
     }
 
+    // Boundary-type edit buttons match their layer colors: property boundaries
+    // draw red, building footprints draw blue.
+    &--boundary {
+        color: $color-red-600;
+    }
+
+    &--building {
+        color: $color-blue-600;
+    }
+
     &-group {
         display: flex;
         gap: .3rem;

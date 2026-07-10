@@ -348,6 +348,11 @@
     </div>
 </div>{# end .pin-detail-grid #}
 
+{# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
+<dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
+    <div id="pin-wiki-create-dialog-body"></div>
+</dialog>
+
 {# -- Pin edit dialog ------------------------------------------------------ #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Pin" %}
@@ -464,7 +469,7 @@
 {% url 'pin.detail_pins.json' pin.slug as detail_pins_json_url %}
 {% url 'pin.detail_pins' pin.slug as detail_pin_create_url %}
 {% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
-{% url 'campus.pin' pin.slug as boundary_url %}
+{% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
 {% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=pin.effective_latitude|default:"42.6525" map_center_lng=pin.effective_longitude|default:"-73.7579" main_marker_owner_uuid=pin.uuid default_map_view=default_map_view openweathermap_api_key=openweathermap_api_key markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
 <script>

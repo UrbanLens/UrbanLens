@@ -59,7 +59,6 @@ class PinSerializer(serializers.ModelSerializer):
             "last_visited",
             "latitude",
             "longitude",
-            "is_private",
             "created",
             "updated",
             "profile",

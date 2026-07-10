@@ -8,21 +8,28 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 
 
-class CreateLocationForPinTaskTests(TestCase):
-    """create_location_for_pin delegates to the location service and reports progress."""
+class GenerateBoundariesForLocationTaskTests(TestCase):
+    """generate_boundaries_for_location runs the provider chain once per Location."""
 
-    def test_returns_created_location_id(self) -> None:
-        fake_location = mock.Mock(pk=123)
+    def test_missing_location_is_a_noop(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate:
+            result = tasks.generate_boundaries_for_location(999999)
+
+        self.assertFalse(result)
+        generate.assert_not_called()
+
+    def test_skips_when_generation_already_ran(self) -> None:
+        from model_bakery import baker
+
+        location = baker.make_recipe("dashboard.location")
         with (
-            mock.patch("urbanlens.dashboard.tasks.LocationCreationService") as service,
-            mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
+            mock.patch("urbanlens.dashboard.services.locations.boundaries.boundary_generation_ran", return_value=True),
+            mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
         ):
-            service.return_value.create_for_pin.return_value = fake_location
-            result = tasks.create_location_for_pin(99)
+            result = tasks.generate_boundaries_for_location(location.pk)
 
-        self.assertEqual(result, 123)
-        service.return_value.create_for_pin.assert_called_once_with(99)
-        self.assertEqual(progress.call_count, 2)
+        self.assertTrue(result)
+        generate.assert_not_called()
 
 
 class DatabaseBackupTaskTests(TestCase):

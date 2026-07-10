@@ -2,8 +2,8 @@
 
 Routes are keyed by the Location slug (the stable URL token) but every view
 operates on the :class:`~urbanlens.dashboard.models.wiki.model.Wiki` for that
-Location, materialising one lazily via
-``Wiki.objects.get_or_create_for_location`` on first access.
+Location. Wikis are user-created (from the pin detail page); these views 404
+when the place has no wiki yet.
 """
 
 from __future__ import annotations
@@ -13,19 +13,18 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.campus.model import Campus
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +37,9 @@ _WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_
 
 
 def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its (lazily-created) Wiki."""
+    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
     location = get_object_or_404(Location, slug=location_slug)
-    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    wiki = get_object_or_404(Wiki, location=location)
     return location, wiki
 
 
@@ -235,76 +234,6 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "changes": list(changes.keys())})
 
 
-class LocationWikiBboxView(LoginRequiredMixin, View):
-    """Update the bounding box polygon for a place.
-
-    GET  /location/<slug>/wiki/bbox/  → returns current bbox as GeoJSON
-    POST /location/<slug>/wiki/bbox/  → { "polygon": <GeoJSON geometry> }
-
-    The bounding box lives on the Location's default Campus (a physical-place
-    attribute); the wiki simply provides the editing UI.
-    """
-
-    def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
-        if campus.polygon is None:
-            campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=wiki.name)
-            campus.save(update_fields=["polygon", "updated"])
-        return JsonResponse({"polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
-
-    def post(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-
-        try:
-            body = json.loads(request.body)
-            polygon_geojson = body.get("polygon")
-        except (json.JSONDecodeError, ValueError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        if not polygon_geojson:
-            geom = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=wiki.name)
-        else:
-            try:
-                geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-                if isinstance(geom, Polygon):
-                    geom = MultiPolygon(geom, srid=geom.srid)
-            except (GEOSException, ValueError) as exc:
-                logger.exception("Invalid polygon GeoJSON: %s", exc)
-                return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
-
-        # Check area against the site-wide limit.  Project to an equal-area CRS
-        # (EPSG:6933) so the area calculation is meaningful globally.
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-
-        max_km2 = SiteSettings.get_current().max_bbox_area_km2
-        try:
-            area_km2 = geom.transform(6933, clone=True).area / 1_000_000
-        except GEOSException:
-            area_km2 = 0.0
-        if area_km2 > max_km2:
-            return JsonResponse(
-                {
-                    "error": f"Bounding box is too large ({area_km2:,.0f} km²). Maximum allowed area is {max_km2:,.0f} km².",
-                },
-                status=400,
-            )
-
-        campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
-        old_wkt = campus.polygon.wkt if campus.polygon else None
-        campus.polygon = geom
-        campus.save(update_fields=["polygon", "updated"])
-
-        WikiEdit.objects.create(
-            wiki=wiki,
-            editor=profile,
-            changes={"bounding_box": {"from": old_wkt, "to": geom.wkt}},
-        )
-
-        return JsonResponse({"ok": True, "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
-
-
 class LocationWikiHistoryView(LoginRequiredMixin, View):
     """HTMX partial: edit history list for a wiki.
 
@@ -340,18 +269,25 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         revert_changes: dict[str, dict] = {}
         for field, diff in target_edit.changes.items():
             old_val = diff.get("from")
-            if field == "bounding_box":
-                campus, _ = Campus.objects.get_or_create_default_for_wiki(wiki, location=location)
-                current_val = campus.polygon.wkt if campus.polygon else None
+            if field == "bounding_box" or field.startswith("boundary_"):
+                # "bounding_box" is the legacy audit key from the single-boundary
+                # era; treat it as the property boundary.
+                boundary_type = field.removeprefix("boundary_") if field.startswith("boundary_") else BoundaryType.PROPERTY
+                if boundary_type not in BoundaryType.values:
+                    continue
+                row = Boundary.objects.row_for_wiki(wiki, boundary_type)
+                current_val = row.polygon.wkt if row and row.polygon else None
                 revert_changes[field] = {"from": current_val, "to": old_val}
                 if old_val:
                     restored = GEOSGeometry(old_val, srid=4326)
                     if isinstance(restored, Polygon):
                         restored = MultiPolygon(restored, srid=restored.srid)
-                    campus.polygon = restored
-                else:
-                    campus.polygon = None
-                campus.save(update_fields=["polygon", "updated"])
+                    if row is None:
+                        row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
+                    row.polygon = restored
+                    row.save()
+                elif row is not None:
+                    row.delete()
             elif field in {"latitude", "longitude"}:
                 # Coordinate reverts repoint the Location; skip silently if the
                 # target place is unavailable. Handled together below.

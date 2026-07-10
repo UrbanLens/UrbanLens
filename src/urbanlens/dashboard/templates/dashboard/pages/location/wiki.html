@@ -295,7 +295,7 @@
 {% url 'location.wiki.detail_pins.json' location.slug as detail_pins_json_url %}
 {% url 'location.wiki.detail_pins.panel' location.slug as detail_pin_create_url %}
 {% url 'location.wiki.detail_pin.edit' location.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
-{% url 'location.wiki.bbox' location.slug as boundary_url %}
+{% url 'location.wiki.boundary' location.slug as boundary_url %}
 {% url 'location.wiki.gallery.json' location.slug as photo_gallery_json_url %}
 {% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=location.latitude map_center_lng=location.longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
 <script>

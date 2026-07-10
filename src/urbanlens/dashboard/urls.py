@@ -14,7 +14,7 @@ from urbanlens.dashboard.controllers import (
     account_deletion,
     aliases,
     badges,
-    campus,
+    boundary,
     comments,
     detail_pins,
     friendship,
@@ -41,6 +41,7 @@ from urbanlens.dashboard.controllers import (
     userprofile,
     visit_suggestions,
     visits,
+    wiki_create,
 )
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
@@ -129,9 +130,9 @@ urlpatterns = [
                 ),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
-                    "campus/",
-                    campus.CampusController.as_view({"get": "list_campuses"}),
-                    name="campus.list",
+                    "boundaries/",
+                    boundary.BoundaryController.as_view({"get": "list_boundaries"}),
+                    name="boundary.list",
                 ),
                 path(
                     "add/",
@@ -204,9 +205,14 @@ urlpatterns = [
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
                             path(
-                                "<slug:pin_slug>/campus/",
-                                campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
-                                name="campus.pin",
+                                "<slug:pin_slug>/boundary/",
+                                boundary.BoundaryController.as_view({"get": "get_boundaries", "post": "save_boundary"}),
+                                name="boundary.pin",
+                            ),
+                            path(
+                                "<slug:pin_slug>/wiki/create/",
+                                wiki_create.PinWikiCreateView.as_view(),
+                                name="pin.wiki.create",
                             ),
                             path(
                                 "<slug:pin_slug>/media/<str:source>/",
@@ -604,9 +610,9 @@ urlpatterns = [
                     name="location.wiki.edit",
                 ),
                 path(
-                    "<slug:location_slug>/wiki/bbox/",
-                    location_wiki.LocationWikiBboxView.as_view(),
-                    name="location.wiki.bbox",
+                    "<slug:location_slug>/wiki/boundary/",
+                    boundary.WikiBoundaryView.as_view(),
+                    name="location.wiki.boundary",
                 ),
                 path(
                     "<slug:location_slug>/wiki/history/",

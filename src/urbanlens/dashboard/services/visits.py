@@ -508,10 +508,11 @@ def sync_last_visited(pin: Pin) -> None:
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
     """Record geolocation-based visits for the profile's pins containing a point.
 
-    A visit is created for each of the user's top-level pins whose pin-specific
-    campus boundary, location-default campus boundary, or 50 m coordinate
-    fallback contains the supplied latitude/longitude. Existing visits on the
-    same calendar day prevent another row from being created for that pin.
+    A visit is created for each of the user's top-level pins whose effective
+    property boundary (pin drawing, wiki drawing, generated default, or the
+    50 m circle/coordinate fallback) contains the supplied latitude/longitude.
+    Existing visits on the same calendar day prevent another row from being
+    created for that pin.
 
     Args:
         profile: Profile whose personal pins should be checked.
@@ -530,20 +531,20 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
     from django.contrib.gis.measure import D
     from django.utils import timezone
 
-    from urbanlens.dashboard.models.campus.model import Campus
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("campus")
+    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location")
     created_visits: list[PinVisit] = []
 
     for pin in pins:
         if pin.visit_history.filter(visited_at__date=timestamp.date()).exists():
             continue
 
-        campus = Campus.objects.effective_for_pin(pin)
-        if campus is not None:
-            contains_point = campus.effective_polygon.contains(point)
+        polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
+        if polygon is not None:
+            contains_point = polygon.contains(point)
         else:
             contains_point = Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
 

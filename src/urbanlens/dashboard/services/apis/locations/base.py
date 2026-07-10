@@ -111,17 +111,49 @@ class StreetViewProvider(Gateway, ABC):
 
 
 class BoundaryProvider(Service, ABC):
-    """Provider interface for future default-boundary data sources."""
+    """Provider interface for default-boundary data sources.
+
+    Providers declare which kind of boundary they yield via ``boundary_kind``
+    ("property" or "building", matching :class:`BoundaryType` values). Sources
+    that can't say per-feature must declare "property" - ambiguity is always
+    treated as a property boundary. Providers that can distinguish per feature
+    (e.g. Overpass) override :meth:`get_typed_boundaries` instead.
+    """
+
+    #: The boundary type this provider's ``get_boundary`` result describes.
+    boundary_kind: ClassVar[str] = "property"
 
     @abstractmethod
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
         """Return a polygon boundary for the coordinate, or None to allow fallback."""
         ...
 
+    def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
+        """Return this provider's boundaries keyed by boundary type.
+
+        The default implementation wraps :meth:`get_boundary` under
+        ``boundary_kind``. Providers that can classify features per type
+        override this to return both kinds from one upstream query.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Optional place name for name-aware providers.
+
+        Returns:
+            Mapping of boundary type value to polygon (or None).
+        """
+        return {self.boundary_kind: self.get_boundary(latitude, longitude, name=name)}
+
 
 @dataclass(slots=True)
 class StaticBoundaryProvider(BoundaryProvider):
-    """Deterministic fallback used when external providers cannot find a boundary."""
+    """Deterministic bbox provider, kept for tests and explicit callers.
+
+    No longer part of the default provider chain: when no provider finds a
+    boundary, the effective property boundary falls back to the default circle
+    around the location's coordinates instead of a static bbox.
+    """
 
     service_key: ClassVar[str | None] = "static_default_boundary"
 

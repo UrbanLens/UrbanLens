@@ -1,7 +1,7 @@
 """Cache-backed staging so a bulk pin delete can be undone for a short window.
 
 Deleting a Pin cascades to reviews, visit history, notes, markup annotations,
-aliases, comments, and the pin's own campus boundary override (all
+aliases, comments, and the pin's own boundary overrides (all
 ``on_delete=CASCADE`` from the DB's point of view) - those rows are gone the
 instant the delete happens, before anything here gets a chance to cache them.
 So restoring only brings back each pin's own core fields, its position in the
@@ -28,7 +28,6 @@ UNDO_TTL_SECONDS = 300
 # (handled separately below, since FK columns need their `_id` attname, not the
 # relation name, to be passed to Pin.objects.create()).
 _RESTORABLE_FIELDS = (
-    "is_private",
     "name_is_user_provided",
     "name",
     "icon",

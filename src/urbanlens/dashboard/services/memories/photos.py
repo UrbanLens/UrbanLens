@@ -129,22 +129,23 @@ def create_pin_and_log_visit(
     if lat is None or lng is None:
         raise ValueError("create_pin_and_log_visit requires coordinates (from the image or overrides)")
 
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import create_location_for_pin
-
     pin = create_minimal_pin(profile, location=None, latitude=lat, longitude=lng)
     if name and name.strip():
         pin.name = name.strip()
         pin.name_is_user_provided = True
         pin.save(update_fields=["name", "name_is_user_provided", "updated"])
-    safely_enqueue_task(create_location_for_pin, pin.pk)
 
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     image.pin = pin
     image.visit = visit
-    # The pin's shared Location is resolved by create_location_for_pin in the
-    # background, which also backfills image.location for the pin's photos.
-    image.save(update_fields=["pin", "visit", "updated"])
+    # The pin's shared Location exists immediately (create_minimal_pin resolves
+    # or creates one), so the photo inherits it right away. No background
+    # wiki/boundary work happens here - wikis are user-created from the pin page.
+    if image.location_id is None:
+        image.location = pin.location
+        image.save(update_fields=["pin", "visit", "location", "updated"])
+    else:
+        image.save(update_fields=["pin", "visit", "updated"])
     if visit is not None:
         sync_last_visited(pin)
         add_visited_status(pin)

@@ -1,14 +1,14 @@
-"""Tests for location creation and place-name resolver services."""
+"""Tests for boundary resolution and place-name resolver services."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.locations.creation import _default_bbox
+from urbanlens.dashboard.services.apis.locations.base import default_bbox
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
@@ -21,6 +21,20 @@ class _Resolver:
         return self.value
 
 
+@dataclass(slots=True)
+class _StubBoundaryProvider:
+    """Minimal typed boundary provider for chain tests."""
+
+    typed: dict
+    service_key: str | None = "stub"
+    boundary_kind: str = "property"
+    calls: list = field(default_factory=list)
+
+    def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict:
+        self.calls.append((latitude, longitude, name))
+        return self.typed
+
+
 class DefaultBoundingBoxTests(TestCase):
     """Default generated bounding boxes contain the source coordinate."""
 
@@ -30,7 +44,7 @@ class DefaultBoundingBoxTests(TestCase):
     )
     @hyp_settings(max_examples=30)
     def test_default_bbox_surrounds_coordinate(self, latitude: float, longitude: float) -> None:
-        bbox = _default_bbox(latitude, longitude)
+        bbox = default_bbox(latitude, longitude)
         min_x, min_y, max_x, max_y = bbox.extent
         self.assertLess(min_x, longitude)
         self.assertGreater(max_x, longitude)
@@ -71,31 +85,47 @@ class PlaceNameResolverChainTests(TestCase):
 
 
 class BoundaryProviderChainTests(TestCase):
-    """Default boundary resolution uses providers in order before falling back."""
+    """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
 
     def test_chain_returns_first_provider_boundary(self) -> None:
-        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain, default_bbox
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
         expected = default_bbox(40.0, -74.0)
-        provider = mock.Mock(name="provider")
-        provider.service_key = "mock"
-        provider.get_boundary.return_value = expected
+        provider = _StubBoundaryProvider(typed={"property": expected})
 
-        boundary = BoundaryProviderChain(providers=(provider,)).get_boundary(40.0, -74.0, name="Factory")
+        resolved = BoundaryProviderChain(providers=(provider,)).get_boundaries(40.0, -74.0, name="Factory")
 
-        self.assertEqual(boundary, expected)
-        provider.get_boundary.assert_called_once_with(40.0, -74.0, name="Factory")
+        self.assertIsNotNone(resolved.property_polygon)
+        self.assertEqual(resolved.property_polygon[0].wkt, expected.wkt)
+        self.assertIsNone(resolved.building_polygon)
+        self.assertEqual(provider.calls, [(40.0, -74.0, "Factory")])
 
-    def test_chain_falls_back_when_provider_returns_none(self) -> None:
-        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain, default_bbox
+    def test_chain_returns_nothing_when_no_provider_finds_boundary(self) -> None:
+        """No static-bbox fallback any more: absence means the circle default applies."""
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
-        provider = mock.Mock(name="provider")
-        provider.service_key = "mock"
-        provider.get_boundary.return_value = None
+        provider = _StubBoundaryProvider(typed={"property": None, "building": None})
 
-        boundary = BoundaryProviderChain(providers=(provider,)).get_boundary(40.0, -74.0)
+        resolved = BoundaryProviderChain(providers=(provider,)).get_boundaries(40.0, -74.0)
 
-        self.assertEqual(boundary, default_bbox(40.0, -74.0))
+        self.assertIsNone(resolved.property_polygon)
+        self.assertIsNone(resolved.building_polygon)
+        self.assertIsNone(BoundaryProviderChain(providers=(provider,)).get_boundary(40.0, -74.0))
+
+    def test_later_providers_fill_remaining_slots(self) -> None:
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+        building = default_bbox(40.0, -74.0)
+        parcel = default_bbox(40.001, -74.001)
+        first = _StubBoundaryProvider(typed={"building": building})
+        second = _StubBoundaryProvider(typed={"property": parcel, "building": default_bbox(41.0, -75.0)})
+
+        resolved = BoundaryProviderChain(providers=(first, second)).get_boundaries(40.0, -74.0)
+
+        # The building slot keeps the first provider's result; the second
+        # provider only fills the still-empty property slot.
+        self.assertEqual(resolved.building_polygon[0].wkt, building.wkt)
+        self.assertEqual(resolved.property_polygon[0].wkt, parcel.wkt)
 
     def test_overpass_gateway_selects_smallest_polygon_containing_point(self) -> None:
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
@@ -131,6 +161,37 @@ class BoundaryProviderChainTests(TestCase):
 
         self.assertIsNotNone(boundary)
         self.assertAlmostEqual(boundary.area, 0.000004, places=8)
+
+    def test_overpass_gateway_classifies_building_tags_separately(self) -> None:
+        """Elements tagged ``building`` fill the building slot; everything else is property."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        ring = [
+            {"lat": 39.99, "lon": -74.01},
+            {"lat": 39.99, "lon": -73.99},
+            {"lat": 40.01, "lon": -73.99},
+            {"lat": 40.01, "lon": -74.01},
+            {"lat": 39.99, "lon": -74.01},
+        ]
+        inner_ring = [
+            {"lat": 39.999, "lon": -74.001},
+            {"lat": 39.999, "lon": -73.999},
+            {"lat": 40.001, "lon": -73.999},
+            {"lat": 40.001, "lon": -74.001},
+            {"lat": 39.999, "lon": -74.001},
+        ]
+        elements = [
+            {"type": "way", "id": 1, "geometry": ring, "tags": {"landuse": "industrial"}},
+            {"type": "way", "id": 2, "geometry": inner_ring, "tags": {"building": "yes"}},
+        ]
+        gateway = OverpassGateway(session=mock.Mock())
+
+        with mock.patch.object(gateway, "nearby_boundary_candidates", return_value=elements):
+            typed = gateway.get_typed_boundaries(40.0, -74.0)
+
+        self.assertIsNotNone(typed["building"])
+        self.assertIsNotNone(typed["property"])
+        self.assertLess(typed["building"].area, typed["property"].area)
 
 
 class OverpassGatewayTests(TestCase):

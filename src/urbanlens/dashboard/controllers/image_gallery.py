@@ -30,11 +30,8 @@ _GALLERY_PAGE_SIZE = 12
 
 
 def _wiki_for_location(location: Location | None) -> Wiki | None:
-    """Return the community Wiki for a Location, creating it lazily (or None)."""
-    if location is None:
-        return None
-    wiki, _created = Wiki.objects.get_or_create_for_location(location)
-    return wiki
+    """Return the community Wiki for a Location, or None when it has no wiki yet."""
+    return Wiki.objects.get_for_location(location)
 
 
 # -- Pin gallery --------------------------------------------------------------

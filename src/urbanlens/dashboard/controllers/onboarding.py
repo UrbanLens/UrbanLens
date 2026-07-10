@@ -10,7 +10,6 @@ from django.views import View
 
 from urbanlens.dashboard.forms.onboarding_form import WelcomeOnboardingForm
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.community import bulk_privatize_pins
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -36,12 +35,9 @@ class WelcomeOnboardingView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        was_community_enabled = profile.community_enabled
         form = WelcomeOnboardingForm(request.POST, instance=profile)
         if form.is_valid():
             profile = form.save()
-            if was_community_enabled and not profile.community_enabled:
-                bulk_privatize_pins(profile)
             profile.welcome_onboarding_complete = True
             profile.save(update_fields=["welcome_onboarding_complete"])
             return redirect("post_login")

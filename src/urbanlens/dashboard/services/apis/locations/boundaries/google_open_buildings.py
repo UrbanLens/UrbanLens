@@ -79,6 +79,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
 
     service_key: ClassVar[str | None] = "google_open_buildings"
     paid_service: ClassVar[bool] = False
+    boundary_kind: ClassVar[str] = "building"
 
     bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
     min_confidence: float = 0.0
@@ -101,7 +102,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         min_lon, min_lat, max_lon, max_lat = bbox
         results: list[dict] = []
         for token in _s2_tokens_for_bbox(bbox):
-            # Runs inside the campus panel-fetch Celery task (via
+            # Runs inside the boundary panel-fetch Celery task (via
             # BoundaryProviderChain, see services/external_data.py), whose
             # soft time limit is the real budget - the (connect, read) tuple
             # just keeps a dead connection from eating that budget while a

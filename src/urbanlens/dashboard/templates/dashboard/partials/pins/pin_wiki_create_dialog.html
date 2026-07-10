@@ -1,0 +1,48 @@
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Create Community Wiki" %}
+<div class="ul-dialog-body">
+  {% if existing_wiki %}
+    <p>A community wiki already exists for this place.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-create-dialog').close()">Close</button>
+      <a class="btn btn--primary" href="{% url 'location.wiki' location_slug=pin.location.slug %}">
+        <i class="material-symbols-outlined">open_in_new</i> Open wiki
+      </a>
+    </div>
+  {% else %}
+    <p>
+      Create a shared community page for <strong>{{ pin.location.display_name }}</strong>.
+      Anyone who pins this place can see and edit it.
+    </p>
+    <form hx-post="{% url 'pin.wiki.create' pin.slug %}"
+          hx-target="#pin-overview"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').close(); if(window.toastr){toastr.success('Community wiki created.')}}">
+      {% csrf_token %}
+      {% if seedable_fields %}
+      <p class="wiki-seed-hint">
+        Choose which details from your pin to copy into the new wiki.
+        Anything you include becomes <strong>visible to the whole community</strong>.
+      </p>
+      <ul class="wiki-seed-list">
+        {% for field in seedable_fields %}
+        <li class="wiki-seed-item">
+          <label>
+            <input type="checkbox" name="seed_fields" value="{{ field.field }}">
+            <span class="wiki-seed-label">{{ field.label }}</span>
+            <span class="wiki-seed-value">{{ field.value|truncatechars:120 }}</span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="wiki-seed-hint">The wiki will start with just the place name - details can be added on the wiki page afterwards.</p>
+      {% endif %}
+      <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-create-dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary">
+          <i class="material-symbols-outlined">public</i> Create wiki
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>

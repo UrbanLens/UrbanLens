@@ -238,7 +238,7 @@ class CreateVisitSuggestionTests(TestCase):
         """When the suggestion carries no shared Location, the origin pin's own
         official_name (from its Location) is a useful fallback for the message."""
         origin_loc = baker.make(Location, latitude="41.5", longitude="-75.5", official_name="Secret Warehouse")
-        origin_pin = baker.make(Pin, profile=self.suggester, location=origin_loc, is_private=True)
+        origin_pin = baker.make(Pin, profile=self.suggester, location=origin_loc)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
 
         suggestion = create_visit_suggestion(

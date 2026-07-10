@@ -56,14 +56,35 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
 
 
 class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
-    """Manager for Wiki. Use get_or_create_for_location to lazily create a page for a Location."""
+    """Manager for Wiki.
+
+    Wikis are only ever created explicitly by a user (the "Create community
+    wiki" button on the pin detail page, via ``WikiCreationService``). Use
+    ``get_for_location`` for the common "does this place have a wiki?" lookup.
+    """
+
+    def get_for_location(self, location: Location | None) -> Wiki | None:
+        """Return the Wiki for a Location, or None when the place has no wiki yet.
+
+        Args:
+            location: The shared Location to look up (None-safe).
+
+        Returns:
+            The Wiki, or None.
+        """
+        if location is None:
+            return None
+        try:
+            return location.wiki
+        except ObjectDoesNotExist:
+            return None
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
-        """Return the Wiki for a Location, creating it lazily if absent.
+        """Return the Wiki for a Location, creating it if absent.
 
-        A Wiki is created on demand (backfill-only-where-used): pin creation does
-        not eagerly create wikis, so the first time community content is added or
-        the wiki page is opened we materialise one here.
+        Wikis are user-initiated: this must only be called from an explicit
+        create action (``WikiCreationService``), never as a lazy side effect of
+        viewing or editing other content - use ``get_for_location`` there.
 
         Args:
             location: The shared Location to attach the wiki to.

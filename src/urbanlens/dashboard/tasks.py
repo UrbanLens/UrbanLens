@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from celery import shared_task
 
 from urbanlens.dashboard.services.celery import update_task_progress
-from urbanlens.dashboard.services.locations.creation import LocationCreationService
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -19,22 +18,87 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def create_location_for_pin(self, pin_id: int) -> int | None:
-    """Create or find a shared Location for a pin, then link the pin to it."""
-    logger.info("Creating background location for pin %s", pin_id)
-    update_task_progress(self, current=0, total=1, message="Creating location...")
-    location = LocationCreationService().create_for_pin(pin_id)
-    update_task_progress(self, current=1, total=1, message="Location ready")
-    if location:
-        # Photos attached to the pin before its Location existed (e.g. the
-        # Memories create-pin-from-photo flow) inherit it now.
-        from urbanlens.dashboard.models.images.model import Image
+def enrich_wiki_location(self, wiki_id: int) -> bool:
+    """Enrich a freshly user-created Wiki's Location with external data.
 
-        Image.objects.filter(pin_id=pin_id, location__isnull=True).update(location_id=location.pk)
-        logger.info("Created/linked location %s for pin %s", location.pk, pin_id)
-        return location.pk
-    logger.info("No location created for pin %s", pin_id)
-    return None
+    Runs after the user clicks "Create community wiki": links the Location to
+    its Google Place, resolves a canonical name when the wiki is still
+    unnamed, and generates the location's default property/building
+    boundaries. This is the only place these APIs are hit for a new wiki -
+    pin creation and bulk imports do no external work.
+
+    Args:
+        wiki_id: PK of the newly created Wiki.
+
+    Returns:
+        True when the wiki still existed and enrichment ran.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
+
+    wiki = Wiki.objects.select_related("location").filter(pk=wiki_id).first()
+    if wiki is None or wiki.location_id is None:
+        logger.info("enrich_wiki_location: wiki %s no longer exists or has no location", wiki_id)
+        return False
+
+    location = wiki.location
+    update_task_progress(self, current=0, total=2, message="Resolving place details...")
+
+    name_resolver = PlaceNameResolverChain()
+    try:
+        if location.google_place_id is None:
+            GooglePlaceService(name_resolver=name_resolver).ensure_linked(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
+
+    if not wiki.name or wiki.name == "Unnamed Location":
+        try:
+            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
+        except Exception:
+            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+            place_name = None
+        if place_name:
+            Wiki.objects.filter(pk=wiki.pk, name__in=["", "Unnamed Location"]).update(name=place_name)
+
+    update_task_progress(self, current=1, total=2, message="Generating boundaries...")
+    if not boundary_generation_ran(location):
+        generate_location_boundaries(location, name=wiki.name or None)
+
+    update_task_progress(self, current=2, total=2, message="Wiki ready")
+    return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def generate_boundaries_for_location(location_id: int) -> bool:
+    """Generate the default property/building boundaries for a Location.
+
+    Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
+    page) - the pin detail page uses the "boundary" panel source instead, which
+    calls the same ``generate_location_boundaries`` function.
+
+    Args:
+        location_id: PK of the Location.
+
+    Returns:
+        True when the location existed and generation ran (or had already run).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+
+    try:
+        location = Location.objects.filter(pk=location_id).first()
+        if location is None:
+            logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
+            return False
+        if not boundary_generation_ran(location):
+            generate_location_boundaries(location)
+        return True
+    finally:
+        cache.delete(f"ul_boundary_generation_{location_id}")
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -512,7 +576,7 @@ def fetch_panel_source(source_key: str, pin_id: int) -> None:
 
     Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
     finds a panel's store empty; the page polls until this task persists the
-    result (LocationCache row, Campus boundary column, or warmed slide caches).
+    result (LocationCache row, Boundary geometry column, or warmed slide caches).
 
     Args:
         source_key: An ``external_data.panel_sources()`` key.

@@ -1051,8 +1051,7 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         location = get_object_or_404(Location, slug=location_slug)
-        wiki, _created = Wiki.objects.get_or_create_for_location(location)
-        return wiki
+        return get_object_or_404(Wiki, location=location)
 
     def get(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):

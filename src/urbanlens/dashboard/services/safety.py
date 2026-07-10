@@ -395,10 +395,10 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
 def find_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None) -> Wiki | None:
     """Return the community Wiki covering a destination point, if one already exists.
 
-    Only *existing* wikis count - wikis are materialised lazily (see
-    ``WikiManager.get_or_create_for_location``), and a check-in escalation must
-    not conjure a community page for a place nobody has written about.
-    Matching mirrors ``LocationManager.get_for_point``: campus generated
+    Only *existing* wikis count - wikis are created explicitly by users (see
+    ``WikiCreationService``), and a check-in escalation must not conjure a
+    community page for a place nobody has written about. Matching mirrors
+    ``LocationManager.get_for_point``: location-default generated boundary
     polygons first, then a 50 m proximity fallback.
 
     Args:

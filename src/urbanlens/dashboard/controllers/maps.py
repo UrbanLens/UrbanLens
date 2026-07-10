@@ -187,7 +187,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             badge_ids = request.POST.getlist("badge_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
-            is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
             google_place_id = request.POST.get("google_place_id") or None
             # Canonical name supplied by the client when adding from a Google Places or
             # Wikipedia/NPS marker - avoids a synchronous geocoding API round-trip when
@@ -212,20 +211,20 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # one matches, the client offers the user a choice (see below).
             all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
 
+            from urbanlens.dashboard.models.wiki.model import Wiki
+
             pin = Pin.objects.create(
                 name=name,
                 name_is_user_provided=bool((name or "").strip()),
                 location=location,
+                # Link to the place's community wiki when one already exists;
+                # wikis are only ever created explicitly from the pin page.
+                wiki=Wiki.objects.get_for_location(location),
                 icon=icon,
                 custom_icon=custom_icon,
                 color=color,
-                is_private=is_private,
                 profile=request.user.profile,
             )
-            # Pin.save() may have forced is_private=True (Community disabled) even
-            # though the request asked for a public pin - re-read the persisted
-            # value so the external-enrichment gates below reflect reality.
-            is_private = pin.is_private
 
             if badge_ids:
                 pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
@@ -244,7 +243,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # When adding from a Places layer marker, pre-populate the GooglePlace
             # link on both the pin and its location so subsequent views avoid an
             # extra Places Details API call.
-            if google_place_id and not is_private:
+            if google_place_id:
                 try:
                     from urbanlens.dashboard.services.apis.locations.google.place_info import (
                         GooglePlaceService,
@@ -264,7 +263,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
             # web-search results cache, so the pin detail page doesn't need to hit
             # the APIs on first load.
-            if location and not is_private and request.user.profile.external_apis_enabled:
+            if location and request.user.profile.external_apis_enabled:
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
                 from urbanlens.dashboard.tasks import (
                     prefetch_location_external_data,
@@ -278,7 +277,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 user_has_feature,
             )
 
-            if location and not is_private and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
+            if location and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
                 from urbanlens.dashboard.tasks import refresh_pin_web_search
 
@@ -658,7 +657,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         color = request.POST.get("color")
         custom_icon = request.FILES.get("custom_icon") or None
         badge_ids = [bid for bid in request.POST.getlist("badge_ids") if bid]
-        is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
 
         import contextlib
 
@@ -676,7 +674,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.color = color or None
         if custom_icon:
             pin.custom_icon = custom_icon
-        pin.is_private = is_private
         pin.save()
 
         if badge_ids:

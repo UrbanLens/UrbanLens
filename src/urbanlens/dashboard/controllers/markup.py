@@ -149,7 +149,7 @@ def _resolve_owner(
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
         return markup_map, PinMarkup.objects.for_map(markup_map)
     location = get_object_or_404(Location, slug=location_slug)
-    wiki, _created = Wiki.objects.get_or_create_for_location(location)
+    wiki = get_object_or_404(Wiki, location=location)
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
