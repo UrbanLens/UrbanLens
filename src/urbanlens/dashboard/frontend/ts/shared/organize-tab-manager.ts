@@ -66,6 +66,7 @@ export interface OrgTabManagerConfig {
         sourcesListId: string;
         confirmId: string;
         editNameId?: string;
+        /** Icon-picker id (not an element id) - element ids are derived as `icon-value-${editIconId}` etc. */
         editIconId?: string;
         swapHintId?: string;
     };
@@ -106,6 +107,7 @@ export class OrgTabManager {
 
     init(): void {
         this.wireSelection();
+        this.wireRowEditIntercept();
         this.wireBulkEdit();
         this.wireMerge();
         this.wireHtmxHooks();
@@ -269,6 +271,30 @@ export class OrgTabManager {
             }
             this.syncSelectionUi();
         });
+    }
+
+    // When multiple badges are selected, a row's own "Edit" pencil should
+    // still open the bulk-edit dialog for the whole selection rather than
+    // the single-item form - otherwise it silently edits just that one row
+    // while the rest of the selection looks like it's being included. Runs
+    // in the capture phase so it can veto the click before htmx's own
+    // bubble-phase hx-get listener on the button fires.
+    private wireRowEditIntercept(): void {
+        this.rows?.addEventListener(
+            "click",
+            (e) => {
+                if (this.selected.size <= 1) return;
+                const btn = (e.target as HTMLElement).closest<HTMLElement>('.tag-card-actions .btn--icon[title="Edit"]');
+                if (!btn) return;
+                const card = btn.closest<HTMLElement>(this.cfg.cardSelector);
+                const id = card?.dataset[this.cfg.idKey];
+                if (!id || !this.selected.has(id)) return;
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                this.openBulkEditDialog();
+            },
+            true,
+        );
     }
 
     private onRowsUpdated(): void {
@@ -575,20 +601,16 @@ export class OrgTabManager {
         else picker.querySelector(".color-clear")?.classList.add("selected");
     }
 
-    private updateMergeIconPreview(): void {
-        const icon = (document.getElementById(`${this.cfg.ns}-merge-edit-icon`) as HTMLInputElement | null)?.value ?? "";
-        const color = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
-        const preview = document.getElementById(`${this.cfg.ns}-merge-edit-icon-preview`);
-        if (!preview) return;
-        const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "";
-        const style = safeColor ? `color:${safeColor};` : "";
-        if (!icon) {
-            preview.innerHTML = '<i class="material-icons tag-icon-empty" style="font-size:1.2rem">label</i>';
-        } else if (MATERIAL_ICON_NAME.test(icon)) {
-            preview.innerHTML = `<i class="material-icons" style="font-size:1.2rem;${style}">${escHtml(icon)}</i>`;
-        } else {
-            preview.innerHTML = `<span style="font-size:1.2rem">${escHtml(icon)}</span>`;
-        }
+    private setMergeIconPicker(icon: string): void {
+        const pickerId = this.cfg.mergeDialog.editIconId ?? `${this.cfg.ns}-merge-edit`;
+        const iconValue = document.getElementById(`icon-value-${pickerId}`) as HTMLInputElement | null;
+        const iconCurrent = document.getElementById(`icon-current-${pickerId}`);
+        const iconGrid = document.getElementById(`icon-grid-${pickerId}`);
+        iconGrid?.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
+        if (iconValue) iconValue.value = icon;
+        if (iconCurrent) iconCurrent.innerHTML = renderIconGlyphHtml(icon);
+        if (icon && iconGrid) iconGrid.querySelector(`[data-icon="${icon}"]`)?.classList.add("selected");
+        else iconGrid?.querySelector(".icon-picker-none")?.classList.add("selected");
     }
 
     private renderMergeDialog(): void {
@@ -617,15 +639,13 @@ export class OrgTabManager {
                 if (swapHint) swapHint.style.display = targetIsProtected ? "none" : "";
             }
             const nameEl = document.getElementById(d.editNameId ?? "") as HTMLInputElement | null;
-            const iconEl = document.getElementById(d.editIconId ?? "") as HTMLInputElement | null;
             if (nameEl) {
                 nameEl.value = data.name;
                 nameEl.readOnly = targetIsProtected;
                 nameEl.title = targetIsProtected ? "Protected status names cannot be changed" : "";
             }
-            if (iconEl) iconEl.value = data.icon;
+            this.setMergeIconPicker(data.icon);
             this.setMergeColorPicker(data.color);
-            this.updateMergeIconPreview();
         }
 
         const confirmBtn = document.getElementById(d.confirmId) as HTMLButtonElement;
@@ -658,7 +678,8 @@ export class OrgTabManager {
             let hasEdits = false;
             if (this.cfg.supportsMergeEdit) {
                 editName = ((document.getElementById(d.editNameId ?? "") as HTMLInputElement | null)?.value ?? "").trim() || origData.name;
-                editIcon = (document.getElementById(d.editIconId ?? "") as HTMLInputElement | null)?.value ?? "";
+                const iconPickerId = d.editIconId ?? `${this.cfg.ns}-merge-edit`;
+                editIcon = (document.getElementById(`icon-value-${iconPickerId}`) as HTMLInputElement | null)?.value ?? "";
                 editColor = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
                 hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
             }

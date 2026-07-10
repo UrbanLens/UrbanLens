@@ -89,7 +89,7 @@ function buildTabConfig(rows: HTMLElement, overrides: Partial<OrgTabManagerConfi
             sourcesListId: `${overrides.ns}-merge-sources-list`,
             confirmId: `${overrides.ns}-merge-confirm-btn`,
             editNameId: `${overrides.ns}-merge-edit-name`,
-            editIconId: `${overrides.ns}-merge-edit-icon`,
+            editIconId: `${overrides.ns}-merge-edit`,
             swapHintId: `${overrides.ns}-merge-swap-hint`,
         },
     };

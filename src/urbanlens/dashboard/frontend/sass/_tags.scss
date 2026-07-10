@@ -1555,21 +1555,6 @@ dialog.tag-create-card.ul-dialog {
     flex: 1.2;
 }
 
-.cat-merge-edit-icon-wrap {
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-}
-
-.cat-merge-edit-icon-preview {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
 .cat-merge-edit-label {
     font-size: .75rem;
     margin-bottom: 3px;
@@ -1578,12 +1563,6 @@ dialog.tag-create-card.ul-dialog {
 .cat-merge-edit-section input[readonly] {
     opacity: .6;
     cursor: not-allowed;
-}
-
-.cat-merge-edit-hint {
-    font-weight: 400;
-    opacity: .65;
-    font-size: .7rem;
 }
 
 .cat-merge-color-picker {

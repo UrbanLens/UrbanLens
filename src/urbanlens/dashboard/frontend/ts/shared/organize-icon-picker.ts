@@ -20,9 +20,10 @@ export const OrganizeIconPicker = {
     pick(id: string, icon: string, btn: HTMLElement): void {
         IconPicker.pick(id, icon, btn);
 
-        // When "None" is picked, mark the custom icon for clearing on save.
+        // Picking anything from the grid (a real icon or "None") replaces
+        // whatever custom icon was previously uploaded for this badge.
         const clearFlag = document.getElementById(`edit-clear-custom-${id}`) as HTMLInputElement | null;
-        if (!icon && clearFlag) clearFlag.value = "1";
+        if (clearFlag) clearFlag.value = "1";
 
         // When a real icon is picked, clear any pending upload file.
         const uploadInput = document.getElementById(`icon-upload-input-${id}`) as HTMLInputElement | null;
