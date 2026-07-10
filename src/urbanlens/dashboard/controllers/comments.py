@@ -410,11 +410,14 @@ def _parse_map_data(request) -> dict | None:
     center_lng = data.get("center_lng")
     if not (_is_valid_lat(center_lat) and _is_valid_lng(center_lng)):
         return None
+    layer_mode = data.get("layer_mode")
+    if not isinstance(layer_mode, str) or layer_mode not in _ALLOWED_LAYER_MODES:
+        layer_mode = "standard"
     sanitized: dict = {
         "center_lat": float(center_lat),  # type: ignore[arg-type]
         "center_lng": float(center_lng),  # type: ignore[arg-type]
         "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
-        "layer_mode": data.get("layer_mode") if data.get("layer_mode") in _ALLOWED_LAYER_MODES else "standard",
+        "layer_mode": layer_mode,
         "detail_pins": [],
         "markup": _sanitize_markup_shapes(data.get("markup", data.get("shapes"))),
     }

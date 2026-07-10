@@ -57,17 +57,18 @@ class CommentMapDataSanitizationTests(TestCase):
     def test_unknown_layer_mode_defaults_to_standard(self) -> None:
         import json
 
-        payload = json.dumps({
-            "center_lat": 41.0,
-            "center_lng": -74.0,
-            "layer_mode": "javascript:alert(1)",
-            "markup": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": "#2196F3"}],
-        })
+        for layer_mode in ["javascript:alert(1)", ["satellite"]]:
+            payload = json.dumps({
+                "center_lat": 41.0,
+                "center_lng": -74.0,
+                "layer_mode": layer_mode,
+                "markup": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": "#2196F3"}],
+            })
 
-        result = _parse_map_data(_request(payload))
+            result = _parse_map_data(_request(payload))
 
-        assert result is not None  # nosec B101
-        assert result["layer_mode"] == "standard"  # nosec B101
+            assert result is not None  # nosec B101
+            assert result["layer_mode"] == "standard"  # nosec B101
 
     def test_malicious_hex_injection_in_color_is_rejected(self) -> None:
         import json
