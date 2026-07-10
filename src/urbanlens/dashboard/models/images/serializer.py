@@ -11,7 +11,23 @@ class ImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Image
-        fields = ["id", "image", "image_url", "pin", "wiki", "profile", "uploader_username", "caption", "latitude", "longitude", "created"]
+        fields = [
+            "id",
+            "image",
+            "image_url",
+            "pin",
+            "wiki",
+            "profile",
+            "uploader_username",
+            "caption",
+            "author",
+            "source_url",
+            "copyright",
+            "taken_at",
+            "latitude",
+            "longitude",
+            "created",
+        ]
         read_only_fields = ["id", "image_url", "uploader_username", "created"]
 
     def get_image_url(self, obj: Image) -> str | None:

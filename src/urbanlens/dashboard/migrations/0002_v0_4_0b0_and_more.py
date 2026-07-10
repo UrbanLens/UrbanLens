@@ -1619,7 +1619,7 @@ class Migration(migrations.Migration):
             name='auto_delete_after_days',
             field=models.IntegerField(blank=True, null=True),
         ),
-        
+
         # Wikis are user-created now; the private flag gated nothing.
         migrations.RemoveField(
             model_name="pin",

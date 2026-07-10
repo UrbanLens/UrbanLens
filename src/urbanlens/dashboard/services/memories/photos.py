@@ -117,9 +117,7 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
 
     candidates = list(
-        Image.objects.needs_attention(profile)
-        .exclude(pk=exclude_image_id)
-        .filter(latitude__isnull=False, longitude__isnull=False, taken_at__isnull=False),
+        Image.objects.needs_attention(profile).exclude(pk=exclude_image_id).filter(latitude__isnull=False, longitude__isnull=False, taken_at__isnull=False),
     )
     if not candidates:
         return

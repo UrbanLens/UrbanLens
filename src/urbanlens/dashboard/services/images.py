@@ -9,6 +9,7 @@ import io
 import logging
 import math
 import posixpath
+import re
 from typing import IO, TYPE_CHECKING, Any
 
 from django.utils import timezone
@@ -116,6 +117,149 @@ def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
         logger.debug("Unparseable EXIF DateTimeOriginal value: %s", raw_value)
         return None
     return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
+
+
+# Windows Explorer's XP* EXIF tags, written as null-terminated UTF-16LE byte
+# tuples by some cameras/editors. Fallbacks for the standard Artist/
+# ImageDescription tags, which not every device populates.
+_XP_AUTHOR_TAG = 0x9C9D
+_XP_TITLE_TAG = 0x9C9B
+_XP_COMMENT_TAG = 0x9C9C
+
+# Common auto-generated phone/camera filename stems: PXL_ (Pixel),
+# IMG_/IMG- (Android/iPhone, incl. WhatsApp's IMG-YYYYMMDD-WAxxxx), MVIMG_
+# (Google motion photo stills), DSC_/DSCN/DCIM (point-and-shoot cameras). A
+# match indicates the uploader almost certainly took the photo themselves,
+# as opposed to a descriptively-named file sourced from somewhere else.
+_CAMERA_FILENAME_RE = re.compile(r"^(pxl|img|mvimg|dscn|dsc|dcim)[-_]?\d{4,}", re.IGNORECASE)
+
+
+def _get_ifd0(image_file: IO[bytes]) -> Any | None:
+    """Return the top-level (IFD0) EXIF tags for an image file, if present."""
+    image_file.seek(0)
+    img = PILImage.open(image_file)
+    exif = img.getexif()
+    return exif or None
+
+
+def _decode_xp_string(value: Any) -> str | None:
+    """Decode a Windows XP* EXIF tag's null-terminated UTF-16LE byte tuple to text."""
+    if not value:
+        return None
+    try:
+        raw = bytes(value)
+        text = raw.decode("utf-16-le").rstrip("\x00").strip()
+    except (TypeError, ValueError, UnicodeDecodeError):
+        return None
+    return text or None
+
+
+def extract_author(image_file: IO[bytes]) -> str | None:
+    """Return the photo's author/credit from EXIF, or None if absent.
+
+    Prefers the standard ``Artist`` tag; falls back to the Windows-specific
+    ``XPAuthor`` tag written by some cameras and editing tools.
+    """
+    try:
+        exif = _get_ifd0(image_file)
+    except Exception as exc:
+        logger.debug("EXIF author extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif:
+        return None
+    artist = exif.get(0x013B)  # Artist
+    if artist and str(artist).strip():
+        return str(artist).strip()
+    return _decode_xp_string(exif.get(_XP_AUTHOR_TAG))
+
+
+def extract_copyright_notice(image_file: IO[bytes]) -> str | None:
+    """Return the photo's EXIF copyright notice, or None if absent."""
+    try:
+        exif = _get_ifd0(image_file)
+    except Exception as exc:
+        logger.debug("EXIF copyright extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif:
+        return None
+    notice = exif.get(0x8298)  # Copyright
+    if notice and str(notice).strip():
+        return str(notice).strip()
+    return None
+
+
+def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
+    """Return a caption sourced from EXIF ``ImageDescription``/``XPTitle``/``XPComment``."""
+    try:
+        exif = _get_ifd0(image_file)
+    except Exception as exc:
+        logger.debug("EXIF caption extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif:
+        return None
+    description = exif.get(0x010E)  # ImageDescription
+    if description and str(description).strip():
+        return str(description).strip()
+    for tag_id in (_XP_TITLE_TAG, _XP_COMMENT_TAG):
+        text = _decode_xp_string(exif.get(tag_id))
+        if text:
+            return text
+    return None
+
+
+def extract_source_url(image_file: IO[bytes]) -> str | None:
+    """Return a source URL embedded in the file's text metadata, if any.
+
+    EXIF has no standard URL tag, but some tools embed one in a PNG text
+    chunk, exposed by Pillow via ``Image.info``, under a key like "url" or
+    "source".
+
+    Args:
+        image_file: The uploaded file or opened FieldFile to read.
+
+    Returns:
+        The URL string, or None when no such metadata is present.
+    """
+    try:
+        image_file.seek(0)
+        img = PILImage.open(image_file)
+        for key, value in (img.info or {}).items():
+            if isinstance(key, str) and isinstance(value, str) and key.lower() in {"url", "source", "source_url"} and value.strip().lower().startswith(("http://", "https://")):
+                return value.strip()
+    except Exception as exc:
+        logger.debug("Source URL extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    return None
+
+
+def is_camera_generated_filename(filename: str) -> bool:
+    """Return True when a filename matches common phone/camera auto-naming conventions.
+
+    Used to infer that the uploader is the photo's author when no attribution
+    metadata (author/source URL/caption/copyright) is present at all - a
+    generically-named camera file (e.g. ``PXL_20260709_123456.jpg``) is very
+    unlikely to be a photo sourced from somewhere else.
+
+    Args:
+        filename: The stored or uploaded filename (path or bare name).
+
+    Returns:
+        True when the filename's stem matches a known camera naming pattern.
+    """
+    stem = posixpath.splitext(posixpath.basename(filename))[0]
+    return bool(_CAMERA_FILENAME_RE.match(stem))
 
 
 def _json_safe(value: Any) -> Any:
@@ -291,7 +435,9 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         viewer_profile: The requesting profile, if any - used to flag ``is_mine``.
 
     Returns:
-        Dict with id/url/caption/latitude/longitude/uploader/is_mine.
+        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the
+        attribution fields (author/source_url/copyright/taken_at) shown in the
+        lightbox.
     """
     return {
         "id": img.pk,
@@ -301,4 +447,8 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "longitude": float(img.longitude) if img.longitude is not None else None,
         "uploader": img.profile.username if img.profile else "",
         "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
+        "author": img.author or "",
+        "source_url": img.source_url or "",
+        "copyright": img.copyright or "",
+        "taken_at": img.taken_at.isoformat() if img.taken_at else None,
     }

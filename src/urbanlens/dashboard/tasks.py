@@ -315,11 +315,29 @@ def process_image_upload(self, image_id: int) -> bool:
     It also snapshots the full EXIF metadata (before any re-encoding), applies
     the storage downscale/WebP policy for the uploader, and records the stored
     file size that counts against the uploader's storage quota.
+
+    Attribution fields (author/source_url/caption/copyright) are filled from
+    EXIF/PNG metadata when present and not already set. When none of those
+    four fields are present at all and the filename matches a common phone/
+    camera auto-naming convention (e.g. ``PXL_20260709_123456.jpg``), the
+    uploader is assumed to be the author; any other unattributed photo is
+    left blank rather than guessed at.
     """
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.images import compute_checksum, downscale_stored_image, extract_exif_data, extract_gps_coords, extract_taken_at
+    from urbanlens.dashboard.services.images import (
+        compute_checksum,
+        downscale_stored_image,
+        extract_author,
+        extract_caption_from_metadata,
+        extract_copyright_notice,
+        extract_exif_data,
+        extract_gps_coords,
+        extract_source_url,
+        extract_taken_at,
+        is_camera_generated_filename,
+    )
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.storage import get_downscale_policy
 
@@ -333,6 +351,10 @@ def process_image_upload(self, image_id: int) -> bool:
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
+            author = extract_author(image_file) if not image.author else None
+            copyright_notice = extract_copyright_notice(image_file) if not image.copyright else None
+            metadata_caption = extract_caption_from_metadata(image_file) if not image.caption else None
+            source_url = extract_source_url(image_file) if not image.source_url else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
@@ -353,6 +375,24 @@ def process_image_upload(self, image_id: int) -> bool:
     if exif_data:
         image.exif_data = exif_data
         update_fields["exif_data"] = exif_data
+    if author:
+        image.author = author
+        update_fields["author"] = author
+    if copyright_notice:
+        image.copyright = copyright_notice
+        update_fields["copyright"] = copyright_notice
+    if metadata_caption:
+        image.caption = metadata_caption
+        update_fields["caption"] = metadata_caption
+    if source_url:
+        image.source_url = source_url
+        update_fields["source_url"] = source_url
+
+    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name):
+        uploader_name = image.profile.full_name or image.profile.username
+        if uploader_name:
+            image.author = uploader_name
+            update_fields["author"] = uploader_name
 
     # Downscale/convert per the uploader's storage policy, then record the
     # stored size that counts against their quota. The EXIF snapshot above is

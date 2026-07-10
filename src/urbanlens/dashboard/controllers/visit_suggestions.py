@@ -76,8 +76,10 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
         )
         response = _trigger_badge_refresh(response)
         if blocked:
-            response["HX-Trigger"] = json.dumps({
-                "notifCountRefresh": {"target": "body"},
-                "showToast": {"message": "Visit logging is turned off - enable it in Settings to add this to your visit history.", "level": "info"},
-            })
+            response["HX-Trigger"] = json.dumps(
+                {
+                    "notifCountRefresh": {"target": "body"},
+                    "showToast": {"message": "Visit logging is turned off - enable it in Settings to add this to your visit history.", "level": "info"},
+                }
+            )
         return response

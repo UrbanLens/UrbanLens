@@ -469,10 +469,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
     Comment.objects.create(
         wiki=wiki,
         profile=checkin.profile,
-        text=(
-            f"Safety alert: {checkin.profile.username} planned a trip here (\"{checkin.title}\") and hasn't "
-            f"checked in as expected. If you've seen them or can help, see the check-in page: {checkin_url}"
-        ),
+        text=(f"Safety alert: {checkin.profile.username} planned a trip here (\"{checkin.title}\") and hasn't checked in as expected. If you've seen them or can help, see the check-in page: {checkin_url}"),
     )
     checkin.wiki_notified_at = timezone.now()
     checkin.save(update_fields=["wiki_notified_at", "updated"])

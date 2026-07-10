@@ -158,10 +158,7 @@ def _share_a_friend(ghost: Profile, owner: Profile) -> None:
     from urbanlens.dashboard.models.profile.model import Profile
 
     accepted = Friendship.objects.filter(status=FriendshipStatus.ACCEPTED)
-    mutual_id = (
-        accepted.filter(from_profile=owner).values_list("to_profile_id", flat=True).first()
-        or accepted.filter(to_profile=owner).values_list("from_profile_id", flat=True).first()
-    )
+    mutual_id = accepted.filter(from_profile=owner).values_list("to_profile_id", flat=True).first() or accepted.filter(to_profile=owner).values_list("from_profile_id", flat=True).first()
     if mutual_id is not None:
         mutual = Profile.objects.get(pk=mutual_id)
     else:

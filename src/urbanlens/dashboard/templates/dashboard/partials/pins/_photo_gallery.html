@@ -31,6 +31,10 @@ Context:
         data-lat="{{ img.latitude|default:'' }}"
         data-lng="{{ img.longitude|default:'' }}"
         data-mine="{% if img.profile == profile %}true{% else %}false{% endif %}"
+        data-author="{{ img.author|default:'' }}"
+        data-copyright="{{ img.copyright|default:'' }}"
+        data-source-url="{{ img.source_url|default:'' }}"
+        data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
@@ -85,6 +89,12 @@ Context:
       <i class="material-symbols-outlined">chevron_right</i>
     </button>
     <p id="lightbox-caption" class="lightbox-caption"></p>
+    <div id="lightbox-meta" class="lightbox-meta">
+      <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
+      <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+      <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
+      <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
+    </div>
   </div>
 </dialog>
 
@@ -116,6 +126,10 @@ Context:
       lat: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
       lng: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
       mine: el.dataset.mine === 'true',
+      author: el.dataset.author || '',
+      copyright: el.dataset.copyright || '',
+      sourceUrl: el.dataset.sourceUrl || '',
+      takenAt: el.dataset.takenAt || '',
     };
   });
   var _lightboxIdx = 0;
@@ -233,6 +247,10 @@ Context:
     li.dataset.lat = img.latitude !== null ? img.latitude : '';
     li.dataset.lng = img.longitude !== null ? img.longitude : '';
     li.dataset.mine = 'true';
+    li.dataset.author = img.author || '';
+    li.dataset.copyright = img.copyright || '';
+    li.dataset.sourceUrl = img.source_url || '';
+    li.dataset.takenAt = img.taken_at || '';
     li.addEventListener('mouseenter', function () { galleryHover(img.id, true); });
     li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
 
@@ -260,7 +278,10 @@ Context:
     }
 
     // Keep internal list in sync.
-    _items.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
+    _items.push({
+      id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
+      author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
+    });
   }
 
   // -- Delete -----------------------------------------------------------------
@@ -290,6 +311,7 @@ Context:
       if (fallback && fallback.url) {
         document.getElementById('lightbox-img').src = fallback.url;
         document.getElementById('lightbox-caption').textContent = fallback.caption || '';
+        _setLightboxMeta({});
         document.getElementById('gallery-lightbox').showModal();
         return;
       }
@@ -310,6 +332,26 @@ Context:
     var el = document.getElementById('gallery-item-' + item.id);
     var caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
     document.getElementById('lightbox-caption').textContent = caption;
+    _setLightboxMeta(item);
+  }
+
+  function _setLightboxMeta(item) {
+    var authorEl = document.getElementById('lightbox-author');
+    var takenEl = document.getElementById('lightbox-taken-at');
+    var copyrightEl = document.getElementById('lightbox-copyright');
+    var sourceEl = document.getElementById('lightbox-source-link');
+    if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
+    if (takenEl) {
+      var takenText = '';
+      if (item.takenAt) { var d = new Date(item.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+      takenEl.textContent = takenText;
+      takenEl.hidden = !takenText;
+    }
+    if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
+    if (sourceEl) {
+      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
+      else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
+    }
   }
 
   // -- Map hover sync ---------------------------------------------------------

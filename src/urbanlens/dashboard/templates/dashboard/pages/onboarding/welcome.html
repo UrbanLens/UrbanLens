@@ -107,9 +107,27 @@
             </div>
 
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Continue</button>
+                <button type="submit" class="settings-save-btn" id="onboarding-continue-btn" {% if not form.tos_agreed.value %}disabled{% endif %}>Continue</button>
             </div>
         </form>
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var tosCheckbox = document.getElementById("{{ form.tos_agreed.id_for_label }}");
+        var continueBtn = document.getElementById("onboarding-continue-btn");
+        if (!tosCheckbox || !continueBtn) {
+            return;
+        }
+        var syncContinueBtn = function () {
+            continueBtn.disabled = !tosCheckbox.checked;
+        };
+        tosCheckbox.addEventListener("change", syncContinueBtn);
+        syncContinueBtn();
+    });
+</script>
 {% endblock %}

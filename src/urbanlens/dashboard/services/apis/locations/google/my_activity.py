@@ -326,13 +326,7 @@ def import_my_activity_streaming(
             # a pending suggestion for the same place+date needs its own check here,
             # or re-uploading the same export before the user responds would raise a
             # duplicate suggestion every time (mirrors _suggest_for_unfiled_photo).
-            already_pending = (
-                VisitSuggestion.objects.for_profile(profile)
-                .pending()
-                .for_place(location=location, latitude=entry["latitude"], longitude=entry["longitude"])
-                .filter(visited_at__date=entry["visited_at"].date())
-                .exists()
-            )
+            already_pending = VisitSuggestion.objects.for_profile(profile).pending().for_place(location=location, latitude=entry["latitude"], longitude=entry["longitude"]).filter(visited_at__date=entry["visited_at"].date()).exists()
             suggestion = (
                 None
                 if already_pending

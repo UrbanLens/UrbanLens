@@ -91,16 +91,20 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
 
-        return self.filter(
-            status__in=SafetyCheckinStatus.resolved_statuses(),
-            resolved_at__isnull=False,
-            profile__safety_preference__auto_delete_after_days__isnull=False,
-        ).annotate(
-            delete_at=ExpressionWrapper(
-                Greatest(F("resolved_at"), F("created")) + F("profile__safety_preference__auto_delete_after_days") * timedelta(days=1),
-                output_field=DateTimeField(),
-            ),
-        ).filter(delete_at__lte=timezone.now())
+        return (
+            self.filter(
+                status__in=SafetyCheckinStatus.resolved_statuses(),
+                resolved_at__isnull=False,
+                profile__safety_preference__auto_delete_after_days__isnull=False,
+            )
+            .annotate(
+                delete_at=ExpressionWrapper(
+                    Greatest(F("resolved_at"), F("created")) + F("profile__safety_preference__auto_delete_after_days") * timedelta(days=1),
+                    output_field=DateTimeField(),
+                ),
+            )
+            .filter(delete_at__lte=timezone.now())
+        )
 
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.

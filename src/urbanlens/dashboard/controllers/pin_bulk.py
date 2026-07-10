@@ -198,9 +198,6 @@ class PinBulkEditBadgeOptionsView(LoginRequiredMixin, View):
         badges = Badge.objects.filter(kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct().order_by("name")
         return JsonResponse(
             {
-                "badges": [
-                    {"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind}
-                    for b in badges
-                ],
+                "badges": [{"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind} for b in badges],
             },
         )

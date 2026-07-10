@@ -79,6 +79,13 @@
         <button type="button" class="lightbox-nav lightbox-next" onclick="photosLightboxNav(1)">
             <i class="material-symbols-outlined">chevron_right</i>
         </button>
+        <p id="photos-lightbox-caption" class="lightbox-caption" hidden></p>
+        <div id="photos-lightbox-meta" class="lightbox-meta">
+            <p id="photos-lightbox-author" class="lightbox-meta-line" hidden></p>
+            <p id="photos-lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+            <p id="photos-lightbox-copyright" class="lightbox-meta-line" hidden></p>
+            <a id="photos-lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
+        </div>
     </div>
 </dialog>
 
@@ -305,6 +312,11 @@
         li.id = 'photo-tile-' + img.id;
         li.dataset.id = img.id;
         li.dataset.url = img.url;
+        li.dataset.caption = img.caption || '';
+        li.dataset.author = img.author || '';
+        li.dataset.copyright = img.copyright || '';
+        li.dataset.sourceUrl = img.source_url || '';
+        li.dataset.takenAt = img.taken_at || '';
         var badge = (img.latitude !== null && img.longitude !== null)
             ? '<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>' : '';
         li.innerHTML =
@@ -333,7 +345,11 @@
     var _lbIdx = 0, _lbItems = [];
     function _collectItems() {
         _lbItems = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
-            return { id: parseInt(el.dataset.id, 10), url: el.dataset.url };
+            return {
+                id: parseInt(el.dataset.id, 10), url: el.dataset.url, caption: el.dataset.caption || '',
+                author: el.dataset.author || '', copyright: el.dataset.copyright || '',
+                sourceUrl: el.dataset.sourceUrl || '', takenAt: el.dataset.takenAt || '',
+            };
         });
     }
     window.photosOpenLightbox = function (id) {
@@ -350,7 +366,25 @@
     };
     function _showLb() {
         var it = _lbItems[_lbIdx];
-        if (it) document.getElementById('photos-lightbox-img').src = it.url;
+        if (!it) return;
+        document.getElementById('photos-lightbox-img').src = it.url;
+        var captionEl = document.getElementById('photos-lightbox-caption');
+        captionEl.textContent = it.caption || '';
+        captionEl.hidden = !it.caption;
+        var authorEl = document.getElementById('photos-lightbox-author');
+        authorEl.textContent = it.author ? 'By ' + it.author : '';
+        authorEl.hidden = !it.author;
+        var takenEl = document.getElementById('photos-lightbox-taken-at');
+        var takenText = '';
+        if (it.takenAt) { var d = new Date(it.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+        takenEl.textContent = takenText;
+        takenEl.hidden = !takenText;
+        var copyrightEl = document.getElementById('photos-lightbox-copyright');
+        copyrightEl.textContent = it.copyright || '';
+        copyrightEl.hidden = !it.copyright;
+        var sourceEl = document.getElementById('photos-lightbox-source-link');
+        if (it.sourceUrl) { sourceEl.href = it.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
+        else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
     }
     document.addEventListener('keydown', function (e) {
         var lb = document.getElementById('photos-lightbox');

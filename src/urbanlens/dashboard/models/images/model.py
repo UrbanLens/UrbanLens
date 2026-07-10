@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import ImageManager
@@ -69,6 +69,15 @@ class Image(abstract.FrontendDashboardModel):
         blank=True,
     )
     caption = CharField(max_length=500, null=True, blank=True)
+    # Attribution fields, shown in the lightbox. Auto-populated from EXIF/PNG
+    # metadata by process_image_upload when present; when a photo has none of
+    # author/source_url/caption/copyright AND its filename matches a common
+    # phone/camera auto-naming convention (e.g. PXL_20260709_123456.jpg), the
+    # uploader is assumed to be the author. Any other unattributed photo is
+    # left blank rather than guessed at.
+    author = CharField(max_length=255, null=True, blank=True)
+    source_url = URLField(max_length=500, null=True, blank=True)
+    copyright = CharField(max_length=255, null=True, blank=True)
     # The photo's own GPS position (EXIF, or user drag-placement on the map).
     # Kept separate from the `location` FK so each photo can scatter at its exact
     # capture point on the map layer; `location` records which shared place the

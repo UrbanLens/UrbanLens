@@ -8,7 +8,12 @@ Context:
   profile  - current viewer
 {% endcomment %}
 {% for img in images %}
-<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.image.url }}">
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
+    data-caption="{{ img.caption|default:'' }}"
+    data-author="{{ img.author|default:'' }}"
+    data-copyright="{{ img.copyright|default:'' }}"
+    data-source-url="{{ img.source_url|default:'' }}"
+    data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
     <button type="button" class="photo-tile-btn" onclick="photosOpenLightbox({{ img.pk }})">
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
