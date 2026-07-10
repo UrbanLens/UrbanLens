@@ -10,8 +10,8 @@
         "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js/*.js",
-        "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm",
-        "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify",
+        "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife",
+        "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --minify",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
@@ -25,6 +25,7 @@
     "author": "Jess Mann",
     "license": "N/A",
     "devDependencies": {
+        "@types/leaflet": "^1.9.21",
         "@types/sortablejs": "^1.15.9",
         "bun-types": "latest",
         "sortablejs": "^1.15.7"

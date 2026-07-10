@@ -18,10 +18,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
 
     {% load static %}
-    {# -- Shared markup engine - must load before {% block content %} scripts -- #}
-    {% include 'dashboard/partials/layout/_markup_engine.html' %}
-    {# -- Shared "jump to" location search engine - same reason -- #}
-    {% include 'dashboard/partials/layout/_location_search_engine.html' %}
+    {# -- Shared MarkupEngine + LocationSearchEngine globals - must load before
+       {% block content %} scripts. Built as a classic (non-module) script so it
+       stays synchronous/blocking like the inline scripts it replaces - see
+       ts/entries-classic/core.ts for why this can't be type="module". -- #}
+    <script src="{% static 'dashboard/js/core.js' %}"></script>
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />

@@ -3,7 +3,6 @@
  * need to interoperate with. These are intentionally minimal - just the
  * surface actually called from the modules in this project.
  */
-
 interface ToastrOptions {
     timeOut?: number;
     closeButton?: boolean;
@@ -40,5 +39,10 @@ declare global {
     const toastr: Toastr;
     const csrftoken: string;
 }
+
+// Leaflet is loaded globally via a CDN <script> tag (not bundled) on
+// map/pin-detail/wiki/safety pages. @types/leaflet's own `export as
+// namespace L` (activated via tsconfig's `types: ["leaflet"]`) already
+// provides the global `L` namespace/value - nothing further needed here.
 
 export {};
