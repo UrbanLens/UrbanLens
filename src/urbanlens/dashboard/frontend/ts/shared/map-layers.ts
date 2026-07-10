@@ -86,7 +86,11 @@ const TILE_DEFS: Record<string, TileDef> = {
     },
 };
 
-/** Legacy layer-mode aliases still stored in older MarkupMaps / comment map JSON. */
+/**
+ * Legacy layer-mode aliases accepted defensively (pre-canonical MarkupMap
+ * values and old cached snapshots). Mirrors LEGACY_LAYER_MODE_ALIASES in
+ * dashboard/models/markup/meta.py.
+ */
 const BASE_ALIASES: Record<string, BaseLayerKey> = {
     street: "street",
     standard: "street",
@@ -105,15 +109,6 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
     return BASE_ALIASES[(key || "").toLowerCase()] || "street";
 }
 
-/**
- * Maps a canonical base key back to the legacy identifier stored by
- * MarkupMap.layer_mode and comment map snapshots ("standard" / "topo" /
- * "satellite"). Use when persisting layer state server-side.
- */
-export function legacyBase(key: string | null | undefined): string {
-    const canonical = normalizeBase(key);
-    return canonical === "street" ? "standard" : canonical === "topographic" ? "topo" : canonical;
-}
 
 /**
  * Creates a tile layer for one of the canonical sources.
@@ -636,7 +631,6 @@ export const MapLayers = {
     bordersOverlay,
     weatherLayers,
     normalizeBase,
-    legacyBase,
 };
 
 /** Publishes the engine on window for the classic inline template scripts. */

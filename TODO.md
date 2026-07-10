@@ -271,9 +271,7 @@ Features planned for future releases.
 * User settings page: AI Features section needs better explanations.
 * Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.
-* Distinguish between building boundaries and property boundaries.
-* Ability to select a group of pins and turn them into detail pins for a given location. (Essentially: merge pins)
-* Consider again: should wikis automatically be created, or require a user to click "create wiki". This interacts with users gaming pin creation to find known pins.
+* Create unit tests for typescript.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

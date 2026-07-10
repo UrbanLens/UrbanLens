@@ -115,8 +115,8 @@
                 {% endwith %}
 
                 {# -- Attached map snapshot: small live preview, click to enlarge -- #}
+                {# Custom compact preview (badge trigger) + the shared viewer dialog. #}
                 {% if visit.map_data %}
-                {% with vid=visit.id|stringformat:"d" %}{% with sid="comment-map-data-visit-"|add:vid %}{{ visit.map_data|json_script:sid }}{% endwith %}{% endwith %}
                 <div class="comment-map-preview visit-map-preview" data-comment-id="visit-{{ visit.id }}"
                      data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
                      data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
@@ -126,18 +126,9 @@
                         <span class="visit-map-open-badge"><i class="material-symbols-outlined">open_in_full</i></span>
                     </button>
                 </div>
-                <dialog id="comment-map-dialog-visit-{{ visit.id }}" class="comment-map-view-dialog ul-dialog">
-                    <div class="dialog-header">
-                        <span>Visit map</span>
-                        <button type="button" class="dialog-close"
-                                onclick="document.getElementById('comment-map-dialog-visit-{{ visit.id }}').close()">
-                            <i class="material-symbols-outlined">close</i>
-                        </button>
-                    </div>
-                    <div id="comment-map-view-visit-{{ visit.id }}" class="comment-map-view-body"
-                         data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
-                         data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}"></div>
-                </dialog>
+                {% with visit_map_id=visit.id|stringformat:"d" %}
+                {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="visit-"|add:visit_map_id map_data=visit.map_data title="Visit map" marker_lat=pin.effective_latitude|default_if_none:'' marker_lng=pin.effective_longitude|default_if_none:'' %}
+                {% endwith %}
                 {% endif %}
             </div>
 

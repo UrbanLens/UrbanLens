@@ -29,25 +29,8 @@
   <div class="comment-text">{{ rendered_text }}</div>
 
   {% if comment.map_data %}
-  {% with id_str=comment.id|stringformat:"d" %}{% with sid="comment-map-data-"|add:id_str %}{{ comment.map_data|json_script:sid }}{% endwith %}{% endwith %}
-  <div class="comment-map-preview" data-comment-id="{{ comment.id }}">
-    <div class="comment-map-thumb" id="comment-map-thumb-{{ comment.id }}"></div>
-    <button type="button" class="comment-map-expand-btn"
-            onclick="_expandCommentMap({{ comment.id }})">
-      <i class="material-symbols-outlined">open_in_full</i>
-      Expand map
-    </button>
-  </div>
-  <dialog id="comment-map-dialog-{{ comment.id }}" class="comment-map-view-dialog ul-dialog">
-    <div class="dialog-header">
-      <span>Map</span>
-      <button type="button" class="dialog-close"
-              onclick="document.getElementById('comment-map-dialog-{{ comment.id }}').close()">
-        <i class="material-symbols-outlined">close</i>
-      </button>
-    </div>
-    <div id="comment-map-view-{{ comment.id }}" class="comment-map-view-body"></div>
-  </dialog>
+  {% include "dashboard/partials/map/_map_view_preview.html" with map_id=comment.id %}
+  {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=comment.id map_data=comment.map_data %}
   {% endif %}
 
   {% if comment.image %}

@@ -11,14 +11,9 @@ id must stay stable across re-renders.
 {% endcomment %}
 <div class="safety-attached-maps" id="safety-attached-maps">
     {% for map in attached_maps %}
-    {% with uuid_str=map.uuid|stringformat:"s" %}{% with sid="comment-map-data-mm-"|add:uuid_str %}{{ map.to_snapshot|json_script:sid }}{% endwith %}{% endwith %}
+    {% with uuid_str=map.uuid|stringformat:"s" %}
     <div class="safety-attached-map-card" id="safety-attached-map-{{ map.uuid }}">
-        <div class="comment-map-preview" data-comment-id="mm-{{ map.uuid }}">
-            <div class="comment-map-thumb" id="comment-map-thumb-mm-{{ map.uuid }}"></div>
-            <button type="button" class="comment-map-expand-btn" onclick="_expandCommentMap('mm-{{ map.uuid }}')">
-                <i class="material-symbols-outlined">open_in_full</i> Expand
-            </button>
-        </div>
+        {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
         <div class="safety-attached-map-body">
             <span class="safety-attached-map-title">{{ map.title|default:"Untitled map" }}</span>
             <button type="button" class="safety-attached-map-remove"
@@ -30,15 +25,8 @@ id must stay stable across re-renders.
             </button>
         </div>
     </div>
-    <dialog id="comment-map-dialog-mm-{{ map.uuid }}" class="comment-map-view-dialog ul-dialog">
-        <div class="dialog-header">
-            <span>{{ map.title|default:"Map" }}</span>
-            <button type="button" class="dialog-close" onclick="document.getElementById('comment-map-dialog-mm-{{ map.uuid }}').close()">
-                <i class="material-symbols-outlined">close</i>
-            </button>
-        </div>
-        <div id="comment-map-view-mm-{{ map.uuid }}" class="comment-map-view-body"></div>
-    </dialog>
+    {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=map.to_snapshot title=map.title|default:"Map" %}
+    {% endwith %}
     {% endfor %}
     {% if not attached_maps %}
     <p class="safety-attached-maps-empty form-hint">No additional maps attached yet.</p>

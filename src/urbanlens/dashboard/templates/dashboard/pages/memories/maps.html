@@ -26,15 +26,9 @@
         {% if map_cards %}
         <div class="memories-maps-grid">
             {% for card in map_cards %}
-            {% with uuid_str=card.map.uuid|stringformat:"s" %}{% with sid="comment-map-data-mm-"|add:uuid_str %}{{ card.snapshot|json_script:sid }}{% endwith %}{% endwith %}
+            {% with uuid_str=card.map.uuid|stringformat:"s" %}
             <article class="memories-map-card" id="memories-map-card-{{ card.map.uuid }}">
-                <div class="comment-map-preview" data-comment-id="mm-{{ card.map.uuid }}">
-                    <div class="comment-map-thumb" id="comment-map-thumb-mm-{{ card.map.uuid }}"></div>
-                    <button type="button" class="comment-map-expand-btn" onclick="_expandCommentMap('mm-{{ card.map.uuid }}')">
-                        <i class="material-symbols-outlined">open_in_full</i>
-                        Expand map
-                    </button>
-                </div>
+                {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
                 <div class="memories-map-card-body">
                     <h3 class="memories-map-card-title">{{ card.map.title|default:"Untitled map" }}</h3>
                     <p class="memories-map-card-meta">
@@ -62,16 +56,8 @@
                     </div>
                 </div>
             </article>
-            <dialog id="comment-map-dialog-mm-{{ card.map.uuid }}" class="comment-map-view-dialog ul-dialog">
-                <div class="dialog-header">
-                    <span>{{ card.map.title|default:"Map" }}</span>
-                    <button type="button" class="dialog-close"
-                            onclick="document.getElementById('comment-map-dialog-mm-{{ card.map.uuid }}').close()">
-                        <i class="material-symbols-outlined">close</i>
-                    </button>
-                </div>
-                <div id="comment-map-view-mm-{{ card.map.uuid }}" class="comment-map-view-body"></div>
-            </dialog>
+            {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" %}
+            {% endwith %}
             {% endfor %}
         </div>
         {% else %}

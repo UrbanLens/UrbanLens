@@ -138,15 +138,21 @@ class SanitizeLayerFieldsTests(TestCase):
     """sanitize_map_data whitelists layer_mode and coerces show_borders."""
 
     def test_valid_layer_modes_pass(self) -> None:
-        for mode in ("standard", "satellite", "topo", "dark"):
+        for mode in ("street", "satellite", "topographic", "dark"):
             result = sanitize_map_data({"center_lat": 0.0, "center_lng": 0.0, "layer_mode": mode})
             assert result is not None  # nosec B101
             self.assertEqual(result["layer_mode"], mode)
 
-    def test_unknown_layer_mode_falls_back_to_standard(self) -> None:
+    def test_legacy_layer_modes_normalize_to_canonical(self) -> None:
+        for legacy, canonical in (("standard", "street"), ("topo", "topographic")):
+            result = sanitize_map_data({"center_lat": 0.0, "center_lng": 0.0, "layer_mode": legacy})
+            assert result is not None  # nosec B101
+            self.assertEqual(result["layer_mode"], canonical)
+
+    def test_unknown_layer_mode_falls_back_to_street(self) -> None:
         result = sanitize_map_data({"center_lat": 0.0, "center_lng": 0.0, "layer_mode": "javascript:alert(1)"})
         assert result is not None  # nosec B101
-        self.assertEqual(result["layer_mode"], "standard")
+        self.assertEqual(result["layer_mode"], "street")
 
     def test_show_borders_is_coerced_to_bool(self) -> None:
         result = sanitize_map_data({"center_lat": 0.0, "center_lng": 0.0, "show_borders": "yes"})
@@ -275,7 +281,7 @@ class MarkupMapEndpointTests(TestCase):
     def _create_map(self) -> str:
         response = self.client.post(
             reverse("markup_map.create"),
-            data=json.dumps({"center_lat": 40.0, "center_lng": -74.0, "zoom": 12, "layer_mode": "topo", "show_borders": True}),
+            data=json.dumps({"center_lat": 40.0, "center_lng": -74.0, "zoom": 12, "layer_mode": "topographic", "show_borders": True}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -285,9 +291,19 @@ class MarkupMapEndpointTests(TestCase):
         map_uuid = self._create_map()
         markup_map = MarkupMap.objects.get(uuid=map_uuid)
         self.assertEqual(markup_map.profile_id, self.profile.pk)
-        self.assertEqual(markup_map.layer_mode, "topo")
+        self.assertEqual(markup_map.layer_mode, "topographic")
         self.assertTrue(markup_map.show_borders)
         self.assertEqual(markup_map.zoom, 12)
+
+    def test_view_state_accepts_legacy_layer_mode_alias(self) -> None:
+        map_uuid = self._create_map()
+        response = self.client.post(
+            reverse("markup_map.view_state", args=[map_uuid]),
+            data=json.dumps({"layer_mode": "topo"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(MarkupMap.objects.get(uuid=map_uuid).layer_mode, "topographic")
 
     def test_item_create_and_json_listing(self) -> None:
         map_uuid = self._create_map()
@@ -304,7 +320,7 @@ class MarkupMapEndpointTests(TestCase):
         listing = self.client.get(reverse("markup_map.json", args=[map_uuid])).json()
         self.assertEqual(len(listing["markup_items"]), 1)
         self.assertEqual(listing["markup_items"][0]["color"], "#123456")
-        self.assertEqual(listing["view"]["layer_mode"], "topo")
+        self.assertEqual(listing["view"]["layer_mode"], "topographic")
 
     def test_view_state_endpoint_updates_viewport(self) -> None:
         map_uuid = self._create_map()

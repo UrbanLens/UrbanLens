@@ -826,10 +826,6 @@
   function normalizeBase(key) {
     return BASE_ALIASES[(key || "").toLowerCase()] || "street";
   }
-  function legacyBase(key) {
-    const canonical = normalizeBase(key);
-    return canonical === "street" ? "standard" : canonical === "topographic" ? "topo" : canonical;
-  }
   function tileLayer(kind, extraOptions) {
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street;
     return L.tileLayer(def.url, { ...def.options, ...extraOptions });
@@ -1202,8 +1198,7 @@
     tileLayer,
     bordersOverlay,
     weatherLayers,
-    normalizeBase,
-    legacyBase
+    normalizeBase
   };
   function installGlobalMapLayers() {
     window.MapLayers = MapLayers;

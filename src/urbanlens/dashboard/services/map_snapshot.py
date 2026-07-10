@@ -22,7 +22,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.markup.meta import MapLayerMode
+from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -132,12 +132,11 @@ def sanitize_map_data(data: object) -> dict | None:
     center_lng = data.get("center_lng")
     if not (_is_valid_lat(center_lat) and _is_valid_lng(center_lng)):
         return None
-    layer_mode = data.get("layer_mode")
     return {
         "center_lat": float(center_lat),  # type: ignore[arg-type]
         "center_lng": float(center_lng),  # type: ignore[arg-type]
         "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
-        "layer_mode": layer_mode if layer_mode in MapLayerMode.values else MapLayerMode.STANDARD.value,
+        "layer_mode": normalize_layer_mode(data.get("layer_mode")),
         "show_borders": bool(data.get("show_borders")),
         "markup": _sanitize_markup_shapes(data.get("markup") or data.get("shapes")),
     }

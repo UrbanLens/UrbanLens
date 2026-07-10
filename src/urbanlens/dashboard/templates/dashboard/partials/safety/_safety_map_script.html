@@ -67,17 +67,14 @@ so it's always available by the time this script runs - no typeof guard needed.
     var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
 
     // -- Layers: shared engine + panel (same component as the main map) --------
-    // layer_mode persists on the backing MarkupMap using the legacy values
-    // ("standard"/"topo"/"satellite"), so engine state maps back through
-    // MapLayers.legacyBase before saving.
-    var _layerMode = '{{ map_layer_mode|default:"standard" }}';
+    var _layerMode = '{{ map_layer_mode|default:"street" }}';
     var _showBorders = {{ map_show_borders|yesno:"true,false" }};
     window.MapLayers.create(map, {
         root: document.getElementById('safety-map-layers'),
         defaultBase: _layerMode,
         initialOverlays: _showBorders ? ['borders'] : [],
         onStateChange: function (state) {
-            _layerMode = window.MapLayers.legacyBase(state.base);
+            _layerMode = state.base;
             _showBorders = state.borders;
             _saveMapViewSoon();
         },

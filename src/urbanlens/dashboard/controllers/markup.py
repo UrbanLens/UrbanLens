@@ -22,7 +22,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.markup.model import MapLayerMode, MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
+from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
+from urbanlens.dashboard.models.markup.model import MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
@@ -264,8 +265,10 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
             updates.append(field)
     if markup_map.zoom is not None:
         markup_map.zoom = max(1.0, min(22.0, markup_map.zoom))
-    layer_mode = body.get("layer_mode")
-    if layer_mode in MapLayerMode.values:
+    # Accepts canonical values plus legacy aliases from older cached clients;
+    # anything unrecognized is ignored rather than coerced.
+    layer_mode = normalize_layer_mode(body.get("layer_mode"), default=None)
+    if layer_mode is not None:
         markup_map.layer_mode = layer_mode
         updates.append("layer_mode")
     if "show_borders" in body:

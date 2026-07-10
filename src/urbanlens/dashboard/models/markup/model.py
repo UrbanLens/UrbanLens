@@ -19,7 +19,7 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.markup.meta import MapLayerMode, MarkupType, SecurityIndicatorType
+from urbanlens.dashboard.models.markup.meta import MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
 from urbanlens.dashboard.models.markup.queryset import MarkupMapManager, PinMarkupManager
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         center_latitude: Saved viewport centre latitude.
         center_longitude: Saved viewport centre longitude.
         zoom: Saved viewport zoom level.
-        layer_mode: Base tile layer (standard / satellite / topo / dark).
+        layer_mode: Base tile layer (street / satellite / topographic / dark).
         show_borders: Whether the geopolitical-borders overlay is enabled.
     """
 
@@ -85,7 +85,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     center_latitude = FloatField(null=True, blank=True)
     center_longitude = FloatField(null=True, blank=True)
     zoom = FloatField(null=True, blank=True)
-    layer_mode = CharField(max_length=20, choices=MapLayerMode.choices, default=MapLayerMode.STANDARD)
+    layer_mode = CharField(max_length=20, choices=MapLayerMode.choices, default=MapLayerMode.STREET)
     show_borders = BooleanField(default=False)
 
     profile = ForeignKey(
@@ -180,8 +180,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         self.center_latitude = snapshot.get("center_lat")
         self.center_longitude = snapshot.get("center_lng")
         self.zoom = snapshot.get("zoom")
-        layer_mode = snapshot.get("layer_mode")
-        self.layer_mode = layer_mode if layer_mode in MapLayerMode.values else MapLayerMode.STANDARD
+        self.layer_mode = normalize_layer_mode(snapshot.get("layer_mode"))
         self.show_borders = bool(snapshot.get("show_borders"))
         self.save()
         self.items.all().delete()

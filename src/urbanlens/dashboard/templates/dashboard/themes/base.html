@@ -703,7 +703,7 @@
         // -- Composer state ----------------------------------------------------
         var _composerMap = null;
         var _composerLayers = null;       // shared MapLayers engine instance
-        var _composerLayerMode = 'standard';
+        var _composerLayerMode = 'street';
         var _composerShowBorders = false;
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
@@ -744,12 +744,10 @@
                 _composerMap = L.map(mapEl, { zoomControl: true });
                 // Shared layers engine bound to the strip rendered by
                 // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} in this dialog.
-                // The snapshot saved with the comment stores the legacy
-                // layer_mode values, hence legacyBase.
                 _composerLayers = window.MapLayers.create(_composerMap, {
                     root: document.getElementById('cmc-layers'),
                     onStateChange: function (state) {
-                        _composerLayerMode = window.MapLayers.legacyBase(state.base);
+                        _composerLayerMode = state.base;
                         _composerShowBorders = state.borders;
                     },
                 });
@@ -809,7 +807,7 @@
             if (existing) {
                 _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
                 _composerShapes = existing.markup || [];
-                _composerLayers.setBase(existing.layer_mode || 'standard');
+                _composerLayers.setBase(existing.layer_mode || 'street');
                 _composerLayers.setOverlay('borders', !!existing.show_borders);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
@@ -1002,32 +1000,6 @@
         // commentId → { map }
         var _viewerMaps = {};
 
-        // Builds (once per dialog) the read-only layer-switch toolbar shown below
-        // the expanded map. The strip markup mirrors the shared
-        // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} component (it can't be
-        // server-rendered here because the dialog templates predate the
-        // component); window.MapLayers.create() drives it exactly like every
-        // other map's layer buttons.
-        function _ensureViewerToolbar(dlg, commentId) {
-            var existing = dlg.querySelector('.comment-map-view-toolbar .map-layers-strip');
-            if (existing) return existing;
-
-            var toolbar = document.createElement('div');
-            toolbar.className = 'comment-map-view-toolbar';
-            toolbar.innerHTML =
-                '<span class="cmc-toolbar-label">Layer:</span>' +
-                '<div class="map-layers-strip" role="group" aria-label="Map layers">' +
-                '<button type="button" class="map-layers-strip-btn" data-map-layer="street" data-layer-kind="base" title="Street map" aria-label="Street Map"><i class="material-symbols-outlined">map</i></button>' +
-                '<button type="button" class="map-layers-strip-btn" data-map-layer="satellite" data-layer-kind="base" title="Satellite map" aria-label="Satellite Map"><i class="material-symbols-outlined">globe</i></button>' +
-                '<button type="button" class="map-layers-strip-btn" data-map-layer="terrain" data-layer-kind="base" title="Terrain map" aria-label="Topography Map"><i class="material-symbols-outlined">terrain</i></button>' +
-                '<button type="button" class="map-layers-strip-btn" data-map-layer="borders" data-layer-kind="overlay" title="Borders layer" aria-label="Toggle Geopolitical boundaries"><i class="material-symbols-outlined">public</i></button>' +
-                '</div>';
-
-            var el = document.getElementById('comment-map-view-' + commentId);
-            el.insertAdjacentElement('afterend', toolbar);
-            return toolbar.querySelector('.map-layers-strip');
-        }
-
         window._expandCommentMap = function (commentId) {
             if (typeof L === 'undefined') return;
             var dlg = document.getElementById('comment-map-dialog-' + commentId);
@@ -1057,9 +1029,11 @@
             el.style.minHeight = '300px';
 
             var viewMap = L.map(el);
+            // The layer strip is server-rendered inside the dialog by the
+            // shared _map_view_dialog.html partial ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %}).
             window.MapLayers.create(viewMap, {
-                root: _ensureViewerToolbar(dlg, commentId),
-                defaultBase: data.layer_mode || 'standard',
+                root: dlg.querySelector('.map-layers-strip'),
+                defaultBase: data.layer_mode || 'street',
                 initialOverlays: data.show_borders ? ['borders'] : [],
             });
             _fitMapToMarkup(viewMap, data);
@@ -1111,7 +1085,7 @@
                 thumb.style.width = '100%';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                window.MapLayers.tileLayer(data.layer_mode || 'standard').addTo(tmap);
+                window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
                 if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
