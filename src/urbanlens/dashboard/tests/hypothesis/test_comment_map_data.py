@@ -22,6 +22,54 @@ def _request(map_data_json: str) -> MagicMock:
 class CommentMapDataSanitizationTests(TestCase):
     """_parse_map_data strips dangerous color/style values before storage."""
 
+    def test_markup_key_is_preserved_for_viewer(self) -> None:
+        import json
+
+        payload = json.dumps({
+            "center_lat": 41.0,
+            "center_lng": -74.0,
+            "zoom": 15,
+            "layer_mode": "satellite",
+            "markup": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": "#2196F3"}],
+        })
+
+        result = _parse_map_data(_request(payload))
+
+        assert result is not None  # nosec B101
+        assert result["markup"][0]["color"] == "#2196F3"  # nosec B101
+        assert "shapes" not in result  # nosec B101
+        assert result["layer_mode"] == "satellite"  # nosec B101
+
+    def test_legacy_shapes_input_is_stored_as_markup(self) -> None:
+        import json
+
+        payload = json.dumps({
+            "center_lat": 41.0,
+            "center_lng": -74.0,
+            "shapes": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": "#2196F3"}],
+        })
+
+        result = _parse_map_data(_request(payload))
+
+        assert result is not None  # nosec B101
+        assert result["markup"][0]["color"] == "#2196F3"  # nosec B101
+
+    def test_unknown_layer_mode_defaults_to_standard(self) -> None:
+        import json
+
+        for layer_mode in ["javascript:alert(1)", ["satellite"]]:
+            payload = json.dumps({
+                "center_lat": 41.0,
+                "center_lng": -74.0,
+                "layer_mode": layer_mode,
+                "markup": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": "#2196F3"}],
+            })
+
+            result = _parse_map_data(_request(payload))
+
+            assert result is not None  # nosec B101
+            assert result["layer_mode"] == "standard"  # nosec B101
+
     def test_malicious_hex_injection_in_color_is_rejected(self) -> None:
         import json
         payload = json.dumps({
@@ -31,7 +79,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        shape = result["shapes"][0]
+        shape = result["markup"][0]
         assert shape["color"] == "#e74c3c", f"Expected fallback hex, got {shape['color']!r}"  # nosec B101
 
     def test_css_expression_in_color_is_rejected(self) -> None:
@@ -43,7 +91,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["color"] == "#e74c3c"  # nosec B101
+        assert result["markup"][0]["color"] == "#e74c3c"  # nosec B101
 
     def test_invalid_center_coordinates_are_rejected(self) -> None:
         import json
@@ -59,7 +107,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["color"] == "#2196F3"  # nosec B101
+        assert result["markup"][0]["color"] == "#2196F3"  # nosec B101
 
     def test_unknown_shape_type_is_dropped(self) -> None:
         import json
@@ -69,7 +117,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"] == []  # nosec B101
+        assert result["markup"] == []  # nosec B101
 
     def test_out_of_range_latlng_pairs_are_stripped(self) -> None:
         import json
@@ -79,7 +127,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert len(result["shapes"][0]["latlngs"]) == 2  # nosec B101
+        assert len(result["markup"][0]["latlngs"]) == 2  # nosec B101
 
     def test_stroke_width_is_clamped(self) -> None:
         import json
@@ -89,7 +137,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["stroke_width"] <= 50  # nosec B101
+        assert result["markup"][0]["stroke_width"] <= 50  # nosec B101
 
     def test_zoom_is_clamped(self) -> None:
         import json
