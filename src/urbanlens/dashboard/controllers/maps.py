@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.redact import redact_secret
@@ -105,10 +106,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def record_geolocation_visit(self, request, *args, **kwargs):
         """Record same-day PinVisit rows for pins containing a device geolocation."""
         try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-            latitude = float(body.get("latitude"))
-            longitude = float(body.get("longitude"))
-        except (TypeError, ValueError, json.JSONDecodeError):
+            latitude = float(request.data.get("latitude"))
+            longitude = float(request.data.get("longitude"))
+        except (TypeError, ValueError):
             return JsonResponse({"ok": False, "error": "Valid latitude and longitude are required."}, status=400)
 
         if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
@@ -121,8 +121,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"ok": True, "created": len(visits), "pin_ids": [visit.pin_id for visit in visits]})
 
     def view_map(self, request, *args, **kwargs):
-        import json as _json
-
         from urbanlens.dashboard.models.profile.model import MapCenterMode
         from urbanlens.dashboard.models.subscriptions import (
             SiteFeature,
@@ -138,7 +136,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
         filter_badges_list = list(filter_badges)
-        filter_badges_json = _json.dumps([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
+        filter_badges_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -158,7 +156,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "color_choices": COLOR_CHOICES,
                 "profile_uuid": profile.uuid,
                 "profile_slug": profile.slug or str(profile.uuid),
-                "app_uuid": str(site.instance_uuid),
+                "app_uuid": str(site.uuid),
                 "cluster_radius": profile.cluster_radius,
                 "pin_count": pin_count,
                 "show_pin_count": show_pin_count,
@@ -188,7 +186,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             badge_ids = request.POST.getlist("badge_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
-            is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
             google_place_id = request.POST.get("google_place_id") or None
             # Canonical name supplied by the client when adding from a Google Places or
             # Wikipedia/NPS marker - avoids a synchronous geocoding API round-trip when
@@ -198,6 +195,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if not latitude or not longitude:
                 if not address:
                     return HttpResponse("Error: No address or lat/lon provided.", status=400)
+                if not request.user.profile.external_apis_enabled:
+                    return HttpResponse("Error: External lookups are turned off in your settings - drop a pin on the map instead.", status=403)
                 latitude, longitude = get_pin_by_address(address)
                 if not latitude or not longitude:
                     return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
@@ -205,39 +204,29 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lat_f = float(latitude)
             lon_f = float(longitude)
 
-            location = None
-            all_locations: list[Location] = []
+            location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
 
-            if not is_private:
-                # Link to an existing Location whose bounding box contains this point,
-                # or create a new one. This keeps all pins for the same place connected.
-                # The Location name must be the canonical place name - never the user's
-                # custom label, which stays on Pin.name only.
-                all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
-                if all_locations:
-                    location = all_locations[0]
-                else:
-                    location = _create_location_with_canonical_name(lat_f, lon_f, place_name=place_canonical_name)
+            # Locations whose bounding box also covers this point - when more than
+            # one matches, the client offers the user a choice (see below).
+            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
+
+            from urbanlens.dashboard.models.wiki.model import Wiki
 
             pin = Pin.objects.create(
                 name=name,
                 name_is_user_provided=bool((name or "").strip()),
                 location=location,
-                # Private pins have no Location to hold coordinates (they never
-                # get a shared wiki entry), so the position must live on the pin
-                # itself via the latitude/longitude override.
-                latitude=lat_f if is_private else None,
-                longitude=lon_f if is_private else None,
+                # Link to the place's community wiki when one already exists;
+                # wikis are only ever created explicitly from the pin page.
+                wiki=Wiki.objects.get_for_location(location),
                 icon=icon,
                 custom_icon=custom_icon,
                 color=color,
-                is_private=is_private,
                 profile=request.user.profile,
             )
-            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
 
             if badge_ids:
-                pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
+                pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
             else:
                 if tag_ids:
                     pin.badges.remove(*pin.badges.filter(kind="tag"))
@@ -245,15 +234,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 if category_ids:
                     pin.badges.remove(*pin.badges.filter(kind="category"))
                     pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
+
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
             pin.slug = pin.ensure_slug()
-            pin.save(update_fields=["slug"])
 
             # When adding from a Places layer marker, pre-populate the GooglePlace
             # link on both the pin and its location so subsequent views avoid an
             # extra Places Details API call.
-            if google_place_id and not is_private:
+            if google_place_id:
                 try:
                     from urbanlens.dashboard.services.apis.locations.google.place_info import (
                         GooglePlaceService,
@@ -263,7 +252,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     )
 
                     gp_service = GooglePlaceService()
-                    gp_service.ensure_linked_by_place_id(pin, google_place_id)
+                    gp_service.ensure_linked_by_place_id(pin.location, google_place_id)
                     if location:
                         gp_service.ensure_linked_by_place_id(location, google_place_id)
                     update_location_name_from_external_sources(location)
@@ -273,7 +262,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
             # web-search results cache, so the pin detail page doesn't need to hit
             # the APIs on first load.
-            if location and not is_private:
+            if location and request.user.profile.external_apis_enabled:
                 from urbanlens.dashboard.services.celery import safely_enqueue_task
                 from urbanlens.dashboard.tasks import (
                     prefetch_location_external_data,
@@ -287,7 +276,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 user_has_feature,
             )
 
-            if location and not is_private and user_has_feature(request.user, SiteFeature.SEARCH):
+            if location and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
+                from urbanlens.dashboard.services.celery import safely_enqueue_task
+                from urbanlens.dashboard.tasks import refresh_pin_web_search
+
                 safely_enqueue_task(refresh_pin_web_search, pin.pk)
 
             if user_has_feature(request.user, SiteFeature.AI):
@@ -306,7 +298,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     {
                         "uuid": str(loc.uuid),
                         "slug": loc.slug or str(loc.uuid),
-                        "name": loc.name,
+                        "name": loc.display_name,  # Back-compat for existing JS consumers.
+                        "display_name": loc.display_name,
                         "is_current": loc.pk == location.pk,
                         "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }
@@ -349,6 +342,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         q = (request.GET.get("q") or "").strip()
         if len(q) < 2:
             return JsonResponse({"results": [], "source": "places"})
+
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"results": [], "source": "places", "disabled": True})
 
         api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
@@ -476,7 +472,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             query = query.filter_by_criteria(criteria)
 
-        query = query.order_by(Lower(Coalesce("name", "location__name")))
+        query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
         page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
         return render(
             request,
@@ -489,9 +485,35 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
     def upload_image(self, request, pin_slug, *args, **kwargs):
+        """Attach an uploaded image to a pin.
+
+        Args:
+            request: Incoming request carrying an ``image`` file.
+            pin_slug: Slug of the target pin.
+
+        Returns:
+            An empty 200 response, 400 if no file was given, 409 if the
+            uploader already has this exact file on the pin, or 413 if the
+            upload would exceed the uploader's storage quota.
+        """
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.tasks import process_image_upload
+
         image = request.FILES.get("image")
+        if not image:
+            return HttpResponse("No image provided.", status=400)
         pin = Pin.objects.get(slug=pin_slug)
-        Image.objects.create(image=image, pin=pin)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checksum = compute_checksum(image)
+        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+            return HttpResponse("You already uploaded this photo to this pin.", status=409)
+        quota_error = quota_error_for_upload(profile, image.size)
+        if quota_error:
+            return HttpResponse(quota_error, status=413)
+        img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size)
+        safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 
     def change_category(self, request, pin_slug, *args, **kwargs):
@@ -532,7 +554,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     south, west, north, east = parts
                     bbox_poly = Polygon.from_bbox((west, south, east, north))
                     bbox_poly.srid = 4326
-                    query = query.filter(point__within=bbox_poly)
+                    query = query.filter(location__point__within=bbox_poly)
             except (ValueError, TypeError) as e:
                 logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
 
@@ -578,7 +600,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(
             {
                 "last_updated": last_updated.isoformat() if last_updated else None,
-                "app_uuid": str(site.instance_uuid),
+                "app_uuid": str(site.uuid),
             },
         )
 
@@ -634,35 +656,24 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         color = request.POST.get("color")
         custom_icon = request.FILES.get("custom_icon") or None
         badge_ids = [bid for bid in request.POST.getlist("badge_ids") if bid]
-        is_private = request.POST.get("is_private") in {"1", "true", "on", "True"}
 
         import contextlib
 
-        previous_name = (pin.name or "").strip()
         if name is not None:
             pin.name = name or None
             pin.name_is_user_provided = bool(name.strip())
-        if latitude is not None:
-            with contextlib.suppress(ValueError):
-                pin.latitude = float(latitude)
-        if longitude is not None:
-            with contextlib.suppress(ValueError):
-                pin.longitude = float(longitude)
+        # Coordinates live on the Location; a move repoints the pin to a
+        # find-or-created Location at the new point rather than mutating a shared row.
+        if latitude is not None and longitude is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                pin.location, _ = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
         if icon is not None:
             pin.icon = icon or None
         if color is not None:
             pin.color = color or None
         if custom_icon:
             pin.custom_icon = custom_icon
-        pin.is_private = is_private
         pin.save()
-
-        if name is not None:
-            from urbanlens.dashboard.services.locations.naming import (
-                sync_pin_aliases_after_rename,
-            )
-
-            sync_pin_aliases_after_rename(pin, previous_name)
 
         if badge_ids:
             from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
@@ -939,7 +950,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             else:
                 pin["tags_data"] = []
                 pin["tags"] = ""
-            pin["tags_data_json"] = json.dumps(pin["tags_data"])
+            pin["tags_data_json"] = safe_json_for_script(pin["tags_data"])
             if pin.get("categories"):
                 pin["categories"] = ", ".join(pin["categories"])
             else:
@@ -974,8 +985,8 @@ def _safe_positive_int(value: str | None) -> int | None:
 def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:
     """Create a new Location using its canonical Google place name.
 
-    The user's custom pin name must never be used as a Location name because
-    Location.name is shared across all users and visible on the community wiki.
+    The user's custom pin name must never be used as a Location's official_name
+    because it is shared across all users and seeds the community wiki title.
     We ask Google for the real place name and fall back to "Unnamed Location"
     when geocoding is unavailable or returns nothing useful.
 
@@ -1014,7 +1025,6 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     official_name = canonical_name if is_meaningful_name(canonical_name) else None
 
     return Location.objects.create(
-        name=canonical_name,
         official_name=official_name,
         latitude=lat,
         longitude=lon,

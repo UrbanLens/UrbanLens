@@ -3,6 +3,7 @@
 from django import forms
 
 from urbanlens.dashboard.models.profile.model import (
+    DistanceUnit,
     GuidanceLevel,
     MapCenterMode,
     MapViewChoice,
@@ -109,6 +110,18 @@ class PrivacySettingsForm(forms.ModelForm):
             "contact_visibility",
         ]
 
+    def __init__(self, *args, **kwargs):
+        """Disable every field while Community is off - they're forced to "No one" in Profile.save() anyway.
+
+        ``disabled=True`` both greys the field out in rendering and makes Django
+        ignore any posted value for it, so this is also the belt to Profile.save()'s
+        suspenders against a tampered POST re-enabling one field at a time.
+        """
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for field in self.fields.values():
+                field.disabled = True
+
 
 class ContactSettingsForm(forms.Form):
     """Contact information - saves to the Django User model."""
@@ -124,6 +137,21 @@ class ContactSettingsForm(forms.Form):
             },
         ),
     )
+
+    def __init__(self, *args, exclude_user_id: int | None = None, **kwargs):
+        self._exclude_user_id = exclude_user_id
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self) -> str:
+        """Reject email addresses already claimed by another account (normalized comparison)."""
+        from django.core.exceptions import ValidationError
+
+        from urbanlens.dashboard.services.email_normalization import is_email_taken
+
+        email = self.cleaned_data["email"].strip().lower()
+        if is_email_taken(email, exclude_user_id=self._exclude_user_id):
+            raise ValidationError("Another account already uses this email address.")
+        return email
 
 
 class StyleSettingsForm(forms.ModelForm):
@@ -147,10 +175,22 @@ class StyleSettingsForm(forms.ModelForm):
         label="In-app Help",
         help_text="Choose how UrbanLens introduces features as you explore.",
     )
+    distance_units = forms.ChoiceField(
+        choices=DistanceUnit.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Distance Units",
+        help_text="Units for distances and travel stats. Defaults to your region.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["theme_mode", "map_dark_mode", "guidance_level"]
+        fields = ["theme_mode", "map_dark_mode", "guidance_level", "distance_units"]
+
+    def __init__(self, *args, **kwargs):
+        """Preselect the region-inferred unit when the user has not chosen one yet."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and self.instance.pk and not self.instance.distance_units:
+            self.initial["distance_units"] = self.instance.effective_distance_units
 
 
 class ContactMethodsForm(forms.ModelForm):
@@ -315,6 +355,36 @@ class PlacesLayerForm(forms.ModelForm):
         fields = ["places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"]
 
 
+class DeleteAccountForm(forms.Form):
+    """Confirms an account-deletion request with a password and a typed confirmation phrase."""
+
+    password = forms.CharField(
+        label="Password",
+        widget=forms.PasswordInput(attrs={"class": "settings-input", "autocomplete": "current-password"}),
+    )
+    confirm_text = forms.CharField(
+        label="Confirmation",
+        widget=forms.TextInput(attrs={"class": "settings-input", "autocomplete": "off", "spellcheck": "false"}),
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        self._user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_password(self) -> str:
+        password = self.cleaned_data["password"]
+        if not self._user or not self._user.check_password(password):
+            raise forms.ValidationError("Incorrect password.")
+        return password
+
+    def clean_confirm_text(self) -> str:
+        expected = f"delete {self._user.username}" if self._user else ""
+        confirm_text = self.cleaned_data["confirm_text"].strip()
+        if confirm_text.lower() != expected.lower():
+            raise forms.ValidationError(f'Type "{expected}" exactly to confirm.')
+        return confirm_text
+
+
 class AISettingsForm(forms.ModelForm):
     """AI feature preferences - which badge kinds can be auto-assigned on pin creation."""
 
@@ -346,3 +416,60 @@ class AISettingsForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ["ai_enabled", "ai_badge_categories", "ai_badge_tags", "ai_badge_statuses"]
+
+
+class MemoriesSettingsForm(forms.ModelForm):
+    """Which visit/location-history categories get saved. Independently adjustable at any time."""
+
+    track_pin_visits = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Visit History",
+        help_text="Log visits to your pins from manual entries, imports, and photo tagging.",
+    )
+    track_routes = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="GPS Routes",
+        help_text="Save imported GPS routes/tracks.",
+    )
+    track_geolocation = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Live Location",
+        help_text="Record visits from your live device location.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["track_pin_visits", "track_routes", "track_geolocation"]
+
+
+class CommunitySettingsForm(forms.ModelForm):
+    """Master switch for pin privacy, profile visibility, and friendships."""
+
+    community_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Community Features",
+        help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["community_enabled"]
+
+
+class ExternalApiSettingsForm(forms.ModelForm):
+    """Master switch for external API calls made on this profile's behalf."""
+
+    external_apis_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="External Services",
+        help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["external_apis_enabled"]

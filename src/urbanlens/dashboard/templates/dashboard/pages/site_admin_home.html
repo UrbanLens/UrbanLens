@@ -153,6 +153,28 @@
             <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
         </a>
 
+        <a href="{% url 'site_admin_plugins' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(99,102,241,.12)">
+                <i class="material-icons" style="color:#4f46e5">extension</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Plugins</div>
+                <div class="admin-nav-card__desc">Review the external integrations discovered for this install and where each came from.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+        
+        <a href="{% url 'site_admin_users' %}" class="admin-nav-card">
+            <div class="admin-nav-card__icon" style="background:rgba(8,145,178,.12)">
+                <i class="material-icons" style="color:#0891b2">group</i>
+            </div>
+            <div class="admin-nav-card__body">
+                <div class="admin-nav-card__title">Users</div>
+                <div class="admin-nav-card__desc">Browse registered users, their subscriptions, and storage usage.</div>
+            </div>
+            <i class="material-icons admin-nav-card__arrow">arrow_forward</i>
+        </a>
+
         {% if show_dev_toolbar %}
         <a href="{% url 'site_admin_ui_components' %}" class="admin-nav-card">
             <div class="admin-nav-card__icon" style="background:rgba(236,72,153,.12)">

@@ -30,7 +30,9 @@
 	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.05em;
+		line-height: 1;
 		flex-shrink: 0;
+		height: 1em;
 	}
 
 	&--primary {
@@ -47,6 +49,18 @@
 
 		&:active {
 			background-color: var(--ul-button-hover-bg);
+		}
+	}
+
+	&--secondary {
+		background: var(--ul-grey-0);
+		border-color: var(--ul-grey-1);
+
+		&:focus,
+		&:hover {
+			background-color: var(--ul-button-hover-bg);
+			border-color: var(--ul-grey-3b);
+			color: var(--ul-button-hover-text);
 		}
 	}
 
@@ -141,6 +155,28 @@
 		background: var(--secondary-color);
 		color: var(--ul-grey-9);
 	}
+	
+    &--yes {
+        background: $color-green-100;
+        color: $color-green-1100;
+
+        &:hover {
+            background: $color-green-200;
+			color: $color-green-1300;
+        }
+    }
+
+    &--no {
+        background: var(--ul-grey-4);
+        color: var(--ul-grey-7);
+		border-color: var(--ul-grey-5);
+
+        &:hover {
+            background: var(--ul-grey-0a);
+            color: $color-red-600;
+			border-color: var(--ul-grey-1b);
+        }
+    }
 
 	&.is-loading {
 		opacity: .78;

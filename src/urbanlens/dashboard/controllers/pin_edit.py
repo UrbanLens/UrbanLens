@@ -17,19 +17,26 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.locations.naming import sync_pin_aliases_after_rename
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
 
 def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
-    """Return the pin if it belongs to the requesting user, 403 if forbidden, 404 if not found."""
+    """Return the pin if it belongs to the requesting user.
+
+    Returns 403 when the requester has no authenticated profile at all. Any
+    other user's pin - whether it exists or not - returns 404: the lookup is
+    scoped to the requester's own profile, so a pin owned by someone else is
+    indistinguishable from a nonexistent one and its existence is never leaked.
+    """
+    if not request.user.is_authenticated or not request.user.profile:
+        return HttpResponse("Forbidden", status=403)
     try:
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug)
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile__user"), slug=pin_slug, profile=request.user.profile)
     except Http404:
         return HttpResponse(status=404)
-    if pin.profile.user != request.user:
-        return HttpResponse("Forbidden", status=403)
     return pin
 
 
@@ -102,9 +109,6 @@ def _overview_context(pin: Pin) -> dict:
     lat, lng = pin.effective_latitude, pin.effective_longitude
     overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
 
-    if pin.location and not pin.location.slug:
-        pin.location.ensure_slug()
-
     return {
         "pin": pin,
         "client_version": _pin_version(pin),
@@ -142,7 +146,7 @@ def _ensure_location_address(location) -> None:
         return
 
     try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         if not app_settings.google_unrestricted_api_key:
@@ -155,10 +159,7 @@ def _ensure_location_address(location) -> None:
         if not results:
             return
 
-        type_map: dict[str, str] = {}
-        for comp in results[0].get("address_components", []):
-            for t in comp.get("types", []):
-                type_map.setdefault(t, comp.get("short_name") or comp.get("long_name") or "")
+        type_map = parse_address_components(results[0].get("address_components", []))
 
         update_fields: list[str] = []
 
@@ -173,6 +174,7 @@ def _ensure_location_address(location) -> None:
         _maybe_set("administrative_area_level_1", type_map.get("administrative_area_level_1"))
         _maybe_set("administrative_area_level_2", type_map.get("administrative_area_level_2"))
         _maybe_set("zipcode", type_map.get("postal_code"))
+        _maybe_set("country", type_map.get("country"))
 
         if update_fields:
             location.save(update_fields=update_fields)
@@ -191,7 +193,7 @@ class PinOverviewView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         pin = result
-        if pin.location and not pin.location.route:
+        if pin.location and not pin.location.route and pin.profile.external_apis_enabled:
             _ensure_location_address(pin.location)
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
@@ -227,6 +229,9 @@ class PinEditView(LoginRequiredMixin, View):
         # fall back to the pin's current value - never silently clear it.
         name = (body.get("name") or "").strip() or None if "name" in body else pin.name
         description = (body.get("description") or "").strip() or None if "description" in body else pin.description
+        length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
         rating_raw = body.get("rating")
@@ -316,7 +321,6 @@ class PinEditView(LoginRequiredMixin, View):
         if pin_type not in valid_types:
             pin_type = pin.pin_type
 
-        previous_name = (pin.name or "").strip()
         next_name = (name or "").strip()
 
         pin.name = name
@@ -356,17 +360,15 @@ class PinEditView(LoginRequiredMixin, View):
             ]
         )
 
-        sync_pin_aliases_after_rename(pin, previous_name)
-
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:
             Review.objects.update_or_create(
-                user=request.user,
+                profile=request.user.profile,
                 pin=pin,
-                defaults={"rating": rating, "review": ""},
+                defaults={"rating": rating},
             )
         elif rating == 0:
-            Review.objects.filter(user=request.user, pin=pin).delete()
+            Review.objects.filter(profile=request.user.profile, pin=pin).delete()
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:
@@ -476,7 +478,10 @@ class PinDeleteView(LoginRequiredMixin, View):
             return result
         pin = result
         logger.info("User %s deleted pin %s", request.user.id, pin.id)
-        pin.delete()
+        subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
+        stash_for_undo("pin", subtree, request.user.profile)
+        for descendant in subtree:
+            descendant.delete()
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = reverse("map.view")
         return response
@@ -534,20 +539,20 @@ class PinRelinkView(LoginRequiredMixin, View):
         pin = result
 
         from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
             location = get_object_or_404(Location, slug=location_slug)
         else:
-            # Detach: create a new bare Location at this pin's coordinates so
-            # the pin retains its own independent community wiki page.
+            # Detach: create a new bare Location at this pin's coordinates.
             # Use the existing location's canonical name if available; otherwise
             # fetch the Google place name.  Never fall back to pin.name -
-            # that is personal data and must not become a community wiki title.
+            # that is personal data and must not become a community place name.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
-            if pin.location and pin.location.name and pin.location.name != "Unnamed Location":
+            if pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
                 location = Location.objects.create(
-                    name=pin.location.name,
+                    official_name=pin.location.official_name,
                     latitude=lat,
                     longitude=lng,
                 )
@@ -556,8 +561,11 @@ class PinRelinkView(LoginRequiredMixin, View):
 
                 location = _create_location_with_canonical_name(lat, lng)
 
+        # Wikis are user-created only: link to the location's wiki when one
+        # exists, otherwise leave the pin wiki-less until someone creates one.
         pin.location = location
-        pin.save(update_fields=["location"])
+        pin.wiki = Wiki.objects.get_for_location(location)
+        pin.save(update_fields=["location", "wiki"])
         pin.refresh_from_db()
 
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))

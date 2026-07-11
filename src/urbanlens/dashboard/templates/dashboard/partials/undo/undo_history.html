@@ -1,0 +1,37 @@
+{% load humanize %}
+<div id="undo-history">
+    <div class="settings-actions" style="margin-bottom: 12px;">
+        <button type="button"
+                class="btn btn--danger"
+                hx-post="{% url 'undo.clear' %}"
+                hx-target="#undo-history"
+                hx-swap="outerHTML"
+                hx-confirm="Clear your entire undo history? Deleted items still within their 7-day window won't be recoverable anymore."
+                {% if not actions %}disabled{% endif %}>
+            <i class="material-symbols-outlined">delete_sweep</i> Clear undo history
+        </button>
+    </div>
+
+    {% if actions %}
+    <ul class="undo-history-list">
+        {% for action in actions %}
+        <li class="undo-history-row" id="undo-action-{{ action.uuid }}">
+            <div class="undo-history-row-info">
+                <span class="undo-history-badge">{{ action.model_label|title }}</span>
+                <span class="undo-history-repr">{{ action.object_repr }}</span>
+                <span class="undo-history-time">Deleted {{ action.created|naturaltime }} · expires {{ action.expires_at|naturaltime }}</span>
+            </div>
+            <button type="button"
+                    class="btn btn--primary"
+                    hx-post="{% url 'undo.restore' action.uuid %}"
+                    hx-target="#undo-history"
+                    hx-swap="outerHTML">
+                <i class="material-symbols-outlined">undo</i> Undo
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="settings-help">No recent deletions. Deleted pins, wikis, safety check-ins, and trips show up here for 7 days.</p>
+    {% endif %}
+</div>

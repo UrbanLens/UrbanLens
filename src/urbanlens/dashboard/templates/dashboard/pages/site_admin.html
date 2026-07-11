@@ -118,12 +118,63 @@
                 </select>
             </div>
             <div class="form-row">
-                <label for="search-cache-hours">Search result cache duration (hours)</label>
+                <label for="external-data-cache-days">External data cache duration (days)</label>
                 <p class="form-help">
-                    How long to cache web search results per pin before re-fetching. Set to 0 to disable caching.
+                    Minimum number of days to cache external API responses before re-fetching. Applies to
+                    Wikipedia, NPS, LoopNet, USGS, Nominatim, media archives, Google Places, web search, and
+                    satellite/street view imagery -- all shared per Location so pins and wikis at the same
+                    place reuse one cached result instead of each fetching their own.
                 </p>
-                <input type="number" name="search_cache_hours" id="search-cache-hours"
-                       value="{{ settings.search_cache_hours }}" min="0" max="8760" step="1">
+                <input type="number" name="external_data_cache_days" id="external-data-cache-days"
+                       value="{{ settings.external_data_cache_days }}" min="1" max="365" step="1">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">badge</i>
+            <span>Place Naming</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="name-source-priority-list">Name source priority</label>
+                <p class="form-help">
+                    Drag to reorder, or use the arrow buttons -- highest priority is used first when picking
+                    a location's official name from external sources. A name that two or more sources agree
+                    on always wins regardless of rank. Untick a source to leave it unranked; unranked sources
+                    still contribute a name, just last, in plugin order.
+                </p>
+                <ul class="priority-list" id="name-source-priority-list">
+                    {% for slug, label, ranked in name_source_order %}
+                    <li class="priority-list__item{% if not ranked %} priority-list__item--unranked{% endif %}"
+                        draggable="{% if ranked %}true{% else %}false{% endif %}" data-slug="{{ slug }}">
+                        <i class="material-symbols-outlined priority-list__handle" aria-hidden="true">drag_indicator</i>
+                        <span class="priority-list__rank"></span>
+                        <span class="priority-list__label">{{ label }}</span>
+                        <div class="priority-list__move">
+                            <button type="button" class="priority-list__btn" data-action="up" aria-label="Move {{ label }} up">
+                                <i class="material-symbols-outlined">arrow_upward</i>
+                            </button>
+                            <button type="button" class="priority-list__btn" data-action="down" aria-label="Move {{ label }} down">
+                                <i class="material-symbols-outlined">arrow_downward</i>
+                            </button>
+                        </div>
+                        <label class="priority-list__toggle">
+                            <input type="checkbox" data-role="rank-toggle"{% if ranked %} checked{% endif %}>
+                            Ranked
+                        </label>
+                    </li>
+                    {% empty %}
+                    <li class="priority-list__item priority-list__item--empty">No name-provider plugins are enabled.</li>
+                    {% endfor %}
+                </ul>
+                <input type="hidden" name="default_name_source_priority" id="default-name-source-priority"
+                       value="{{ settings.default_name_source_priority }}">
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
@@ -167,6 +218,72 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
+            <i class="material-symbols-outlined">database</i>
+            <span>Storage &amp; Uploads</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-storage">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="storage-quota-gb">Default storage quota (GB)</label>
+                <p class="form-help">
+                    Photo/video storage each regular user may use. Subscription roles can grant a larger
+                    quota on the <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.
+                    Set to <strong>0</strong> for unlimited.
+                </p>
+                <input type="number" name="storage_quota_gb" id="storage-quota-gb"
+                       value="{{ settings.storage_quota_gb }}" min="0" max="1000000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-enabled">Downscale uploaded photos</label>
+                <p class="form-help">
+                    Photos larger than the maximum dimension below are downscaled on upload to save storage
+                    space. The full EXIF metadata of the original file is always saved before any conversion.
+                </p>
+                <select name="image_downscale_enabled" id="image-downscale-enabled">
+                    <option value="1"{% if settings.image_downscale_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.image_downscale_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-max-dimension">Max photo dimension (px)</label>
+                <p class="form-help">
+                    Longest edge photos are downscaled to. 1920&nbsp;px keeps plenty of detail for screens
+                    while reducing the size of a modern phone photo to roughly 1/8th.
+                </p>
+                <input type="number" name="image_downscale_max_dimension" id="image-downscale-max-dimension"
+                       value="{{ settings.image_downscale_max_dimension }}" min="256" max="20000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="image-convert-webp">Convert uploads to WebP</label>
+                <p class="form-help">
+                    Re-encode processed uploads as WebP for additional storage savings (roughly a third
+                    smaller than JPEG at the same quality).
+                </p>
+                <select name="image_convert_webp" id="image-convert-webp">
+                    <option value="1"{% if settings.image_convert_webp %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.image_convert_webp %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="image-downscale-vip">Downscale subscriber uploads</label>
+                <p class="form-help">
+                    Whether photos uploaded by users with an active subscription are also downscaled and
+                    converted. When off, subscribers keep their original files (unless they opt into
+                    downscaling in their own settings).
+                </p>
+                <select name="image_downscale_vip" id="image-downscale-vip">
+                    <option value="1"{% if settings.image_downscale_vip %} selected{% endif %}>Yes, downscale subscribers too</option>
+                    <option value="0"{% if not settings.image_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
             <i class="material-symbols-outlined">person_add_disabled</i>
             <span>Registration</span>
         </div>
@@ -182,6 +299,40 @@
                     <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
                     <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
                 </select>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">outgoing_mail</i>
+            <span>Outbound Email Limits</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="email-limit-per-hour">Emails per hour</label>
+                <p class="form-help">
+                    Caps on emails a single user can trigger to third parties (friend invitations, visit
+                    invitations, ...). Subscription roles can raise these per tier on the
+                    <a href="{% url 'site_admin_subscriptions' %}">Subscription Access</a> page.
+                    Set a value to <strong>0</strong> for unlimited.
+                </p>
+                <input type="number" name="email_limit_per_hour" id="email-limit-per-hour"
+                       value="{{ settings.email_limit_per_hour }}" min="0" max="100000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="email-limit-per-day">Emails per day</label>
+                <input type="number" name="email_limit_per_day" id="email-limit-per-day"
+                       value="{{ settings.email_limit_per_day }}" min="0" max="100000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="email-limit-per-month">Emails per month (rolling 30 days)</label>
+                <input type="number" name="email_limit_per_month" id="email-limit-per-month"
+                       value="{{ settings.email_limit_per_month }}" min="0" max="100000" step="1">
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
@@ -293,7 +444,7 @@
 
         form.addEventListener('change', function (e) {
             var t = e.target;
-            if (t.type === 'hidden') return;
+            if (t.type === 'hidden' && t.id !== 'default-name-source-priority') return;
             if (window.autosaveGuard) window.autosaveGuard.markDirty();
             var delay = (t.type === 'text' || t.type === 'number') ? 1200 : 0;
             var key = form.id || Math.random();
@@ -311,6 +462,107 @@
             }
         });
     });
+}());
+
+(function () {
+    var list = document.getElementById('name-source-priority-list');
+    var hidden = document.getElementById('default-name-source-priority');
+    if (!list || !hidden) return;
+
+    function isRankable(li) {
+        return li.classList.contains('priority-list__item') && !!li.dataset.slug;
+    }
+
+    function rankedItems() {
+        return Array.from(list.children).filter(function (li) {
+            return isRankable(li) && !li.classList.contains('priority-list__item--unranked');
+        });
+    }
+
+    function firstUnranked() {
+        return list.querySelector('.priority-list__item--unranked');
+    }
+
+    function renumber() {
+        rankedItems().forEach(function (li, i) {
+            var rank = li.querySelector('.priority-list__rank');
+            if (rank) rank.textContent = String(i + 1);
+        });
+        Array.from(list.children).filter(function (li) {
+            return isRankable(li) && li.classList.contains('priority-list__item--unranked');
+        }).forEach(function (li) {
+            var rank = li.querySelector('.priority-list__rank');
+            if (rank) rank.textContent = '—';
+        });
+    }
+
+    function sync() {
+        renumber();
+        hidden.value = rankedItems().map(function (li) { return li.dataset.slug; }).join(',');
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.priority-list__btn');
+        if (!btn) return;
+        var li = btn.closest('.priority-list__item');
+        if (!li || li.classList.contains('priority-list__item--unranked')) return;
+        if (btn.dataset.action === 'up') {
+            var prev = li.previousElementSibling;
+            if (prev) list.insertBefore(li, prev);
+        } else if (btn.dataset.action === 'down') {
+            var next = li.nextElementSibling;
+            if (next && !next.classList.contains('priority-list__item--unranked')) {
+                list.insertBefore(next, li);
+            }
+        }
+        sync();
+    });
+
+    list.addEventListener('change', function (e) {
+        var toggle = e.target.closest('[data-role="rank-toggle"]');
+        if (!toggle) return;
+        var li = toggle.closest('.priority-list__item');
+        if (!li) return;
+        if (toggle.checked) {
+            li.classList.remove('priority-list__item--unranked');
+            li.draggable = true;
+            list.insertBefore(li, firstUnranked());
+        } else {
+            li.classList.add('priority-list__item--unranked');
+            li.draggable = false;
+            list.appendChild(li);
+        }
+        sync();
+    });
+
+    var dragging = null;
+
+    list.addEventListener('dragstart', function (e) {
+        var li = e.target.closest('.priority-list__item');
+        if (!li || li.classList.contains('priority-list__item--unranked')) { e.preventDefault(); return; }
+        dragging = li;
+        li.classList.add('priority-list__item--dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    });
+
+    list.addEventListener('dragend', function () {
+        if (dragging) dragging.classList.remove('priority-list__item--dragging');
+        dragging = null;
+        sync();
+    });
+
+    list.addEventListener('dragover', function (e) {
+        if (!dragging) return;
+        e.preventDefault();
+        var after = rankedItems().filter(function (li) { return li !== dragging; }).find(function (li) {
+            var rect = li.getBoundingClientRect();
+            return e.clientY < rect.top + rect.height / 2;
+        });
+        list.insertBefore(dragging, after || firstUnranked());
+    });
+
+    renumber();
 }());
 </script>
 {% endblock %}

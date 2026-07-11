@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
@@ -17,6 +19,7 @@ if TYPE_CHECKING:
     import datetime
     from decimal import Decimal
 
+    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
@@ -25,7 +28,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_visit_suggestion_message(*, location: Location | None = None, **kwargs: str | None) -> str:
+def visit_logging_allowed(profile: Profile) -> bool:
+    """True if manual/imported/photo-derived PinVisit rows may be created for this profile."""
+    return profile.track_pin_visits
+
+
+def route_import_allowed(profile: Profile) -> bool:
+    """True if GPS route/track import (and its bundled dwell-detected visits) is allowed."""
+    return profile.track_routes
+
+
+def geolocation_tracking_allowed(profile: Profile) -> bool:
+    """True if live device-geolocation visit pings may be recorded."""
+    return profile.track_geolocation
+
+
+def build_visit_suggestion_message(*, location: Location | None = None, fallback: str = "at a location", **kwargs: str | None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
 
     Prefers the shared Location. When there is no Location - e.g. the origin pin is
@@ -38,14 +56,25 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
     Args:
         location: Shared Location identifying the place, if one exists. Wins over
             official_name/city/state below whenever present.
+        fallback: Phrase to use when no usable name or city/state is available from
+            either source - callers should phrase it to fit their own sentence (e.g.
+            "to your destination" for "did you make it ___?").
         **kwargs: Additional keyword arguments for fallback values.
 
     Returns:
-        A short phrase like "at Old Mill" or "in Springfield, IL", or a generic
-        fallback when no usable name or city/state is available from either source.
+        A short phrase like "at Old Mill" or "in Springfield, IL", or `fallback`
+        when no usable name or city/state is available from either source.
     """
     official_name = location.official_name if location else kwargs.get("official_name")
-    canonical_name = location.name if location else kwargs.get("canonical_name")
+    canonical_name = kwargs.get("canonical_name")
+    if location is not None:
+        # A Location's wiki is a reverse OneToOne accessor - it raises
+        # Wiki.DoesNotExist rather than evaluating falsy when unset.
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            wiki = None
+        canonical_name = wiki.name if wiki is not None else None
     city = location.city if location else kwargs.get("city")
     state = location.state if location else kwargs.get("state")
 
@@ -57,7 +86,7 @@ def build_visit_suggestion_message(*, location: Location | None = None, **kwargs
         return f"in {city}, {state}"
     if city:
         return f"in {city}"
-    return "at a location"
+    return fallback
 
 
 def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> Pin | None:
@@ -72,14 +101,39 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
     Returns:
         The matching Pin, or None.
     """
-    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True, parent_location__isnull=True)
+    qs = Pin.objects.filter(profile=profile, parent_pin__isnull=True)
     if location_id:
         pin = qs.filter(location_id=location_id).first()
         if pin:
             return pin
     if latitude is not None and longitude is not None:
-        return qs.filter(latitude=latitude, longitude=longitude).first()
+        # A Pin's coordinates live on its Location.
+        return qs.filter(location__latitude=latitude, location__longitude=longitude).first()
     return None
+
+
+def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius_m: int) -> Pin | None:
+    """Return a profile's closest pin within radius_m metres of a point, or None.
+
+    Used to match ambient/imported location signals (Google Takeout Location
+    History placeVisits, My Activity "Directions to X" entries) against a
+    profile's existing pins, rather than creating a new pin for every
+    everyday-life coordinate an import file happens to carry.
+
+    Args:
+        latitude: Point latitude.
+        longitude: Point longitude.
+        profile: Owner profile - only this profile's pins are searched.
+        radius_m: Maximum match distance in metres.
+
+    Returns:
+        Nearest matching Pin, or None if no pin is within range.
+    """
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import D
+
+    point = Point(longitude, latitude, srid=4326)
+    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("location__point").first()
 
 
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
@@ -117,12 +171,30 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
     return pin.visit_history.filter(visited_at__date=visited_at.date()).order_by("-visited_at").first()
 
 
+def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal) -> Location:
+    """Return the shared Location for a point, creating one with a canonical name if none exists yet.
+
+    Args:
+        latitude: Point latitude.
+        longitude: Point longitude.
+
+    Returns:
+        The existing or newly created Location.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.get_for_point(float(latitude), float(longitude))
+    if location is None:
+        from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+
+        location = _create_location_with_canonical_name(float(latitude), float(longitude))
+    return location
+
+
 def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Create a bare pin for a profile at a place, deliberately copying nothing private.
 
-    Unlike ``pin_sharing._create_pin_from_share`` (which copies a source pin's
-    private description/icon/color for explicit pin-sharing), this leaves ``name``
-    unset so ``effective_name`` falls back to the Location's own name.
+    This leaves ``name`` unset so ``effective_name`` falls back to the Location's own name.
 
     Args:
         profile: Profile the new pin belongs to.
@@ -133,7 +205,9 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
     Returns:
         The newly created Pin.
     """
-    return Pin.objects.create(profile=profile, location=location, latitude=latitude, longitude=longitude)
+    if location is None:
+        location = resolve_location_for_point(latitude, longitude)
+    return Pin.objects.create(profile=profile, location=location)
 
 
 def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
@@ -182,13 +256,16 @@ def create_visit_suggestion(
     origin_visit: PinVisit | None = None,
     trip_activity: TripActivity | None = None,
     safety_checkin: SafetyCheckin | None = None,
+    origin_image: Image | None = None,
     origin_pin: Pin | None = None,
+    from_my_activity: bool = False,
+    destination_label: str | None = None,
 ) -> VisitSuggestion | None:
     """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
 
-    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin`` must be
-    given - it determines both which flow raised this suggestion and, on
-    acceptance, which VisitSource the resulting PinVisit gets (see
+    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin``/``origin_image``/
+    ``from_my_activity`` must be given - it determines both which flow raised this
+    suggestion and, on acceptance, which VisitSource the resulting PinVisit gets (see
     ``_visit_source_for``).
 
     If suggested_to already has a visit logged for this place on this date, and
@@ -210,8 +287,16 @@ def create_visit_suggestion(
         origin_visit: The suggester's own PinVisit, for the manual-dialog flow.
         trip_activity: The completed TripActivity, for the trip flow.
         safety_checkin: The concluded SafetyCheckin, for the safety check-in flow.
+        origin_image: The uploaded photo, for the geotagged-photo flow (a
+            self-directed suggestion where ``suggested_to`` is the uploader).
         origin_pin: The suggester's own pin, used only as a message fallback when
             there is no Location (e.g. a private, unlinked pin).
+        from_my_activity: Whether this suggestion was raised from a Google Takeout
+            My Activity (Maps) "Directions to X" entry with no matching pin (a
+            self-directed suggestion, like origin_image, but with no backing row).
+        destination_label: The destination name parsed from the My Activity entry,
+            used only as a message fallback (like origin_pin.official_name) when
+            there is no Location - never stored.
 
     Returns:
         The created VisitSuggestion, or None if nothing would change for suggested_to.
@@ -234,6 +319,8 @@ def create_visit_suggestion(
         origin_visit=origin_visit,
         trip_activity=trip_activity,
         safety_checkin=safety_checkin,
+        origin_image=origin_image,
+        from_my_activity=from_my_activity,
         existing_visit=existing_visit,
     )
     suggestion.candidate_profiles.set(candidate_profiles)
@@ -245,11 +332,25 @@ def create_visit_suggestion(
     if pref == DeliveryPreference.NONE:
         return suggestion
 
-    place = build_visit_suggestion_message(location=location, official_name=origin_pin.official_name if origin_pin else None, city=origin_pin.city if origin_pin else None, state=origin_pin.state if origin_pin else None)
+    place = build_visit_suggestion_message(
+        location=location,
+        official_name=destination_label or (origin_pin.official_name if origin_pin else None),
+        city=origin_pin.city if origin_pin else None,
+        state=origin_pin.state if origin_pin else None,
+        # Only the safety check-in phrasing ("did you make it ___?") reads naturally
+        # with "to your destination" - the other messages below use "at/in ___" verbs.
+        fallback="to your destination" if safety_checkin is not None else "at a location",
+    )
     when = visited_at.strftime("%b %d, %Y")
     if safety_checkin is not None:
         title = "Confirm your visit?"
         message = f"Your safety check-in wrapped up - did you make it {place} on {when}?"
+    elif origin_image is not None:
+        title = "Confirm your visit?"
+        message = f"A photo you added looks like you visited {place} on {when}. Add it to your visit history?"
+    elif from_my_activity:
+        title = "Confirm your visit?"
+        message = f"Your Google Maps activity shows you got directions and were {place} on {when}. Add it to your visit history?"
     elif existing_visit:
         who = suggested_by.username if suggested_by else "A connection"
         title = "Update your visit?"
@@ -279,18 +380,23 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
         suggestion: The suggestion being accepted.
 
     Returns:
-        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, or VisitSource.USER
-        depending on which origin is set (the model's check constraint
-        guarantees exactly one of the three is set).
+        VisitSource.TRIP, VisitSource.SAFETY_CHECKIN, VisitSource.PHOTO,
+        VisitSource.HISTORY, or VisitSource.USER depending on which origin is
+        set (the model's check constraint guarantees exactly one of the five
+        is set).
     """
     if suggestion.trip_activity_id:
         return VisitSource.TRIP
     if suggestion.safety_checkin_id:
         return VisitSource.SAFETY_CHECKIN
+    if suggestion.origin_image_id:
+        return VisitSource.PHOTO
+    if suggestion.from_my_activity:
+        return VisitSource.HISTORY
     return VisitSource.USER
 
 
-def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit:
+def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit | None:
     """Accept a visit suggestion by logging a new, separate PinVisit.
 
     Ensures a pin exists at the suggested place (reusing suggested_to's existing
@@ -303,13 +409,25 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
         accepting_profile: The profile accepting (must be suggestion.suggested_to).
 
     Returns:
-        The newly created PinVisit for the accepting profile.
+        The newly created PinVisit for the accepting profile, or None (no-op,
+        suggestion left pending) if accepting_profile has turned off visit-history
+        tracking.
     """
+    if not visit_logging_allowed(accepting_profile):
+        return None
+
     pin = get_or_create_pin_at(accepting_profile, location=suggestion.location, latitude=suggestion.latitude, longitude=suggestion.longitude)
 
     visit = PinVisit.objects.create(pin=pin, visited_at=suggestion.visited_at, source=_visit_source_for(suggestion))
     sync_last_visited(pin)
     add_visited_status(pin)
+
+    # A photo-raised suggestion carries the originating photo; on confirmation,
+    # attach it to the visit so it appears on the visit row and in the gallery.
+    if suggestion.origin_image_id:
+        from urbanlens.dashboard.models.images.model import Image
+
+        Image.objects.filter(pk=suggestion.origin_image_id).update(visit=visit)
 
     mutual = _mutual_candidates(accepting_profile, suggestion.suggested_by, list(suggestion.candidate_profiles.all()))
     visit.participants.set(mutual.values())
@@ -371,6 +489,25 @@ def add_visited_status(pin: Pin) -> None:
         pin.badges.add(visited_badge)
 
 
+def remove_visited_status(pin: Pin) -> None:
+    """Clear a pin's "Visited" marking - the profile's status badge and last_visited.
+
+    Used when a pin was marked visited by mistake (e.g. a stray status badge or
+    an import glitch) and the user doesn't want to log a dated visit for it, so
+    it should stop being surfaced in the Memories "log your visits" queue.
+
+    Args:
+        pin: Pin instance to update in-place.
+    """
+    from urbanlens.dashboard.models.badges.model import Badge
+
+    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_badge:
+        pin.badges.remove(visited_badge)
+    pin.last_visited = None
+    pin.save(update_fields=["last_visited"])
+
+
 def sync_last_visited(pin: Pin) -> None:
     """Recompute pin.last_visited from the most recent PinVisit row.
 
@@ -385,10 +522,11 @@ def sync_last_visited(pin: Pin) -> None:
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
     """Record geolocation-based visits for the profile's pins containing a point.
 
-    A visit is created for each of the user's top-level pins whose pin-specific
-    campus boundary, location-default campus boundary, or 50 m coordinate
-    fallback contains the supplied latitude/longitude. Existing visits on the
-    same calendar day prevent another row from being created for that pin.
+    A visit is created for each of the user's top-level pins whose effective
+    property boundary (pin drawing, wiki drawing, generated default, or the
+    50 m circle/coordinate fallback) contains the supplied latitude/longitude.
+    Existing visits on the same calendar day prevent another row from being
+    created for that pin.
 
     Args:
         profile: Profile whose personal pins should be checked.
@@ -397,28 +535,32 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         visited_at: Timestamp to store; defaults to ``timezone.now()``.
 
     Returns:
-        List of newly-created ``PinVisit`` rows.
+        List of newly-created ``PinVisit`` rows. Always empty if the profile has
+        turned off live geolocation tracking.
     """
+    if not geolocation_tracking_allowed(profile):
+        return []
+
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import D
     from django.utils import timezone
 
-    from urbanlens.dashboard.models.campus.model import Campus
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related("campus")
+    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location")
     created_visits: list[PinVisit] = []
 
     for pin in pins:
         if pin.visit_history.filter(visited_at__date=timestamp.date()).exists():
             continue
 
-        campus = Campus.objects.effective_for_pin(pin)
-        if campus is not None:
-            contains_point = campus.effective_polygon.contains(point)
+        polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
+        if polygon is not None:
+            contains_point = polygon.contains(point)
         else:
-            contains_point = Pin.objects.filter(pk=pin.pk, point__distance_lte=(point, D(m=50))).exists()
+            contains_point = Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
 
         if not contains_point:
             continue

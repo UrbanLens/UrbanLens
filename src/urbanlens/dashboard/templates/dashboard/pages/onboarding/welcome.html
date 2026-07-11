@@ -1,0 +1,133 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="settings-page page-content">
+    <div class="settings-header">
+        <h1 class="settings-title">Welcome</h1>
+        <p class="settings-subtitle">
+            UrbanLens is fully private - nothing is shared with anyone until you decide to share it. So unless you live in a bunker with a fake identity, I'd strongly recommend leaving these features on. You can change them anytime.
+        </p>
+    </div>
+
+    <section class="settings-section ul-section onboarding-section">
+        <form method="post" class="settings-form" id="welcome-onboarding-form">
+            {% csrf_token %}
+
+            <h2 class="onboarding-section-title">
+                <i class="material-symbols-outlined">visibility_off</i>
+                Disable Features
+            </h2>
+
+            <div class="onboarding-cards">
+                <label class="onboarding-card onboarding-card--memories">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">history</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.memories_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
+                    </span>
+                    <span class="onboarding-card-title-row">
+                        <span class="onboarding-card-title">{{ form.memories_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct." %}
+                    </span>
+                    <span class="onboarding-card-desc" id="{{ form.memories_enabled.id_for_label }}_helptext">{{ form.memories_enabled.help_text }}</span>
+                    {% if form.memories_enabled.errors %}
+                    <span class="settings-error">{{ form.memories_enabled.errors|join:", " }}</span>
+                    {% endif %}
+                </label>
+
+                <label class="onboarding-card onboarding-card--community">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">groups</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.community_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
+                    </span>
+                    <span class="onboarding-card-title-row">
+                        <span class="onboarding-card-title">{{ form.community_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these off if you don't plan to interact with other users, and don't want to be confused by buttons that lead you to pages you won't use. Community wikis won't be displayed to you, and you won't see notifications for friend requests, or options to create group trips." %}
+                    </span>
+                    <span class="onboarding-card-desc" id="{{ form.community_enabled.id_for_label }}_helptext">{{ form.community_enabled.help_text }}</span>
+                    {% if form.community_enabled.errors %}
+                    <span class="settings-error">{{ form.community_enabled.errors|join:", " }}</span>
+                    {% endif %}
+                </label>
+
+                <label class="onboarding-card onboarding-card--external">
+                    <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
+                    <span class="onboarding-card-top">
+                        <span class="onboarding-card-icon">
+                            <i class="material-symbols-outlined">cloud</i>
+                        </span>
+                        <span class="ul-switch onboarding-card-switch">
+                            {{ form.external_apis_enabled }}
+                            <span class="ul-switch__track"></span>
+                        </span>
+                    </span>
+                    <span class="onboarding-card-title-row">
+                        <span class="onboarding-card-title">{{ form.external_apis_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about anonymized coordinates and place names being sent to APIs, like google search. These requests are never sent with identifying information, but turning these features off will prevent the requests from happening at all." %}
+                    </span>
+                    <span class="onboarding-card-desc" id="{{ form.external_apis_enabled.id_for_label }}_helptext">{{ form.external_apis_enabled.help_text }}</span>
+                    {% if form.external_apis_enabled.errors %}
+                    <span class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</span>
+                    {% endif %}
+                </label>
+            </div>
+
+            <h2 class="onboarding-section-title">
+                <i class="material-symbols-outlined">gavel</i>
+                Terms of Service
+            </h2>
+
+            <div class="onboarding-tos">
+                <p class="onboarding-tos-summary">
+                    The short version: UrbanLens is run by one person, not a company - please be reasonable. For legal reasons, I must tell you not to use the site to do anything illegal, including trespassing.
+                    Safety tools are <strong>best-effort</strong>, not a
+                    guarantee that anyone will see an alert or that help will arrive in time. What you do with the information you find here is your own decision and your own responsibility. Because of the site's focus on privacy, moderation is impossible. Please be kind to one another.
+                </p>
+                <label class="onboarding-tos-agree">
+                    {{ form.tos_agreed }}
+                    <span>
+                        I have read and agree to the
+                        <a href="{% url 'terms' %}" target="_blank" rel="noopener">Terms of Service</a>.
+                    </span>
+                </label>
+                {% if form.tos_agreed.errors %}
+                <span class="settings-error">{{ form.tos_agreed.errors|join:", " }}</span>
+                {% endif %}
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn" id="onboarding-continue-btn" {% if not form.tos_agreed.value %}disabled{% endif %}>Continue</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var tosCheckbox = document.getElementById("{{ form.tos_agreed.id_for_label }}");
+        var continueBtn = document.getElementById("onboarding-continue-btn");
+        if (!tosCheckbox || !continueBtn) {
+            return;
+        }
+        var syncContinueBtn = function () {
+            continueBtn.disabled = !tosCheckbox.checked;
+        };
+        tosCheckbox.addEventListener("change", syncContinueBtn);
+        syncContinueBtn();
+    });
+</script>
+{% endblock %}

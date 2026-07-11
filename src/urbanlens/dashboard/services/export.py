@@ -202,11 +202,12 @@ def _run_export_steps(
 
 
 def _resolve_target(obj: Any) -> tuple[str, str]:
-    """Return (target_type, target_name) for an object with a pin or location FK."""
+    """Return (target_type, target_name) for an object with a pin or wiki FK."""
     if obj.pin:
         return "pin", obj.pin.effective_name
-    if obj.location:
-        return "location", obj.location.name
+    wiki = getattr(obj, "wiki", None)
+    if wiki:
+        return "location", wiki.name
     return "", ""
 
 
@@ -286,9 +287,9 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export all user pins as a rich JSON file (UrbanLens custom format).
 
-    Only personal Pin data is exported here - never the shared Location it may
-    be linked to. Location is community wiki data (canonical name, address,
-    description) that belongs to the instance, not to any one user's export.
+    Only personal Pin data is exported here - never the shared Location or Wiki it may
+    be linked to. Community wiki data (canonical name, address, description) belongs
+    to the instance, not to any one user's export.
     Each pin's *effective* coordinates are exported instead of its raw
     lat/lng override, so a pin that currently relies on its Location for
     placement still has somewhere to land on import. On import, pins are
@@ -309,7 +310,6 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "icon": pin.icon or "",
                 "color": pin.color or "",
                 "priority": pin.priority,
-                "is_private": pin.is_private,
                 "pin_type": pin.pin_type,
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
@@ -449,7 +449,7 @@ def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") ->
 def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.comments.model import Comment
 
-    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
+    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
 
     rows = []
     for comment in comments:
@@ -471,7 +471,7 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.images.model import Image
 
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "location").order_by("created")
+    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
 
     photos_dir = os.path.join(temp_dir, "photos")
     os.makedirs(photos_dir, exist_ok=True)

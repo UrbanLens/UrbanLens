@@ -11,9 +11,11 @@ from django.views.generic import TemplateView
 from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
+    account_deletion,
     aliases,
     badges,
-    campus,
+    boundary,
+    calendar_sync,
     comments,
     detail_pins,
     friendship,
@@ -23,8 +25,11 @@ from urbanlens.dashboard.controllers import (
     markup,
     memories,
     notifications,
+    onboarding,
     organize,
+    photos,
     pin,
+    pin_bulk,
     pin_edit,
     pin_sharing,
     safety,
@@ -34,9 +39,11 @@ from urbanlens.dashboard.controllers import (
     thanks,
     tools,
     trip,
+    undo,
     userprofile,
     visit_suggestions,
     visits,
+    wiki_create,
 )
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
@@ -85,6 +92,30 @@ urlpatterns = [
         ),
         name="about",
     ),
+    path(
+        "values/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/values/index.html",
+            extra_context={"page_name": "values"},
+        ),
+        name="values",
+    ),
+    path(
+        "faq/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/faq/index.html",
+            extra_context={"page_name": "faq"},
+        ),
+        name="faq",
+    ),
+    path(
+        "terms/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/legal/terms.html",
+            extra_context={"page_name": "terms"},
+        ),
+        name="terms",
+    ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path(
         "help/import-pins/",
@@ -104,11 +135,22 @@ urlpatterns = [
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
+                # Literal "pins/..." routes must be registered before the "pins/<slug:pin_slug>/"
+                # catch-all below, which would otherwise match e.g. "pins/bulk-delete/" as a slug.
+                path("pins/bulk-delete/", pin_bulk.PinBulkDeleteView.as_view(), name="pin.bulk_delete"),
+                path("pins/bulk-undo/", pin_bulk.PinBulkUndoView.as_view(), name="pin.bulk_undo"),
+                path("pins/bulk-merge/", pin_bulk.PinBulkMergeView.as_view(), name="pin.bulk_merge"),
+                path("pins/bulk-edit/", pin_bulk.PinBulkEditView.as_view(), name="pin.bulk_edit"),
+                path(
+                    "pins/bulk-edit/badge-options/",
+                    pin_bulk.PinBulkEditBadgeOptionsView.as_view(),
+                    name="pin.bulk_edit.badge_options",
+                ),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
-                    "campus/",
-                    campus.CampusController.as_view({"get": "list_campuses"}),
-                    name="campus.list",
+                    "boundaries/",
+                    boundary.BoundaryController.as_view({"get": "list_boundaries"}),
+                    name="boundary.list",
                 ),
                 path(
                     "add/",
@@ -181,9 +223,14 @@ urlpatterns = [
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
                             path(
-                                "<slug:pin_slug>/campus/",
-                                campus.CampusController.as_view({"get": "get_campus", "post": "save_campus"}),
-                                name="campus.pin",
+                                "<slug:pin_slug>/boundary/",
+                                boundary.BoundaryController.as_view({"get": "get_boundaries", "post": "save_boundary"}),
+                                name="boundary.pin",
+                            ),
+                            path(
+                                "<slug:pin_slug>/wiki/create/",
+                                wiki_create.PinWikiCreateView.as_view(),
+                                name="pin.wiki.create",
                             ),
                             path(
                                 "<slug:pin_slug>/media/<str:source>/",
@@ -199,6 +246,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/search/",
                                 pin.PinController.as_view({"get": "web_search"}),
                                 name="pin.web_search",
+                            ),
+                            path(
+                                "<slug:pin_slug>/search/refresh/",
+                                pin.PinController.as_view({"post": "web_search_refresh"}),
+                                name="pin.web_search.refresh",
                             ),
                             path(
                                 "<slug:pin_slug>/satellite_view/",
@@ -219,6 +271,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/visits/",
                                 visits.VisitHistoryView.as_view(),
                                 name="pin.visits",
+                            ),
+                            path(
+                                "<slug:pin_slug>/visits/<int:visit_id>/edit/",
+                                visits.VisitEditView.as_view(),
+                                name="pin.visit.edit",
                             ),
                             path(
                                 "<slug:pin_slug>/visits/<int:visit_id>/delete/",
@@ -299,6 +356,16 @@ urlpatterns = [
                                 "<slug:pin_slug>/aliases/<int:alias_id>/delete/",
                                 aliases.PinAliasDeleteView.as_view(),
                                 name="pin.alias.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/aliases/<int:alias_id>/use/",
+                                aliases.PinAliasUseView.as_view(),
+                                name="pin.alias.use",
+                            ),
+                            path(
+                                "<slug:pin_slug>/aliases/<int:alias_id>/toggle-nickname/",
+                                aliases.PinAliasToggleNicknameView.as_view(),
+                                name="pin.alias.toggle_nickname",
                             ),
                             path(
                                 "<slug:pin_slug>/comments/",
@@ -402,6 +469,13 @@ urlpatterns = [
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
+                path(
+                    "edit/emails/verify/<uuid:token>/",
+                    userprofile.ProfileEmailVerifyView.as_view(),
+                    name="profile.email.verify",
+                ),
+                path("preview/exit/", userprofile.ProfilePreviewStopView.as_view(), name="profile.preview.exit"),
+                path("preview/<slug:mode>/", userprofile.ProfilePreviewStartView.as_view(), name="profile.preview"),
                 path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
                 path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
                 path(
@@ -431,6 +505,11 @@ urlpatterns = [
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
+    path("settings/delete-account/", account_deletion.RequestAccountDeletionView.as_view(), name="account.delete.request"),
+    path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
+    path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),
+    path("settings/undo-history/clear/", undo.UndoClearView.as_view(), name="undo.clear"),
+    path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
         include(
@@ -547,14 +626,19 @@ urlpatterns = [
                     name="location.wiki",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/delete/",
+                    location_wiki.LocationWikiDeleteView.as_view(),
+                    name="location.wiki.delete",
+                ),
+                path(
                     "<slug:location_slug>/wiki/edit/",
                     location_wiki.LocationWikiEditView.as_view(),
                     name="location.wiki.edit",
                 ),
                 path(
-                    "<slug:location_slug>/wiki/bbox/",
-                    location_wiki.LocationWikiBboxView.as_view(),
-                    name="location.wiki.bbox",
+                    "<slug:location_slug>/wiki/boundary/",
+                    boundary.WikiBoundaryView.as_view(),
+                    name="location.wiki.boundary",
                 ),
                 path(
                     "<slug:location_slug>/wiki/history/",
@@ -565,6 +649,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),
                     name="location.wiki.revert",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/history/<int:edit_id>/delete/",
+                    location_wiki.LocationWikiEditDeleteView.as_view(),
+                    name="location.wiki.history.delete",
                 ),
                 path(
                     "<slug:location_slug>/wiki/detail-pins/json/",
@@ -617,6 +706,16 @@ urlpatterns = [
                     name="location.wiki.alias.delete",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/aliases/<int:alias_id>/use/",
+                    aliases.LocationAliasUseView.as_view(),
+                    name="location.wiki.alias.use",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/aliases/<int:alias_id>/toggle-nickname/",
+                    aliases.LocationAliasToggleNicknameView.as_view(),
+                    name="location.wiki.alias.toggle_nickname",
+                ),
+                path(
                     "<slug:location_slug>/wiki/gallery/",
                     image_gallery.WikiGalleryView.as_view(),
                     name="location.wiki.gallery",
@@ -631,6 +730,11 @@ urlpatterns = [
                     image_gallery.WikiImageView.as_view(),
                     name="location.wiki.gallery.image",
                 ),
+                path(
+                    "<slug:location_slug>/wiki/stat/<str:field>/vote/",
+                    location_wiki.WikiStatVoteView.as_view(),
+                    name="location.wiki.stat_vote",
+                ),
             ],
         ),
     ),
@@ -641,6 +745,12 @@ urlpatterns = [
                 path("", trip.TripListView.as_view(), name="trips.list"),
                 path("create/", trip.TripCreateView.as_view(), name="trips.create"),
                 path("location-search/", trip.TripLocationSearchView.as_view(), name="trips.location_search"),
+                path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
+                path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
+                path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),
+                path("calendar/import/", calendar_sync.CalendarImportView.as_view(), name="trips.calendar.import"),
+                path("calendar/import/preview/", calendar_sync.CalendarImportPreviewView.as_view(), name="trips.calendar.import.preview"),
+                path("<uuid:trip_uuid>/calendar/export/", calendar_sync.TripCalendarExportView.as_view(), name="trips.calendar.export"),
                 path("<uuid:trip_uuid>/", trip.TripDetailView.as_view(), name="trips.detail"),
                 path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
                 path("<uuid:trip_uuid>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
@@ -729,8 +839,11 @@ urlpatterns = [
             [
                 path("", safety.SafetyHomeView.as_view(), name="safety.home"),
                 path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
+                path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
+                path("wiki-option/", safety.SafetyCheckinWikiOptionView.as_view(), name="safety.checkin.wiki_option"),
                 path("contact/<uuid:token>/", safety.SafetyContactPortalView.as_view(), name="safety.contact.portal"),
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
+                path("contact/<uuid:token>/opt-out/<str:scope>/", safety.SafetyContactOptOutView.as_view(), name="safety.contact.optout"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
                 path("contact/<uuid:token>/markup/json/", markup.SafetyContactMarkupJsonView.as_view(), name="safety.contact.markup.json"),
                 path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
@@ -742,13 +855,23 @@ urlpatterns = [
                 # No-trailing-slash variant so DELETE/POST fetch calls work even
                 # when APPEND_SLASH would otherwise downgrade the method to GET.
                 path("<slug:checkin_slug>/gallery/<int:image_id>", safety.SafetyImageView.as_view()),
-                path("<uuid:safety_checkin_uuid>/markup/json/", markup.MarkupJsonView.as_view(), name="safety.checkin.markup.json"),
-                path("<uuid:safety_checkin_uuid>/markup/", markup.MarkupView.as_view(), name="safety.checkin.markup"),
-                path(
-                    "<uuid:safety_checkin_uuid>/markup/<uuid:markup_uuid>/",
-                    markup.MarkupEditView.as_view(),
-                    name="safety.checkin.markup.edit",
-                ),
+                path("<slug:checkin_slug>/delete/", safety.SafetyCheckinDeleteView.as_view(), name="safety.checkin.delete"),
+                path("<slug:checkin_slug>/maps/picker/", safety.SafetyCheckinMapPickerView.as_view(), name="safety.checkin.maps.picker"),
+                path("<slug:checkin_slug>/maps/attach/", safety.SafetyCheckinMapAttachView.as_view(), name="safety.checkin.maps.attach"),
+                path("<slug:checkin_slug>/maps/<uuid:map_uuid>/detach/", safety.SafetyCheckinMapDetachView.as_view(), name="safety.checkin.maps.detach"),
+            ],
+        ),
+    ),
+    path(
+        "markup-maps/",
+        include(
+            [
+                path("new/", markup.MarkupMapCreateView.as_view(), name="markup_map.create"),
+                path("<uuid:map_uuid>/json/", markup.MarkupJsonView.as_view(), name="markup_map.json"),
+                path("<uuid:map_uuid>/view/", markup.MarkupMapViewStateView.as_view(), name="markup_map.view_state"),
+                path("<uuid:map_uuid>/delete/", markup.MarkupMapDeleteView.as_view(), name="markup_map.delete"),
+                path("<uuid:map_uuid>/markup/", markup.MarkupView.as_view(), name="markup_map.markup"),
+                path("<uuid:map_uuid>/markup/<uuid:markup_uuid>/", markup.MarkupEditView.as_view(), name="markup_map.markup.edit"),
             ],
         ),
     ),
@@ -767,7 +890,6 @@ urlpatterns = [
             [
                 path("<int:comment_id>/react/", comments.CommentReactionView.as_view(), name="comment.react"),
                 path("locations/", comments.PinnedLocationsJsonView.as_view(), name="comment.locations"),
-                path("map-pins/", comments.CommentMapPinsView.as_view(), name="comment.map_pins"),
             ],
         ),
     ),
@@ -820,12 +942,27 @@ urlpatterns = [
                 path("", memories.MemoriesView.as_view(), name="memories.view"),
                 path("data/", memories.MemoriesFeedDataView.as_view(), name="memories.data"),
                 path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
+                path("visit/<slug:pin_slug>/", memories.MemoriesVisitView.as_view(), name="memories.visit"),
+                path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
+                path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
+                path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
+                path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
+                path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
+                path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
+                path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
+                path("photos/page/", photos.PhotoGridPageView.as_view(), name="memories.photos.page"),
+                path("photos/upload/", photos.PhotoUploadView.as_view(), name="memories.photos.upload"),
+                path("photos/pin-search/", photos.PhotoPinSearchView.as_view(), name="memories.photos.pin_search"),
+                path("photos/<int:image_id>/confirm-pin/", photos.PhotoPinConfirmView.as_view(), name="memories.photos.pin_confirm"),
+                path("photos/<int:image_id>/<str:action>/", photos.PhotoActionView.as_view(), name="memories.photos.action"),
             ],
         ),
     ),
     path("setup/", setup.SetupWizardView.as_view(), name="setup"),
+    path("welcome/", onboarding.WelcomeOnboardingView.as_view(), name="onboarding.welcome"),
     path("tasks/<str:task_id>/status/", site_admin.CeleryTaskStatusView.as_view(), name="celery_task_status"),
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
+    path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path("site-admin/stats/kpi/", site_admin.SiteAdminStatsKpiPartialView.as_view(), name="site_admin_stats_kpi"),
@@ -834,6 +971,7 @@ urlpatterns = [
     path("site-admin/stats/pull-latest-code/", site_admin.SiteAdminPullLatestCodeView.as_view(), name="site_admin_pull_latest_code"),
     path("site-admin/subscriptions/", site_admin.SiteAdminSubscriptionsView.as_view(), name="site_admin_subscriptions"),
     path("site-admin/api-limits/", site_admin.SiteAdminApiLimitsView.as_view(), name="site_admin_api_limits"),
+    path("site-admin/plugins/", site_admin.SiteAdminPluginsView.as_view(), name="site_admin_plugins"),
     path(
         "site-admin/ui-components/",
         site_admin.SiteAdminUIComponentsView.as_view(),

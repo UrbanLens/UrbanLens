@@ -1,0 +1,409 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="faq-hero">
+    <div class="faq-hero-inner">
+        <p class="faq-eyebrow">Frequently Asked Questions</p>
+        <h1 class="faq-title">Questions, <em>answered.</em></h1>
+        <p class="faq-subtitle">
+            Everything you need to know about pins, privacy, and planning your next expedition.
+            Can't find what you're looking for? Check out our <a href="{% url 'about' %}">About</a>
+            and <a href="{% url 'values' %}">Values</a> pages for more.
+        </p>
+    </div>
+</section>
+
+{# -- Quick jump nav --------------------------------------------------------- #}
+<nav class="faq-jump" aria-label="FAQ categories">
+    <div class="faq-jump-inner">
+        <a href="#getting-started" class="faq-jump-link">Getting started</a>
+        <a href="#privacy-sharing" class="faq-jump-link">Privacy &amp; sharing</a>
+        <a href="#features" class="faq-jump-link">Features</a>
+        <a href="#safety" class="faq-jump-link">Safety</a>
+        <a href="#account-data" class="faq-jump-link">Account &amp; data</a>
+    </div>
+</nav>
+
+{# -- Getting started -------------------------------------------------------- #}
+<section class="faq-section" id="getting-started">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Getting started</div>
+        <h2 class="faq-section-title">The basics.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item" open>
+                <summary class="faq-item-summary">
+                    <span>Why does this exist? Why not just use google maps?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Google maps is great, but it has missing features and a bunch of bugs. I made this after getting increasingly frustrated with google maps for urbex.
+                    </p>
+                    <ul>
+                        <li>On Google Maps, you don't own your data, and it's clunky to export any of it. Google sometimes changes the services they offer or the data they let you export, which makes me uncomfortable.</li>
+                        <li>If you pin a lot of things, your google map gets really cluttered, and it's hard to unclutter it.</li>
+                        <li>You can't reliably choose an icon for a pin. You can choose an icon for a saved list, but if it's in multiple lists, google just picks which icon to show for you.</li>
+                        <li>You can't search or filter pins by metadata, like whether you've visited it or not. You can try to get past this by making more saved lists, but things get really tedious really fast.</li>
+                        <li>If you save a pin to an existing google place, and that google place disappears, your pin breaks. It no longer shows details when you click on it, and you can never delete it. It's just on your map forever. So you have to make another pin next to it, and just live with 2 pins for the same place, one of which can't ever be clicked on.</li>
+                        <li>Sometimes searching for pins doesn't work reliably. It works reliably enough that you rely on it... and then it suddenly doesn't work when you're relying on it and it makes you scream.</li>
+                        <li>Sometimes saving a pin to a list doesn't actually save it. This works differently on mobile and desktop, and I've occasionally discovered that a pin just didn't save.</li>
+                        <li>When saving a bunch of pins to a list, one after another, there's some kind of memory leak that causes the map to get more and more sluggish the more pins you open and save, until you need to reload the page.</li>
+                        <li>When saving a bunch of pins, sometimes you click on a brand new pin, click the save to list button, and it shows that new pin already in the lists you put the last pin in... even though it's not. To get it to save, you need to remove it from those lists, and then add it back to them again. Sometimes this doesn't work. If you just close the dialog, it doesn't save at all.</li>
+                        <li>There's no way to make smaller maps of just a few pins in any meaningful way.</li>
+                        <li>You can't upload photos, documents, etc, to a pin without making them public to everyone.</li>
+                        <li>...and I could go on.</li>
+                    </ul>
+                    <p>
+                        Google maps worked just well enough for me to keep using it for years. But eventually, I had to make something that did the things I wanted, the way I wanted them.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is UrbanLens free?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our
+                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>How can I be anonymous?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to opt in to being more public. But if you want even more anonymity, you have three options:
+                    </p>
+                    <ol class="faq-ordered-list">
+                        <li>You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.</li>
+                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. We go out of our way not to store information about you. You can verify that yourself by asking your favorite AI to assess <a href="https://github.com/UrbanLens/UrbanLens">our code</a>.</li>
+                        <li>You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. That will prevent you from accidentally opting in to sharing your stuff.</li>
+                    </ol>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>I already have pins saved elsewhere. Can I bring them in?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes - you can import pins from a whole bunch of other places. Every imported pin is shown to you for review before anything is saved. See the
+                        <a href="{% url 'help.import_pins' %}">pin import guide</a> for details.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Privacy & sharing -------------------------------------------------------- #}
+<section class="faq-section faq-section--alt" id="privacy-sharing">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Privacy &amp; sharing</div>
+        <h2 class="faq-section-title">Who can see what.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Are my pins public?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        No. Every pin is private by default. Sharing is opt-in and granular - you choose whether
+                        to share a pin with specific friends, a trip, or no one at all. Big, obvious confirmation dialogs will be shown to you before anything gets shared.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Nobody can see my pins? Really?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Correct. Nobody. Not even me.
+                    </p>
+                    <p>
+                        The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, AI tools can help you understand the codebase and verify your data is safe.
+                    </p>
+                    <p>
+                        But let's also have a reality check.
+                    </p>
+                    <p>
+                        Anytime someone else owns the hardware your data is stored on, there is a pathway for them to see your data. Even if your data is encrypted, the hardware owner could intercept the data before encryption, or brute force the encryption key. If any mapping site out there tells you they can't see your pins without telling you this caveat, they're lying to you.
+                    </p>
+                    <p>
+                        I put a ton of time into trying to design something that didn't even store coordinates on my server, in order to get past this problem. If you look back through the git history, you can probably find a bunch of notes I wrote about it. I experimented with several ideas, and got part of the way through designing a peer-to-peer network before I came to the conclusion that this problem might be intractable.
+                    </p>
+                    <p>
+                        So the best I can do is show you every line of code in my application, and promise that I won't hack into my own software in order to see your pins. And if you're worried about it, you should take my code and put it on your own machine, where nobody has access except you.
+                    </p>
+                    <p>
+                        Please don't trust anyone else who doesn't explain this to you, and makes you assurances they can't keep.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What's a wiki, and is it separate from my pin?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        A wiki is a community-editable page that is only accessible to people who already have the pin on their map.</p>
+                    <p>
+                        It's entirely separate from your personal pin. It's opt-in, so most wikis are going to be blank, unless someone decides to add information to them.
+                    </p>
+                    <p>
+                        The core idea behind a wiki is that sharing exploring information is hard. Sometimes you want to share updates with other explorers who already know about the place, but you don't want to broadcast the location to people who don't. Wikis let you share information exclusively with people who already have the pin, so you can freely share any information you'd like without worrying about publicizing a vulnerable place.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Features ---------------------------------------------------------------- #}
+<section class="faq-section" id="features">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Features</div>
+        <h2 class="faq-section-title">Maps, trips, and photos.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I plan group trips without revealing exact locations?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Trips support RSVPs, member management, and shared itineraries with per-trip and per-pin privacy controls, so you can coordinate an expedition without exposing pin details. Only people you invite to the trip can see anything, and even then, you can make some pins even more private; people on the trip who don't have the pin will see "Secret Location", until you're ready to share the exact location. Is this overkill? Probably.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Organizing my pins sounds tedious. Pretend this is a question.</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        I like automating things. So I automated things.
+                    </p>
+                    <p>
+                        There are lots of ways to make this easier.
+                    </p>
+                    <ul>
+                        <li>If your pins are in saved lists in Google Maps, you'll be given a chance to create different tags for each list that you import, so you don't have to redo the organizational system you already set up.</li>
+                        <li>During import, you can click a checkbox to have an AI help you tag them, too. It does its best. Try not to hurt its feelings.</li>
+                        <li>When you upload photos, you can opt in to have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
+                        <li>A friend of mine had a loose text file of notes about places... so I support that, too. Upload a text file and an AI will help out. Your mileage may vary.</li>
+                        <li>Importing your location history can automatically make pins for you, if you want it to. The location history file is deleted immediately, just like all the other stuff you import.</li>
+                        <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button. I'm sorry, I know clicking buttons is hard.)</li>
+                        <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but I tested it and it works.</li>
+                        <li>Group trips make pins. So do safety checkins. And as many other things as I could think of.</li>
+                        <li>Once you have your pins here, you can nest them into categories and tags in a whole bunch of configurations, which lets you search and filter in cool ways. Like... you could make your map only display pins that are in the "church" and "want to go" categories, but not in the "no entry" or "demolished" categories, and then you can keep adding filters onto that.</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is there a limit to how much I can upload?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        I'm just one person, and I bought a lot of hard drives, but I don't have unlimited space. I gave a few GB to people I've never met, and a little bit more to my friends. It adds up pretty fast.
+                    </p>
+                    <p>
+                        You can see how much space you have on your profile page. Uploaded images are automatically optimized to help you fit more within your quota without losing meaningful detail.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Where do the extra details on a pin page come from?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        The site tries its best to pull in supplementary data, and filter out the junk that doesn't apply. So it can show things like Wikipedia summaries, historical imagery, weather, and relevant public datasets - to help you research a location before you visit.
+                    </p>
+                    <p>
+                        When these external APIs are contacted, we only send the minimum amount of data needed to get a relevant response. That usually means just the name of the place, or the coordinates.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Safety -------------------------------------------------------------------- #}
+<section class="faq-section faq-section--alt" id="safety">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Safety</div>
+        <h2 class="faq-section-title">Staying safe.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What is a safety check-in?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        When you go to a new place, you're supposed to tell a trusted friend where you're going, and ask them to check in on you when you're supposed to be back... but oh gosh, I never got in that habit. Plus, what am I supposed to do when I'm going somewhere secret, and I don't want to advertise its location? I guess if I get hurt, I just die.
+                    </p>
+                    <p>
+                        A safety check-in lets you save all the details of the trip ahead of time, without sharing it with anyone until you don't come home. Only then are they contacted to help find you.
+                    </p>
+                    <p>
+                        You should understand there are downsides to this approach, and you shouldn't rely on it as your only safety plan. Since your contacts aren't notified until after you're in trouble, they might be busy and just not see the message for hours, or days. Emails might end up in a spam folder. They could see that you sent a message to 3 other people, and assume one of the other 3 will do the job, so they can go to bed. The site could go down, and not send the notice out at all!
+                    </p>
+                    <p>
+                        I added this feature because I wanted it for me, and the people I care about, but you should keep doing the safety stuff you already do in addition to using this feature. This shouldn't replace the safety stuff you already do.
+                    </p>
+                    <p>
+                        In addition, you should choose your contacts wisely, and make sure they'll do the thing you want them to do if they get a message. If you send a poorly worded message to your grandma, she's going to call the police on you after your phone dies.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can a safety check-in notify people who aren't on UrbanLens?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Safety check-ins support notifying contacts by email in addition to other UrbanLens
+                        users, so the people who need to know you're overdue don't need an account of their own. They don't need to login. They just need to click a link in their email.
+                    </p>
+                    <p>
+                        Once contacted, they will see a map you drew of where you're going, and a trip plan you wrote for them. They'll also be able to send messages to one another, in case one of them gets important information the other people need to know.
+                    </p>
+                    <p>
+                        No one who doesn't have an special link to the check-in page can see the page or those details, and no one but you can see it until you don't check in.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- Account & data -------------------------------------------------------------- #}
+<section class="faq-section" id="account-data">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">Account &amp; data</div>
+        <h2 class="faq-section-title">Your data, your rules.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I see everything UrbanLens stores about me?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Any data we store about you is visible on your own profile page - there's no hidden
+                        user data on UrbanLens that isn't displayed back to you. We don't even store your ip.
+                    </p>
+                    <p>
+                        But it's time for another reality check about ip addresses.
+                    </p>
+                    <p>
+                        UrbanLens relies on services from other open source software, too, like a web server to handle your web traffic, a caching layer to make the site fast, and more. Some of those services see details about you, like your ip address, just because of the nature of web traffic. Sometimes those details are put into log files. I rotate those log files regularly, and no one without access to my server could ever see them in the first place... but, that's no reason not to use a VPN. They cost like $3 a month.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Can I delete my account and data?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes. Account deletion is available from your profile settings and removes your personal
+                        data from UrbanLens. The site gets rid of all of it, and I really mean all of it.
+                    </p>
+                    <p>
+                        You have 1 week to undo the deletion, and during that time your data will still exist on our servers in a separate backup file that isn't visible on the site. If you don't undo the deletion, your data will be gone forever.
+                    </p>
+                    <p>
+                        There's an export tool you can use to get a copy of your data before you do that.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is UrbanLens open source? Can I contribute?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Yes - the full source is on
+                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>. Contributions are welcome,
+                        and we just ask that any contributed code align with the principles on our
+                        <a href="{% url 'values' %}">Values</a> page.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Who built UrbanLens?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        UrbanLens is built and maintained by one person, not a company. It started as a personal
+                        tool for me, then for a small circle of friends, and it's growing from there.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- CTA ------------------------------------------------------------------ #}
+<section class="faq-cta-section">
+    <div class="faq-cta-inner">
+        <h2 class="faq-cta-title">Still have questions?</h2>
+        <p class="faq-cta-body">Explore what UrbanLens can do, or jump straight in.</p>
+        <div class="faq-cta-actions">
+            {% if not user.is_authenticated %}
+            <a href="{% url 'signup' %}" class="faq-btn btn btn--primary btn--lg">
+                <i class="material-symbols-outlined">rocket_launch</i> Create an account
+            </a>
+            <a href="{% url 'about' %}" class="faq-btn btn btn--ghost btn--lg">Learn more</a>
+            {% else %}
+            <a href="{% url 'map.view' %}" class="faq-btn btn btn--primary btn--lg">
+                <i class="material-symbols-outlined">map</i> Open my map
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{% endblock %}

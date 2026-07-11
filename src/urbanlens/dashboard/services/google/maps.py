@@ -201,10 +201,6 @@ class GoogleMapsGateway(Gateway):
         skipped = 0
         with tqdm(total=total, desc="Importing pins") as pbar:
             for pin_data in data:
-                # If pin_data contains "name", convert to "nickname"
-                if "name" in pin_data:
-                    pin_data["nickname"] = pin_data.pop("name")
-
                 try:
                     pin, created = Pin.objects.get_nearby_or_create(
                         latitude=pin_data["latitude"],
@@ -382,17 +378,13 @@ class GoogleMapsGateway(Gateway):
                         location = Location.objects.by_cid(cid).first() if cid is not None else None
                         if location:
                             pin_data["location"] = location
-                            # Clear the coordinate override - pin inherits location's coords.
-                            pin_data.pop("latitude", None)
-                            pin_data.pop("longitude", None)
+                            pin_data.setdefault("latitude", location.latitude)
+                            pin_data.setdefault("longitude", location.longitude)
 
-                        pin_name = pin_data.get("name") or pin_data.get("nickname") or (location.name if location else "")
+                        pin_name = pin_data.get("name") or (location.display_name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
                         lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
                         try:
-                            # If pin_data contains "name", convert to "nickname"
-                            if "name" in pin_data:
-                                pin_data["nickname"] = pin_data.pop("name")
                             pin, created = Pin.objects.get_nearby_or_create(
                                 latitude=lookup_lat,
                                 longitude=lookup_lon,
@@ -545,9 +537,9 @@ class GoogleMapsGateway(Gateway):
             - ``create_category`` (bool): create a ``kind="category"`` badge from *stem*.
             - ``badge_ids`` (list[int]): badge IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, ``badge_ids`` (list[int]), and optionally
-              ``is_private`` (bool) fields.  Private pins are never linked to a
-              shared Location and do not create a community wiki entry.
+              ``description``, ``cid``, and ``badge_ids`` (list[int]) fields.
+              Imports never create community wiki entries or hit external APIs;
+              wikis are created explicitly by the user from the pin detail page.
 
         Yields:
             str: SSE-formatted data lines (same event shapes as ``import_pins_streaming``).
@@ -596,17 +588,14 @@ class GoogleMapsGateway(Gateway):
                     description = pin_dict.get("description") or ""
                     cid = pin_dict.get("cid")
                     pin_badge_ids = pin_dict.get("badge_ids") or []
-                    is_private = bool(pin_dict.get("is_private", False))
 
                     try:
-                        # Private pins are never linked to a shared Location.
-                        location = None if is_private else (Location.objects.by_cid(cid).first() if cid else None)
+                        location = Location.objects.by_cid(cid).first() if cid else None
 
                         pin_defaults: dict[str, Any] = {
                             "profile": user_profile,
-                            "nickname": pin_name,
+                            "name": pin_name,
                             "description": description,
-                            "is_private": is_private,
                         }
 
                         if location:

@@ -12,7 +12,7 @@
             <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
             {% if user.is_authenticated %}
             <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
             {% endif %}
             <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
         </ul>
@@ -124,7 +124,7 @@
         <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
         {% if user.is_authenticated %}
         <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-        <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
+        <li><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
         {% endif %}
         <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
     </ul>

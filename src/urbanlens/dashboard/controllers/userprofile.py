@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -30,6 +31,10 @@ from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+logger = logging.getLogger(__name__)
 
 
 class ViewProfileView(LoginRequiredMixin, View):
@@ -68,7 +73,12 @@ class ViewProfileView(LoginRequiredMixin, View):
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
+            "can_view_contact": can_view_contact,
         }
+        if request.user == profile.user:
+            from urbanlens.dashboard.services.profile_preview import preview_modes
+
+            context["preview_modes"] = preview_modes()
         self._add_common_context(request, profile, context)
         return render(request, "dashboard/pages/profile/index.html", context)
 
@@ -81,79 +91,19 @@ class ViewProfileView(LoginRequiredMixin, View):
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
-        """Return True if the requesting user is allowed to view this profile."""
+        """Return True if the requesting user is allowed to view this profile.
+
+        Delegates to :meth:`Profile.can_view_profile` so all relationship
+        checks (friends, common pin/friend/trip, anything-in-common) live in
+        one place.
+        """
         if request.user == profile.user:
             return True
 
-        visibility = profile.profile_visibility
-
-        if visibility == VisibilityChoice.ANYONE:
-            return True
-
-        if not request.user.is_authenticated:
-            return False
-
-        if visibility == VisibilityChoice.NO_ONE:
-            return False
-
-        try:
-            my_profile = Profile.objects.get(user=request.user)
-        except Profile.DoesNotExist:
-            return False
-
-        if visibility == VisibilityChoice.FRIENDS:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-            try:
-                friendship = Friendship.objects.between(my_profile, profile)
-                return FriendshipStatus.is_friend(friendship.status)
-            except Friendship.DoesNotExist:
-                return False
-
-        if visibility == VisibilityChoice.COMMON_PIN:
-            my_loc_ids = set(
-                Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
-            )
-            their_loc_ids = set(
-                Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
-            )
-            return bool(my_loc_ids & their_loc_ids)
-
-        if visibility == VisibilityChoice.COMMON_FRIEND:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-            my_friends = set(
-                Friendship.objects.filter(from_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            ) | set(
-                Friendship.objects.filter(to_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends = set(
-                Friendship.objects.filter(from_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            ) | set(
-                Friendship.objects.filter(to_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            return bool(my_friends & their_friends)
-
-        if visibility == VisibilityChoice.COMMON_TRIP:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
-            my_trips = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
-            their_trips = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
-            return bool(my_trips & their_trips)
-
-        return False
+        viewer = None
+        if request.user.is_authenticated:
+            viewer = Profile.objects.filter(user=request.user).first()
+        return profile.can_view_profile(viewer)
 
     def _add_common_context(self, request: HttpRequest, profile: Profile, context: dict) -> None:
         """Populate cross-user stats and friendship context when viewing another user's profile."""
@@ -187,7 +137,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         shared_visited_ids = their_visited_ids & my_visited_ids
 
         context["common_pin_count"] = len(common_ids)
-        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).order_by("name") if shared_visited_ids else Location.objects.none()
+        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship
         from urbanlens.dashboard.models.friendship.model import Friendship
@@ -236,6 +186,62 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["my_profile"] = my_profile
 
 
+class ProfilePreviewStartView(LoginRequiredMixin, View):
+    """Start previewing your own profile as a selected type of user.
+
+    Stores the preview state in the session and redirects to the public
+    profile URL; ``ProfilePreviewMiddleware`` then renders that page as a
+    simulated user with the chosen relationship.
+    """
+
+    def post(self, request: HttpRequest, mode: str) -> HttpResponse:
+        """Activate a preview session for the given audience.
+
+        Args:
+            request: The HTTP request.
+            mode: A ``VisibilityChoice`` value selecting the simulated viewer.
+
+        Returns:
+            Redirect to the previewed profile page (or back to the profile
+            when the mode is unknown).
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.profile_preview import SESSION_KEY, preview_modes
+
+        if mode not in dict(preview_modes()):
+            return redirect("profile.view")
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.slug:
+            # Slugs are generated on save; force one so the public URL exists.
+            profile.save()
+        if not profile.slug:
+            return redirect("profile.view")
+
+        path = reverse("profile.view_user", kwargs={"profile_slug": profile.slug})
+        request.session[SESSION_KEY] = {"mode": mode, "path": path, "owner_id": profile.pk}
+        return redirect(path)
+
+
+class ProfilePreviewStopView(LoginRequiredMixin, View):
+    """Exit profile preview mode and return to the normal profile page."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Clear any active preview session.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Redirect to the owner's profile page.
+        """
+        from urbanlens.dashboard.services.profile_preview import SESSION_KEY
+
+        request.session.pop(SESSION_KEY, None)
+        return redirect("profile.view")
+
+
 class ProfileFieldUpdateView(LoginRequiredMixin, View):
     """Save a single profile field immediately (auto-save AJAX endpoint).
 
@@ -276,6 +282,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True})
 
         if field == "email":
+            from urbanlens.dashboard.services.email_normalization import is_email_taken
+
             value = request.POST.get("value", "").strip()
             if not value:
                 return JsonResponse({"error": "Email address is required."}, status=400)
@@ -283,6 +291,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
                 validate_email(value)
             except ValidationError:
                 return JsonResponse({"error": "Enter a valid email address."}, status=400)
+            if is_email_taken(value, exclude_user_id=request.user.pk):
+                return JsonResponse({"error": "Another account already uses this email address."}, status=409)
             request.user.email = value
             request.user.save(update_fields=["email"])
             return JsonResponse({"ok": True})
@@ -434,6 +444,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "supported_platforms": URL_INPUT_PLATFORM_LABELS,
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": AvatarService.random_options(4),
+            "secondary_emails": profile.secondary_emails.all(),
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -453,6 +464,12 @@ class EditProfileView(LoginRequiredMixin, View):
             return self._add_link(request, profile)
         if action == "remove_link":
             return self._remove_link(request, profile)
+        if action == "add_email":
+            return self._add_email(request, profile)
+        if action == "remove_email":
+            return self._remove_email(request, profile)
+        if action == "resend_email_verification":
+            return self._resend_email_verification(request, profile)
         return redirect("profile.edit")
 
     def _save_profile(self, request: HttpRequest, profile: Profile) -> HttpResponse:
@@ -553,6 +570,60 @@ class EditProfileView(LoginRequiredMixin, View):
             )
         return redirect("profile.edit")
 
+    def _add_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+        from urbanlens.dashboard.services.email_normalization import is_email_taken, normalize_email
+
+        raw = request.POST.get("email_input", "").strip().lower()
+        email_error = ""
+        try:
+            validate_email(raw)
+        except ValidationError:
+            email_error = "Enter a valid email address."
+        else:
+            normalized = normalize_email(raw)
+            if is_email_taken(raw, exclude_user_id=request.user.pk):
+                email_error = "That email address is already in use."
+            elif profile.secondary_emails.filter(normalized_email=normalized).exists():
+                email_error = "You've already added that email address."
+            else:
+                secondary_email = ProfileEmail.objects.create(profile=profile, email=raw)
+                _send_profile_email_verification(request, secondary_email)
+        return self._emails_response(request, profile, email_error=email_error)
+
+    def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
+        email_id = request.POST.get("email_id", "")
+        profile.secondary_emails.filter(pk=email_id).delete()
+        return self._emails_response(request, profile)
+
+    def _resend_email_verification(self, request: HttpRequest, profile: Profile) -> HttpResponse:
+        email_status = ""
+        secondary_email = profile.secondary_emails.filter(pk=request.POST.get("email_id", ""), is_verified=False).first()
+        if secondary_email:
+            _send_profile_email_verification(request, secondary_email)
+            email_status = f"Verification email resent to {secondary_email.email}."
+        return self._emails_response(request, profile, email_status=email_status)
+
+    def _emails_response(
+        self,
+        request: HttpRequest,
+        profile: Profile,
+        email_error: str = "",
+        email_status: str = "",
+    ) -> HttpResponse:
+        """Return the secondary-emails partial for HTMX requests, or redirect for plain requests."""
+        if request.headers.get("HX-Request"):
+            return render(
+                request,
+                "dashboard/partials/profile/profile_emails.html",
+                {
+                    "secondary_emails": profile.secondary_emails.all(),
+                    "email_error": email_error,
+                    "email_status": email_status,
+                },
+            )
+        return redirect("profile.edit")
+
 
 class SocialLinkVerifyView(LoginRequiredMixin, View):
     """Verify that a just-saved social-link URL resolves to a valid profile page.
@@ -641,6 +712,70 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         response = HttpResponse(status=200)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
         return response
+
+
+def _send_profile_email_verification(request: HttpRequest, secondary_email: ProfileEmail) -> None:
+    """Email a confirm-ownership link for a newly-added (or re-sent) secondary email.
+
+    Args:
+        request: The HTTP request (used to build an absolute verification URL).
+        secondary_email: The unverified ``ProfileEmail`` to send a link for.
+    """
+    import smtplib
+
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.loader import render_to_string
+    from django.urls import reverse
+
+    verify_url = request.build_absolute_uri(
+        reverse("profile.email.verify", args=[str(secondary_email.verification_token)]),
+    )
+    context = {"profile": secondary_email.profile, "verify_url": verify_url}
+    subject = "Confirm your email address for UrbanLens"
+    text_body = f"Hi {secondary_email.profile.username},\n\nConfirm this email address so it can be used to find your UrbanLens account and to log in:\n{verify_url}\n\nIf you didn't request this, you can ignore this email.\n\n- UrbanLens"
+    html_body = render_to_string("dashboard/email/verify_profile_email.html", context)
+
+    try:
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[secondary_email.email])
+        msg.attach_alternative(html_body, "text/html")
+        msg.send()
+    except (smtplib.SMTPException, OSError):
+        logger.exception("Failed to send profile email verification to %s", secondary_email.email)
+
+
+class ProfileEmailVerifyView(View):
+    """Click-through from a secondary-email confirmation link (no login required).
+
+    Anyone holding the emailed link can confirm ownership of that inbox, the
+    same way the initial signup verification link works - the visitor may not
+    be logged in as the owning profile at the time they click it.
+    """
+
+    def get(self, request: HttpRequest, token) -> HttpResponse:
+        from django.contrib import messages
+        from django.db import IntegrityError
+
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        secondary_email = ProfileEmail.objects.filter(verification_token=token).select_related("profile").first()
+        if not secondary_email:
+            messages.error(request, "That verification link is invalid or has already been used.")
+        elif secondary_email.is_verified:
+            messages.info(request, f"{secondary_email.email} is already verified.")
+        else:
+            try:
+                secondary_email.mark_verified()
+            except IntegrityError:
+                messages.error(request, "That email address is already verified on another account.")
+            else:
+                # Deliver any friend requests + visit suggestions that were
+                # waiting on this address (visit participants tagged by email
+                # before this account claimed it).
+                from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites
+
+                process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
+                messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
+        return redirect("profile.edit")
 
 
 def _authenticated_profile(request: HttpRequest) -> Profile:

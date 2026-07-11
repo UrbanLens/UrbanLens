@@ -26,8 +26,6 @@ class PinFilter(django_filters.FilterSet):
             "categories",
             "priority",
             "last_visited",
-            "latitude",
-            "longitude",
             "rated",
             "rated_over",
             "rated_under",

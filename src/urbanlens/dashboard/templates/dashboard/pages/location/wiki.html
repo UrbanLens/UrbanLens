@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -20,7 +21,7 @@
             <span class="wiki-badge">
                 <i class="material-symbols-outlined">public</i> Community Wiki
             </span>
-            <h1 class="wiki-title">{{ location.name }}</h1>
+            <h1 class="wiki-title">{{ wiki.name }}</h1>
             {% if location.address %}
             <p class="wiki-address">
                 <i class="material-symbols-outlined">place</i>
@@ -31,16 +32,35 @@
         <div class="wiki-banner-right">
             <div class="wiki-notice">
                 <i class="material-symbols-outlined">public</i>
-                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
+                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
             </div>
             <div class="wiki-banner-actions">
+                {# Lists collapsed sections for this wiki and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
+                <div class="collapse-restore" data-collapse-restore-scope="wiki" hidden>
+                    <button type="button" class="btn btn--secondary btn--sm collapse-restore-toggle" aria-haspopup="true">
+                        <i class="material-symbols-outlined">visibility</i>
+                        Hidden sections
+                        <span class="badge collapse-restore-count">0</span>
+                    </button>
+                    <div class="collapse-restore-menu"></div>
+                </div>
                 <button type="button" class="wiki-edit-btn btn btn--primary"
                         onclick="document.getElementById('wiki-edit-dialog').showModal()">
                     <i class="material-symbols-outlined">edit_note</i>
                     Suggest edits
                 </button>
+                {% if can_delete_wiki %}
+                <button type="button" class="wiki-delete-btn btn btn--danger"
+                        hx-delete="{% url 'location.wiki.delete' location.slug %}"
+                        hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
+                        hx-target="body"
+                        title="No one else has viewed this wiki yet, so you can still delete it.">
+                    <i class="material-symbols-outlined">delete</i>
+                    Delete wiki
+                </button>
+                {% endif %}
                 {% if user_pin %}
-                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
+                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary">
                     <i class="material-symbols-outlined">arrow_back</i> Back to my pin
                 </a>
                 {% endif %}
@@ -62,15 +82,15 @@
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.name }}</a>
+                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.display_name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
                             hx-target="#pin-overview-stub"
                             hx-swap="none"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
-                            title="Switch your pin to {{ other.name }}">
+                            hx-on::after-request="if(event.detail.successful){toastr.success('Switched to {{ other.display_name|escapejs }}');document.getElementById('wiki-location-conflict').remove();}"
+                            title="Switch your pin to {{ other.display_name }}">
                         Switch
                     </button>
                     {% endif %}
@@ -90,39 +110,39 @@
     <div class="wiki-body">
 
         {# -- Description / dates (if any) --------------------------------- #}
-        {% if location.description or location.date_abandoned or location.effective_date_last_active %}
+        {% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
             <div class="card-header">
                 <i class="material-symbols-outlined">info</i>
                 <h2>About</h2>
             </div>
             <div class="card__body wiki-meta-body">
-                {% if location.description %}
-                <p id="wiki-field-description" class="wiki-description">{{ location.description }}</p>
+                {% if wiki.description %}
+                <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
                 {% endif %}
-                {% if location.date_abandoned or location.effective_date_last_active %}
+                {% if wiki.date_abandoned or wiki.effective_date_last_active %}
                 <div class="wiki-meta-dates">
-                    {% if location.date_abandoned %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ location.date_abandoned|date:"M j, Y" }}</span>
+                    {% if wiki.date_abandoned %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
                     {% endif %}
-                    {% if location.effective_date_last_active %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ location.effective_date_last_active|date:"M j, Y" }}</span>
+                    {% if wiki.effective_date_last_active %}
+                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ wiki.effective_date_last_active|date:"M j, Y" }}</span>
                     {% endif %}
                 </div>
                 {% endif %}
                 {# Security indicators - only shown when at least one is non-unknown #}
-                {% if location.fences != "unknown" or location.alarms != "unknown" or location.cameras != "unknown" or location.security != "unknown" or location.signs != "unknown" or location.vps != "unknown" or location.plywood != "unknown" or location.locked != "unknown" %}
+                {% if wiki.fences != "unknown" or wiki.alarms != "unknown" or wiki.cameras != "unknown" or wiki.security != "unknown" or wiki.signs != "unknown" or wiki.vps != "unknown" or wiki.plywood != "unknown" or wiki.locked != "unknown" %}
                 <div class="security-indicators">
                     <span class="security-indicators-label">Security</span>
                     <div class="security-chips">
-                        {% if location.fences != "unknown" %}<span class="security-chip security-chip--{{ location.fences }}">Fences: {{ location.get_fences_display }}</span>{% endif %}
-                        {% if location.alarms != "unknown" %}<span class="security-chip security-chip--{{ location.alarms }}">Alarms: {{ location.get_alarms_display }}</span>{% endif %}
-                        {% if location.cameras != "unknown" %}<span class="security-chip security-chip--{{ location.cameras }}">Cameras: {{ location.get_cameras_display }}</span>{% endif %}
-                        {% if location.security != "unknown" %}<span class="security-chip security-chip--{{ location.security }}">Security: {{ location.get_security_display }}</span>{% endif %}
-                        {% if location.signs != "unknown" %}<span class="security-chip security-chip--{{ location.signs }}">Signs: {{ location.get_signs_display }}</span>{% endif %}
-                        {% if location.vps != "unknown" %}<span class="security-chip security-chip--{{ location.vps }}">VPS: {{ location.get_vps_display }}</span>{% endif %}
-                        {% if location.plywood != "unknown" %}<span class="security-chip security-chip--{{ location.plywood }}">Plywood: {{ location.get_plywood_display }}</span>{% endif %}
-                        {% if location.locked != "unknown" %}<span class="security-chip security-chip--{{ location.locked }}">Locked: {{ location.get_locked_display }}</span>{% endif %}
+                        {% if wiki.fences != "unknown" %}<span class="security-chip security-chip--{{ wiki.fences }}">Fences: {{ wiki.get_fences_display }}</span>{% endif %}
+                        {% if wiki.alarms != "unknown" %}<span class="security-chip security-chip--{{ wiki.alarms }}">Alarms: {{ wiki.get_alarms_display }}</span>{% endif %}
+                        {% if wiki.cameras != "unknown" %}<span class="security-chip security-chip--{{ wiki.cameras }}">Cameras: {{ wiki.get_cameras_display }}</span>{% endif %}
+                        {% if wiki.security != "unknown" %}<span class="security-chip security-chip--{{ wiki.security }}">Security: {{ wiki.get_security_display }}</span>{% endif %}
+                        {% if wiki.signs != "unknown" %}<span class="security-chip security-chip--{{ wiki.signs }}">Signs: {{ wiki.get_signs_display }}</span>{% endif %}
+                        {% if wiki.vps != "unknown" %}<span class="security-chip security-chip--{{ wiki.vps }}">VPS: {{ wiki.get_vps_display }}</span>{% endif %}
+                        {% if wiki.plywood != "unknown" %}<span class="security-chip security-chip--{{ wiki.plywood }}">Plywood: {{ wiki.get_plywood_display }}</span>{% endif %}
+                        {% if wiki.locked != "unknown" %}<span class="security-chip security-chip--{{ wiki.locked }}">Locked: {{ wiki.get_locked_display }}</span>{% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -138,8 +158,13 @@
             </div>
             <div class="card__body wiki-stats-grid">
                 <div class="wiki-stat">
-                    <span class="wiki-stat-value">{{ pin_count }}</span>
-                    <span class="wiki-stat-label">{{ pin_count|pluralize:"user has,users have" }} this pinned</span>
+                    {% if pin_count_display.is_low %}
+                    <span class="wiki-stat-value wiki-stat-value--low">Fewer than 3</span>
+                    <span class="wiki-stat-label">users have this pinned</span>
+                    {% else %}
+                    <span class="wiki-stat-value" data-tooltip="This number is approximate, to protect user privacy.">about {{ pin_count_display.value }}</span>
+                    <span class="wiki-stat-label">users have this pinned</span>
+                    {% endif %}
                 </div>
                 {% if first_pinned %}
                 <div class="wiki-stat">
@@ -147,6 +172,19 @@
                     <span class="wiki-stat-label">First pinned</span>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+
+        {# -- Community ratings: composite + your own vote, per stat field ---- #}
+        <div class="card wiki-card wiki-ratings" data-collapse-scope="wiki" data-collapse-section="ratings">
+            <div class="card-header">
+                <i class="material-symbols-outlined">groups</i>
+                <h2>Community Ratings</h2>
+            </div>
+            <div class="card__body wiki-ratings-grid">
+                {% for stat in wiki_stats %}
+                {% include "dashboard/partials/pins/_wiki_stat_rating_item.html" with wiki=wiki field=stat.field label=stat.label help=stat.help modifier=stat.modifier wide=stat.wide my_vote=stat.my_vote composite=stat.composite %}
+                {% endfor %}
             </div>
         </div>
 
@@ -163,63 +201,68 @@
 
         {# Badges/categories hidden: global categories no longer exist #}
 
-        {# -- Aliases ------------------------------------------------------- #}
-        <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             id="location-aliases-panel"
-             class="card wiki-card aliases-panel">
-            <div class="card-header">
-                <i class="material-symbols-outlined">label_important</i>
-                <span>Aliases</span>
-            </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
+        {# -- Aliases / Photos / Comments / Edit history: half-width on wide screens #}
+        <div class="wiki-body-secondary">
 
-        {# -- Photo gallery -------------------------------------------------- #}
-        <div id="wiki-gallery-panel"
-             hx-get="{% url 'location.wiki.gallery' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
+            {# -- Aliases ----------------------------------------------------- #}
+            <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','aliases')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-aliases-panel"
+                 class="card wiki-card aliases-panel"
+                 data-collapse-scope="wiki" data-collapse-section="aliases">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">label_important</i>
+                    <span>Aliases</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
+            {# -- Photo gallery ------------------------------------------------ #}
+            <div id="wiki-gallery-panel" class="card"
+                 hx-get="{% url 'location.wiki.gallery' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','gallery')], ul:unhide"
+                 hx-swap="outerHTML"
+                 data-collapse-scope="wiki" data-collapse-section="gallery">
                 <div class="card-header">
                     <i class="material-symbols-outlined">photo_library</i>
                     <span>Photos</span>
                 </div>
                 <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
-        </div>
 
-        {# -- Comments ------------------------------------------------------- #}
-        <div id="comment-panel"
-             hx-get="{% url 'location.wiki.comments' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             class="card wiki-card">
-            <div class="card-header">
-                <i class="material-symbols-outlined">chat</i>
-                <h2>Discussion</h2>
+            {# -- Comments ------------------------------------------------------ #}
+            <div id="comment-panel"
+                 hx-get="{% url 'location.wiki.comments' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','comments')], ul:unhide"
+                 hx-swap="outerHTML"
+                 class="card wiki-card"
+                 data-collapse-scope="wiki" data-collapse-section="comments">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">chat</i>
+                    <h2>Discussion</h2>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
 
-        {# -- Tabs: Details / Edit history ---------------------------------- #}
-        <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
-            <div class="wiki-tabs">
-                <button class="wiki-tab wiki-tab--active" data-tab="history"
-                        hx-get="{% url 'location.wiki.history' location.slug %}"
-                        hx-target="#wiki-tab-content"
-                        hx-swap="innerHTML"
-                        hx-trigger="click, load">
-                    <i class="material-symbols-outlined">history</i> Edit History
-                </button>
-            </div>
-            <div id="wiki-tab-content" class="card__body wiki-tab-content">
-                <div class="wiki-loading">
-                    <i class="material-icons spin">autorenew</i> Loading...
+            {# -- Edit history -------------------------------------------------- #}
+            <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">history</i>
+                    <h2>Edit History</h2>
+                </div>
+                <div id="wiki-tab-content"
+                     class="card__body wiki-tab-content"
+                     hx-get="{% url 'location.wiki.history' location.slug %}"
+                     hx-trigger="load[!window.ulSectionCollapsed('wiki','history')], ul:unhide"
+                     hx-swap="innerHTML">
+                    <div class="wiki-loading">
+                        <i class="material-icons spin">autorenew</i> Loading...
+                    </div>
                 </div>
             </div>
-        </div>
+
+        </div>{# end wiki-body-secondary #}
 
     </div>{# end wiki-body #}
 
@@ -234,32 +277,22 @@
             {% csrf_token %}
             <div class="form-row">
                 <label for="wiki-name">Name</label>
-                <input type="text" id="wiki-name" name="name" value="{{ location.name }}" required>
+                <input type="text" id="wiki-name" name="name" value="{{ wiki.name }}" required>
             </div>
             <div class="form-row">
                 <label for="wiki-description">Description</label>
-                <textarea id="wiki-description" name="description" rows="4">{{ location.description|default:"" }}</textarea>
-            </div>
-            <div class="form-row">
-                <label for="wiki-latitude">Latitude</label>
-                <input type="number" id="wiki-latitude" name="latitude" step="0.000001"
-                       value="{{ location.latitude }}" required>
-            </div>
-            <div class="form-row">
-                <label for="wiki-longitude">Longitude</label>
-                <input type="number" id="wiki-longitude" name="longitude" step="0.000001"
-                       value="{{ location.longitude }}" required>
+                <textarea id="wiki-description" name="description" rows="4">{{ wiki.description|default:"" }}</textarea>
             </div>
             <div class="form-row form-row--two-col">
                 <div>
                     <label for="wiki-date-abandoned">Date Abandoned</label>
                     <input type="date" id="wiki-date-abandoned" name="date_abandoned"
-                           value="{{ location.date_abandoned|date:'Y-m-d'|default:'' }}">
+                           value="{{ wiki.date_abandoned|date:'Y-m-d'|default:'' }}">
                 </div>
                 <div>
                     <label for="wiki-date-last-active">Date Last Active</label>
                     <input type="date" id="wiki-date-last-active" name="date_last_active"
-                           value="{{ location.date_last_active|date:'Y-m-d'|default:'' }}">
+                           value="{{ wiki.date_last_active|date:'Y-m-d'|default:'' }}">
                 </div>
             </div>
             <details class="form-section-details" open>
@@ -278,8 +311,8 @@
                 </div>
             </details>
             <div class="form-actions">
-                <button type="submit" class="wiki-action-btn wiki-action-btn btn--primary">Save changes</button>
-                <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="submit" class="btn btn--primary">Save changes</button>
+                <button type="button" class="btn btn--secondary" onclick="this.closest('dialog').close()">Cancel</button>
             </div>
         </form>
     </dialog>
@@ -295,9 +328,24 @@
 {% url 'location.wiki.detail_pins.json' location.slug as detail_pins_json_url %}
 {% url 'location.wiki.detail_pins.panel' location.slug as detail_pin_create_url %}
 {% url 'location.wiki.detail_pin.edit' location.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
-{% url 'location.wiki.bbox' location.slug as boundary_url %}
+{% url 'location.wiki.boundary' location.slug as boundary_url %}
 {% url 'location.wiki.gallery.json' location.slug as photo_gallery_json_url %}
-{% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=location.latitude map_center_lng=location.longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
+<div id="map-annotations-config" hidden
+     data-map-center-lat="{{ location.latitude }}"
+     data-map-center-lng="{{ location.longitude }}"
+     data-location-slug="{{ location.slug }}"
+     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-create-url="{{ markup_create_url }}"
+     data-markup-edit-url-template="{{ markup_edit_url_template }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pin-create-url="{{ detail_pin_create_url }}"
+     data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-boundary-url="{{ boundary_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
+     data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+<script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
@@ -321,7 +369,7 @@
                     if (dd) dd.textContent = data.description;
                 }
                 // Refresh the history tab.
-                htmx.trigger('[data-tab="history"]', 'click');
+                htmx.trigger('#wiki-tab-content', 'load');
             } else {
                 toastr.error(resp.error || 'Failed to save changes.');
             }
@@ -331,6 +379,37 @@
 
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = csrftoken;
+    });
+
+    // -- Pin the community-wiki notice to the corner once the header scrolls away --
+    (function initWikiNoticeScroll() {
+        const notice = document.querySelector('.wiki-notice');
+        const header = document.querySelector('.app-nav');
+        if (!notice || !header) return;
+        let ticking = false;
+        function update() {
+            ticking = false;
+            notice.classList.toggle('wiki-notice--pinned', header.getBoundingClientRect().bottom <= 0);
+        }
+        window.addEventListener('scroll', function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+        }, { passive: true });
+        update();
+    }());
+
+    // -- "Use this name" from the aliases panel -------------------------------
+    document.body.addEventListener('wikiRenamed', (event) => {
+        const name = event.detail && event.detail.name;
+        if (!name) return;
+        document.querySelectorAll('.wiki-title').forEach((el) => { el.textContent = name; });
+        const nameField = document.getElementById('wiki-field-name');
+        if (nameField) nameField.textContent = name;
+        const nameInput = document.getElementById('wiki-name');
+        if (nameInput) nameInput.value = name;
+        // Refresh the history tab so the rename edit shows up.
+        htmx.trigger('#wiki-tab-content', 'load');
     });
 
 
@@ -343,7 +422,7 @@
             {
                 id: 'shared-edits', icon: 'edit_note', target: '.wiki-edit-btn',
                 eyebrow: 'Community page', title: 'Suggest improvements that everyone can use',
-                body: 'Names, descriptions, dates, coordinates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
+                body: 'Names, descriptions, dates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
                 button: 'Suggest an edit', watchSelector: '.wiki-edit-btn',
                 action: function () { document.querySelector('.wiki-edit-btn')?.click(); },
                 ready: function () { return !!document.querySelector('.wiki-edit-btn'); },

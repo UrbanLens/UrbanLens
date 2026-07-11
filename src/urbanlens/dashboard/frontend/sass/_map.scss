@@ -80,6 +80,20 @@
     }
 }
 
+// Multi-select tool: selected-marker ring + select-mode cursor.
+#map.select-mode {
+    cursor: crosshair;
+}
+
+.map-pin-icon-wrap.is-selected {
+    .map-pin-icon,
+    .map-pin-custom-img,
+    .map-pin-emoji,
+    .map-pin-with-circle {
+        filter: drop-shadow(0 0 0 3px $color-blue-500) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    }
+}
+
 .map-pin-custom-img {
     width: 26px;
     height: 26px;
@@ -158,6 +172,16 @@
         color: $color-blue-600;
     }
 
+    // Boundary-type edit buttons match their layer colors: property boundaries
+    // draw red, building footprints draw blue.
+    &--boundary {
+        color: $color-red-600;
+    }
+
+    &--building {
+        color: $color-blue-600;
+    }
+
     &-group {
         display: flex;
         gap: .3rem;
@@ -186,8 +210,8 @@
         overflow: hidden;
     }
     &--details {
-        top: 6em;
-        left: 10px;
+        top: 1.5rem;
+        left: 4rem;
     }
 
     // One consistent create/edit panel (markup annotations, detail pins): docked
@@ -462,15 +486,6 @@
     &.no-gps {
         color: $color-red-300;
     }
-}
-
-.photo-panel-hint {
-    display: block;
-    padding: .18rem .3rem;
-    font-size: .62rem;
-    color: var(--ul-grey-6);
-    @include truncate;
-    background: rgba(255, 255, 255, .85);
 }
 
 .photo-panel-empty {
@@ -1122,7 +1137,7 @@
 
     &.apdlg-badge-sugg-create {
         border-top: 1px solid var(--ul-grey-1a);
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         font-style: italic;
         font-size: .82rem;
         .material-symbols-outlined,
@@ -1207,7 +1222,7 @@
     align-items: center;
     gap: .4rem;
     font-size: .875rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     cursor: pointer;
     user-select: none;
 
@@ -2044,23 +2059,26 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
-.addr-search-input {
-    flex: 1;
-    min-width: 0;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--ul-grey-8);
-    font-size: 0.78rem;
-    padding: 6px 0;
+// Specificity needed to override border in base. TODO will fix border declaration.
+div.container .addr-search-bar {
+    input.addr-search-input {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--ul-grey-8);
+        font-size: 0.78rem;
+        padding: 6px 0;
 
-    &::placeholder {
-        color: var(--ul-grey-6);
-    }
+        &::placeholder {
+            color: var(--ul-grey-6);
+        }
 
-    @include up($breakpoint-sm) {
-        font-size: 0.84rem;
-        padding: 10px 0;
+        @include up($breakpoint-sm) {
+            font-size: 0.84rem;
+            padding: 10px 0;
+        }
     }
 }
 
@@ -2629,6 +2647,79 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     overflow: hidden;
 
     &[hidden] { display: none; }
+}
+
+// Multi-select tool: floating bottom-center action bar.
+.bulk-select-toolbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space-sm;
+    align-items: center;
+    background: rgba(18, 22, 30, .96);
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: $radius-md;
+    padding: $space-sm $space-md;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
+    max-width: min(560px, 92vw);
+
+    &[hidden] { display: none; }
+
+    .bulk-select-count {
+        color: rgba(255, 255, 255, .7);
+        font-size: .82rem;
+        margin-right: $space-sm;
+        white-space: nowrap;
+    }
+
+    .bulk-select-close {
+        margin-left: $space-sm;
+    }
+}
+
+// Undo action embedded inside the bulk-delete toastr message.
+.toast-undo-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, .5);
+    border-radius: $radius-sm;
+    color: inherit;
+    font-weight: 600;
+    padding: .15rem .6rem;
+    margin-left: .4rem;
+    cursor: pointer;
+
+    &:hover {
+        background: rgba(255, 255, 255, .15);
+    }
+
+    &:disabled {
+        opacity: .5;
+        cursor: default;
+    }
+}
+
+// Bulk delete confirm dialog: compact so highlighted markers stay visible around it.
+.bulk-delete-dialog {
+    width: min(420px, 92vw);
+}
+
+.bulk-delete-pin-list {
+    max-height: 160px;
+    overflow-y: auto;
+    margin: 0 0 .75rem;
+    padding: 0 0 0 1.1rem;
+    font-size: .88rem;
+}
+
+.bulk-delete-warning {
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+    margin: 0 0 .75rem;
 }
 
 .place-info-header {
@@ -3393,6 +3484,30 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     cursor: pointer;
 }
 
+// Inline variant: docks the panel inside a .map-bottom-controls flex row
+// (pin detail, wiki, safety maps) instead of floating it over the map itself.
+// The flyout menu still positions against the panel, opening up/right.
+.map-layers-panel--inline {
+    position: relative;
+    bottom: auto;
+    left: auto;
+}
+
+// Compact strip variant of the shared layers component
+// ({% map_layers_panel variant="strip" %}): a small icon-button row used
+// inside dialogs. Inside the comment-map toolbars it dissolves into the
+// toolbar row so the layer buttons align with the drawing tools.
+.map-layers-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.comment-map-composer-toolbar .map-layers-strip,
+.comment-map-view-toolbar .map-layers-strip {
+    display: contents;
+}
+
 .map-layers-toggle {
     display: flex;
     align-items: center;
@@ -3408,6 +3523,14 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     font-weight: 600;
     color: var(--ul-grey-8);
     opacity: 0.85;
+    box-sizing: border-box;
+    overflow: hidden;
+    // Caps to whichever of the map's own width/height is smaller (via
+    // @include map-query-container on the map wrapper), so the toggle keeps
+    // shrinking when the MAP - not the browser viewport - is squeezed into
+    // a short OR narrow container.
+    max-width: clamp(40px, 22cqmin, 90px);
+    max-height: clamp(34px, 22cqmin, 74px);
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
@@ -3416,7 +3539,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 
     .map-layers-toggle-icon {
-        font-size: 1.1rem;
+        font-size: clamp(.85rem, 6cqmin, 1.1rem);
         color: var(--ul-grey-6);
         transition: color .2s ease;
     }
@@ -3425,8 +3548,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         flex-direction: column;
         gap: 5px;
         padding: 6px 4px 5px;
-        min-width: 62px;
-        font-size: .67rem;
+        min-width: 0;
+        font-size: clamp(.55rem, 3cqmin, .67rem);
 
         .map-layers-toggle-thumb {
             display: block;
@@ -3457,7 +3580,7 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 3px;
-    max-width: calc(100vw - 20px);
+    max-width: calc(100cqw - 20px);
     opacity: 0;
     transform: translateY(10px) scale(0.96);
     pointer-events: none;
@@ -3520,12 +3643,19 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     text-align: center;
     transition: background .12s, color .12s, border-color .12s;
     min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    // Same cqmin-based cap as the toggle button, so the whole menu shrinks
+    // in step with the toggle when either the map's width or height is tight.
+    max-width: clamp(36px, 18cqmin, 80px);
+    max-height: clamp(40px, 20cqmin, 90px);
 
     @include up($breakpoint-xs) {
         gap: 5px;
         padding: 6px 4px 5px;
-        font-size: .67rem;
-        min-width: 62px;
+        font-size: clamp(.55rem, 3cqmin, .67rem);
+        min-width: 0;
+        max-width: clamp(44px, 18cqmin, 62px);
     }
 
     &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
@@ -3543,23 +3673,23 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .map-layer-thumb {
     display: block;
     position: relative;
-    width: 30px;
-    height: 30px;
+    width: clamp(22px, 14cqmin, 30px);
+    height: clamp(22px, 14cqmin, 30px);
     border-radius: 5px;
     overflow: hidden;
     flex-shrink: 0;
     background: var(--ul-grey-2);
 
     @include up($breakpoint-xs) {
-        width: 54px;
-        height: 54px;
+        width: clamp(30px, 14cqmin, 54px);
+        height: clamp(30px, 14cqmin, 54px);
         border-radius: 7px;
     }
 
-    
+
     @include up($breakpoint-md) {
-        width: 5rem;
-        height: 5rem;
+        width: clamp(40px, 16cqmin, 5rem);
+        height: clamp(40px, 16cqmin, 5rem);
         border-radius: 7px;
     }
 
@@ -3579,11 +3709,11 @@ details.fp-accordion-item[open] .fp-acc-arrow {
         justify-content: center;
         .material-symbols-outlined,
         .material-icons {
-            font-size: 1rem;
+            font-size: clamp(.75rem, 7cqmin, 1rem);
             color: var(--ul-grey-7);
 
             @include up($breakpoint-xs) {
-                font-size: 1.6rem;
+                font-size: clamp(1rem, 8cqmin, 1.6rem);
             }
         }
     }
@@ -3608,14 +3738,14 @@ details.fp-accordion-item[open] .fp-acc-arrow {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1rem;
+            font-size: clamp(.75rem, 7cqmin, 1rem);
             color: #fff;
             text-shadow: 0 2px 10px rgba(0, 0, 0, .95);
             pointer-events: none;
             z-index: 2;
 
             @include up($breakpoint-xs) {
-                font-size: 2rem;
+                font-size: clamp(1.1rem, 9cqmin, 2rem);
             }
         }
     }
@@ -3934,7 +4064,23 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     opacity: 0.8;
     transition: opacity .15s, box-shadow .15s;
 
-    &:hover, &:focus-within { opacity: 1; }
+    #address-search-input {
+        background-color: transparent;
+        border-color: transparent;
+        box-shadow: none;
+
+        &:active,
+        &:focus,
+        &:hover {
+            background-color: transparent;
+            border-color: transparent;
+            box-shadow: none;
+        }
+    }
+
+    &:hover, &:focus-within { 
+        opacity: 1; 
+    }
 
     // Move the bar to align with the zoom controls on desktop
     @include up($breakpoint-sm) {

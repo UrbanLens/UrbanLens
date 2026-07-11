@@ -10,7 +10,8 @@ Context:
   checkin      - SafetyCheckin instance (when context_type == "safety")
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
-     data-collapse-scope="{{ context_type }}" data-collapse-section="gallery">
+     data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
+     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
@@ -30,6 +31,10 @@ Context:
         data-lat="{{ img.latitude|default:'' }}"
         data-lng="{{ img.longitude|default:'' }}"
         data-mine="{% if img.profile == profile %}true{% else %}false{% endif %}"
+        data-author="{{ img.author|default:'' }}"
+        data-copyright="{{ img.copyright|default:'' }}"
+        data-source-url="{{ img.source_url|default:'' }}"
+        data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
@@ -84,6 +89,12 @@ Context:
       <i class="material-symbols-outlined">chevron_right</i>
     </button>
     <p id="lightbox-caption" class="lightbox-caption"></p>
+    <div id="lightbox-meta" class="lightbox-meta">
+      <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
+      <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+      <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
+      <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
+    </div>
   </div>
 </dialog>
 
@@ -115,6 +126,10 @@ Context:
       lat: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
       lng: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
       mine: el.dataset.mine === 'true',
+      author: el.dataset.author || '',
+      copyright: el.dataset.copyright || '',
+      sourceUrl: el.dataset.sourceUrl || '',
+      takenAt: el.dataset.takenAt || '',
     };
   });
   var _lightboxIdx = 0;
@@ -124,8 +139,17 @@ Context:
   var _dragDepth = 0;
   var _overlay   = document.getElementById('gallery-drop-overlay');
 
+  // Drags that originate inside the page (photo thumbnails, panel items, etc.)
+  // must never open the drop-to-upload overlay - browsers attach the image file
+  // to such drags, so treating them as uploads would re-upload an existing
+  // photo. OS file drags never fire dragstart inside the page, which is what
+  // distinguishes them.
+  var _internalDrag = false;
+  document.addEventListener('dragstart', function () { _internalDrag = true; });
+  document.addEventListener('dragend', function () { _internalDrag = false; });
+
   function _isFilesDrag(e) {
-    return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    return !_internalDrag && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
   }
 
   document.addEventListener('dragenter', function (e) {
@@ -143,6 +167,7 @@ Context:
   // Drop anywhere outside the overlay hides it without uploading
   document.addEventListener('drop', function (e) {
     _dragDepth = 0;
+    _internalDrag = false;
     if (_overlay) _overlay.hidden = true;
   });
 
@@ -154,12 +179,14 @@ Context:
     }
   });
 
-  // Drop ON the overlay uploads the files
+  // Drop ON the overlay uploads the files (never for an in-page drag - the
+  // overlay shouldn't be visible then, but guard against races anyway).
   window._galleryOverlayDrop = function (e) {
     e.preventDefault();
     e.stopPropagation();
     _dragDepth = 0;
     if (_overlay) _overlay.hidden = true;
+    if (_internalDrag) { _internalDrag = false; return; }
     galleryHandleFiles(e.dataTransfer.files);
   };
 
@@ -172,29 +199,39 @@ Context:
     var total = files.length;
     var done = 0;
 
+    function _finishOne() {
+      done++;
+      if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+      if (done === total) {
+        setTimeout(function () {
+          if (progress) progress.hidden = true;
+          if (bar) bar.style.width = '0';
+        }, 800);
+      }
+    }
+
     Array.from(files).forEach(function (file) {
       var fd = new FormData();
       fd.append('image', file);
       fd.append('csrfmiddlewaretoken', CSRF_TOKEN);
 
       fetch(UPLOAD_URL, { method: 'POST', body: fd })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          // Surface server-side rejections (e.g. 409 duplicate photo) as errors.
+          return r.json().catch(function () { return {}; }).then(function (data) {
+            if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+          });
+        })
         .then(function (img) {
-          done++;
-          if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+          _finishOne();
           _addItemToGrid(img);
           if (window._galleryAddMarker) window._galleryAddMarker(img);
-          if (done === total) {
-            setTimeout(function () {
-              if (progress) progress.hidden = true;
-              if (bar) bar.style.width = '0';
-            }, 800);
-          }
           var empty = document.getElementById('gallery-empty');
           if (empty) empty.remove();
         })
         .catch(function (err) {
-          done++;
+          _finishOne();
           if (window.toastr) toastr.error('Upload failed: ' + (err.message || 'unknown error'));
         });
     });
@@ -210,6 +247,10 @@ Context:
     li.dataset.lat = img.latitude !== null ? img.latitude : '';
     li.dataset.lng = img.longitude !== null ? img.longitude : '';
     li.dataset.mine = 'true';
+    li.dataset.author = img.author || '';
+    li.dataset.copyright = img.copyright || '';
+    li.dataset.sourceUrl = img.source_url || '';
+    li.dataset.takenAt = img.taken_at || '';
     li.addEventListener('mouseenter', function () { galleryHover(img.id, true); });
     li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
 
@@ -237,7 +278,10 @@ Context:
     }
 
     // Keep internal list in sync.
-    _items.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
+    _items.push({
+      id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
+      author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
+    });
   }
 
   // -- Delete -----------------------------------------------------------------
@@ -258,9 +302,20 @@ Context:
   };
 
   // -- Lightbox ---------------------------------------------------------------
-  window.galleryOpenLightbox = function (imgId) {
+  // `fallback` ({url, caption}) covers photos not on the currently rendered
+  // (paginated) gallery page - e.g. opened from a map thumbnail marker.
+  window.galleryOpenLightbox = function (imgId, fallback) {
     _lightboxIdx = _items.findIndex(function (i) { return i.id === imgId; });
-    if (_lightboxIdx < 0) _lightboxIdx = 0;
+    if (_lightboxIdx < 0) {
+      _lightboxIdx = 0;
+      if (fallback && fallback.url) {
+        document.getElementById('lightbox-img').src = fallback.url;
+        document.getElementById('lightbox-caption').textContent = fallback.caption || '';
+        _setLightboxMeta({});
+        document.getElementById('gallery-lightbox').showModal();
+        return;
+      }
+    }
     _showLightbox();
     document.getElementById('gallery-lightbox').showModal();
   };
@@ -277,6 +332,26 @@ Context:
     var el = document.getElementById('gallery-item-' + item.id);
     var caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
     document.getElementById('lightbox-caption').textContent = caption;
+    _setLightboxMeta(item);
+  }
+
+  function _setLightboxMeta(item) {
+    var authorEl = document.getElementById('lightbox-author');
+    var takenEl = document.getElementById('lightbox-taken-at');
+    var copyrightEl = document.getElementById('lightbox-copyright');
+    var sourceEl = document.getElementById('lightbox-source-link');
+    if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
+    if (takenEl) {
+      var takenText = '';
+      if (item.takenAt) { var d = new Date(item.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+      takenEl.textContent = takenText;
+      takenEl.hidden = !takenText;
+    }
+    if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
+    if (sourceEl) {
+      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
+      else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
+    }
   }
 
   // -- Map hover sync ---------------------------------------------------------
@@ -285,12 +360,19 @@ Context:
   };
 
   // -- Reposition callback (called from map panel when user finishes dragging) --
-  window.galleryRepositionImage = function (imgId, lat, lng) {
+  // `onError`, if given, is invoked with no args when the server rejects the
+  // move - the caller uses it to snap the marker back to its prior position.
+  window.galleryRepositionImage = function (imgId, lat, lng, onError) {
     fetch(REPOSITION_BASE + imgId + '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
       body: JSON.stringify({ latitude: lat, longitude: lng }),
-    }).then(function (r) { return r.json(); }).then(function (data) {
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
       var el = document.getElementById('gallery-item-' + imgId);
       if (el) {
         el.dataset.lat = data.latitude;
@@ -309,6 +391,9 @@ Context:
       }
       var item = _items.find(function (i) { return i.id === imgId; });
       if (item) { item.lat = data.latitude; item.lng = data.longitude; }
+    }).catch(function (err) {
+      if (window.toastr) toastr.error('Failed to reposition photo: ' + (err.message || 'unknown error'));
+      if (typeof onError === 'function') onError();
     });
   };
 })();

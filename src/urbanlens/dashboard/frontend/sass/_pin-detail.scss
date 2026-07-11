@@ -378,26 +378,62 @@
     .visit-item {
         display: flex;
         align-items: flex-start;
-        gap: .5rem;
-        padding: .5rem 1rem;
+        gap: .65rem;
+        padding: .7rem 1rem;
         border-bottom: 1px solid var(--ul-grey-1a);
+        transition: background .12s;
 
         &:last-child {
             border-bottom: none;
         }
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    // -- Leading circular source icon, doubling as a timeline marker --------
+    .visit-item-icon {
+        @include flex-center;
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        margin-top: .1rem;
+        border-radius: 50%;
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1.05rem;
+        }
+
+        &.visit-source--history { color: var(--ul-info, #3b82f6); }
+        &.visit-source--photo   { color: var(--ul-accent, #8b5cf6); }
+        &.visit-source--user,
+        &.visit-source--trip    { color: var(--ul-primary, #2563eb); }
+    }
+
+    // Column wrapper holding the date line, notes, participants, photos and map.
+    .visit-item-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+        min-width: 0;
     }
 
     .visit-item-main {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         gap: .5rem;
-        flex: 1;
         flex-wrap: wrap;
     }
 
     .visit-date {
-        font-weight: 500;
-        font-size: .88rem;
+        font-weight: 600;
+        font-size: .92rem;
+        color: var(--ul-grey-9);
     }
 
     .visit-time {
@@ -405,6 +441,17 @@
         color: var(--ul-grey-6);
     }
 
+    .visit-source-label {
+        font-size: .68rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--ul-grey-6);
+        background: var(--ul-grey-1a);
+        padding: .08rem .45rem;
+        border-radius: 999px;
+    }
+
+    // Kept for the pending-suggestion rows which still use the inline badge.
     .visit-source {
         font-size: .75rem;
         color: var(--ul-grey-6);
@@ -414,28 +461,186 @@
     }
 
     .visit-notes {
-        font-size: .82rem;
-        color: var(--ul-grey-7);
-        margin-top: .2rem;
-        padding: 0 1rem .35rem;
+        font-size: .86rem;
+        line-height: 1.4;
+        color: var(--ul-grey-8);
+        white-space: pre-wrap;
+        word-break: break-word;
     }
 
     .visit-participants {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
         font-size: .8rem;
         color: var(--ul-grey-6);
-        font-style: italic;
-        margin-top: .2rem;
-        padding: 0 1rem .35rem;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: .95rem;
+        }
+    }
+
+    .visit-participant-avatars {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .visit-participant-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 2px solid var(--ul-grey-0);
+        background: $color-light-blue-100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: -6px;
+        flex-shrink: 0;
+
+        &:first-child {
+            margin-left: 0;
+        }
+    }
+
+    .visit-participant-avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .visit-participant-avatar-initial {
+        font-weight: 700;
+        font-size: .6rem;
+        color: $color-blue-500;
+        text-transform: uppercase;
+    }
+
+    // -- Attached-photo thumbnails on a visit row ---------------------------
+    .visit-photos {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        flex-wrap: wrap;
+        margin-top: .1rem;
+    }
+
+    .visit-photo-thumb {
+        display: block;
+        width: 52px;
+        height: 52px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--ul-grey-1a);
+        cursor: pointer;
+        transition: transform .1s, box-shadow .1s;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+        }
+    }
+
+    // -- Inline map preview on a visit row ----------------------------------
+    // (The shared thumbnail JS forces the thumb height inline, so we only
+    // constrain the width here to keep the preview compact.)
+    .visit-map-preview {
+        margin: .15rem 0 0;
+        max-width: 340px;
+    }
+
+    // Transparent full-cover button so a click anywhere on the small map opens
+    // the enlarged viewer (the thumb itself is pointer-events:none).
+    .visit-map-open {
+        position: absolute;
+        inset: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .visit-map-open-badge {
+        position: absolute;
+        bottom: .4rem;
+        right: .4rem;
+        @include flex-center;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, .9);
+        border: 1px solid var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+        backdrop-filter: blur(4px);
+        transition: background .1s;
+
+        .material-symbols-outlined,
+        .material-icons {
+            font-size: 1rem;
+        }
+    }
+
+    .visit-map-open:hover .visit-map-open-badge {
+        background: #fff;
+    }
+
+    // -- Edit / delete actions, revealed on row hover -----------------------
+    .visit-item-actions {
+        display: flex;
+        align-items: center;
+        gap: .1rem;
+        margin-left: auto;
+        opacity: 0;
+        transition: opacity .12s;
+    }
+
+    .visit-item:hover .visit-item-actions,
+    .visit-item-actions:focus-within {
+        opacity: 1;
+    }
+
+    .visit-edit-btn {
+        @include icon-btn(28px);
+        outline: none;
     }
 
     .visit-delete-btn {
-        @include icon-btn-danger(24px);
-        margin-left: auto;
+        @include icon-btn-danger(28px);
         outline: none;
 
         &:focus {
             outline: none;
         }
+    }
+}
+
+// The lazily-loaded edit form's placeholder while HTMX fetches it.
+.visit-edit-loading {
+    padding: 1.25rem 1rem;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-style: italic;
+}
+
+// -- Reference pin marker on visit maps (composer, thumbnail, viewer) --------
+.ul-ref-marker {
+    background: transparent;
+    border: none;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 30px;
+        line-height: 30px;
+        color: $danger-color;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
     }
 }
 
@@ -476,6 +681,189 @@
         gap: .35rem;
         font-size: .85rem;
         font-weight: 400;
+    }
+
+    .visit-participant-row {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+    }
+
+    // Per-participant "send them a visit suggestion" bell toggle.
+    .visit-participant-suggest {
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+        color: var(--ul-grey-5);
+
+        input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .material-symbols-outlined { font-size: 1rem; }
+
+        &:has(input:checked) { color: $color-indigo-500; }
+    }
+
+    // -- External (non-member) participants ---------------------------------
+    .visit-external-existing {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .85rem;
+        padding: .15rem 0;
+
+        .material-symbols-outlined { font-size: 1rem; }
+    }
+
+    .visit-external-chip {
+        font-size: .7rem;
+        font-weight: 600;
+        padding: .1rem .45rem;
+        border-radius: 999px;
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-6);
+    }
+
+    .visit-external-row {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        margin-bottom: .35rem;
+
+        input[type="text"],
+        input[type="email"] {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    .visit-external-invite {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        font-size: .78rem;
+        font-weight: 400;
+        white-space: nowrap;
+    }
+
+    .visit-external-add-btn {
+        align-self: flex-start;
+        margin-top: .25rem;
+    }
+
+    .visit-participants--external {
+        color: var(--ul-grey-6);
+        font-size: .82rem;
+    }
+
+    .visit-external-name { white-space: nowrap; }
+
+    .visit-external-invited-icon {
+        font-size: .85rem;
+        vertical-align: -2px;
+        color: $color-indigo-500;
+    }
+
+    // -- Existing-photo picker grid -----------------------------------------
+    .visit-photo-existing {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        max-height: 10rem;
+        overflow-y: auto;
+        padding: .1rem;
+    }
+
+    .visit-photo-pick {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        border-radius: 6px;
+        overflow: hidden;
+        cursor: pointer;
+        border: 2px solid transparent;
+
+        input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: filter .1s ease;
+        }
+
+        .visit-photo-pick-check {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--ul-primary-color);
+            color: #fff;
+            display: none;
+            align-items: center;
+            justify-content: center;
+
+            i {
+                font-size: 14px;
+            }
+        }
+
+        &:has(input:checked) {
+            border-color: var(--ul-primary-color);
+
+            .visit-photo-pick-check {
+                display: inline-flex;
+            }
+
+            img {
+                filter: brightness(.85);
+            }
+        }
+    }
+
+    // -- Upload-new-photos control ------------------------------------------
+    .visit-photo-upload {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        margin-top: .5rem;
+        padding: .35rem .6rem;
+        border: 1px dashed var(--ul-grey-3, #bbb);
+        border-radius: 6px;
+        font-size: .82rem;
+        color: var(--ul-grey-7);
+        cursor: pointer;
+        width: fit-content;
+
+        input[type="file"] {
+            display: none;
+        }
+
+        &:hover {
+            border-color: var(--ul-primary-color);
+            color: var(--ul-primary-color);
+        }
+    }
+
+    // -- Attached-map chip / draw button ------------------------------------
+    .visit-map-attached-chip {
+        margin-bottom: .4rem;
+    }
+
+    .visit-map-attach-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
     }
 }
 
@@ -1238,6 +1626,27 @@
     }
 }
 
+// -- Read-only star display (wiki community composite) ---------------------
+.star-rating-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.sr-star-static {
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--ul-grey-3);
+
+    &--on {
+        color: $color-amber-500;
+    }
+}
+
+.star-rating-display--priority .sr-star-static--on { color: $color-indigo-500; }
+.star-rating-display--vulnerability .sr-star-static--on { color: $color-red-500; }
+.star-rating-display--danger .sr-star-static--on { color: $color-orange-500; }
+
 .sr-star-clear {
     background: none;
     border: none;
@@ -1300,12 +1709,6 @@ body.page-location-details {
         gap: .2rem;
         min-width: 0;
         flex: 1;
-        min-width: max-content;
-
-        &--place {
-            flex: 2;
-            align-items: flex-start;
-        }
 
         .field-label {
             width: auto;
@@ -1386,7 +1789,6 @@ body.page-location-details {
         flex-shrink: 0;
     }
 
-    &--private,
     &--unlinked {
         background: $color-blue-500;
         color: $color-grey-0;
@@ -1402,6 +1804,294 @@ body.page-location-details {
             min-width: 0;
         }
     }
+
+    &--nowiki > .material-symbols-outlined {
+        color: var(--ul-grey-4);
+    }
+}
+
+.pin-wiki-box-muted {
+    font-size: .85rem;
+    color: var(--ul-grey-5);
+}
+
+.pin-wiki-create-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    padding: .3rem .65rem;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+// -- Create-community-wiki dialog (seed-field/alias/photo picker) -----------
+
+.pin-wiki-create-dialog {
+    max-width: 560px;
+
+    .ul-dialog-body {
+        padding: 1.25rem 1.4rem 1.4rem;
+    }
+}
+
+.wiki-create-intro {
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+    margin: 0 0 .9rem;
+    line-height: 1.5;
+}
+
+.wiki-create-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    background: var(--ul-color-accent-bg, rgba(99, 102, 241, .07));
+    border-radius: $radius-md;
+    padding: .6rem .75rem;
+    margin: 0 0 1.1rem;
+    line-height: 1.45;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        margin-top: .1rem;
+        color: var(--ul-color-accent-fg, $color-indigo-500);
+    }
+}
+
+.wiki-create-section {
+    margin-bottom: 1.15rem;
+
+    &:last-of-type {
+        margin-bottom: 0;
+    }
+}
+
+.wiki-create-section-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0 0 .1rem;
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: var(--primary-color);
+    }
+}
+
+.wiki-create-section-hint {
+    margin: .1rem 0 .5rem;
+    font-size: .76rem;
+    color: var(--ul-grey-5);
+}
+
+.wiki-seed-hint {
+    font-size: .82rem;
+    color: var(--ul-grey-5);
+    margin: .6rem 0;
+}
+
+.wiki-seed-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    max-height: 40vh;
+    overflow-y: auto;
+
+    label {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        padding: .5rem .7rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: $radius-md;
+        cursor: pointer;
+        transition: border-color .12s, background .12s;
+
+        &:hover {
+            background: var(--ul-grey-1b);
+            border-color: var(--ul-grey-2b);
+        }
+    }
+
+    input[type="checkbox"] {
+        flex-shrink: 0;
+        width: 1.05rem;
+        height: 1.05rem;
+        accent-color: var(--primary-color);
+    }
+}
+
+.wiki-seed-item--locked label {
+    cursor: default;
+    background: var(--ul-grey-1a);
+
+    &:hover {
+        background: var(--ul-grey-1a);
+        border-color: var(--ul-grey-1a);
+    }
+}
+
+.wiki-seed-label {
+    font-weight: 600;
+    font-size: .85rem;
+    flex-shrink: 0;
+}
+
+.wiki-seed-value {
+    font-size: .8rem;
+    color: var(--ul-grey-5);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wiki-seed-badge {
+    margin-left: auto;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ul-color-accent-fg, $color-indigo-600);
+    background: var(--ul-color-accent-bg, rgba(99, 102, 241, .1));
+    padding: .15rem .45rem;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+// -- Photo picker: thumbnail grid with a checkbox overlay per photo ---------
+
+.wiki-seed-photo-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: .5rem;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.wiki-seed-photo {
+    aspect-ratio: 1 / 1;
+    border-radius: $radius-md;
+    overflow: hidden;
+    position: relative;
+
+    label {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        position: relative;
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        // Unselected photos read as "not shared": greyed out under a Private
+        // ribbon until the user opts them in.
+        filter: grayscale(1);
+        opacity: .55;
+        transition: opacity .12s, filter .12s;
+    }
+
+    input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    // Diagonal "Private" ribbon across the top-left corner of unselected photos.
+    .wiki-seed-photo-ribbon {
+        position: absolute;
+        top: .55rem;
+        left: -1.6rem;
+        width: 5.5rem;
+        transform: rotate(-45deg);
+        background: rgba(0, 0, 0, .62);
+        color: #fff;
+        font-size: .58rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        text-align: center;
+        padding: .14rem 0;
+        pointer-events: none;
+        transition: opacity .12s;
+    }
+
+    input[type="checkbox"]:checked ~ img {
+        filter: none;
+        opacity: 1;
+    }
+
+    input[type="checkbox"]:checked ~ .wiki-seed-photo-ribbon {
+        opacity: 0;
+    }
+
+    .wiki-seed-photo-check {
+        position: absolute;
+        top: .3rem;
+        right: .3rem;
+        width: 1.2rem;
+        height: 1.2rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, .45);
+        border: 1.5px solid rgba(255, 255, 255, .85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s, border-color .12s;
+
+        .material-symbols-outlined {
+            font-size: .8rem;
+            color: transparent;
+            transition: color .12s;
+        }
+    }
+
+    input[type="checkbox"]:checked ~ .wiki-seed-photo-check {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+
+        .material-symbols-outlined {
+            color: #fff;
+        }
+    }
+
+    input[type="checkbox"]:focus-visible ~ .wiki-seed-photo-check {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.wiki-seed-photo-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 1.4rem; }
 }
 
 .pin-wiki-box-info {
@@ -1410,6 +2100,335 @@ body.page-location-details {
     gap: .1rem;
     min-width: 0;
     line-height: 1.2;
+}
+
+// -- Share-pin dialog (message + name picker + photo picker) ----------------
+
+.pin-share-dialog {
+    max-width: 560px;
+
+    .ul-dialog-body {
+        padding: 1.1rem 1.3rem 1.3rem;
+    }
+
+    .form-row {
+        margin-bottom: .9rem;
+    }
+}
+
+.pin-share-intro {
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+    margin: 0 0 1rem;
+    line-height: 1.5;
+}
+
+.pin-share-sent {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem 0 1.2rem;
+
+    p {
+        margin: 0;
+        font-size: .9rem;
+        color: var(--ul-grey-7);
+    }
+}
+
+.pin-share-sent-icon {
+    font-size: 1.6rem;
+    color: var(--ul-color-success-fg, $color-green-600);
+    flex-shrink: 0;
+}
+
+.pin-share-section {
+    margin-bottom: 1.15rem;
+
+    &:last-of-type {
+        margin-bottom: 0;
+    }
+}
+
+.pin-share-section-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0 0 .55rem;
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: var(--primary-color);
+    }
+}
+
+.pin-share-section-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: .4rem;
+    margin: -.3rem 0 .6rem;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+    line-height: 1.45;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        flex-shrink: 0;
+        margin-top: .05rem;
+        color: var(--ul-grey-5);
+    }
+}
+
+#pin-share-custom-name-row {
+    margin-top: -.4rem;
+
+    .pin-share-section-hint {
+        margin: .4rem 0 0;
+    }
+}
+
+// Photo picker: same thumbnail-grid-with-checkbox-overlay pattern as the wiki
+// seed picker (.wiki-seed-photo-grid) - unselected photos read as "private"
+// under a greyscale filter and diagonal ribbon until opted in.
+.pin-share-photo-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: .5rem;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.pin-share-photo {
+    aspect-ratio: 1 / 1;
+    border-radius: $radius-md;
+    overflow: hidden;
+    position: relative;
+
+    label {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        position: relative;
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        filter: grayscale(1);
+        opacity: .55;
+        transition: opacity .12s, filter .12s;
+    }
+
+    input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .pin-share-photo-ribbon {
+        position: absolute;
+        top: .55rem;
+        left: -1.6rem;
+        width: 5.5rem;
+        transform: rotate(-45deg);
+        background: rgba(0, 0, 0, .62);
+        color: #fff;
+        font-size: .58rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        text-align: center;
+        padding: .14rem 0;
+        pointer-events: none;
+        transition: opacity .12s;
+    }
+
+    input[type="checkbox"]:checked ~ img {
+        filter: none;
+        opacity: 1;
+    }
+
+    input[type="checkbox"]:checked ~ .pin-share-photo-ribbon {
+        opacity: 0;
+    }
+
+    .pin-share-photo-check {
+        position: absolute;
+        top: .3rem;
+        right: .3rem;
+        width: 1.2rem;
+        height: 1.2rem;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, .45);
+        border: 1.5px solid rgba(255, 255, 255, .85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s, border-color .12s;
+
+        .material-symbols-outlined {
+            font-size: .8rem;
+            color: transparent;
+            transition: color .12s;
+        }
+    }
+
+    input[type="checkbox"]:checked ~ .pin-share-photo-check {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+
+        .material-symbols-outlined {
+            color: #fff;
+        }
+    }
+
+    input[type="checkbox"]:focus-visible ~ .pin-share-photo-check {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.pin-share-photo-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 1.4rem; }
+}
+
+// -- Shared-pin recipient page (dashboard/pages/pin_share/detail.html) ------
+
+.pin-share-detail-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-bottom: 1.1rem;
+}
+
+.pin-share-from-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .9rem 1rem 0;
+}
+
+.pin-share-from-avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+
+    &--placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--primary-color);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+}
+
+.pin-share-from-text {
+    min-width: 0;
+}
+
+.pin-share-from-name {
+    margin: 0;
+    font-size: .92rem;
+    color: var(--ul-grey-7);
+
+    strong {
+        color: var(--ul-grey-9);
+    }
+}
+
+.pin-share-from-title {
+    margin: .15rem 0 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--ul-grey-9);
+}
+
+.pin-share-message {
+    margin: 0 1rem;
+    padding: .7rem .9rem;
+    border-radius: $radius-md;
+    background: var(--ul-color-accent-bg, rgba(99, 102, 241, .07));
+    border-left: 3px solid var(--primary-color);
+    display: flex;
+    gap: .5rem;
+    align-items: flex-start;
+
+    .material-symbols-outlined {
+        color: var(--primary-color);
+        font-size: 1.2rem;
+        flex-shrink: 0;
+        margin-top: .05rem;
+    }
+
+    p {
+        margin: 0;
+        font-size: .88rem;
+        line-height: 1.5;
+        color: var(--ul-grey-8);
+        font-style: italic;
+    }
+}
+
+.pin-share-photos {
+    padding: 0 1rem;
+}
+
+.pin-share-photos-grid {
+    padding: 0;
+    margin-top: .5rem;
+}
+
+.pin-share-respond-actions {
+    padding: 0 1rem;
+}
+
+.pin-share-status {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0 1rem;
+    padding: .55rem .8rem;
+    border-radius: $radius-md;
+    font-size: .85rem;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
+
+    &--accepted {
+        background: rgba($color-green-500, .12);
+        color: $color-green-700;
+    }
+
+    &--rejected {
+        background: rgba($color-red-500, .1);
+        color: $color-red-600;
+    }
 }
 
 .pin-wiki-box-label {
@@ -1447,7 +2466,7 @@ body.page-location-details {
 .pin-wiki-box-actions {
     display: flex;
     align-items: center;
-    gap: .2rem;
+    gap: .4rem;
     flex-shrink: 0;
     padding-left: .5rem;
     border-left: 1px solid var(--ul-grey-1a);
@@ -1997,6 +3016,12 @@ body.page-location-details .pin-detail-grid {
         .map-wrapper {
             position: relative;
             width: 100%;
+            // Mirrors #map's own height below so this wrapper has a definite
+            // size for @include map-query-container to safely contain against
+            // (`contain: size` collapses an "auto" height to 0 otherwise).
+            height: min(52vh, 540px);
+            min-height: 320px;
+            @include map-query-container;
         }
 
         #map {
@@ -2112,6 +3137,10 @@ body.page-location-details .pin-detail-grid {
     }
 
     .web-search {
+        .web-search-refresh-btn.htmx-request i {
+            animation: ul-spin .65s linear infinite;
+        }
+
         .search-results-list {
             padding: .25rem 0;
             list-style: none;
@@ -2262,12 +3291,8 @@ body.page-location-details .pin-detail-grid {
         'onboarding'
         'overview'
         'map'
-        'satellite'
-        'street'
-        'gallery'
-        'visits'
-        'categories'
-        'aliases'
+        'media'
+        'lists'
         'aux'
         'comments';
     gap: var(--pin-detail-gap);
@@ -2286,25 +3311,11 @@ body.page-location-details .pin-detail-grid {
     > .location-map,
     > .pin-map { grid-area: map; }
 
-    > .satellite-view,
-    > #satellite-view-section { grid-area: satellite; min-width: 0; }
+    > .pin-media-row { grid-area: media; }
 
-    > .street-view,
-    > #street-view-section { grid-area: street; min-width: 0; }
-
-    > .visit-history,
-    > #visit-history-panel { grid-area: visits; }
-
-    > .tag-panel { grid-area: categories; }
-
-    > .aliases-panel,
-    > #pin-aliases-panel { grid-area: aliases; }
+    > .pin-lists-row { grid-area: lists; }
 
     > .pin-aux-grid { grid-area: aux; }
-
-    > .photo-gallery,
-    > #pin-gallery-panel,
-    > #photo-gallery { grid-area: gallery; min-width: 0; }
 
     > .comment-panel,
     > #comment-panel { grid-area: comments; }
@@ -2315,10 +3326,8 @@ body.page-location-details .pin-detail-grid {
             'onboarding onboarding'
             'overview   overview'
             'map        map'
-            'satellite  street'
-            'gallery    gallery'
-            'visits     categories'
-            'aliases    aliases'
+            'media      media'
+            'lists      lists'
             'aux        aux'
             'comments   comments';
     }
@@ -2328,8 +3337,8 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'overview   overview   overview'
             'map        map        map'
-            'satellite  street     gallery'
-            'visits     categories aliases'
+            'media      media      media'
+            'lists      lists      lists'
             'aux        aux        aux'
             'comments   comments   comments';
     }
@@ -2338,10 +3347,41 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'overview   overview   overview'
             'map        map        map'
-            'satellite  street     gallery'
-            'visits     categories aliases'
+            'media      media      media'
+            'lists      lists      lists'
             'aux        aux        aux'
             'comments   comments   .';
+    }
+}
+
+// Satellite Imagery / Street View / Photos, and Visit History / Badges /
+// Aliases: each row starts every card at an equal share of the row and lets
+// `auto-fit` redivide that space among whichever cards are actually visible.
+// Collapsing a card (`.is-collapsed`, see _collapsible.scss) removes it from
+// flow, so its siblings grow to fill the freed space instead of leaving a
+// blank track the way named grid-area placement would.
+.pin-media-row,
+.pin-lists-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--pin-detail-gap);
+    align-items: start;
+
+    > * {
+        min-width: 0;
+        align-self: stretch;
+    }
+}
+
+.pin-media-row {
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 22em), 1fr));
+    }
+}
+
+.pin-lists-row {
+    @include up($breakpoint-xs) {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
     }
 }
 

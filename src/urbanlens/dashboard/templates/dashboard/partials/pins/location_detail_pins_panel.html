@@ -2,7 +2,7 @@
     <div class="card-header">
         <i class="material-symbols-outlined">push_pin</i>
         <h2>Detail Pins</h2>
-        <button type="button" class="wiki-action-btn wiki-action-btn--sm"
+        <button type="button" class="btn btn--secondary btn--sm"
                 onclick="document.getElementById('wiki-detail-pin-dialog').showModal()">
             <i class="material-symbols-outlined">add_location</i> Add
         </button>
@@ -27,15 +27,12 @@
                 {% else %}place{% endif %}
             </span>
             <div class="detail-pin-wiki-info">
-                <span class="detail-pin-wiki-name">{{ dp.effective_name }}</span>
+                <span class="detail-pin-wiki-name">{{ dp.name }}</span>
                 {% if dp.description %}
                 <span class="detail-pin-wiki-desc">{{ dp.description }}</span>
                 {% endif %}
                 <span class="detail-pin-wiki-meta">
-                    {{ dp.effective_latitude|floatformat:5 }}, {{ dp.effective_longitude|floatformat:5 }}
-                    {% if dp.profile and dp.profile.user %}
-                    &mdash; added by {% if dp.profile.user == request.user %}you{% else %}{{ dp.profile.user.username }}{% endif %}
-                    {% endif %}
+                    {{ dp.latitude|floatformat:5 }}, {{ dp.longitude|floatformat:5 }}
                 </span>
             </div>
             <button type="button" class="detail-pin-wiki-delete"

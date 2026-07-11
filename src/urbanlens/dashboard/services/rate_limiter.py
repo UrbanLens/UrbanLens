@@ -19,8 +19,11 @@ from urbanlens.dashboard.exceptions import DashboardError
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Service registry - default config for every known external API service.
-# Rows are auto-created from these defaults the first time a service is seen.
+# Service registry - default config for external API services that have not
+# yet been converted to plugins. Plugin-provided integrations declare their
+# defaults via ``UrbanLensPlugin.get_service_defaults`` instead; the merged
+# view lives in ``all_service_defaults``. Rows are auto-created from these
+# defaults the first time a service is seen.
 # ---------------------------------------------------------------------------
 
 
@@ -36,23 +39,11 @@ class ServiceDefaults:
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
-    "google_places": ServiceDefaults(
-        display_name="Google Places API",
-        calls_per_minute=20,
-        calls_per_day=200,
-        notes="Free tier: $200/month credit. Geocoding/details billed per call.",
-    ),
     "google_geocoding": ServiceDefaults(
         display_name="Google Geocoding API",
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: $200/month credit (~40,000 calls/month).",
-    ),
-    "google_maps": ServiceDefaults(
-        display_name="Google Maps (Static/StreetView)",
-        calls_per_minute=20,
-        calls_per_day=200,
-        notes="Static Maps: 25,000 free/month. Street View: billed per call.",
     ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
@@ -60,50 +51,11 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=100,
         notes="CSE free tier: 100 queries/day hard limit.",
     ),
-    "nps": ServiceDefaults(
-        display_name="National Park Service API",
-        calls_per_minute=10,
-        calls_per_day=500,
-        usa_only=True,
-        notes="Free API. USA only - NPS covers US national parks exclusively.",
-    ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: 1,000 calls/day.",
-    ),
-    "wikipedia": ServiceDefaults(
-        display_name="Wikipedia",
-        calls_per_minute=30,
-        calls_per_day=2000,
-        notes="Free API. Be polite - set a descriptive User-Agent.",
-    ),
-    "wikimedia": ServiceDefaults(
-        display_name="Wikimedia Commons",
-        calls_per_minute=30,
-        calls_per_day=1000,
-        notes="Free API.",
-    ),
-    "smithsonian": ServiceDefaults(
-        display_name="Smithsonian Open Access",
-        calls_per_minute=20,
-        calls_per_day=500,
-        usa_only=True,
-        notes="Free API. USA-centric archive.",
-    ),
-    "loopnet": ServiceDefaults(
-        display_name="LoopNet",
-        calls_per_minute=5,
-        calls_per_day=100,
-        usa_only=True,
-        notes="US commercial real estate. Scraped - be conservative to avoid blocking.",
-    ),
-    "nominatim": ServiceDefaults(
-        display_name="Nominatim (OpenStreetMap)",
-        calls_per_minute=1,
-        calls_per_day=500,
-        notes="Free API. Hard limit: 1 req/second per OSM ToS.",
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
@@ -131,13 +83,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         usa_only=True,
         notes="Massachusetts-based digital archive. Free API.",
     ),
-    "library_of_congress": ServiceDefaults(
-        display_name="Library of Congress",
-        calls_per_minute=10,
-        calls_per_day=200,
-        usa_only=True,
-        notes="Free API. USA-centric archive.",
-    ),
     "routexl": ServiceDefaults(
         display_name="RouteXL",
         calls_per_minute=5,
@@ -149,12 +94,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=100,
         notes="Free tier varies by provider.",
-    ),
-    "esri": ServiceDefaults(
-        display_name="Esri ArcGIS REST",
-        calls_per_minute=20,
-        calls_per_day=500,
-        notes="Public Esri basemap/wayback services. No key required.",
     ),
     "apple_maps": ServiceDefaults(
         display_name="Apple Maps Server API",
@@ -168,24 +107,11 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         notes="Requires OAuth2. Free for non-commercial use via Earth Engine sign-up.",
     ),
-    "open_aerial_map": ServiceDefaults(
-        display_name="OpenAerialMap",
-        calls_per_minute=20,
-        calls_per_day=500,
-        notes="Free, no key required. Open licensed aerial imagery metadata.",
-    ),
     "openhistoricalmap": ServiceDefaults(
         display_name="OpenHistoricalMap",
         calls_per_minute=1,
         calls_per_day=500,
         notes="Free, no key required. OSM-based historic map data. Nominatim: 1 req/second hard limit.",
-    ),
-    "usgs": ServiceDefaults(
-        display_name="USGS EarthExplorer / TNM",
-        calls_per_minute=10,
-        calls_per_day=500,
-        usa_only=True,
-        notes="M2M requires an applicationToken from EarthExplorer account settings. TNM is fully public.",
     ),
     "wayback_machine": ServiceDefaults(
         display_name="Internet Archive Wayback Machine",
@@ -193,31 +119,24 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=500,
         notes="Free, no key required. Be polite - the Archive is a public resource.",
     ),
-    "mapbox": ServiceDefaults(
-        display_name="Mapbox",
-        calls_per_minute=20,
-        calls_per_day=500,
-        notes="Requires a Mapbox public access token. Static Images API has a free tier.",
-    ),
-    "bing_maps": ServiceDefaults(
-        display_name="Bing Maps",
-        calls_per_minute=20,
-        calls_per_day=500,
-        notes="Requires a Bing Maps key from Azure portal. Static imagery has a free tier.",
-    ),
-    "mapillary": ServiceDefaults(
-        display_name="Mapillary",
-        calls_per_minute=20,
-        calls_per_day=1000,
-        notes="Requires a client access token from mapillary.com/dashboard/developers. Free tier available.",
-    ),
-    "kartaview": ServiceDefaults(
-        display_name="KartaView",
-        calls_per_minute=20,
-        calls_per_day=500,
-        notes="Free, no key required. Crowdsourced street-level imagery.",
-    ),
 }
+
+
+def all_service_defaults() -> dict[str, ServiceDefaults]:
+    """Every known service's default config: static registry plus plugins.
+
+    Plugin-declared defaults win over a same-keyed ``SERVICE_REGISTRY`` entry
+    so converting an integration to a plugin fully transfers ownership of its
+    configuration.
+
+    Returns:
+        Mapping of service key to its :class:`ServiceDefaults`.
+    """
+    from urbanlens.dashboard.plugins import plugin_registry
+
+    merged = dict(SERVICE_REGISTRY)
+    merged.update(plugin_registry.service_defaults())
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +147,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
 def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
 
-    Uses the ``SERVICE_REGISTRY`` defaults when creating a new row.
+    Uses the merged :func:`all_service_defaults` (static registry plus
+    plugin declarations) when creating a new row.
 
     Args:
         service: The service key (e.g. ``"nps"``).
@@ -238,7 +158,7 @@ def get_limit_config(service: str) -> Any:
     """
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
-    defaults_entry = SERVICE_REGISTRY.get(service)
+    defaults_entry = all_service_defaults().get(service)
     if defaults_entry:
         row, _ = ApiRateLimit.objects.get_or_create(
             service=service,
@@ -449,6 +369,13 @@ class _RateLimitedSession:
                 was_service_disabled=True,
             )
             raise ServiceDisabledError(self._service_key)
+
+        # requests has no default timeout at all: a gateway call that forgets
+        # timeout= would otherwise block its caller (and, when running under a
+        # call_with_deadline guard, pin an executor slot) indefinitely. The
+        # (connect, read) tuple bounds each phase separately; callers that pass
+        # their own timeout are untouched, including long-running offline jobs.
+        kwargs.setdefault("timeout", (5, 30))
 
         t0 = time.monotonic()
         try:

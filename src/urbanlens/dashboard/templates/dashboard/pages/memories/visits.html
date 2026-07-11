@@ -1,0 +1,50 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block header %}
+{# Leaflet powers the shared visit dialog's map-attach composer. #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block title %}Visits{% endblock %}
+
+{% block content %}
+<div id="visits-page" class="memories-tab-page">
+    <div class="memories-header">
+        <div>
+            <h1 class="memories-title"><i class="material-symbols-outlined">where_to_vote</i> Log your visits</h1>
+            <p class="memories-subtitle">Places you've marked visited that don't have a dated visit yet. Add a date to log them - and photos, a map, or notes if you like.</p>
+        </div>
+    </div>
+
+    <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="visits" unlogged_visits_count=unlogged_visits|length %}
+
+        {% if unlogged_visits %}
+        {% include "dashboard/partials/memories/_unlogged_visits.html" %}
+        {% else %}
+        <section class="visits-empty-state" aria-labelledby="visits-empty-title">
+            <div class="visits-empty-hero">
+                <span class="visits-empty-icon"><i class="material-symbols-outlined">task_alt</i></span>
+                <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
+            </div>
+            <p class="visits-empty-kicker">All caught up</p>
+            <h2 id="visits-empty-title">No visit details need your attention.</h2>
+            <p>Every place you've marked as visited already has a dated visit, or there are no visited places waiting for details yet.</p>
+            <div class="visits-empty-actions">
+                <a class="btn btn--primary" href="{% url 'memories.view' %}">
+                    <i class="material-symbols-outlined">timeline</i> View your timeline
+                </a>
+                <a class="btn btn--secondary" href="{% url 'map.view' %}">
+                    <i class="material-symbols-outlined">map</i> Explore your map
+                </a>
+            </div>
+        </section>
+        {% endif %}
+    </div>
+</div>
+
+{% include "dashboard/partials/memories/_visit_dialog.html" %}
+{% endblock %}

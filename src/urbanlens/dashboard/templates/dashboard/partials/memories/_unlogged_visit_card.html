@@ -1,0 +1,61 @@
+{% comment %}
+A single card in the Memories "log your visits" list.
+
+The quick-log form posts just a date to memories.visit and swaps the whole list
+(#memories-unlogged-band). "Add details" instead loads the full visit form into
+the shared Memories visit dialog via memoriesOpenVisitDialog(), where the user
+can attach photos, draw a map, add notes, and tag people.
+
+"Not visited" and the dismiss (X) button both post to memories.unlogged.action
+and swap just this card by id - "Not visited" clears the pin's visited status
+entirely (it drops off the map's visited filters too), while dismiss only hides
+the suggestion, leaving the pin's visited status untouched.
+
+Context:
+  pin   - the Pin to log a visit for
+  today - ISO date string bounding/prefilling the date input
+{% endcomment %}
+<article class="unlogged-card" id="unlogged-card-{{ pin.slug }}">
+    <button type="button" class="unlogged-card-dismiss" title="Remove from this list"
+            hx-post="{% url 'memories.unlogged.action' pin.slug 'dismiss' %}"
+            hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">
+        <i class="material-symbols-outlined">close</i>
+    </button>
+    <div class="unlogged-card-icon"><i class="material-symbols-outlined">location_on</i></div>
+    <div class="unlogged-card-body">
+        <div class="unlogged-card-title" title="{{ pin.effective_name }}">{{ pin.effective_name }}</div>
+        <div class="unlogged-card-meta">
+            {% if pin.last_visited %}
+            <i class="material-symbols-outlined">event</i> Last visited {{ pin.last_visited|date:"N j, Y" }}
+            {% else %}
+            <i class="material-symbols-outlined">check_circle</i> Marked visited
+            {% endif %}
+        </div>
+
+        <div class="unlogged-card-actions">
+            <form class="unlogged-card-quick"
+                  hx-post="{% url 'memories.visit' pin.slug %}"
+                  hx-target="#memories-unlogged-band"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <input type="date" name="visited_date" aria-label="Visit date" required
+                       value="{{ pin.last_visited|date:'Y-m-d'|default:today }}" max="{{ today }}">
+                <button type="submit" class="btn btn--sm btn--primary btn--submit">
+                    <i class="material-symbols-outlined">check</i> Log visit
+                </button>
+            </form>
+
+            <button type="button" class="btn btn--sm btn--ghost unlogged-card-details"
+                    onclick="memoriesOpenVisitDialog('{% url 'memories.visit' pin.slug %}')">
+                <i class="material-symbols-outlined">add_photo_alternate</i> Add details
+            </button>
+
+            <button type="button" class="btn btn--sm btn--ghost unlogged-card-unmark"
+                    title="This pin wasn't actually visited"
+                    hx-post="{% url 'memories.unlogged.action' pin.slug 'unmark' %}"
+                    hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">
+                <i class="material-symbols-outlined">remove_circle_outline</i> Not visited
+            </button>
+        </div>
+    </div>
+</article>

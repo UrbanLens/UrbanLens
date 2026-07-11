@@ -8,6 +8,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.site_admin import (
     SITE_ADMIN_GROUP_NAME,
@@ -70,6 +71,9 @@ class SiteAdminRedirectTests(TestCase):
 
     def test_post_login_redirects_to_map_after_onboarding(self) -> None:
         complete_site_admin_onboarding(self.user)
+        # Isolate the site-admin redirect chain from the separate welcome/
+        # profile-setup chain (covered by WelcomeRedirectChainTests).
+        Profile.objects.filter(user=self.user).update(welcome_onboarding_complete=True, profile_setup_complete=True)
         client = Client()
         client.force_login(self.user)
 

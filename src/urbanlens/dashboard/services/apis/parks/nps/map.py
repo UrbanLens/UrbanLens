@@ -4,9 +4,6 @@ from dataclasses import dataclass
 import logging
 from typing import ClassVar
 
-import geopandas
-from shapely.geometry import Point
-
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -17,34 +14,43 @@ class NPSMapGateway(Gateway):
     service_key: ClassVar[str] = "nps"
     paid_service: ClassVar[bool] = False
 
-    base_url: str = "https://mapservices.nps.gov/arcgis/rest/services/ParkBoundaries/FeatureServer/0/query"
+    base_url: str = "https://services1.arcgis.com/fBc8EJBxQRMcHlei/ArcGIS/rest/services/NPS_Land_Resources_Division_Boundary_and_Tract_Data_Service/FeatureServer/2/query"
 
     def check_coordinates_within_park(self, latitude: float, longitude: float) -> str | None:
-        """
-        Determines if a set of coordinates is within a national park and returns the park code.
-        """
-        # Construct the point from the given coordinates
-        point = Point(longitude, latitude)
+        """Return the park code of the NPS unit whose boundary contains the point.
 
-        # Query parameters for retrieving the boundary data in GeoJSON format
+        Resolves containment server-side with a point-in-polygon query against
+        the NPS Land Resources Division boundary feature service, so only the
+        containing unit (if any) comes back rather than the entire boundary
+        dataset. The returned code is lower-cased to match the developer
+        API's ``parkCode`` (e.g. ArcGIS ``YELL`` -> ``yell``).
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            The lower-cased park code of the containing unit, or ``None`` when
+            the point falls outside every NPS boundary.
+        """
         params = {
-            "where": "1=1",  # This condition effectively selects all features
-            "outFields": "*",  # Select all fields
-            "outSR": "4326",  # Spatial reference for WGS84
-            "f": "geojson",  # Output format as GeoJSON
+            "geometry": f"{longitude},{latitude}",
+            "geometryType": "esriGeometryPoint",
+            "inSR": "4326",
+            "spatialRel": "esriSpatialRelIntersects",
+            "where": "1=1",
+            "outFields": "UNIT_CODE,UNIT_NAME",
+            "returnGeometry": "false",
+            "f": "json",
         }
 
-        # Make the request to the GIS data service
         response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
 
-        # Load the GeoJSON into a GeoDataFrame
-        park_boundaries = geopandas.read_file(response.content)
+        for feature in response.json().get("features", []):
+            attributes = feature.get("attributes") or {}
+            code = attributes.get("UNIT_CODE") or attributes.get("unit_code") or attributes.get("parkCode")
+            if code:
+                return str(code).strip().lower()
 
-        # Check if the point is within any of the park boundaries
-        for _, park in park_boundaries.iterrows():
-            if point.within(park["geometry"]):
-                return park["parkCode"]
-
-        # If no park contains the coordinates, return an empty string or None
         return None

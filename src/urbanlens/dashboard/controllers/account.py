@@ -26,7 +26,6 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
 
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
 from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
@@ -120,9 +119,11 @@ class RegistrationForm(UserCreationForm):
         self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
 
     def clean_email(self) -> str:
-        """Reject duplicate email addresses (case-insensitive)."""
+        """Reject email addresses already in use (normalized comparison)."""
+        from urbanlens.dashboard.services.email_normalization import is_email_taken
+
         email = self.cleaned_data["email"].strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
+        if is_email_taken(email):
             raise ValidationError("An account with this email address already exists.")
         return email
 
@@ -259,15 +260,16 @@ class VerifyEmailView(View):
         user.is_active = True
         user.save(update_fields=["is_active"])
 
-        profile, created = Profile.objects.get_or_create(user=user)
-        if created:
-            profile.profile_setup_complete = False
-            profile.save(update_fields=["profile_setup_complete"])
-
         # Auto-send friend request from any pending email invitations
         session_invite_token = request.session.pop("pending_invite_token", None)
         invite_token = session_invite_token or verification.pending_invite_token
         _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
+
+        # Deliver any friend requests + visit suggestions that were waiting on
+        # this email address (visit participants tagged before the account existed).
+        from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites
+
+        process_pending_visit_invites(user)
 
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 
@@ -376,9 +378,16 @@ class CustomLoginView(LoginView):
                     )
                     return super().form_invalid(form)
 
-            # Check for unverified account.
+            # Check for unverified account (username or email login).
+            user: User | None = None
             try:
                 user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                from urbanlens.dashboard.services.email_normalization import find_user_by_email
+
+                user = find_user_by_email(username, active_only=False) if "@" in username else None
+
+            if user is not None:
                 if not user.is_active and hasattr(user, "email_verification"):
                     resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"
                     form.errors["__all__"] = form.error_class(
@@ -389,8 +398,6 @@ class CustomLoginView(LoginView):
                             ),
                         ],
                     )
-            except User.DoesNotExist:
-                pass
         return super().form_invalid(form)
 
 
@@ -418,6 +425,9 @@ class PostLoginRedirectView(View):
             profile = request.user.profile
         except Profile.DoesNotExist:
             profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if not profile.welcome_onboarding_complete:
+            return redirect("onboarding.welcome")
 
         if not profile.profile_setup_complete:
             return redirect("profile.edit")
@@ -493,6 +503,8 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
         user: The newly-verified User.
         invite_token: Optional invitation token stored during signup from an invite link.
     """
+    from urbanlens.dashboard.models.profile.model import Profile
+
     try:
         profile, _ = Profile.objects.get_or_create(user=user)
         for invitation in _collect_pending_invitations(user, invite_token):

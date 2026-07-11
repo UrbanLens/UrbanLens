@@ -8,7 +8,10 @@
     </div>
 
     {# -- Privacy ------------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    {# Community, Memories, and External Services each bulk-gate what UrbanLens tracks or #}
+    {# exposes about you, so their toggles live here as subsections rather than their own #}
+    {# top-level pages - Privacy is the natural home for "what does the site do with me". #}
+    <section class="settings-section ul-section" id="privacy-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">lock</i>
             <div>
@@ -17,7 +20,8 @@
             </div>
         </div>
 
-        <form method="post" class="settings-form" id="privacy-form">
+        <div class="settings-section-body">
+        <form method="post" class="settings-form settings-form--privacy" id="privacy-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="privacy">
 
@@ -102,6 +106,123 @@
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
+
+        {# -- Community (subsection) ------------------------------------------ #}
+        <div class="settings-subsection" id="community-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">groups</i>
+                Community
+            </h3>
+            <p class="settings-section-desc">Whether other users can see your pins, profile, and friend requests.</p>
+
+            <form method="post" class="settings-form" id="community-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="community">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ community_form.community_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ community_form.community_enabled.label }}</strong>
+                            <span class="settings-help">{{ community_form.community_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if community_form.community_enabled.errors %}
+                    <p class="settings-error">{{ community_form.community_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% if not community_form.instance.community_enabled %}
+                <p class="settings-help">All of your pins are private and your privacy settings above are locked to the most restrictive option while this is off.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
+        {# -- Memories (subsection) -------------------------------------------- #}
+        <div class="settings-subsection" id="memories-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">history</i>
+                Memories
+            </h3>
+            <p class="settings-section-desc">What visit and location history is saved.</p>
+
+            <form method="post" class="settings-form" id="memories-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="memories">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ memories_form.track_pin_visits }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ memories_form.track_pin_visits.label }}</strong>
+                            <span class="settings-help">{{ memories_form.track_pin_visits.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ memories_form.track_routes }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ memories_form.track_routes.label }}</strong>
+                            <span class="settings-help">{{ memories_form.track_routes.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ memories_form.track_geolocation }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ memories_form.track_geolocation.label }}</strong>
+                            <span class="settings-help">{{ memories_form.track_geolocation.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
+        {# -- External Services (subsection) ------------------------------------ #}
+        <div class="settings-subsection" id="external-api-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">public</i>
+                External Services
+            </h3>
+            <p class="settings-section-desc">Whether UrbanLens can call external services on your behalf.</p>
+
+            <form method="post" class="settings-form" id="external-api-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="external_apis">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ external_api_form.external_apis_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ external_api_form.external_apis_enabled.label }}</strong>
+                            <span class="settings-help">{{ external_api_form.external_apis_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if external_api_form.external_apis_enabled.errors %}
+                    <p class="settings-error">{{ external_api_form.external_apis_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% if not external_api_form.instance.external_apis_enabled %}
+                <p class="settings-help">Weather, geocoding, place-data panels, and AI features are unavailable while this is off. AI and Places sources below can still be turned back on individually.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+        </div>
     </section>
 
     {# -- Style --------------------------------------------------------------- #}
@@ -213,6 +334,17 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field">
+                <label class="settings-label" for="{{ style_form.distance_units.id_for_label }}">
+                    {{ style_form.distance_units.label }}
+                </label>
+                <p class="settings-help">{{ style_form.distance_units.help_text }}</p>
+                {{ style_form.distance_units }}
+                {% if style_form.distance_units.errors %}
+                <p class="settings-error">{{ style_form.distance_units.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
@@ -298,7 +430,7 @@
                 <p id="geocode-error" style="color:var(--color-error,#c00);margin-top:4px;display:none"></p>
             </div>
 
-            <div class="settings-field">
+            <div class="settings-field settings-field--map-preview">
                 <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
                 <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
                 <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
@@ -570,6 +702,59 @@
     </section>
     {% endif %}
 
+    {# -- Storage --------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="storage-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">database</i>
+            <div>
+                <h2 class="settings-section-title">Storage</h2>
+                <p class="settings-section-desc">Your upload space and photo size preference.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div class="storage-usage">
+                {% if storage_quota_bytes %}
+                <div class="storage-usage__bar" role="progressbar" aria-valuenow="{{ storage_percent_used }}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="storage-usage__fill{% if storage_percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ storage_percent_used }}%;"></div>
+                </div>
+                <p class="storage-usage__text">
+                    <strong>{{ storage_used_bytes|filesizeformat }}</strong> of {{ storage_quota_bytes|filesizeformat }} used
+                    &middot; {{ storage_remaining_bytes|filesizeformat }} left
+                </p>
+                {% else %}
+                <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
+                {% endif %}
+            </div>
+
+            <form method="post" class="settings-form" id="storage-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="storage">
+
+                <div class="settings-field">
+                    <label class="settings-label" for="id_image_downscale_max_dimension">Photo size</label>
+                    <p class="settings-help">
+                        Photos are downscaled to this size (longest edge) when stored. Choosing a smaller size
+                        lets more photos fit in your storage. Applies to future uploads only - existing photos
+                        are not changed.{% if storage_convert_webp %} Processed photos are stored as WebP.{% endif %}
+                    </p>
+                    <select class="settings-select browser-default" name="image_downscale_max_dimension" id="id_image_downscale_max_dimension">
+                        {% for option in storage_downscale_options %}
+                        <option value="{{ option.value }}" data-estimated-photos="{{ option.estimated_photos }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if storage_quota_bytes %}
+                    <p class="settings-help storage-estimate" id="storage-estimate" aria-live="polite"></p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
     {# -- Notifications ------------------------------------------------------- #}
     <section class="settings-section ul-section">
         <div class="settings-section-header">
@@ -608,7 +793,67 @@
             </div>
         </div>
     </section>
+
+    {# -- Undo history ------------------------------------------------------------ #}
+    <section class="settings-section ul-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">history</i>
+            <div>
+                <h2 class="settings-section-title">Undo History</h2>
+                <p class="settings-section-desc">Restore pins, wikis, safety check-ins, and trips you deleted in the last 7 days.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div hx-get="{% url 'undo.history' %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+    </section>
+
+    {# -- Danger Zone ----------------------------------------------------------- #}
+    <section class="settings-section ul-section settings-section--danger">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">warning</i>
+            <div>
+                <h2 class="settings-section-title">Danger Zone</h2>
+                <p class="settings-section-desc">Irreversible account actions.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div class="danger-zone-row{% if user.is_superuser or perms.dashboard.view_site_admin %} danger-zone-row--disabled{% endif %}">
+                <div>
+                    <p class="danger-zone-row-title">Delete my account</p>
+                    {% if user.is_superuser or perms.dashboard.view_site_admin %}
+                    <p class="settings-help">
+                        Admin accounts can't be deleted from here. Remove your admin permissions first if you
+                        want to delete your account.
+                    </p>
+                    {% else %}
+                    <p class="settings-help">
+                        Your account is soft-deleted immediately and permanently deleted, along with all your
+                        data, after a 7-day grace period. You can undo this at any point before then.
+                    </p>
+                    {% endif %}
+                </div>
+                {% if user.is_superuser or perms.dashboard.view_site_admin %}
+                <button type="button" class="btn btn--danger-filled" disabled title="Admin accounts can't be deleted.">
+                    <i class="material-symbols-outlined">delete_forever</i> Delete my account
+                </button>
+                {% else %}
+                <button type="button" class="btn btn--danger-filled" onclick="document.getElementById('delete-account-dialog').showModal()">
+                    <i class="material-symbols-outlined">delete_forever</i> Delete my account
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </section>
 </div>
+
+{% include "dashboard/partials/account/_delete_account_dialog.html" %}
 {% endblock %}
 
 {% block scripts %}
@@ -678,39 +923,22 @@ function applyGuidancePreview(level) {
     // Fallback when there is no server-provided center yet (new user with no pins).
     if (previewLat === null) { previewLat = 40.7128; previewLng = -74.0060; }
 
-    // Tile layer URLs for each view mode.
-    var _TILE_URLS = {
-        street:      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        satellite:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        topographic: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    };
-    var _TILE_ATTRIBS = {
-        street:      '© OpenStreetMap contributors',
-        satellite:   'Tiles © Esri',
-        topographic: '© OpenTopoMap contributors',
-    };
-
     // Detect the user's current default map view from the selected radio.
     var _currentMapViewTile = (function () {
         var checked = document.querySelector('input[name="default_map_view"]:checked');
         return checked ? checked.value : 'satellite';
     }());
 
-    // Initialise the preview Leaflet map.
+    // Initialise the preview Leaflet map. Tiles come from the shared
+    // window.MapLayers factory so the preview always matches the real maps.
     var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
-    var _previewTileLayer = L.tileLayer(_TILE_URLS[_currentMapViewTile] || _TILE_URLS.street, {
-        attribution: _TILE_ATTRIBS[_currentMapViewTile] || _TILE_ATTRIBS.street,
-        maxZoom: 19,
-    }).addTo(previewMap);
+    var _previewTileLayer = window.MapLayers.tileLayer(_currentMapViewTile).addTo(previewMap);
 
     // Switch the preview tile layer when the user picks a different map view.
     document.querySelectorAll('input[name="default_map_view"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
-            var view = radio.value;
-            var url  = _TILE_URLS[view] || _TILE_URLS.street;
-            var attr = _TILE_ATTRIBS[view] || _TILE_ATTRIBS.street;
-            _previewTileLayer.setUrl(url);
-            previewMap.attributionControl.addAttribution(attr);
+            previewMap.removeLayer(_previewTileLayer);
+            _previewTileLayer = window.MapLayers.tileLayer(radio.value).addTo(previewMap);
         });
     });
 
@@ -1077,6 +1305,23 @@ window.updateClusterRadius = function (value) {
 
     masterToggle.addEventListener('change', syncSubOptions);
     syncSubOptions();
+}());
+
+// -- Storage: show the photos-remaining estimate for the selected size ---------
+(function () {
+    var sizeSelect = document.getElementById('id_image_downscale_max_dimension');
+    var estimate   = document.getElementById('storage-estimate');
+    if (!sizeSelect || !estimate) return;
+
+    function updateEstimate() {
+        var option = sizeSelect.options[sizeSelect.selectedIndex];
+        var photos = option ? parseInt(option.getAttribute('data-estimated-photos'), 10) : NaN;
+        estimate.textContent = isNaN(photos) ? '' :
+            'Room for about ' + photos.toLocaleString() + ' more photos at this size.';
+    }
+
+    sizeSelect.addEventListener('change', updateEstimate);
+    updateEstimate();
 }());
 </script>
 {% endblock %}

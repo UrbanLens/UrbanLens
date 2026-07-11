@@ -1,0 +1,51 @@
+{% load static %}
+{% comment %}
+Shared map layers component - rendered by {% map_layers_panel %} (see
+dashboard/templatetags/map_components.py; do not include this file directly).
+The markup is the main map's layers panel, generalized: buttons carry
+data-map-layer/data-layer-kind attributes that window.MapLayers.create(...)
+binds to, so every map presents and behaves exactly like the main map.
+
+variant="panel": bottom-left Google-Maps-style flyout (thumbnails + labels).
+variant="strip": compact icon row for dialogs (comment map composer/viewer).
+{% endcomment %}
+{% if variant == "strip" %}
+<div class="map-layers-strip {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel role="group" aria-label="Map layers">
+    {% for b in buttons %}
+    <button type="button" class="map-layers-strip-btn" id="{{ panel_id }}-{{ b.key }}"
+            data-map-layer="{{ b.key }}" data-layer-kind="{{ b.kind }}"
+            title="{{ b.tooltip }}" aria-label="{{ b.aria_label }}">
+        <i class="material-symbols-outlined">{{ b.icon }}</i>
+    </button>
+    {% endfor %}
+</div>
+{% else %}
+<div class="map-layers-panel {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel>
+    <button type="button" class="map-layers-toggle" id="{{ panel_id }}-toggle" data-layers-toggle
+            aria-label="Toggle map layers"
+            aria-expanded="false">
+        <span class="map-layer-thumb map-layers-toggle-thumb">
+            <img src="{% static 'dashboard/images/map_layers.jpg' %}" alt="" loading="lazy">
+        </span>
+        <i class="material-icons map-layers-toggle-icon">layers</i>
+        <span class="map-layers-label">Layers</span>
+    </button>
+    {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
+    <div class="map-layers-menu" id="{{ panel_id }}-menu" data-layers-menu hidden aria-hidden="true">
+        {% for b in buttons %}
+        <button type="button" id="{{ b.button_id }}" class="map-layer-btn"
+                data-map-layer="{{ b.key }}" data-layer-kind="{{ b.kind }}"
+                aria-label="{{ b.aria_label }}" data-tooltip="{{ b.tooltip }}" data-tooltip-float="true" data-tooltip-pos="top">
+            <span class="map-layer-thumb{% if not b.thumb %} map-layer-thumb--icon{% endif %}">
+                {% if b.thumb %}
+                <img src="{% static b.thumb %}" alt="{{ b.thumb_alt }}" loading="lazy">
+                {% else %}
+                <i class="material-symbols-outlined">{{ b.icon }}</i>
+                {% endif %}
+            </span>
+            <span>{{ b.label }}</span>
+        </button>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

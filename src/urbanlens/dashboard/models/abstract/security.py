@@ -3,10 +3,10 @@ from __future__ import annotations
 from django.db.models.fields import CharField
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.abstract.model import Model
+from urbanlens.dashboard.models.abstract.model import DashboardModel
 
 
-class SecurityModel(Model):
+class SecurityModel(DashboardModel):
     """Adds security indicators to a model."""
 
     fences = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
@@ -18,5 +18,5 @@ class SecurityModel(Model):
     plywood = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
     locked = CharField(max_length=20, choices=SecurityLevel.choices, default=SecurityLevel.UNKNOWN)
 
-    class Meta(Model.Meta):
+    class Meta(DashboardModel.Meta):
         abstract = True

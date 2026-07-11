@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError
 
-from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
-from urbanlens.UrbanLens.settings.app import settings
-
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +102,41 @@ _DMS_COORDINATE_PATTERN = re.compile(
 # a cheap early-reject before running the regexes, not as a ReDoS mitigation.
 _MAX_COORDINATE_NAME_LENGTH = 64
 
+# Words (including common abbreviations) that mark a name as a street name
+# rather than a place name, used by is_address_derived_name. Matching is on
+# whole casefolded tokens, so "St" matches but "Station" does not.
+_STREET_TYPE_WORDS: frozenset[str] = frozenset(
+    {
+        "street",
+        "road",
+        "place",
+        "boulevard",
+        "avenue",
+        "lane",
+        "drive",
+        "way",
+        "court",
+        "terrace",
+        "highway",
+        "pike",
+        "route",
+        "st",
+        "rd",
+        "pl",
+        "blvd",
+        "ave",
+        "ln",
+        "dr",
+        "hwy",
+        "ct",
+        "ter",
+        "rt",
+        "rte",
+    },
+)
+
+_NAME_TOKEN_PATTERN = re.compile(r"[^a-z0-9]+", re.IGNORECASE)
+
 
 def is_coordinate_name(name: str) -> bool:
     if len(name) > _MAX_COORDINATE_NAME_LENGTH:
@@ -131,7 +165,56 @@ def is_meaningful_name(name: str | None) -> bool:
         return False
     if is_coordinate_name(name):
         return False
-    return stripped.casefold() not in _MEANINGLESS_NAME_PHRASES
+    normalized = stripped.casefold()
+    # "Unnamed Location in Albany, NY" (Location.display_name's area-suffixed
+    # placeholder) is still a placeholder, not a real place name.
+    if normalized.startswith("unnamedlocationin"):
+        return False
+    return normalized not in _MEANINGLESS_NAME_PHRASES
+
+
+def is_address_derived_name(name: str, location: Location) -> bool:
+    """Return True when a candidate name is merely a fragment of the location's address.
+
+    External sources (Google Places especially) sometimes report the street
+    name or the city as the place "name" - e.g. "Westwood Northern Blvd" for
+    an address on that street, or "Albany" for a location in Albany, NY. Such
+    names identify the surroundings, not the place, so they must not become
+    the official name. A name is considered address-derived when:
+
+    * it contains a street-type word (street, road, blvd, ...) **and** appears
+      within the location's address - so "Westwood Northern Blvd" is rejected,
+      but "Kenwood" at "1 Kenwood Road" is kept (the street was named after
+      the place); or
+    * it matches or appears within the location's city or state name.
+
+    Comparisons use :func:`normalize_name_for_comparison`, so punctuation,
+    case, and spacing differences do not affect the verdict.
+
+    Args:
+        name: The candidate name to check.
+        location: The location whose address components the name is checked against.
+
+    Returns:
+        True when the name is address-derived and should not be saved as an
+        official name.
+    """
+    normalized = normalize_name_for_comparison(name)
+    if not normalized:
+        return False
+
+    for component in (location.city, location.state):
+        normalized_component = normalize_name_for_comparison(component)
+        if normalized_component and normalized in normalized_component:
+            return True
+
+    tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
+    if tokens & _STREET_TYPE_WORDS:
+        normalized_address = normalize_name_for_comparison(location.address)
+        if normalized_address and normalized in normalized_address:
+            return True
+
+    return False
 
 
 def _clean_candidate(value: Any) -> str | None:
@@ -144,33 +227,50 @@ def _clean_candidate(value: Any) -> str | None:
 def external_name_candidates_for_location(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
-) -> list[tuple[str, Any]]:
-    """Return raw external name candidates for a location in preference order."""
-    candidates: list[tuple[str, Any]] = []
-    candidates.extend(extra_candidates or [])
-    google_place = location.google_place if getattr(location, "google_place_id", None) else None
-    if google_place is not None:
-        candidates.append(("google_place", google_place.cached_place_name))
+) -> list[NameCandidate]:
+    """Gather cleaned, quality-gated external name candidates for a location.
 
-    try:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    Explicit ``extra_candidates`` come first, then every enabled plugin's
+    :class:`~urbanlens.dashboard.services.locations.name_resolution.NameProvider`
+    contributions in plugin ``(order, name)`` order. Raw values are cleaned
+    (:func:`is_meaningful_name`) and address-derived fragments are rejected
+    (:func:`is_address_derived_name`); duplicates of the same normalized name
+    from the same source are dropped, preserving first-seen order.
 
-        for service_name, key_path in (
-            ("google_places", ("name",)),
-            ("wikipedia", ("title",)),
-            ("nps", ("fullName", "name")),
-        ):
-            cached = LocationCache.get_fresh(location, service_name)
-            data = cached.data if cached else None
-            if isinstance(data, dict):
-                for key in key_path:
-                    candidates.append((service_name, data.get(key)))
-    except Exception:
-        logger.debug(
-            "Could not inspect external name caches for location %s",
-            getattr(location, "pk", None),
-            exc_info=True,
-        )
+    Args:
+        location: The location to gather candidates for.
+        extra_candidates: Optional ``(source, raw_value)`` pairs to consider
+            ahead of plugin-provided candidates (e.g. freshly fetched data not
+            yet visible in the cache).
+
+    Returns:
+        Cleaned candidates in arrival order.
+    """
+    from urbanlens.dashboard.plugins.registry import plugin_registry
+    from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+
+    raw: list[tuple[str, Any]] = list(extra_candidates or [])
+    for provider in plugin_registry.name_providers():
+        try:
+            raw.extend((provider.source, value) for value in provider.candidates(location))
+        except Exception:
+            logger.exception(
+                "Name provider '%s' failed for location %s",
+                provider.source,
+                getattr(location, "pk", None),
+            )
+
+    candidates: list[NameCandidate] = []
+    seen: set[tuple[str, str]] = set()
+    for source, value in raw:
+        name = _clean_candidate(value)
+        if not name or is_address_derived_name(name, location):
+            continue
+        key = (source, normalize_name_for_comparison(name))
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(NameCandidate(name=name, source=source))
     return candidates
 
 
@@ -180,91 +280,83 @@ def best_external_name_for_location(
 ) -> tuple[str, str] | None:
     """Choose the best externally supplied name for a location.
 
-    Preference order intentionally favours structured place data over broader
-    encyclopedia or park data: explicit candidates (usually freshly loaded
-    Google Places details), cached Google place names, cached Google Places,
-    Wikipedia, then NPS.
+    Candidates come from plugin name providers (plus any explicit extras) and
+    the winner is picked by the configured
+    :class:`~urbanlens.dashboard.services.locations.name_resolution.NameResolver`
+    - by default, two-source agreement first, then the site-admin source
+    priority order.
+
+    Args:
+        location: The location to name.
+        extra_candidates: Optional ``(source, raw_value)`` pairs considered
+            ahead of plugin candidates.
+
+    Returns:
+        ``(name, source)`` for the winning candidate, or None when no
+        acceptable candidate exists.
     """
-    for source, value in external_name_candidates_for_location(location, extra_candidates=extra_candidates):
-        if name := _clean_candidate(value):
-            return name, source
-    return None
+    from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
+
+    candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
+    resolved = default_name_resolver().resolve(candidates, location)
+    if resolved is None:
+        return None
+    return resolved.name, resolved.source
 
 
-def _candidate_names(extra_candidates: list[tuple[str, Any]] | None = None) -> list[tuple[str, str]]:
-    """Return de-duplicated meaningful external names in source order."""
-    candidates: list[tuple[str, Any]] = list(extra_candidates or [])
-    names: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for source, value in candidates:
-        if name := _clean_candidate(value):
-            key = name.casefold()
-            if key not in seen:
-                names.append((source, name))
-                seen.add(key)
-    return names
+def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
+    """Persist external name candidates as official WikiAlias rows.
 
+    Every candidate is recorded - including one matching the wiki's current
+    name, since the alias list is the full set of known names. Existing rows
+    (e.g. user-created aliases with the same name) are left untouched.
 
-def _add_location_aliases(location: Location, names: list[tuple[str, str]]) -> bool:
-    """Append external names as LocationAlias rows without duplicating the canonical name."""
-    if not getattr(location, "pk", None):
+    Args:
+        wiki: The wiki to attach aliases to; skipped when None or unsaved
+            (wikis are created lazily and this honours that).
+        candidates: Cleaned candidates to persist.
+
+    Returns:
+        True when at least one alias row was created.
+    """
+    if wiki is None or not getattr(wiki, "pk", None):
         return False
-    from urbanlens.dashboard.models.aliases.model import LocationAlias
+    from urbanlens.dashboard.models.aliases.model import AliasType, WikiAlias
 
-    canonical = (location.name or "").strip().casefold()
     changed = False
-    for _source, name in names:
-        if name.casefold() == canonical:
-            continue
+    for candidate in candidates:
         try:
-            _alias, created = LocationAlias.objects.get_or_create(location=location, name=name)
+            _alias, created = WikiAlias.objects.get_or_create(
+                wiki=wiki,
+                name=candidate.name,
+                defaults={"kind": AliasType.OFFICIAL, "source": candidate.source},
+            )
         except IntegrityError:
             created = False
         changed = changed or created
     return changed
 
 
-def _add_pin_aliases(pin: Pin, names: list[tuple[str, str]]) -> bool:
-    """Append external names as PinAlias rows without duplicating the pin label."""
-    if not getattr(pin, "pk", None):
-        return False
-    from urbanlens.dashboard.models.aliases.model import PinAlias
+def persist_official_aliases_for_location(location: Location) -> bool:
+    """Backfill official aliases for a location's wiki from cached candidates.
 
-    canonical_names = {value.strip().casefold() for value in (pin.name, pin.effective_name) if value}
-    changed = False
-    for _source, name in names:
-        if name.casefold() in canonical_names:
-            continue
-        try:
-            _alias, created = PinAlias.objects.get_or_create(pin=pin, name=name)
-        except IntegrityError:
-            created = False
-        changed = changed or created
-    return changed
+    Used when a wiki comes into existence after external data was already
+    cached (wikis are created lazily): reads only already-cached candidates -
+    no network calls - and records them as official aliases.
 
+    Args:
+        location: The location whose wiki should receive official aliases.
 
-def sync_pin_aliases_after_rename(pin: Pin, previous_name: str) -> None:
-    """After a pin's ``name`` has been changed and saved, keep aliases in sync.
-
-    Adds the previous user-given name as a searchable alias (unless it was blank
-    or unchanged), and drops any existing alias that now matches the new name so
-    the aliases list never contains a redundant near-duplicate of the current name.
+    Returns:
+        True when at least one alias row was created.
     """
-    from urbanlens.dashboard.models.aliases.model import PinAlias
+    from django.core.exceptions import ObjectDoesNotExist
 
-    next_name = (pin.name or "").strip()
-    previous_name = previous_name.strip()
-    if previous_name and previous_name != next_name:
-        try:
-            PinAlias.objects.get_or_create(pin=pin, name=previous_name)
-        except IntegrityError:
-            logger.debug("Pin alias already exists for pin %s and name %s", pin.pk, previous_name)
-
-    if next_name:
-        normalized_next = normalize_name_for_comparison(next_name)
-        for alias in pin.aliases.all():
-            if normalize_name_for_comparison(alias.name) == normalized_next:
-                alias.delete()
+    try:
+        wiki = location.wiki
+    except ObjectDoesNotExist:
+        return False
+    return _add_wiki_aliases(wiki, external_name_candidates_for_location(location))
 
 
 def update_location_name_from_external_sources(
@@ -273,60 +365,52 @@ def update_location_name_from_external_sources(
     extra_candidates: list[tuple[str, Any]] | None = None,
     save: bool = True,
 ) -> bool:
-    """Replace a meaningless Location.name with the best externally loaded name."""
-    resolved = best_external_name_for_location(location, extra_candidates=extra_candidates)
-    original_name = location.name
+    """Refresh a Location's official_name (and its wiki's name/aliases) from external sources.
+
+    The place-identity name lives on ``Location.official_name``; the
+    community-editable name and alias list live on the linked ``Wiki`` (updated
+    only when one already exists, honouring lazy wiki creation). All surviving
+    candidates are persisted as official aliases *before* any name is written,
+    so the Pin/Wiki ``save()`` alias invariant finds correctly attributed rows
+    instead of creating user-attributed ones.
+
+    Args:
+        location: The location to refresh.
+        extra_candidates: Optional ``(source, raw_value)`` pairs considered
+            ahead of plugin candidates.
+        save: Whether to persist the changes; False computes without writing.
+
+    Returns:
+        True when the location name, wiki name, or alias list changed.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
+
+    candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
+    try:
+        wiki = location.wiki
+    except ObjectDoesNotExist:
+        wiki = None
+
+    aliases_changed = _add_wiki_aliases(wiki, candidates)
+
+    resolved = default_name_resolver().resolve(candidates, location)
     changed_fields: set[str] = set()
+    wiki_changed = False
     if resolved is not None:
-        name, _source = resolved
+        name = resolved.name
         if location.official_name != name:
             location.official_name = name
             changed_fields.add("official_name")
-        if not is_meaningful_name(location.name) and location.name != name:
-            location.name = name
-            changed_fields.add("name")
         if changed_fields and save and location.pk:
             location.save(update_fields=[*sorted(changed_fields), "updated"])
+        # Refresh the community name only when it is not yet meaningful, so a
+        # community-edited wiki name is never overwritten.
+        if wiki is not None and not is_meaningful_name(wiki.name) and wiki.name != name:
+            wiki.name = name
+            wiki_changed = True
+            if save and wiki.pk:
+                wiki.save(update_fields=["name", "updated"])
 
-    alias_names = _candidate_names(external_name_candidates_for_location(location, extra_candidates=extra_candidates))
-    changed = _add_location_aliases(location, alias_names)
-    if changed_fields:
-        return True
-    if original_name == location.name and resolved is None:
-        return changed
-    return changed
-
-
-def update_pin_name_from_external_sources(
-    pin: Pin,
-    *,
-    extra_candidates: list[tuple[str, Any]] | None = None,
-    save: bool = True,
-) -> bool:
-    """Replace an auto/placeholder pin label unless the user typed a name."""
-    name_changed = False
-    location = pin.location if pin.location_id else None
-    if location is not None:
-        name_changed = update_location_name_from_external_sources(location, extra_candidates=extra_candidates, save=save)
-
-    official_candidate = None
-    if extra_candidates:
-        for _source, value in extra_candidates:
-            if name := _clean_candidate(value):
-                official_candidate = name
-                break
-    if not pin.name_is_user_provided and official_candidate and pin.official_name != official_candidate:
-        pin.official_name = official_candidate
-        if save and pin.pk:
-            pin.save(update_fields=["official_name", "updated"])
-        name_changed = True
-
-    if not pin.name_is_user_provided and not is_meaningful_name(pin.name) and official_candidate:
-        pin.name = official_candidate
-        if save and pin.pk:
-            pin.save(update_fields=["name", "updated"])
-        name_changed = True
-
-    alias_names = _candidate_names(extra_candidates)
-    changed = _add_pin_aliases(pin, alias_names)
-    return name_changed or changed
+    return bool(changed_fields) or wiki_changed or aliases_changed

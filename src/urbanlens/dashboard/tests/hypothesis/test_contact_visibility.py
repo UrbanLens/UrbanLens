@@ -8,6 +8,7 @@ Covers:
 """
 from __future__ import annotations
 
+from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
@@ -305,16 +306,16 @@ class CanViewContactInfoCommonPinTests(TestCase):
     def test_viewer_sharing_a_location_can_see(self) -> None:
         shared_location = baker.make(Location, latitude="40.000000", longitude="-74.000000")
         viewer = _profile()
-        baker.make("dashboard.Pin", profile=self.profile, location=shared_location, latitude=None, longitude=None)
-        baker.make("dashboard.Pin", profile=viewer, location=shared_location, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=self.profile, location=shared_location)
+        baker.make("dashboard.Pin", profile=viewer, location=shared_location)
         self.assertTrue(self.profile.can_view_contact_info(viewer))
 
     def test_viewer_with_different_pins_cannot_see(self) -> None:
         loc_a = baker.make(Location, latitude="40.000000", longitude="-74.000000")
         loc_b = baker.make(Location, latitude="51.500000", longitude="-0.120000")
         viewer = _profile()
-        baker.make("dashboard.Pin", profile=self.profile, location=loc_a, latitude=None, longitude=None)
-        baker.make("dashboard.Pin", profile=viewer, location=loc_b, latitude=None, longitude=None)
+        baker.make("dashboard.Pin", profile=self.profile, location=loc_a)
+        baker.make("dashboard.Pin", profile=viewer, location=loc_b)
         self.assertFalse(self.profile.can_view_contact_info(viewer))
 
     def test_anonymous_cannot_see_regardless_of_pins(self) -> None:
@@ -331,3 +332,47 @@ class CanViewContactInfoSelfTests(TestCase):
         Profile.objects.filter(pk=profile.pk).update(contact_visibility=visibility)
         profile.refresh_from_db()
         self.assertTrue(profile.can_view_contact_info(profile))
+
+
+# -- Profile page email visibility -----------------------------------------------
+
+
+class ProfilePageEmailVisibilityTests(TestCase):
+    """The public profile page must honor contact_visibility for the owner's email."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.owner = _profile()
+        self.owner.user.email = "owner@example.com"
+        self.owner.user.save(update_fields=["email"])
+        Profile.objects.filter(pk=self.owner.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+        self.viewer = _profile()
+        self.client.force_login(self.viewer.user)
+        self.profile_path = reverse("profile.view_user", kwargs={"profile_slug": self.owner.slug})
+
+    def test_email_hidden_from_stranger_when_contact_visibility_is_no_one(self) -> None:
+        Profile.objects.filter(pk=self.owner.pk).update(contact_visibility=VisibilityChoice.NO_ONE)
+        response = self.client.get(self.profile_path)
+        self.assertNotContains(response, "owner@example.com")
+
+    def test_email_hidden_from_stranger_when_contact_visibility_is_friends(self) -> None:
+        Profile.objects.filter(pk=self.owner.pk).update(contact_visibility=VisibilityChoice.FRIENDS)
+        response = self.client.get(self.profile_path)
+        self.assertNotContains(response, "owner@example.com")
+
+    def test_email_shown_when_contact_visibility_is_anyone(self) -> None:
+        Profile.objects.filter(pk=self.owner.pk).update(contact_visibility=VisibilityChoice.ANYONE)
+        response = self.client.get(self.profile_path)
+        self.assertContains(response, "owner@example.com")
+
+    def test_email_shown_to_accepted_friend(self) -> None:
+        Profile.objects.filter(pk=self.owner.pk).update(contact_visibility=VisibilityChoice.FRIENDS)
+        _make_accepted_friendship(self.owner, self.viewer)
+        response = self.client.get(self.profile_path)
+        self.assertContains(response, "owner@example.com")
+
+    def test_owner_always_sees_own_email(self) -> None:
+        Profile.objects.filter(pk=self.owner.pk).update(contact_visibility=VisibilityChoice.NO_ONE)
+        self.client.force_login(self.owner.user)
+        response = self.client.get(reverse("profile.view"))
+        self.assertContains(response, "owner@example.com")

@@ -37,6 +37,17 @@ _db_settings = settings(
 )
 
 
+def _pin_at(profile: Profile, lat: float, lng: float, **kwargs) -> Pin:
+    """Create a Pin whose linked Location sits at the given coordinates.
+
+    A Pin no longer stores its own coordinates; they live on the shared Location
+    it references (see AddressableModel), so tests that care about a pin's map
+    position must create a Location at those coordinates.
+    """
+    location = baker.make(Location, latitude=lat, longitude=lng)
+    return baker.make(Pin, profile=profile, location=location, **kwargs)
+
+
 def _profile_with_mode(mode: str, **extra) -> Profile:
     profile: Profile = baker.make(User).profile
     Profile.objects.filter(pk=profile.pk).update(map_center_mode=mode, **extra)
@@ -204,7 +215,7 @@ class GetMapCenterAutoColdTests(TestCase):
     def test_auto_mode_returns_computed_centroid_when_pins_exist(self) -> None:
         profile = _profile_with_mode(MapCenterMode.AUTO)
         location = baker.make(Location, latitude=40.0, longitude=-74.0)
-        baker.make(Pin, profile=profile, location=location, latitude=40.0, longitude=-74.0)
+        baker.make(Pin, profile=profile, location=location)
         result = profile.get_map_center()
         self.assertIsNotNone(result)
         assert result is not None  # nosec B101
@@ -227,7 +238,7 @@ class ComputeMapCenterTests(TestCase):
         self.assertIsNone(self.profile.compute_map_center())
 
     def test_single_pin_centroid_equals_pin_coordinates(self) -> None:
-        baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
+        _pin_at(self.profile, 42.65, -73.75)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result[0], 42.65, places=4)
@@ -235,15 +246,15 @@ class ComputeMapCenterTests(TestCase):
 
     def test_two_nearby_pins_result_is_their_midpoint(self) -> None:
         # These two points are ~140 km apart - both in the same cluster.
-        baker.make(Pin, profile=self.profile, latitude=40.0, longitude=-70.0)
-        baker.make(Pin, profile=self.profile, latitude=41.0, longitude=-71.0)
+        _pin_at(self.profile, 40.0, -70.0)
+        _pin_at(self.profile, 41.0, -71.0)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result[0], 40.5, places=3)
         self.assertAlmostEqual(result[1], -70.5, places=3)
 
     def test_result_is_cached_on_profile_in_db(self) -> None:
-        baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
+        _pin_at(self.profile, 42.65, -73.75)
         self.profile.compute_map_center()
         self.profile.refresh_from_db()
         self.assertIsNotNone(self.profile.map_center_latitude)
@@ -251,21 +262,21 @@ class ComputeMapCenterTests(TestCase):
         self.assertAlmostEqual(float(self.profile.map_center_latitude), 42.65, places=4)
 
     def test_result_is_also_set_on_instance(self) -> None:
-        baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
+        _pin_at(self.profile, 42.65, -73.75)
         self.profile.compute_map_center()
         # No refresh_from_db - check the in-memory instance
         self.assertIsNotNone(self.profile.map_center_latitude)
 
     def test_returns_floats_not_decimals(self) -> None:
-        baker.make(Pin, profile=self.profile, latitude=42.65, longitude=-73.75)
+        _pin_at(self.profile, 42.65, -73.75)
         result = self.profile.compute_map_center()
         self.assertIsInstance(result[0], float)
         self.assertIsInstance(result[1], float)
 
     def test_falls_back_to_location_coordinates_when_pin_has_no_override(self) -> None:
         location = baker.make(Location, latitude=50.0, longitude=10.0)
-        # Pin has no coordinate override - Coalesce must use location coords.
-        baker.make(Pin, profile=self.profile, location=location, latitude=None, longitude=None)
+        # A Pin reads its coordinates from the linked Location.
+        baker.make(Pin, profile=self.profile, location=location)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result[0], 50.0, places=2)
@@ -284,8 +295,8 @@ class ComputeMapCenterTests(TestCase):
         """For two pins that are close together, the cluster centroid equals their midpoint."""
         lat2, lng2 = lat1 + dlat, lng1 + dlng
         assume(_haversine_km((lat1, lng1), (lat2, lng2)) <= _CLUSTER_RADIUS_KM)
-        baker.make(Pin, profile=self.profile, latitude=lat1, longitude=lng1)
-        baker.make(Pin, profile=self.profile, latitude=lat2, longitude=lng2)
+        _pin_at(self.profile, lat1, lng1)
+        _pin_at(self.profile, lat2, lng2)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result[0], (lat1 + lat2) / 2, places=4)
@@ -308,8 +319,8 @@ class ComputeMapCenterClusteringTests(TestCase):
         # The NYC cluster has more members and must win.
         nyc = [(40.7, -74.0), (40.8, -73.9), (40.6, -74.1)]
         for lat, lng in nyc:
-            baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
-        baker.make(Pin, profile=self.profile, latitude=51.5, longitude=-0.1)  # London
+            _pin_at(self.profile, lat, lng)
+        _pin_at(self.profile, 51.5, -0.1)  # London
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         # Result must be near NYC, not in the middle of the Atlantic.
@@ -320,8 +331,8 @@ class ComputeMapCenterClusteringTests(TestCase):
     def test_equal_sized_clusters_returns_a_cluster_centroid_not_midpoint(self) -> None:
         # One pin in NYC and one in London.  The result must be one of the two
         # locations - NOT the midpoint in the mid-Atlantic (~46°N 37°W).
-        baker.make(Pin, profile=self.profile, latitude=40.7, longitude=-74.0)   # NYC
-        baker.make(Pin, profile=self.profile, latitude=51.5, longitude=-0.1)    # London
+        _pin_at(self.profile, 40.7, -74.0)   # NYC
+        _pin_at(self.profile, 51.5, -0.1)    # London
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         near_nyc = abs(result[0] - 40.7) < 1.0 and abs(result[1] - -74.0) < 1.0
@@ -335,9 +346,9 @@ class ComputeMapCenterClusteringTests(TestCase):
         # Six pins in Europe, two pins in South America.  Result must be in Europe.
         europe = [(48.8, 2.3), (51.5, -0.1), (52.5, 13.4), (41.9, 12.5), (40.4, -3.7), (50.0, 14.4)]
         for lat, lng in europe:
-            baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+            _pin_at(self.profile, lat, lng)
         for lat, lng in [(-23.5, -46.6), (-34.6, -58.4)]:
-            baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+            _pin_at(self.profile, lat, lng)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         # Result must be in the European latitude/longitude band.
@@ -353,7 +364,7 @@ class ComputeMapCenterClusteringTests(TestCase):
         lats = [40.0 + i * 0.1 for i in range(n)]
         lngs = [-74.0 - i * 0.1 for i in range(n)]
         for lat, lng in zip(lats, lngs):
-            baker.make(Pin, profile=self.profile, latitude=lat, longitude=lng)
+            _pin_at(self.profile, lat, lng)
         result = self.profile.compute_map_center()
         self.assertIsNotNone(result)
         self.assertGreaterEqual(result[0], min(lats) - 0.001)

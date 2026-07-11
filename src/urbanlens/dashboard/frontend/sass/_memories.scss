@@ -1,7 +1,24 @@
 @use 'variables' as *;
 
+// Shared type accent colors (routes / trips / visits / photos). Adjust these to
+// recolor the legend swatches, map markers, and timeline card icons together.
+$memories-type-colors: (
+    route: $color-blue-500,
+    trip: $color-orange-500,
+    visit: $color-green-500,
+    photo: $color-pink-500,
+);
+
+// Each type utility class exposes its accent via a custom property so any
+// descendant (swatch, marker, card icon) can pick it up with a single rule.
+@each $type, $color in $memories-type-colors {
+    .memories-type-#{$type} {
+        --memories-type-color: #{$color};
+    }
+}
+
 // -- Memories page ----------------------------------------------------------
-#memories-page {
+.memories-tab-page {
     margin-top: 1rem;
 }
 
@@ -184,6 +201,7 @@
         height: 10px;
         border-radius: 50%;
         display: inline-block;
+        background: var(--memories-type-color);
     }
 
     &.is-off {
@@ -195,18 +213,26 @@
 
 .memories-map-wrap {
     position: relative;
-    border-radius: .75rem;
-    overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
     margin-bottom: 1.5rem;
+    // Definite height so container queries (the layers panel's toggle button,
+    // see @include map-query-container) can size against this box - `contain:
+    // size` otherwise collapses an "auto" height to 0.
+    height: 420px;
+    @include map-query-container;
 }
 
 #memories-map {
     height: 420px;
     width: 100%;
+    border-radius: .75rem;
+    overflow: hidden;
+    border: 1px solid var(--ul-grey-1a);
 }
 
 .memories-marker-icon {
+    width: 26px;
+    height: 26px;
+    background: var(--memories-type-color);
     border-radius: 50%;
     border: 2px solid #fff;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
@@ -217,6 +243,32 @@
     .material-symbols-outlined {
         color: #fff;
         font-size: 14px;
+    }
+}
+
+// Leaflet marker popups (built in JS via popupHtml()).
+.memories-popup {
+    min-width: 160px;
+
+    .memories-popup-thumb {
+        width: 100%;
+        max-height: 120px;
+        object-fit: cover;
+        border-radius: .4rem;
+        margin-bottom: .4rem;
+    }
+
+    .memories-popup-title {
+        font-weight: 700;
+    }
+
+    .memories-popup-subtitle {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+    }
+
+    .memories-popup-link {
+        font-size: .8rem;
     }
 }
 
@@ -254,6 +306,11 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
         transform: translateY(-1px);
     }
+
+    // Cards without a target link aren't clickable.
+    &.memories-card--static {
+        cursor: default;
+    }
 }
 
 .memories-card-icon {
@@ -264,6 +321,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--memories-type-color);
 
     .material-symbols-outlined {
         color: #fff;
@@ -347,3 +405,918 @@
         font-size: 2rem;
     }
 }
+
+// -- Memories sub-nav tabs (Timeline | Photos) ------------------------------
+
+// Materialize paints every bare <nav> as a 56px salmon (#ee6e73) bar and forces
+// `nav i` icons to display:block/56px. This is a plain sub-nav, so reset all of
+// that back to a normal underline tab strip.
+.memories-tabs {
+    display: flex;
+    gap: .25rem;
+    width: auto;
+    height: auto;
+    line-height: normal;
+    background-color: var(--ul-grey-0);
+    color: inherit;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+.memories-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .6rem .9rem;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color .15s ease, border-color .15s ease;
+
+    // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.
+    .material-symbols-outlined {
+        display: inline-flex;
+        align-items: center;
+        height: auto;
+        line-height: 1;
+        font-size: 1.2rem;
+    }
+
+    &:focus,
+    &:active,
+    &:hover {
+        color: var(--ul-grey-8);
+        border-bottom-color: var(--ul-grey-4);
+    }
+
+    &.is-active {
+        color: var(--ul-grey-9);
+        border-bottom-color: $color-deep-purple-500;
+        background-color: var(--ul-grey-0b);
+
+        .material-symbols-outlined { color: $color-deep-purple-500; }
+    }
+}
+
+// -- Photos page ------------------------------------------------------------
+
+.photos-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    text-align: center;
+    padding: 1.5rem 1rem;
+    margin-bottom: 1.5rem;
+    border: 2px dashed var(--ul-grey-2);
+    border-radius: .9rem;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+
+    &:focus,
+    &:active,
+    &:hover { border-color: $color-deep-purple-500; background: var(--ul-grey-0b); }
+
+    .material-symbols-outlined { font-size: 2rem; color: $color-deep-purple-500; }
+}
+
+.photos-dropzone-title { font-weight: 600; color: var(--ul-grey-8); }
+.photos-dropzone-sub { font-size: .82rem; }
+
+.photos-upload-progress {
+    width: 100%;
+    max-width: 320px;
+    height: 5px;
+    margin-top: .6rem;
+    background: var(--ul-grey-1a);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.photos-upload-bar {
+    height: 100%;
+    width: 0;
+    background: $color-deep-purple-500;
+    transition: width .25s ease;
+}
+
+// -- Needs-attention band --------------------------------------------------
+
+.photos-attention { margin-bottom: 1.75rem; }
+
+.photos-attention-head,
+.photos-gallery-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .75rem;
+
+    h2 {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--ul-grey-8);
+    }
+
+    .material-symbols-outlined { font-size: 1.3rem; color: $color-deep-purple-500; }
+}
+
+.photos-attention-scroll {
+    display: flex;
+    gap: .85rem;
+    overflow-x: auto;
+    padding-bottom: .5rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+}
+
+.photos-attention--empty .photos-attention-clear {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .9rem 1rem;
+    border-radius: .75rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+    margin: 0;
+
+    .material-symbols-outlined { color: $color-green-500; }
+}
+
+// -- Actionable photo card -------------------------------------------------
+
+.photo-card {
+    flex: 0 0 82%;
+    max-width: 340px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .85rem;
+    overflow: hidden;
+    background: var(--ul-grey-0);
+}
+
+.photo-card-thumb {
+    display: block;
+    aspect-ratio: 16 / 10;
+    background: var(--ul-grey-1a);
+
+    img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
+
+// Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
+// file is missing (e.g. removed from storage independently of its DB row).
+.photo-card-thumb-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 2rem; }
+}
+
+.photo-card-body {
+    padding: .75rem .85rem .85rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+}
+
+.photo-card-meta { font-size: .78rem; color: var(--ul-grey-6); }
+
+.photo-card-date {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+.photo-card-prompt {
+    margin: 0;
+    font-size: .88rem;
+    line-height: 1.35;
+    color: var(--ul-grey-8);
+}
+
+.photo-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.photo-card-search {
+    summary {
+        cursor: pointer;
+        font-size: .82rem;
+        color: $color-deep-purple-500;
+        margin-bottom: .4rem;
+    }
+}
+
+.photo-pin-search-input {
+    width: 100%;
+    padding: .45rem .6rem;
+    border: 1px solid var(--ul-grey-2);
+    border-radius: .5rem;
+    font-size: .85rem;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+}
+
+.photo-pin-results {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    margin-top: .4rem;
+    max-height: 190px;
+    overflow-y: auto;
+}
+
+.photo-pin-result {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    width: 100%;
+    text-align: left;
+    padding: .45rem .55rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .5rem;
+    background: transparent;
+    cursor: pointer;
+    font-size: .85rem;
+    color: var(--ul-grey-8);
+
+    &:hover { background: rgba(156, 39, 176, .06); border-color: $color-deep-purple-500; }
+
+    .material-symbols-outlined { font-size: 1.1rem; color: $color-deep-purple-500; }
+    .photo-pin-result-sub { color: var(--ul-grey-6); font-size: .75rem; margin-left: auto; }
+}
+
+.photo-pin-empty { font-size: .8rem; color: var(--ul-grey-6); margin: .3rem 0 0; }
+
+// -- Confirm-pin dialog (preview / move / name before creating) ------------
+
+.photo-pin-confirm-dialog {
+    width: min(560px, 94vw);
+    max-width: 94vw;
+}
+
+.photo-pin-confirm-body { padding: 1rem 1.1rem 1.2rem; }
+
+.photo-pin-confirm-loading { color: var(--ul-grey-6); font-size: .9rem; text-align: center; padding: 2rem 0; }
+
+.photo-pin-confirm-intro {
+    margin: 0 0 .75rem;
+    font-size: .88rem;
+    line-height: 1.4;
+    color: var(--ul-grey-7);
+}
+
+// Positioning context for the floating {% map_search_bar %} (.addr-search-bar)
+// rendered on top of the confirm-pin map, the same way .safety-map-wrapper
+// does for the safety check-in destination picker.
+.photo-pin-confirm-map-wrap {
+    position: relative;
+    margin-bottom: .85rem;
+}
+
+.photo-pin-confirm-map {
+    height: 300px;
+    max-height: 45vh;
+    width: 100%;
+    border-radius: .6rem;
+    overflow: hidden;
+    border: 1px solid var(--ul-grey-1a);
+}
+
+// Leaflet popup shown when the user clicks one of their own pins plotted on
+// the confirm-pin map.
+.photo-pin-existing-popup {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    font-size: .85rem;
+
+    strong { color: var(--ul-grey-8); }
+}
+
+.photo-pin-confirm-form {
+    .form-row { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .85rem; }
+
+    label { font-size: .82rem; font-weight: 600; color: var(--ul-grey-7); }
+
+    input[type="text"] {
+        padding: .5rem .6rem;
+        border: 1px solid var(--ul-grey-2);
+        border-radius: .5rem;
+        font-size: .9rem;
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+
+    .form-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+}
+
+// -- Full gallery grid -----------------------------------------------------
+
+.photos-gallery { margin-bottom: 2rem; }
+
+.photos-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: .4rem;
+}
+
+.photo-tile {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: .5rem;
+    overflow: hidden;
+    background: var(--ul-grey-1a);
+
+    &:hover .photo-tile-del { opacity: 1; }
+}
+
+// Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
+// file is missing (e.g. removed from storage independently of its DB row).
+.photo-tile-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--ul-grey-4);
+
+    .material-icons { font-size: 1.6rem; }
+}
+
+.photo-tile-btn {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+
+    img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
+
+.photo-tile-badge {
+    position: absolute;
+    left: .3rem;
+    bottom: .3rem;
+    display: inline-flex;
+    padding: .1rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+
+    .material-symbols-outlined { font-size: .95rem; }
+}
+
+.photo-tile-del {
+    position: absolute;
+    top: .3rem;
+    right: .3rem;
+    display: inline-flex;
+    padding: .2rem;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s ease;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+// Touch devices can't hover: keep the delete affordance visible.
+@media (hover: none) {
+    .photo-tile-del { opacity: .85; }
+}
+
+.photos-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--ul-grey-6);
+    border: 1px dashed var(--ul-grey-2);
+    border-radius: .9rem;
+    background: var(--ul-grey-1b);
+
+    .material-symbols-outlined { font-size: 2.4rem; opacity: .6; }
+    p { margin: .5rem 0 0; }
+}
+
+// -- Unlogged-visits list ("Log your visits" subpage) -----------------------
+
+.memories-unlogged {
+    margin-bottom: 1.75rem;
+}
+
+.memories-unlogged--caught-up {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .9rem 1rem;
+    border-radius: .75rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+
+    .material-symbols-outlined { color: $color-green-500; }
+}
+
+.memories-unlogged-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .85rem;
+    font-size: .88rem;
+    color: var(--ul-grey-6);
+}
+
+.memories-unlogged-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .85rem;
+}
+
+.unlogged-card {
+    position: relative;
+    display: flex;
+    gap: .65rem;
+    padding: .85rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .85rem;
+    background: var(--ul-grey-0);
+}
+
+.unlogged-card-dismiss {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ul-grey-5);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+
+    .material-symbols-outlined { font-size: 1.1rem; }
+
+    &:hover { background: var(--ul-grey-1a); color: var(--ul-grey-8); }
+}
+
+.unlogged-card-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: rgba($color-green-500, .14);
+
+    .material-symbols-outlined { color: $color-green-500; font-size: 1.4rem; }
+}
+
+.unlogged-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.unlogged-card-title {
+    font-weight: 600;
+    font-size: .95rem;
+    color: var(--ul-grey-8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    // Leave room for the dismiss button pinned to the card's top-right corner.
+    padding-right: 1.8rem;
+}
+
+.unlogged-card-meta {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+// Mobile-first: the quick-log form, "Add details", and "Not visited" each get
+// their own row by default; wider cards (see the grid breakpoint below) have
+// room for everything on one line.
+.unlogged-card-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .5rem;
+}
+
+.unlogged-card-quick {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+
+    input[type="date"] {
+        flex: 1 1 8rem;
+        min-width: 0;
+        padding: .35rem .5rem;
+        border: 1px solid var(--ul-grey-2);
+        border-radius: .5rem;
+        font-size: .82rem;
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+}
+
+.unlogged-card-details,
+.unlogged-card-unmark {
+    align-self: flex-start;
+}
+
+.unlogged-card-unmark:hover {
+    color: $color-red-500;
+    border-color: $color-red-500;
+}
+
+// -- "Log your visits" teaser (Timeline page link to the Visits subpage) ---
+
+.memories-unlogged-teaser {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+    padding: .8rem 1rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .75rem;
+    background: var(--ul-grey-0);
+    text-decoration: none;
+    transition: box-shadow .15s ease, border-color .15s ease;
+
+    &:hover {
+        border-color: $color-deep-purple-500;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+    }
+}
+
+.memories-unlogged-teaser-icon {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    background: rgba($color-green-500, .14);
+
+    .material-symbols-outlined { color: $color-green-500; font-size: 1.3rem; }
+}
+
+.memories-unlogged-teaser-text {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+    flex: 1 1 auto;
+
+    strong { font-size: .92rem; color: var(--ul-grey-8); }
+
+    span { font-size: .8rem; color: var(--ul-grey-6); }
+}
+
+.memories-unlogged-teaser-arrow {
+    flex: 0 0 auto;
+    color: var(--ul-grey-5);
+}
+
+// -- Add-details button on a timeline visit card ---------------------------
+
+.memories-card { position: relative; }
+
+.memories-card-details-btn {
+    position: absolute;
+    top: .35rem;
+    right: .35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s ease, background .15s ease;
+
+    .material-symbols-outlined { font-size: 1.1rem; }
+
+    &:hover { background: $color-deep-purple-500; }
+}
+
+.memories-card:hover .memories-card-details-btn,
+.memories-card:focus-within .memories-card-details-btn { opacity: 1; }
+
+// -- Wider viewports -------------------------------------------------------
+
+@media (min-width: 640px) {
+    .photo-card { flex-basis: 320px; }
+
+    .photos-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; }
+
+    .photos-dropzone { padding: 2rem 1rem; }
+
+    .memories-unlogged-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+    // Enough width now for the quick-log form, "Add details", and "Not visited"
+    // to share a single row instead of stacking.
+    .unlogged-card-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .unlogged-card-quick { flex: 1 1 auto; }
+}
+
+.visits-empty-state {
+    position: relative;
+    overflow: hidden;
+    max-width: 720px;
+    margin: 2rem auto 0;
+    padding: 3rem 2rem;
+    text-align: center;
+    border: 1px solid rgba(156, 39, 176, .18);
+    border-radius: 1.25rem;
+    background:
+        radial-gradient(circle at top left, rgba(156, 39, 176, .16), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(76, 175, 80, .14), transparent 30%),
+        var(--ul-grey-0);
+    box-shadow: 0px 6px 34px rgba(0, 0, 0, 0.32)
+
+    h2 {
+        margin: .35rem 0 .75rem;
+        color: var(--ul-grey-8);
+        font-size: clamp(1.45rem, 3vw, 2rem);
+        line-height: 1.15;
+    }
+
+    p {
+        max-width: 520px;
+        margin: 0 auto;
+        color: var(--ul-grey-6);
+        font-size: .98rem;
+    }
+}
+
+.visits-empty-hero {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 1.15rem;
+}
+
+.visits-empty-icon,
+.visits-empty-sparkle {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.visits-empty-icon {
+    inset: 0;
+    color: $color-green-500;
+    background: rgba(76, 175, 80, .14);
+
+    .material-symbols-outlined { font-size: 3.4rem; }
+}
+
+.visits-empty-sparkle {
+    right: -.25rem;
+    top: .35rem;
+    width: 34px;
+    height: 34px;
+    color: $color-deep-purple-500;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(31, 41, 55, .12);
+
+    .material-symbols-outlined { font-size: 1.35rem; }
+}
+
+.visits-empty-kicker {
+    color: $color-deep-purple-500 !important;
+    font-size: .78rem !important;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.visits-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .75rem;
+    margin-top: 1.5rem;
+}
+
+
+// -- Memories > Maps: grid of the user's markup maps ------------------------
+
+.memories-maps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.memories-map-card {
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+
+    // The shared comment-map thumbnail is used as the card cover.
+    .comment-map-preview {
+        margin: 0;
+        border-radius: 0;
+    }
+}
+
+.memories-map-card-body {
+    padding: .75rem .9rem .9rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    flex: 1;
+}
+
+.memories-map-card-title {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.memories-map-card-meta {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    &--draft {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+
+        .material-symbols-outlined { font-size: .95rem; }
+    }
+}
+
+.memories-map-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: $color-indigo-500;
+    text-decoration: none;
+
+    .material-symbols-outlined { font-size: .95rem; }
+
+    &:hover { text-decoration: underline; }
+}
+
+.memories-map-card-actions {
+    margin-top: auto;
+    padding-top: .5rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+// -- Memories > Sharing: pins shared with friends + reshare chain counts -----
+
+.memories-sharing-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.memories-sharing-card {
+    padding: .9rem 1rem;
+}
+
+.memories-sharing-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.memories-sharing-pin-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    text-decoration: none;
+
+    .material-symbols-outlined { font-size: 1.1rem; color: $color-indigo-500; }
+
+    &:hover { text-decoration: underline; }
+}
+
+.memories-sharing-chain {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    cursor: help;
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+.memories-sharing-recipients {
+    list-style: none;
+    margin: .6rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.memories-sharing-recipient {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .35rem;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined { font-size: 1rem; vertical-align: -3px; }
+}
+
+.memories-sharing-recipient-name {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-weight: 600;
+}
+
+.memories-sharing-recipient-meta {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.memories-sharing-status {
+    font-weight: 600;
+
+    &--accepted { color: $color-green-600; }
+    &--rejected { color: var(--ul-grey-5); }
+    &--pending { color: $color-amber-600; }
+    &--already_pinned { color: $color-indigo-500; }
+}
+

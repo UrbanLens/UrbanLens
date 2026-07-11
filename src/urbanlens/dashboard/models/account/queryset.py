@@ -10,9 +10,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.account.model import EmailVerification
 
 
-class EmailVerificationQuerySet(abstract.QuerySet):
+class EmailVerificationQuerySet(abstract.DashboardQuerySet):
     """QuerySet for email verification tokens."""
 
 
-class EmailVerificationManager(abstract.Manager.from_queryset(EmailVerificationQuerySet)):
+class EmailVerificationManager(abstract.DashboardManager.from_queryset(EmailVerificationQuerySet)):
     """Manager for EmailVerification records."""

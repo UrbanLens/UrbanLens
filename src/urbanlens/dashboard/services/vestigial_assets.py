@@ -59,8 +59,15 @@ def cleanup_vestigial_assets(*, now: datetime | None = None) -> VestigialAssetCl
 
     for dirname, ttl_seconds in _MANAGED_ARTIFACT_DIRS.items():
         root = (media_root / dirname).resolve()
-        if not _is_within(root, media_root) or not root.is_dir():
-            logger.warning("Vestigial %s artifact directory %s is outside the media root or not a directory", dirname, root)
+        if not _is_within(root, media_root):
+            logger.warning("Vestigial %s artifact directory %s is outside the media root", dirname, root)
+            continue
+        if not root.exists():
+            # No job of this kind has run yet; the directory is created lazily on first use.
+            root.mkdir(parents=True, exist_ok=True)
+            continue
+        if not root.is_dir():
+            logger.warning("Vestigial %s artifact path %s is not a directory", dirname, root)
             continue
 
         cutoff = reference_time - timedelta(seconds=ttl_seconds)

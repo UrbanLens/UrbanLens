@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class RouteQuerySet(abstract.QuerySet):
+class RouteQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for Route records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -60,5 +60,5 @@ class RouteQuerySet(abstract.QuerySet):
         return self.filter(path__bboverlaps=bbox)
 
 
-class RouteManager(abstract.Manager.from_queryset(RouteQuerySet)):
+class RouteManager(abstract.FrontendDashboardManager.from_queryset(RouteQuerySet)):
     """Manager for Route."""

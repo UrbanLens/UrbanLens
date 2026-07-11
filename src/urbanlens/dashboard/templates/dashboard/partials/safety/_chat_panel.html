@@ -18,21 +18,23 @@ JavaScript is unavailable.
         <h3>Chat</h3>
         <span class="safety-chat-status" id="safety-chat-status" hidden>Reconnecting...</span>
     </div>
-    <ul class="safety-chat-messages" id="safety-chat-messages">
-        {% for message in messages %}
-        <li class="safety-chat-message">
-            <span class="safety-chat-sender">{{ message.sender_name }}</span>
-            <span class="safety-chat-body">{{ message.body }}</span>
-            <span class="safety-chat-time">{{ message.created|date:"g:i A" }}</span>
-        </li>
-        {% endfor %}
-    </ul>
-    <p class="safety-chat-empty" id="safety-chat-empty" {% if messages %}hidden{% endif %}>No messages yet.</p>
-    <form class="safety-chat-form" id="safety-chat-form" action="{{ chat_url }}" method="post">
-        {% csrf_token %}
-        <input type="text" name="body" id="safety-chat-input" placeholder="Message the other emergency contacts..." maxlength="2000" required>
-        <button type="submit" class="btn btn--sm btn--primary">Send</button>
-    </form>
+    <div class="card__body">
+        <ul class="safety-chat-messages" id="safety-chat-messages">
+            {% for message in messages %}
+            <li class="safety-chat-message">
+                <span class="safety-chat-sender">{{ message.sender_name }}</span>
+                <span class="safety-chat-body">{{ message.body }}</span>
+                <span class="safety-chat-time">{{ message.created|date:"g:i A" }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="safety-chat-empty" id="safety-chat-empty" {% if messages %}hidden{% endif %}>No messages yet.</p>
+        <form class="safety-chat-form" id="safety-chat-form" action="{{ chat_url }}" method="post">
+            {% csrf_token %}
+            <input type="text" name="body" id="safety-chat-input" placeholder="Message the other emergency contacts..." maxlength="2000" required>
+            <button type="submit" class="btn btn--sm btn--primary">Send</button>
+        </form>
+    </div>
 </div>
 <script>
 (function () {

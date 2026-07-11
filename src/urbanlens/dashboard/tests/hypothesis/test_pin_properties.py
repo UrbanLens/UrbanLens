@@ -35,8 +35,6 @@ def _make_pin(**kwargs: Any) -> Pin:
     defaults: dict[str, Any] = {
         "name": None,
         "location": None,
-        "latitude": None,
-        "longitude": None,
         "date_last_active": None,
         "date_abandoned": None,
         "icon": None,
@@ -55,9 +53,14 @@ def _make_pin(**kwargs: Any) -> Pin:
 
 
 def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = None) -> MagicMock:
-    """Return a lightweight mock that quacks like a Location."""
+    """Return a lightweight mock that quacks like a Location.
+
+    ``display_name`` is what Pin.effective_name reads (the community wiki name,
+    falling back to official_name); the mock exposes it directly.
+    """
     loc = MagicMock()
-    loc.name = name
+    loc.display_name = name
+    loc.official_name = name
     loc.latitude = lat if lat is not None else Decimal("42.0")
     loc.longitude = lon if lon is not None else Decimal("-73.0")
     return loc
@@ -82,10 +85,6 @@ class PinEffectiveNameTests(TestCase):
         pin = _make_pin(name=None, location=loc)
         self.assertEqual(pin.effective_name, location_name)
 
-    def test_empty_string_when_no_name_and_no_location(self) -> None:
-        pin = _make_pin(name=None, location=None)
-        self.assertEqual(pin.effective_name, "")
-
     @given(nonempty_name, nonempty_name)
     @settings(max_examples=200)
     def test_name_is_always_returned_verbatim(self, name: str, location_name: str) -> None:
@@ -107,82 +106,44 @@ class PinEffectiveNameTests(TestCase):
 # -- effective_latitude / effective_longitude -----------------------------------
 
 class PinEffectiveCoordinateTests(TestCase):
+    """effective_latitude/effective_longitude always proxy the linked Location.
+
+    A Pin has no coordinate fields of its own (see AddressableModel) - there is
+    no "pin override" concept anymore.
+    """
 
     @given(latitude, longitude)
     @settings(max_examples=300)
-    def test_pin_override_latitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=Decimal(0), lon=Decimal(0))
-        pin = _make_pin(latitude=lat, longitude=lon, location=loc)
+    def test_effective_latitude_matches_location(self, lat: Decimal, lon: Decimal) -> None:
+        loc = _make_location("Place", lat=lat, lon=lon)
+        pin = _make_pin(location=loc)
         result = pin.effective_latitude
         assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lat), places=6)
 
     @given(latitude, longitude)
     @settings(max_examples=300)
-    def test_pin_override_longitude_takes_precedence(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=Decimal(0), lon=Decimal(0))
-        pin = _make_pin(latitude=lat, longitude=lon, location=loc)
+    def test_effective_longitude_matches_location(self, lat: Decimal, lon: Decimal) -> None:
+        loc = _make_location("Place", lat=lat, lon=lon)
+        pin = _make_pin(location=loc)
         result = pin.effective_longitude
         assert result is not None  # nosec B101
         self.assertAlmostEqual(result, float(lon), places=6)
-
-    @given(latitude, longitude)
-    @settings(max_examples=300)
-    def test_location_latitude_used_when_pin_has_no_override(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=lat, lon=lon)
-        pin = _make_pin(latitude=None, longitude=None, location=loc)
-        result = pin.effective_latitude
-        assert result is not None  # nosec B101
-        self.assertAlmostEqual(result, float(lat), places=6)
-
-    @given(latitude, longitude)
-    @settings(max_examples=300)
-    def test_location_longitude_used_when_pin_has_no_override(self, lat: Decimal, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=lat, lon=lon)
-        pin = _make_pin(latitude=None, longitude=None, location=loc)
-        result = pin.effective_longitude
-        assert result is not None  # nosec B101
-        self.assertAlmostEqual(result, float(lon), places=6)
-
-    def test_effective_latitude_is_none_when_no_override_and_no_location(self) -> None:
-        pin = _make_pin(latitude=None, location=None)
-        self.assertIsNone(pin.effective_latitude)
-
-    def test_effective_longitude_is_none_when_no_override_and_no_location(self) -> None:
-        pin = _make_pin(longitude=None, location=None)
-        self.assertIsNone(pin.effective_longitude)
-
-    @given(latitude, longitude, latitude, longitude)
-    @settings(max_examples=150)
-    def test_pin_override_always_beats_location(
-        self,
-        pin_lat: Decimal,
-        pin_lon: Decimal,
-        loc_lat: Decimal,
-        loc_lon: Decimal,
-    ) -> None:
-        """As long as the pin has its own coordinates, location coords are irrelevant."""
-        loc = _make_location("Place", lat=loc_lat, lon=loc_lon)
-        pin = _make_pin(latitude=pin_lat, longitude=pin_lon, location=loc)
-        eff_lat = pin.effective_latitude
-        eff_lon = pin.effective_longitude
-        assert eff_lat is not None  # nosec B101
-        assert eff_lon is not None  # nosec B101
-        self.assertAlmostEqual(eff_lat, float(pin_lat), places=6)
-        self.assertAlmostEqual(eff_lon, float(pin_lon), places=6)
 
     @given(latitude)
     @settings(max_examples=200)
-    def test_effective_latitude_is_always_a_float_or_none(self, lat: Decimal) -> None:
-        """Return type must be float (or None), never Decimal."""
-        pin = _make_pin(latitude=lat, location=None)
+    def test_effective_latitude_is_always_a_float(self, lat: Decimal) -> None:
+        """Return type must be float, never Decimal."""
+        loc = _make_location("Place", lat=lat, lon=Decimal("0"))
+        pin = _make_pin(location=loc)
         result = pin.effective_latitude
         self.assertIsInstance(result, float)
 
     @given(longitude)
     @settings(max_examples=200)
-    def test_effective_longitude_is_always_a_float_or_none(self, lon: Decimal) -> None:
-        pin = _make_pin(longitude=lon, location=None)
+    def test_effective_longitude_is_always_a_float(self, lon: Decimal) -> None:
+        loc = _make_location("Place", lat=Decimal("0"), lon=lon)
+        pin = _make_pin(location=loc)
         result = pin.effective_longitude
         self.assertIsInstance(result, float)
 

@@ -9,12 +9,8 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.badges.customization.queryset import BadgeCustomizationManager
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.badges.model import Badge
-    from urbanlens.dashboard.models.profile.model import Profile
 
-
-class BadgeCustomization(abstract.Model):
+class BadgeCustomization(abstract.DashboardModel):
     """Stores a user's display overrides for a global badge (tag or category).
 
     Each field is nullable - null means "use the badge's global value", non-null
@@ -38,9 +34,13 @@ class BadgeCustomization(abstract.Model):
     icon = CharField(max_length=50, null=True, blank=True)
     color = CharField(max_length=50, null=True, blank=True)
 
+    if TYPE_CHECKING:
+        profile_id: int
+        badge_id: int
+
     objects = BadgeCustomizationManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_tag_customizations"
         constraints = [
             UniqueConstraint(

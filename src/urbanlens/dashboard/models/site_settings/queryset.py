@@ -10,11 +10,11 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
 
-class SiteSettingsQuerySet(abstract.QuerySet):
+class SiteSettingsQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for the site settings singleton."""
 
 
-class SiteSettingsManager(abstract.Manager.from_queryset(SiteSettingsQuerySet)):
+class SiteSettingsManager(abstract.FrontendDashboardManager.from_queryset(SiteSettingsQuerySet)):
     """Manager for SiteSettings. Use get_current() for the singleton record."""
 
     def get_current(self) -> SiteSettings:

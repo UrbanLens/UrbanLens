@@ -213,10 +213,10 @@ class MapPinCache:
     def upsert_pin(self, pin: Pin) -> None:
         if not self.client or not pin.profile_id or pin.profile_id != self.profile_id or not self.client.exists(self.meta_key):
             return
-        if pin.parent_pin_id or pin.parent_location_id:
+        if pin.parent_pin_id:
             self.delete_pin(pin.pk)
             return
-        query = Pin.objects.filter(pk=pin.pk).select_related("location")
+        query = Pin.objects.filter(pk=pin.pk).select_related("location__wiki")
         pins = self.payload.all(query)
         if not pins:
             self.delete_pin(pin.pk)

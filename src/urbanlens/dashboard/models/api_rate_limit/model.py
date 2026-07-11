@@ -9,7 +9,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_rate_limit.queryset import ApiRateLimitManager
 
 
-class ApiRateLimit(abstract.Model):
+class ApiRateLimit(abstract.DashboardModel):
     """Rate limiting configuration for one external API service.
 
     One row per service key (e.g. ``"nps"``, ``"wikipedia"``). Rows are
@@ -53,7 +53,7 @@ class ApiRateLimit(abstract.Model):
 
     objects = ApiRateLimitManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_api_rate_limit"
         verbose_name = "API Rate Limit"
         verbose_name_plural = "API Rate Limits"

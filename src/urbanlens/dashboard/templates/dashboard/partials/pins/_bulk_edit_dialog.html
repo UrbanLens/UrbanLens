@@ -1,0 +1,47 @@
+{# Bulk edit selected pins: replace description, add badges, remove badges present on the selection. #}
+<dialog id="bulk-edit-dialog" class="ul-dialog tag-edit-dialog bulk-edit-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit pins" title_id="bulk-edit-dialog-title" %}
+    <div class="tag-edit-dialog-body organize-badge-edit-form">
+        <div class="form-field">
+            <label class="form-label" for="bulk-edit-description-value">Description</label>
+            <textarea id="bulk-edit-description-value" class="form-input" rows="3" placeholder="Replaces the description on every selected pin"></textarea>
+            <label class="bulk-nochange-label">
+                <input type="checkbox" id="bulk-edit-description-nochange" checked>
+                <span>No change - leave description unchanged</span>
+            </label>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Add badges</label>
+            <div class="apdlg-badge-field" id="bulk-edit-add-badge-field">
+                <div class="apdlg-badge-chips" id="bulk-edit-add-badge-chips"></div>
+                <div class="apdlg-badge-input-wrap form-input-wrap">
+                    <input type="text" id="bulk-edit-add-badge-search" class="form-input apdlg-badge-input"
+                           placeholder="Search badges to add..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-add-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+                </div>
+            </div>
+            <p class="form-hint">Added to every selected pin.</p>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Remove badges</label>
+            <div class="apdlg-badge-field" id="bulk-edit-remove-badge-field">
+                <div class="apdlg-badge-chips" id="bulk-edit-remove-badge-chips"></div>
+                <div class="apdlg-badge-input-wrap form-input-wrap">
+                    <input type="text" id="bulk-edit-remove-badge-search" class="form-input apdlg-badge-input"
+                           placeholder="Search badges to remove..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-remove-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+                </div>
+            </div>
+            <p class="form-hint" id="bulk-edit-remove-badge-hint">Only badges present on at least one selected pin are offered here.</p>
+        </div>
+
+        <div class="tag-form-actions">
+            <button type="button" id="bulk-edit-confirm-btn" class="btn btn--primary">
+                <i class="material-symbols-outlined">edit</i> Apply Changes
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </div>
+</dialog>

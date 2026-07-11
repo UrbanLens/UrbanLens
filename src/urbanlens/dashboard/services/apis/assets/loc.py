@@ -48,7 +48,13 @@ class LOCJsonGateway(MediaProvider):
             "at": "results,pagination",
             "c": count,
         }
-        response = self.session.get(url, params=params, timeout=30)
+        # (connect, read) tuple, not a single scalar: a single timeout= only bounds
+        # inactivity between reads, so a connection that trickles bytes slowly (as
+        # seen in production - IncompleteRead after 30s+ of intermittent activity)
+        # can still run far longer than intended. This runs inside the panel-fetch
+        # Celery task (services/external_data.py); a search this slow is failing,
+        # and failing fast lets the task's failure policy suppress and retry later.
+        response = self.session.get(url, params=params, timeout=(5, 15))
         response.raise_for_status()
         return self._parse(response.json())
 

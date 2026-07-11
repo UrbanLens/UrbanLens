@@ -79,6 +79,19 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     padding: 0;
     gap: 0.25rem;
     flex: 1;
+    
+    > li {
+        &:not(.app-nav-link--active):hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        &:hover {
+            a {
+                color: #fff;
+                background-color: transparent;
+            }
+        }
+    }
 }
 
 .app-nav-link {
@@ -93,9 +106,11 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
 
-    &:hover {
-        background: rgba(255, 255, 255, 0.3);
-        color: var(--ul-black);
+    // Current section - stays visually distinct from the transient :hover state.
+    &--active {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 700;
+        box-shadow: inset 0 -2px 0 var(--ul-primary-color);
     }
 }
 
@@ -316,6 +331,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     flex-grow: 1;
     /* Allow the map to grow to fill available space */
     width: 100%;
+    @include map-query-container;
 }
 
 nav {
@@ -765,58 +781,13 @@ nav .brand-logo img {
 }
 
 // Inline Accept / Decline buttons inside a friend_request notification
-.notif-friend-actions {
+.notif-actions {
     display: flex;
     gap: .4rem;
     margin-top: .45rem;
 
     &--triple {
         flex-wrap: wrap;
-    }
-}
-
-.btn-notif-friend {
-    display: inline-flex;
-    align-items: center;
-    gap: .2rem;
-    padding: .25rem .6rem;
-    font-size: .75rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background .15s, color .15s;
-    background: var(--ul-grey-2, #e2e8f0);
-    color: var(--ul-grey-8, #334155);
-
-    &:hover {
-        background: var(--ul-grey-3, #cbd5e1);
-    }
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: .9rem;
-        line-height: 1em;
-        height: 1em;
-    }
-
-    &--accept {
-        background: $color-green-100;
-        color: $color-green-700;
-
-        &:hover {
-            background: $color-green-200;
-        }
-    }
-
-    &--decline {
-        background: var(--ul-grey-4, #f1f5f9);
-        color: var(--ul-grey-7, #475569);
-
-        &:hover {
-            background: var(--ul-grey-0a);
-            color: $color-red-600;
-        }
     }
 }
 
@@ -855,9 +826,11 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 
     &__grid {
         border: 1px solid var(--ul-grey-1a);
-        border-radius: $radius-sm;
+        border-radius: $radius-md;
         overflow: hidden;
         font-size: .84rem;
+        max-width: 40rem;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }
 
     &__header,
@@ -865,6 +838,21 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         display: grid;
         grid-template-columns: $notif-prefs-cols;
         align-items: center;
+    }
+
+    &__row {
+        background: var(--ul-grey-1);
+
+        &:nth-child(even) {
+            background: var(--ul-grey-1b);
+        }
+
+        &:nth-child(2),
+        &:nth-child(5),
+        &:nth-child(7),
+        &:nth-child(10) {
+            border-top: 6px solid var(--ul-grey-0);
+        }
     }
 
     &__header {
@@ -915,11 +903,12 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
             position: static !important;
             opacity: 1 !important;
             pointer-events: auto !important;
-            width: 15px;
-            height: 15px;
+            width: 1.1rem;
+            height: 1.1rem;
             accent-color: var(--primary-color);
             cursor: pointer;
             display: inline-block;
+            border-radius: 4px;
         }
     }
 
@@ -933,6 +922,21 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
         border: 0;
+    }
+
+    &__browser {
+        margin-top: 1.75rem;
+        max-width: 40rem;
+    }
+
+    &__browser-status {
+        font-size: .84rem;
+        color: var(--ul-grey-6);
+        margin: .25rem 0 .6rem;
+
+        &:empty {
+            display: none;
+        }
     }
 
     &__footer {
@@ -950,6 +954,65 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
             padding-left: .5rem;
             padding-right: .5rem;
         }
+    }
+}
+
+// -- Active safety check-in banner ---------------------------------------------
+
+.safety-active-banner {
+    background: var(--ul-grey-0);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.safety-active-banner-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1.25rem;
+    max-width: 100%;
+}
+
+.safety-active-banner-icon {
+    flex-shrink: 0;
+    font-size: 1.15rem;
+    color: var(--ul-accent-amber, #{$color-amber-700});
+}
+
+.safety-active-banner-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    text-decoration: none;
+    @include truncate;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.safety-active-banner-close-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+
+    &:hover {
+        background: rgba(0, 0, 0, 0.08);
+        color: var(--ul-grey-9);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
     }
 }
 

@@ -1,0 +1,34 @@
+{% comment %}
+The Memories "log your visits" list - pins the user flagged as visited (via
+last_visited or a "Visited" status badge) that have no dated PinVisit record yet.
+Lives on its own subpage (dashboard/pages/memories/visits.html)
+
+Each card lets the user log a concrete, dated visit - either a one-click quick
+log or, via "Add details", the full visit form (photos, map, notes, people) -
+or back out via "Not visited" (clears the visited status) or the dismiss button
+(hides the card without changing the pin). Actions post back and swap this
+whole list by id, so a resolved pin drops out without a full reload. The id is
+present in every branch so the swap target always exists.
+
+Context:
+  unlogged_visits - list of Pin objects to log
+  today           - ISO date string, bounding/prefilling the quick-log inputs
+{% endcomment %}
+{% if unlogged_visits %}
+<section class="memories-unlogged" id="memories-unlogged-band" aria-label="Places to log">
+    <div class="memories-unlogged-head">
+        <span class="badge">{{ unlogged_visits|length }}</span>
+        <span>place{{ unlogged_visits|length|pluralize }} marked visited without a dated visit</span>
+    </div>
+    <div class="memories-unlogged-grid">
+        {% for pin in unlogged_visits %}
+        {% include "dashboard/partials/memories/_unlogged_visit_card.html" with pin=pin today=today %}
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="memories-unlogged memories-unlogged--caught-up" id="memories-unlogged-band" aria-label="Places to log">
+    <i class="material-symbols-outlined">check_circle</i>
+    You're all caught up - every visited pin has a dated visit logged.
+</section>
+{% endif %}

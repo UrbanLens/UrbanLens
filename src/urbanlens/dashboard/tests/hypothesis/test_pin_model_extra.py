@@ -112,14 +112,10 @@ class PinHasMeaningfulNameTests(TestCase):
         pin = Pin()
         pin.name = name
         loc_mock = MagicMock()
-        loc_mock.name = loc_name
+        # effective_name reads location.display_name (the community wiki name,
+        # falling back to official_name) - not a plain "name" field.
+        loc_mock.display_name = loc_name
         pin._state.fields_cache["location"] = loc_mock
-        return pin
-
-    def _pin_no_location(self, name: str | None = None) -> Pin:
-        pin = Pin()
-        pin.name = name
-        pin._state.fields_cache["location"] = None
         return pin
 
     def test_dropped_pin_is_not_meaningful(self) -> None:
@@ -146,9 +142,6 @@ class PinHasMeaningfulNameTests(TestCase):
         pin = self._pin_with_name(None, loc_name="Unnamed Location")
         self.assertIsNone(pin.meaningful_name)
 
-    def test_empty_string_is_not_meaningful(self) -> None:
-        self.assertIsNone(self._pin_no_location().meaningful_name)
-
     def test_real_name_is_meaningful(self) -> None:
         pin = self._pin_with_name("Old Warehouse")
         self.assertIsNotNone(pin.meaningful_name)
@@ -172,12 +165,12 @@ class PinRatingTests(TestCase):
         self.assertEqual(self.pin.rating, 0)
 
     def test_single_review_returns_its_rating(self) -> None:
-        baker.make("dashboard.Review", user=self.user, pin=self.pin, rating=4)
+        baker.make("dashboard.Review", profile=self.user.profile, pin=self.pin, rating=4)
         self.pin = Pin.objects.get(pk=self.pin.pk)
         self.assertEqual(self.pin.rating, 4)
 
     def test_rating_is_integer(self) -> None:
-        baker.make("dashboard.Review", user=self.user, pin=self.pin, rating=3)
+        baker.make("dashboard.Review", profile=self.user.profile, pin=self.pin, rating=3)
         self.pin = Pin.objects.get(pk=self.pin.pk)
         self.assertIsInstance(self.pin.rating, int)
 
@@ -243,13 +236,21 @@ class PinToJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", name="Steel Mill",
+            "dashboard.Location", official_name="Steel Mill",
             latitude="40.000000", longitude="-74.000000",
         )
         self.pin = baker.make(
             Pin, profile=self.user.profile, location=self.location,
             name="My Steel Mill", priority=5,
         )
+        # to_json() reads place_name, which resolves an uncached Location's
+        # name from Google - mock it so tests don't make an outbound API call.
+        patcher = patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_returns_dict(self) -> None:
         self.assertIsInstance(self.pin.to_json(), dict)
@@ -305,48 +306,22 @@ class PinToDetailJsonTests(TestCase):
         self.assertIn("longitude", result)
 
 
-class PinExternalNameRefreshTests(TestCase):
-    """External API data never overwrites explicitly user-provided pin names."""
+class PinNameAliasSaveTests(TestCase):
+    """Pin.save keeps the alias list in sync with the current name.
 
-    def test_user_provided_placeholder_pin_name_is_preserved(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
+    Pins are no longer auto-renamed from external sources; the invariant is
+    that every meaningful persisted name (user-typed or not) has an alias row.
+    Detailed coverage lives in test_name_resolution.py.
+    """
 
-        pin = Pin(name="Unknown", name_is_user_provided=True)
-
-        self.assertFalse(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
-        self.assertEqual(pin.name, "Unknown")
-
-    def test_auto_placeholder_private_pin_name_can_be_replaced(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
-        pin = Pin(name="Dropped Pin", name_is_user_provided=False)
-        pin._state.fields_cache["location"] = None
-
-        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")], save=False))
-        self.assertEqual(pin.name, "Real Place")
-
-    def test_user_provided_pin_adds_external_alias(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
+    def test_saving_named_pin_records_current_name_alias(self) -> None:
         user = baker.make("auth.User")
         pin = baker.make(Pin, profile=user.profile, name="My Label", name_is_user_provided=True)
 
-        self.assertTrue(update_pin_name_from_external_sources(pin, extra_candidates=[("wikipedia", "Real Place")]))
-        self.assertEqual(pin.name, "My Label")
-        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place"])
+        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["My Label"])
 
-    def test_promoted_private_pin_name_is_not_duplicated_as_alias(self) -> None:
-        from urbanlens.dashboard.services.locations.naming import update_pin_name_from_external_sources
-
+    def test_placeholder_names_never_become_aliases(self) -> None:
         user = baker.make("auth.User")
-        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False, location=None)
+        pin = baker.make(Pin, profile=user.profile, name="Dropped Pin", name_is_user_provided=False)
 
-        self.assertTrue(
-            update_pin_name_from_external_sources(
-                pin,
-                extra_candidates=[("wikipedia", "Real Place"), ("google_places", "Real Place Annex")],
-            ),
-        )
-        pin.refresh_from_db()
-        self.assertEqual(pin.name, "Real Place")
-        self.assertEqual(list(pin.aliases.values_list("name", flat=True)), ["Real Place Annex"])
+        self.assertEqual(pin.aliases.count(), 0)

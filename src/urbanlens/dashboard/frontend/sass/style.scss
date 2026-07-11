@@ -27,10 +27,14 @@
 @use 'trips';
 @use 'errors';
 @use 'setup';
+@use 'onboarding';
 @use 'map';
 @use 'auth';
 @use 'homepage';
 @use 'about';
+@use 'values';
+@use 'faq';
+@use 'legal';
 @use 'thanks';
 @use 'help';
 @use 'comments';
@@ -43,3 +47,5 @@
 @use 'collapsible';
 @use 'memories';
 @use 'safety';
+@use 'account_deletion';
+@use 'undo_history';

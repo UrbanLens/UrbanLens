@@ -1,0 +1,27 @@
+{# Google Calendar export toggle for the viewing user's own calendar. #}
+{# Context: trip, profile, calendar_account, calendar_link #}
+<span id="trip-calendar-button">
+    {% if not calendar_account %}
+    <a href="{% url 'trips.calendar.connect' %}" class="btn-icon"
+       title="Connect your Google Calendar to add this trip to it">
+        <i class="material-symbols-outlined">calendar_add_on</i>
+    </a>
+    {% elif calendar_link %}
+    <button type="button" class="btn-icon"
+            title="Remove this trip from your Google Calendar"
+            hx-delete="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-target="#trip-calendar-button"
+            hx-swap="outerHTML"
+            hx-confirm="Remove this trip from your Google Calendar?">
+        <i class="material-symbols-outlined">event_busy</i>
+    </button>
+    {% else %}
+    <button type="button" class="btn-icon"
+            title="Add this trip to your Google Calendar (creates an event for the trip and each scheduled activity)"
+            hx-post="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-target="#trip-calendar-button"
+            hx-swap="outerHTML">
+        <i class="material-symbols-outlined">calendar_add_on</i>
+    </button>
+    {% endif %}
+</span>

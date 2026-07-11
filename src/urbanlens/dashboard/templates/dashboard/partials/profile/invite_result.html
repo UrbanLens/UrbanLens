@@ -1,17 +1,7 @@
-{% if result == "request_sent" %}
+{% if result == "sent" %}
 <div class="invite-result invite-result--success">
     <i class="material-symbols-outlined">check_circle</i>
-    <span>Friend request sent to <strong>{{ username }}</strong>.</span>
-</div>
-{% elif result == "friend_added" %}
-<div class="invite-result invite-result--success">
-    <i class="material-symbols-outlined">check_circle</i>
-    <span><strong>{{ username }}</strong> had already sent you a friend request, so you're friends now.</span>
-</div>
-{% elif result == "invite_sent" %}
-<div class="invite-result invite-result--success">
-    <i class="material-symbols-outlined">mail</i>
-    <span>Invitation emailed to <strong>{{ email }}</strong>. They'll get a friend request automatically when they join.</span>
+    <span>If they're on UrbanLens, they've been sent a friend request. Otherwise, we've emailed them an invitation to join.</span>
 </div>
 {% else %}
 <div class="invite-result invite-result--error">

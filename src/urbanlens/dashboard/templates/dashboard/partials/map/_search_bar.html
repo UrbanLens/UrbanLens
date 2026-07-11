@@ -1,0 +1,25 @@
+{% comment %}
+Shared "jump to location" search bar - rendered by {% map_search_bar %} (see
+dashboard/templatetags/map_components.py; do not include this file directly).
+The markup is the main map's floating address bar, generalized: element ids
+follow the {prefix}-search-* scheme that
+window.LocationSearchEngine.attach(prefix, options) resolves, so every map
+presents search identically while each page keeps its own jump behavior.
+{% endcomment %}
+<div id="{{ prefix }}-search-bar" class="addr-search-bar {{ extra_class }}">
+    <i class="material-icons addr-search-icon">place</i>
+    <input type="text" id="{{ prefix }}-search-input" class="addr-search-input"
+           placeholder="{{ placeholder }}"
+           autocomplete="off" spellcheck="false">
+    {% if show_history %}
+    <button type="button" class="addr-search-history" id="{{ prefix }}-search-history"
+            aria-label="Previous searches">
+        <i class="material-symbols-outlined">arrow_upward</i>
+    </button>
+    {% endif %}
+    <button type="button" class="addr-search-clear" id="{{ prefix }}-search-clear"
+            aria-label="Clear search">
+        <i class="material-symbols-outlined">close</i>
+    </button>
+    <div id="{{ prefix }}-search-suggestions" class="addr-search-suggestions" hidden></div>
+</div>

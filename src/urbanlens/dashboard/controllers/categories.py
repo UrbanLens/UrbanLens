@@ -415,7 +415,7 @@ class CategoryMultiMergeView(LoginRequiredMixin, View):
 
         for source in sources:
             target.pins.add(*source.pins.all())
-            target.locations.add(*source.locations.all())
+            target.wikis.add(*source.wikis.all())
             source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
@@ -468,7 +468,7 @@ class CategoryMergeView(LoginRequiredMixin, View):
             return HttpResponse("Cannot merge a category into itself.", status=400)
 
         target.pins.add(*source.pins.all())
-        target.locations.add(*source.locations.all())
+        target.wikis.add(*source.wikis.all())
         source.delete()
 
         return render(request, "dashboard/partials/category_rows.html", _rows_ctx(profile))
@@ -484,9 +484,9 @@ def _pin_member_ids(pin: Pin) -> set[int]:
     return set(pin.badges.values_list("id", flat=True))
 
 
-def _location_member_ids(location: Location) -> set[int]:
-    """Return the set of all badge IDs currently assigned to a location."""
-    return set(location.badges.values_list("id", flat=True))
+def _wiki_member_ids(wiki) -> set[int]:
+    """Return the set of all badge IDs currently assigned to a community wiki."""
+    return set(wiki.badges.values_list("id", flat=True))
 
 
 def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
@@ -497,12 +497,20 @@ def _apply_badge_to_pin(pin: Pin, badge: Badge, action: str) -> None:
         pin.badges.remove(badge)
 
 
-def _apply_badge_to_location(location: Location, badge: Badge, action: str) -> None:
-    """Add or remove a badge from a location."""
+def _apply_badge_to_wiki(wiki, badge: Badge, action: str) -> None:
+    """Add or remove a badge from a community wiki."""
     if action == "add":
-        location.badges.add(badge)
+        wiki.badges.add(badge)
     elif action == "remove":
-        location.badges.remove(badge)
+        wiki.badges.remove(badge)
+
+
+def _resolve_wiki(location_slug: str):
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki = get_object_or_404(Wiki, location=location)
+    return location, wiki
 
 
 class CategoryPinMembershipView(LoginRequiredMixin, View):
@@ -558,19 +566,19 @@ class CategoryPinMembershipView(LoginRequiredMixin, View):
 
 
 class CategoryLocationMembershipView(LoginRequiredMixin, View):
-    """Add or remove a badge from a location (HTMX panel on wiki page)."""
+    """Add or remove a badge from a community wiki (HTMX panel on wiki page)."""
 
     def get(self, request, location_slug, *args, **kwargs):
-        """Render the badge panel for a location.
+        """Render the badge panel for a wiki page.
 
         Args:
             request: The HTTP request.
-            location_slug: The location UUID.
+            location_slug: The location slug used for wiki routing.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = request.user.profile
         return render(
             request,
@@ -578,33 +586,33 @@ class CategoryLocationMembershipView(LoginRequiredMixin, View):
             {
                 "location": location,
                 "all_categories": _all_badges(profile),
-                "member_ids": _location_member_ids(location),
+                "member_ids": _wiki_member_ids(wiki),
             },
         )
 
     def post(self, request, location_slug, *args, **kwargs):
-        """Add or remove a badge from a location.
+        """Add or remove a badge from a community wiki.
 
         Args:
             request: The HTTP request with POST data (category_id, action).
-            location_slug: The location UUID.
+            location_slug: The location slug used for wiki routing.
 
         Returns:
             Rendered category_location_panel.html partial.
         """
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = request.user.profile
         badge_id = request.POST.get("category_id")
         action = request.POST.get("action")
         badge = get_object_or_404(Badge, id=badge_id, kind__in=["tag", "category", "status"])
-        _apply_badge_to_location(location, badge, action)
+        _apply_badge_to_wiki(wiki, badge, action)
         return render(
             request,
             "dashboard/partials/category_location_panel.html",
             {
                 "location": location,
                 "all_categories": _all_badges(profile),
-                "member_ids": _location_member_ids(location),
+                "member_ids": _wiki_member_ids(wiki),
             },
         )
 

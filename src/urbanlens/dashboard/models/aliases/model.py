@@ -1,10 +1,11 @@
-"""Alias models - alternate names for Pins (personal) and Locations (shared)."""
+"""Alias models - alternate names for Pins (personal) and Wikis (shared)."""
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField
 
 from urbanlens.dashboard.models import abstract
@@ -12,14 +13,64 @@ from urbanlens.dashboard.models import abstract
 logger = logging.getLogger(__name__)
 
 
-class _AliasBase(abstract.Model):
+class AliasType(TextChoices):
+    """
+    The type of alias.
+    * NICKNAME: A user-defined nickname for the pin or wiki.
+                Created by checking the "nickname" checkbox when adding an alias.
+    * OFFICIAL: An official name for the pin or location.
+                Created by the system when the pin or location is created, or queried from an external API source.
+    * ALTERNATE: An alternate name for the pin or location.
+                Created by the user when adding an alias. (without the "nickname" checkbox)
+    """
+
+    NICKNAME = "nickname", "Nickname"
+    OFFICIAL = "official", "Official Name"
+    ALTERNATE = "alternate", "Alternate Name"
+
+
+class AliasSource:
+    """Well-known alias ``source`` values.
+
+    ``source`` is a free-text slug so plugin name providers can attribute
+    aliases to themselves (e.g. ``"google_places"``, ``"wikipedia"``) without
+    the model enumerating every provider. These constants cover the two
+    non-plugin origins.
+
+    * USER: A user-defined alias for the pin or location.
+    * OTHER: An alias whose external origin is unknown (e.g. backfilled data).
+    """
+
+    USER = "user"
+    OTHER = "other"
+
+
+class _AliasBase(abstract.DashboardModel):
     """Shared fields for all alias types."""
 
     name = CharField(max_length=255)
+    kind = CharField(max_length=10, choices=AliasType.choices, default=AliasType.ALTERNATE)
+    # Free-text slug, not choices: plugin name providers write their own source slugs.
+    source = CharField(max_length=50, default=AliasSource.USER)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         abstract = True
         ordering = ["name"]
+
+    @property
+    def is_nickname(self) -> bool:
+        """True when this alias is marked nickname-only (excluded from external API queries)."""
+        return self.kind == AliasType.NICKNAME
+
+    def toggle_nickname(self) -> None:
+        """Flip this alias between nickname-only and a plain alternate name.
+
+        Toggling off an ``official`` alias demotes it to ``alternate`` rather
+        than restoring ``official`` - that designation is only re-established
+        by the next external-source sync, since we don't track prior kind.
+        """
+        self.kind = AliasType.ALTERNATE if self.kind == AliasType.NICKNAME else AliasType.NICKNAME
+        self.save(update_fields=["kind", "updated"])
 
 
 class PinAlias(_AliasBase):
@@ -35,28 +86,33 @@ class PinAlias(_AliasBase):
         related_name="aliases",
     )
 
+    if TYPE_CHECKING:
+        pin_id: int
+
     def __str__(self) -> str:
         return f"{self.name} (pin alias)"
 
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_pin_aliases"
         indexes = [
-            Index(fields=["pin"], name="idxdb_pin_alias_pin"),
+            Index(fields=["pin"], name="idxdb_palias_pin"),
+            Index(fields=["pin", "kind"], name="idxdb_palias_pin_kind"),
+            Index(fields=["pin", "source"], name="idxdb_palias_pin_source"),
         ]
         constraints = [
             UniqueConstraint(fields=["pin", "name"], name="db_pin_alias_unique"),
         ]
 
 
-class LocationAlias(_AliasBase):
-    """An alternate name for a Location, visible to all users who have it pinned.
+class WikiAlias(_AliasBase):
+    """An alternate name for a Wiki, visible to all users who have its place pinned.
 
     ``created_by`` is optional attribution only - deleting a profile does not
     cascade-delete the alias.
     """
 
-    location = ForeignKey(
-        "dashboard.Location",
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=CASCADE,
         related_name="aliases",
     )
@@ -65,17 +121,23 @@ class LocationAlias(_AliasBase):
         on_delete=SET_NULL,
         null=True,
         blank=True,
-        related_name="location_aliases_created",
+        related_name="wiki_aliases_created",
     )
 
+    if TYPE_CHECKING:
+        wiki_id: int
+        created_by_id: int | None
+
     def __str__(self) -> str:
-        return f"{self.name} (location alias)"
+        return f"{self.name} (wiki alias)"
 
     class Meta(_AliasBase.Meta):
-        db_table = "dashboard_location_aliases"
+        db_table = "dashboard_wiki_aliases"
         indexes = [
-            Index(fields=["location"], name="idxdb_loc_alias_loc"),
+            Index(fields=["wiki"], name="idxdb_walias_wiki"),
+            Index(fields=["wiki", "kind"], name="idxdb_walias_wiki_kind"),
+            Index(fields=["wiki", "source"], name="idxdb_walias_wiki_source"),
         ]
         constraints = [
-            UniqueConstraint(fields=["location", "name"], name="db_loc_alias_unique"),
+            UniqueConstraint(fields=["wiki", "name"], name="db_walias_unique"),
         ]

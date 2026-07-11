@@ -4,6 +4,11 @@
 
 html {
     scrollbar-gutter: stable;
+    // Absolutely-positioned tooltip bubbles (see _tooltips.scss) can extend past the
+    // viewport edge when their trigger sits near the left/right edge of the page.
+    // visibility:hidden still counts toward scrollable overflow, so an off-screen,
+    // invisible tooltip can otherwise force a horizontal scrollbar on the whole page.
+    overflow-x: hidden;
 }
 
 body {
@@ -111,7 +116,7 @@ body div.container {
 
         p {
             margin: 0;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             font-size: .9rem;
             line-height: 1.6;
         }
@@ -120,6 +125,10 @@ body div.container {
     .confirm-dialog-footer {
         @include dialog-footer;
     }
+}
+
+.dialog-actions {
+    margin-top: 1rem;
 }
 
 @keyframes dialog-appear {
@@ -173,7 +182,7 @@ body div.container {
             display: block;
             font-size: 0.72rem;
             font-weight: 600;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             text-transform: uppercase;
             letter-spacing: 0.07em;
             margin-bottom: 5px;
@@ -207,7 +216,7 @@ body div.container {
             width: 100%;
             padding: 6px 0;
             font-size: 0.875rem;
-            color: $text-secondary;
+            color: var(--ul-grey-6);
             border: none !important;
             border-radius: 0 !important;
             box-shadow: none !important;

@@ -320,7 +320,9 @@
         }
     }
 
-    .alias-chip-remove {
+    .alias-chip-remove,
+    .alias-chip-use,
+    .alias-chip-nickname-toggle {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -349,6 +351,48 @@
             outline: none;
         }
     }
+
+    .alias-chip-use {
+        &:hover,
+        &:focus {
+            background: color-mix(in srgb, $color-indigo-500 25%, transparent);
+            color: $color-indigo-500;
+        }
+    }
+
+    .alias-chip-nickname-toggle {
+        &:hover,
+        &:focus {
+            background: color-mix(in srgb, $color-amber-500 30%, transparent);
+            color: $color-amber-600;
+        }
+
+        &.is-active {
+            background: color-mix(in srgb, $color-amber-500 35%, transparent);
+            color: $color-amber-700;
+        }
+    }
+
+    .alias-chip-current-badge {
+        font-size: .68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        padding: .05rem .4rem;
+        border-radius: 10px;
+        background: color-mix(in srgb, $color-indigo-500 20%, transparent);
+        color: var(--ul-grey-7);
+    }
+
+    &.alias-chip--current {
+        background: color-mix(in srgb, $color-indigo-500 22%, transparent);
+        border-color: color-mix(in srgb, $color-indigo-500 45%, transparent);
+    }
+
+    &.alias-chip--nickname {
+        background: color-mix(in srgb, $color-amber-500 14%, transparent);
+        border-color: color-mix(in srgb, $color-amber-500 30%, transparent);
+    }
 }
 
 .aliases-empty {
@@ -364,6 +408,27 @@
     gap: .5rem;
     padding: 0 1rem 1rem;
     align-items: center;
+
+    // Rendered as a small pill so the checked state is obvious at a glance.
+    .alias-nickname-check {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .3rem .55rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 999px;
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+        transition: border-color .15s, background .15s, color .15s;
+
+        &:has(input:checked) {
+            border-color: $color-indigo-500;
+            background: rgba(99, 102, 241, .1);
+        }
+    }
 
     .alias-add-input {
         flex: 1;
@@ -399,6 +464,56 @@
         &:hover {
             background: $color-indigo-600;
         }
+    }
+}
+
+// -- Collapsible "what are aliases?" explainer --------------------------------
+.alias-help {
+    margin: 0 1rem 1rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+
+    .alias-help-summary {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .45rem .6rem;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+            color: var(--ul-grey-5);
+        }
+    }
+
+    &[open] .alias-help-summary {
+        border-bottom: 1px solid var(--ul-grey-1a);
+    }
+
+    .alias-help-body {
+        padding: .5rem .6rem;
+
+        p {
+            margin: 0 0 .5rem;
+            line-height: 1.45;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+    }
+
+    .alias-help-inline-icon {
+        font-size: .9rem;
+        vertical-align: -.15em;
     }
 }
 

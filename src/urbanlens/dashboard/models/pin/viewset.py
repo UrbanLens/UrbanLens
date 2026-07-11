@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class PinViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if not self.request:
             return Pin.objects.none()
-        return Pin.objects.all().filter(profile__user=self.request.user)
+        return Pin.objects.select_related("location").filter(profile__user=self.request.user)
 
     def create(self, request, *args, **kwargs):
         logger.info("Create request initiated by user %s", request.user.id)
@@ -39,10 +40,7 @@ class PinViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
-        serializer.save(
-            user=self.request.user,
-            profile=self.request.user.profile,
-        )
+        serializer.save(profile=self.request.user.profile)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -70,5 +68,9 @@ class PinViewSet(viewsets.ModelViewSet):
                 instance.id,
             )
             return Response(status=status.HTTP_403_FORBIDDEN)
+        subtree = list(Pin.objects.filter(pk=instance.pk).with_descendants())
+        stash_for_undo("pin", subtree, instance.profile)
+        for descendant in subtree:
+            descendant.delete()
         logger.info("Pin with id %s deleted", instance.id)
-        return super().destroy(request, *args, **kwargs)
+        return Response(status=status.HTTP_204_NO_CONTENT)

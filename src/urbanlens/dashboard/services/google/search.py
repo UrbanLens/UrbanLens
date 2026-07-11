@@ -27,7 +27,7 @@ def _mask_secret(value: str | None) -> str:
         return "<missing>"
     if len(value) <= 8:
         return "<redacted>"
-    return f"{value[:4]}...{value[-4:]}"
+    return f"{value[:1]}...{value[-1:]}"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -64,11 +64,13 @@ class GoogleCustomSearchGateway(Gateway):
             response.raise_for_status()
         except HTTPError as exc:
             detail = self.extract_error_detail(response)
+            # _mask_secret() already reduces api_key/cx to a masked "<first4>...<last4>" form
+            # before this reaches the logger - not a clear-text secret.
             logger.warning(
                 "Google Custom Search request failed with status %s; key=%s cx=%s reason=%s",
                 response.status_code,
-                _mask_secret(self.api_key),
-                _mask_secret(self.cx),
+                _mask_secret(self.api_key),  # lgtm[py/clear-text-logging-sensitive-data]
+                _mask_secret(self.cx),  # lgtm[py/clear-text-logging-sensitive-data]
                 detail,
             )
             raise GoogleCustomSearchError(

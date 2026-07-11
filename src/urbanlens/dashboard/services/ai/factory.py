@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.ai.gateway import LLMGateway
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ _FEATURE_FIELDS: dict[str, str] = {
 }
 
 
-def get_gateway(feature: str | None = None, **kwargs) -> LLMGateway | None:
+def get_gateway(feature: str | None = None, profile: Profile | None = None, **kwargs) -> LLMGateway | None:
     """Return a configured AI gateway, or None if AI is disabled.
 
     Reads provider, model, and feature-flag state from SiteSettings so the
@@ -28,12 +29,17 @@ def get_gateway(feature: str | None = None, **kwargs) -> LLMGateway | None:
         feature: Optional feature key (see ``_FEATURE_FIELDS``).  When provided,
             that feature's per-toggle must be enabled in addition to the global
             ``ai_enabled`` flag.
+        profile: Optional profile the call is being made on behalf of. When
+            given, both its ``ai_enabled`` and ``external_apis_enabled``
+            preferences must also be on - centralizes the per-profile check so
+            individual callers don't each duplicate it.
         **kwargs: Extra keyword arguments forwarded to the gateway constructor
             (e.g. ``instructions``, ``formatting``).
 
     Returns:
         A configured ``LLMGateway`` subclass instance, or ``None`` if AI is
-        globally disabled or the requested feature is turned off.
+        globally disabled, disabled for the given profile, or the requested
+        feature is turned off.
     """
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -41,6 +47,10 @@ def get_gateway(feature: str | None = None, **kwargs) -> LLMGateway | None:
 
     if not site.ai_enabled:
         logger.debug("AI is globally disabled; skipping AI call")
+        return None
+
+    if profile is not None and (not profile.ai_enabled or not profile.external_apis_enabled):
+        logger.debug("AI is disabled for profile %s; skipping AI call", profile.pk)
         return None
 
     if feature:

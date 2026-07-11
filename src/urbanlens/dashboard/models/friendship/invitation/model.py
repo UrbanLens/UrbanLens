@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 import uuid
 
 from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, UUIDField
@@ -12,7 +13,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
 
 
-class FriendInvitation(abstract.Model):
+class FriendInvitation(abstract.DashboardModel):
     """Sent when a user invites someone by email who is not yet registered.
 
     On sign-up the new user's email is matched against open invitations and
@@ -29,9 +30,12 @@ class FriendInvitation(abstract.Model):
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
 
+    if TYPE_CHECKING:
+        inviter_id: int
+
     objects = FriendInvitationManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         pass
 
     def save(self, *args, **kwargs):

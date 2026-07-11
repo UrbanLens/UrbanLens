@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 
-class LocationCache(abstract.Model):
+class LocationCache(abstract.DashboardModel):
     """
     Caches responses from external data sources keyed to a shared Location.
 
@@ -23,21 +23,20 @@ class LocationCache(abstract.Model):
     A missing row means the source has never been queried for this location.
     """
 
-    STALE_AFTER_DAYS = 7
+    source = models.CharField(max_length=50)
+    data = models.JSONField(default=dict)
+    query_key = models.CharField(max_length=255, blank=True)
 
     location = models.ForeignKey(
         "dashboard.Location",
         on_delete=models.CASCADE,
         related_name="external_cache",
     )
-    source = models.CharField(max_length=50)
 
     if TYPE_CHECKING:
         location_id: int
-    data = models.JSONField(default=dict)
-    query_key = models.CharField(max_length=255, blank=True)
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_location_cache"
         unique_together = [("location", "source")]
         indexes = [
@@ -46,8 +45,11 @@ class LocationCache(abstract.Model):
 
     @property
     def is_stale(self) -> bool:
-        """True if the cached entry is older than STALE_AFTER_DAYS."""
-        return timezone.now() - self.updated > timedelta(days=self.STALE_AFTER_DAYS)
+        """True if the cached entry is older than the site's configured minimum cache duration."""
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        max_age_days = SiteSettings.get_current().external_data_cache_days
+        return timezone.now() - self.updated > timedelta(days=max_age_days)
 
     @classmethod
     def get_fresh(cls, location: Location, source: str) -> LocationCache | None:

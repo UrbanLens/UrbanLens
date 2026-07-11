@@ -1,0 +1,399 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block header %}
+{# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block title %}Photos{% endblock %}
+
+{% block content %}
+<div id="photos-page" class="memories-tab-page"
+     data-upload-url="{% url 'memories.photos.upload' %}"
+     data-action-base="{% url 'memories.photos' %}">
+
+    <div class="memories-header">
+        <div>
+            <h1 class="memories-title"><i class="material-symbols-outlined">photo_library</i> Photos</h1>
+            <p class="memories-subtitle">Every photo you've added, and a quick way to turn them into visits.</p>
+        </div>
+    </div>
+
+    <div class="page-inner">
+        {% include "dashboard/partials/memories/_photos_tabs.html" with active="photos" %}
+
+        <input type="file" id="photos-file-input" accept="image/*" multiple hidden
+               onchange="photosHandleFiles(this.files); this.value='';">
+
+        {# -- Upload dropzone ------------------------------------------------- #}
+        <label for="photos-file-input" class="photos-dropzone" id="photos-dropzone">
+            <i class="material-symbols-outlined">cloud_upload</i>
+            <span class="photos-dropzone-title">Drag photos here, or click to upload</span>
+            <span class="photos-dropzone-sub">We'll sort them by where and when they were taken.</span>
+            <div class="photos-upload-progress" id="photos-upload-progress" hidden>
+                <div class="photos-upload-bar" id="photos-upload-bar"></div>
+            </div>
+        </label>
+
+        {# -- Organize queue (re-fetches itself after uploads land) ----------- #}
+        <div id="photos-attention-wrap"
+             hx-get="{% url 'memories.photos.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_photo_attention.html" %}
+        </div>
+
+        {# -- Full gallery ---------------------------------------------------- #}
+        <section class="photos-gallery" aria-label="All photos">
+            <div class="photos-gallery-head">
+                <h2><i class="material-symbols-outlined">grid_view</i> All photos</h2>
+                {% if photo_count %}<span class="badge">{{ photo_count }}</span>{% endif %}
+            </div>
+            {% if images %}
+            <ul class="photos-grid" id="photo-grid">
+                {% include "dashboard/partials/memories/_photo_grid.html" %}
+            </ul>
+            {% else %}
+            <div class="photos-empty">
+                <i class="material-symbols-outlined">image</i>
+                <p>No photos yet. Upload some above to get started.</p>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+
+{# -- Lightbox ---------------------------------------------------------------- #}
+<dialog id="photos-lightbox" class="gallery-lightbox ul-dialog">
+    <div class="lightbox-inner">
+        <button type="button" class="lightbox-close" onclick="document.getElementById('photos-lightbox').close()">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+        <button type="button" class="lightbox-nav lightbox-prev" onclick="photosLightboxNav(-1)">
+            <i class="material-symbols-outlined">chevron_left</i>
+        </button>
+        <img id="photos-lightbox-img" src="" alt="" class="lightbox-img">
+        <button type="button" class="lightbox-nav lightbox-next" onclick="photosLightboxNav(1)">
+            <i class="material-symbols-outlined">chevron_right</i>
+        </button>
+        <p id="photos-lightbox-caption" class="lightbox-caption" hidden></p>
+        <div id="photos-lightbox-meta" class="lightbox-meta">
+            <p id="photos-lightbox-author" class="lightbox-meta-line" hidden></p>
+            <p id="photos-lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+            <p id="photos-lightbox-copyright" class="lightbox-meta-line" hidden></p>
+            <a id="photos-lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
+        </div>
+    </div>
+</dialog>
+
+{# -- Full-page drag overlay -------------------------------------------------- #}
+<div id="photos-drop-overlay" class="gallery-drop-overlay" hidden
+     ondragover="event.preventDefault()" ondrop="_photosOverlayDrop(event)">
+    <div class="gallery-drop-overlay-inner">
+        <i class="material-symbols-outlined">cloud_upload</i>
+        <p>Drop photos to upload</p>
+    </div>
+</div>
+
+{# -- Confirm-pin dialog: preview/move/name a pin before creating it from a photo -- #}
+{# Closes itself on any successful POST inside it (create-pin, or filing onto an     #}
+{# existing pin); GET searches (place + your-pins autocomplete) leave it open.       #}
+<dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
+        hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}
+    <div id="photo-pin-confirm-body" class="photo-pin-confirm-body">
+        <p class="photo-pin-confirm-loading">Loading&hellip;</p>
+    </div>
+</dialog>
+
+<script>
+(function () {
+    // The confirm-pin dialog: shared across cards, its body is (re)loaded per photo.
+    var confirmMap = null;
+    var nearbyPinsLayer = null;
+
+    window.photosLoadPinConfirm = function (url) {
+        var body = document.getElementById('photo-pin-confirm-body');
+        var dlg = document.getElementById('photo-pin-confirm-dialog');
+        if (!body || !dlg || typeof htmx === 'undefined') { return; }
+        body.innerHTML = '<p class="photo-pin-confirm-loading">Loading&hellip;</p>';
+        htmx.ajax('GET', url, { target: '#photo-pin-confirm-body', swap: 'innerHTML' }).then(function () {
+            dlg.showModal();
+            _initConfirm();
+        });
+    };
+
+    function _initConfirm() {
+        var root = document.getElementById('photo-pin-confirm');
+        var mapEl = document.getElementById('photo-pin-confirm-map');
+        if (!root || !mapEl || typeof L === 'undefined') { return; }
+        var lat = parseFloat(root.dataset.lat), lng = parseFloat(root.dataset.lng);
+        if (isNaN(lat) || isNaN(lng)) { return; }
+
+        if (confirmMap) { confirmMap.remove(); confirmMap = null; }
+        confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
+        // Shared layers engine + panel - the exact same component as the main map
+        // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in _photo_pin_confirm.html).
+        window.MapLayers.create(confirmMap, { root: document.getElementById('photo-pin-confirm-layers') });
+        var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
+        nearbyPinsLayer = L.layerGroup().addTo(confirmMap);
+
+        var latInput = document.getElementById('photo-pin-confirm-lat');
+        var lngInput = document.getElementById('photo-pin-confirm-lng');
+        function commit(ll) { latInput.value = ll.lat.toFixed(6); lngInput.value = ll.lng.toFixed(6); }
+        marker.on('dragend', function () { commit(marker.getLatLng()); });
+        confirmMap.on('click', function (e) { marker.setLatLng(e.latlng); commit(e.latlng); });
+
+        // The dialog was display:none until showModal(), so Leaflet measured a
+        // zero-size container; remeasure now that it's visible.
+        setTimeout(function () { if (confirmMap) { confirmMap.invalidateSize(); } }, 60);
+
+        _wireLocationSearch(root, marker);
+        _loadNearbyPins(root);
+        confirmMap.on('moveend', function () { _loadNearbyPins(root); });
+    }
+
+    // -- Place / existing-pin search (shared engine, same as the main map) -----
+    function _wireLocationSearch(root, marker) {
+        if (typeof window.LocationSearchEngine === 'undefined') { return; }
+        window.LocationSearchEngine.attach('photo-pin-place', {
+            sources: {
+                localPins: { url: root.dataset.localUrl },
+                googlePlaces: { url: root.dataset.placesUrl },
+            },
+            resolvePlaceUrl: root.dataset.resolveUrl,
+            enableMyLocation: false,
+            defaultZoom: 16,
+            onSelect: function (result) {
+                // A pin result means the user picked one of their own existing
+                // pins - file the photo onto it directly instead of moving the
+                // about-to-be-created marker.
+                if (result.type === 'pin' && result.pinSlug) {
+                    _useExistingPin(root, result.pinSlug);
+                    return;
+                }
+                var ll = L.latLng(result.lat, result.lng);
+                marker.setLatLng(ll);
+                if (confirmMap) { confirmMap.setView(ll, result.zoom || 16); }
+                document.getElementById('photo-pin-confirm-lat').value = ll.lat.toFixed(6);
+                document.getElementById('photo-pin-confirm-lng').value = ll.lng.toFixed(6);
+                var nameInput = document.getElementById('photo-pin-confirm-name');
+                if (nameInput && !nameInput.value.trim()) { nameInput.value = result.title || ''; }
+            },
+        });
+    }
+
+    // -- Nearby pins plotted on the map, clickable to file the photo onto one --
+    function _loadNearbyPins(root) {
+        var url = root.dataset.pinsUrl;
+        if (!url || !confirmMap || !nearbyPinsLayer) { return; }
+        var b = confirmMap.getBounds();
+        var bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].join(',');
+        fetch(url + '?bbox=' + encodeURIComponent(bbox), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.ok ? r.json() : { pins: [] }; })
+            .then(function (data) { _renderNearbyPins(root, data.pins || []); })
+            .catch(function () { /* best-effort - the search box still covers pins */ });
+    }
+
+    function _renderNearbyPins(root, pins) {
+        if (!nearbyPinsLayer) { return; }
+        nearbyPinsLayer.clearLayers();
+        pins.forEach(function (p) {
+            if (p.latitude == null || p.longitude == null || !p.slug) { return; }
+            var marker = L.circleMarker([p.latitude, p.longitude], {
+                radius: 8, color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: 0.75,
+            });
+            marker.bindPopup(
+                '<div class="photo-pin-existing-popup">' +
+                '<strong>' + _esc(p.name || 'Unnamed pin') + '</strong>' +
+                '<button type="button" class="btn btn--sm btn--primary photo-pin-use-existing">Use this pin for this photo</button>' +
+                '</div>',
+            );
+            marker.on('popupopen', function (e) {
+                var el = e.popup.getElement();
+                var btn = el && el.querySelector('.photo-pin-use-existing');
+                if (btn) { btn.addEventListener('click', function () { _useExistingPin(root, p.slug); }); }
+            });
+            marker.addTo(nearbyPinsLayer);
+        });
+    }
+
+    function _useExistingPin(root, slug) {
+        if (typeof htmx === 'undefined') { return; }
+        var url = root.dataset.logVisitUrl;
+        var imageId = root.dataset.imageId;
+        if (!url) { return; }
+        htmx.ajax('POST', url, { target: '#photo-card-' + imageId, swap: 'outerHTML', values: { pin_slug: slug } }).then(function () {
+            var dlg = document.getElementById('photo-pin-confirm-dialog');
+            if (dlg) { dlg.close(); }
+        });
+    }
+
+    function _esc(v) { var d = document.createElement('div'); d.textContent = v || ''; return d.innerHTML; }
+}());
+</script>
+
+<script>
+(function () {
+    var root = document.getElementById('photos-page');
+    var UPLOAD_URL = root.dataset.uploadUrl;
+    var ACTION_BASE = root.dataset.actionBase;
+    var CSRF = window.csrftoken || '{{ csrf_token }}';
+
+    // -- Drag-to-upload detection (depth-counted, page-wide) --------------------
+    var _dragDepth = 0;
+    var _overlay = document.getElementById('photos-drop-overlay');
+    // Drags that start inside the page (e.g. a photo tile's img) carry the image
+    // file, so treating them as uploads would duplicate an existing photo. OS
+    // file drags never fire dragstart in-page - that's the distinguishing signal.
+    var _internalDrag = false;
+    document.addEventListener('dragstart', function () { _internalDrag = true; });
+    document.addEventListener('dragend', function () { _internalDrag = false; });
+    function _isFilesDrag(e) { return !_internalDrag && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'); }
+    document.addEventListener('dragenter', function (e) { if (!_isFilesDrag(e)) return; _dragDepth++; if (_overlay) _overlay.hidden = false; });
+    document.addEventListener('dragleave', function (e) { if (!_isFilesDrag(e) && _dragDepth === 0) return; _dragDepth = Math.max(0, _dragDepth - 1); if (_dragDepth === 0 && _overlay) _overlay.hidden = true; });
+    document.addEventListener('drop', function () { _dragDepth = 0; _internalDrag = false; if (_overlay) _overlay.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && _overlay && !_overlay.hidden) { _dragDepth = 0; _overlay.hidden = true; } });
+    window._photosOverlayDrop = function (e) { e.preventDefault(); e.stopPropagation(); _dragDepth = 0; if (_overlay) _overlay.hidden = true; if (_internalDrag) { _internalDrag = false; return; } photosHandleFiles(e.dataTransfer.files); };
+
+    // -- Upload (one request per file, matching the other galleries) -----------
+    window.photosHandleFiles = function (files) {
+        files = Array.from(files || []).filter(function (f) { return f.type.indexOf('image/') === 0; });
+        if (!files.length) return;
+        var progress = document.getElementById('photos-upload-progress');
+        var bar = document.getElementById('photos-upload-bar');
+        if (progress) progress.hidden = false;
+        var total = files.length, done = 0, ok = 0;
+
+        files.forEach(function (file) {
+            var fd = new FormData();
+            fd.append('image', file);
+            fd.append('csrfmiddlewaretoken', CSRF);
+            fetch(UPLOAD_URL, { method: 'POST', body: fd, headers: { 'X-CSRFToken': CSRF } })
+                .then(function (r) {
+                    // Surface server-side rejections (e.g. 409 duplicate photo).
+                    return r.json().catch(function () { return {}; }).then(function (data) {
+                        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                        return data;
+                    });
+                })
+                .then(function (img) { ok++; _prependTile(img); })
+                .catch(function (err) {
+                    if (window.toastr) toastr.error(file.name + ': ' + (err.message || 'upload failed'));
+                })
+                .finally(function () {
+                    done++;
+                    if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+                    if (done === total) _finishUpload(ok);
+                });
+        });
+    };
+
+    function _finishUpload(ok) {
+        var progress = document.getElementById('photos-upload-progress');
+        var bar = document.getElementById('photos-upload-bar');
+        setTimeout(function () { if (progress) progress.hidden = true; if (bar) bar.style.width = '0'; }, 700);
+        if (ok && window.toastr) toastr.success(ok + (ok === 1 ? ' photo uploaded.' : ' photos uploaded.') + ' Sorting by location…');
+        // Ingestion is async: nudge the organize queue a couple of times so freshly
+        // detected suggestions surface without a full reload.
+        _refreshQueue(1500); _refreshQueue(5000);
+    }
+
+    function _refreshQueue(delay) {
+        setTimeout(function () { document.body.dispatchEvent(new Event('refreshQueue')); }, delay);
+    }
+
+    function _prependTile(img) {
+        var grid = document.getElementById('photo-grid');
+        if (!grid) { window.location.reload(); return; } // grid was in empty state
+        var li = document.createElement('li');
+        li.className = 'photo-tile';
+        li.id = 'photo-tile-' + img.id;
+        li.dataset.id = img.id;
+        li.dataset.url = img.url;
+        li.dataset.caption = img.caption || '';
+        li.dataset.author = img.author || '';
+        li.dataset.copyright = img.copyright || '';
+        li.dataset.sourceUrl = img.source_url || '';
+        li.dataset.takenAt = img.taken_at || '';
+        var badge = (img.latitude !== null && img.longitude !== null)
+            ? '<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>' : '';
+        li.innerHTML =
+            '<button type="button" class="photo-tile-btn" onclick="photosOpenLightbox(' + img.id + ')">' +
+            '<img src="' + img.url + '" alt="" loading="lazy">' + badge + '</button>' +
+            '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
+            '<i class="material-symbols-outlined">delete</i></button>';
+        grid.insertBefore(li, grid.firstChild);
+    }
+
+    // -- Delete ----------------------------------------------------------------
+    window.photosDelete = function (id) {
+        if (!confirm('Delete this photo? This cannot be undone.')) return;
+        fetch(ACTION_BASE + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then(function (r) {
+                if (!r.ok) return;
+                var el = document.getElementById('photo-tile-' + id);
+                if (el) el.remove();
+                var card = document.getElementById('photo-card-' + id);
+                if (card) card.remove();
+                if (window.toastr) toastr.info('Photo deleted.');
+            });
+    };
+
+    // -- Lightbox --------------------------------------------------------------
+    var _lbIdx = 0, _lbItems = [];
+    function _collectItems() {
+        _lbItems = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
+            return {
+                id: parseInt(el.dataset.id, 10), url: el.dataset.url, caption: el.dataset.caption || '',
+                author: el.dataset.author || '', copyright: el.dataset.copyright || '',
+                sourceUrl: el.dataset.sourceUrl || '', takenAt: el.dataset.takenAt || '',
+            };
+        });
+    }
+    window.photosOpenLightbox = function (id) {
+        _collectItems();
+        _lbIdx = _lbItems.findIndex(function (i) { return i.id === id; });
+        if (_lbIdx < 0) _lbIdx = 0;
+        _showLb();
+        document.getElementById('photos-lightbox').showModal();
+    };
+    window.photosLightboxNav = function (dir) {
+        if (!_lbItems.length) return;
+        _lbIdx = (_lbIdx + dir + _lbItems.length) % _lbItems.length;
+        _showLb();
+    };
+    function _showLb() {
+        var it = _lbItems[_lbIdx];
+        if (!it) return;
+        document.getElementById('photos-lightbox-img').src = it.url;
+        var captionEl = document.getElementById('photos-lightbox-caption');
+        captionEl.textContent = it.caption || '';
+        captionEl.hidden = !it.caption;
+        var authorEl = document.getElementById('photos-lightbox-author');
+        authorEl.textContent = it.author ? 'By ' + it.author : '';
+        authorEl.hidden = !it.author;
+        var takenEl = document.getElementById('photos-lightbox-taken-at');
+        var takenText = '';
+        if (it.takenAt) { var d = new Date(it.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+        takenEl.textContent = takenText;
+        takenEl.hidden = !takenText;
+        var copyrightEl = document.getElementById('photos-lightbox-copyright');
+        copyrightEl.textContent = it.copyright || '';
+        copyrightEl.hidden = !it.copyright;
+        var sourceEl = document.getElementById('photos-lightbox-source-link');
+        if (it.sourceUrl) { sourceEl.href = it.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
+        else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
+    }
+    document.addEventListener('keydown', function (e) {
+        var lb = document.getElementById('photos-lightbox');
+        if (!lb || !lb.open) return;
+        if (e.key === 'ArrowLeft') photosLightboxNav(-1);
+        else if (e.key === 'ArrowRight') photosLightboxNav(1);
+    });
+}());
+</script>
+{% endblock %}

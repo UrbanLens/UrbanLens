@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import datetime
 import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.db.models import (
     CASCADE,
     BooleanField,
     CharField,
     DateField,
+    DateTimeField,
     DecimalField,
     ImageField,
     Index,
@@ -19,10 +22,12 @@ from django.db.models import (
     TextChoices,
     TextField,
 )
+from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.profile.meta import GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
+from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -37,6 +42,24 @@ if TYPE_CHECKING:
 # collections (e.g. US east coast vs Europe, ~5 600 km) in separate clusters.
 _CLUSTER_RADIUS_KM = 1_000.0
 
+# How long a soft-deleted account stays recoverable before the hard delete runs.
+ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
+# How long before the hard delete the "1 day left" reminder goes out.
+ACCOUNT_DELETION_REMINDER_LEAD = datetime.timedelta(days=1)
+
+# Visibility fields forced to VisibilityChoice.NO_ONE while community_enabled is
+# False. Re-enabling community makes them editable again; their values are not
+# restored to whatever they were before - they stay at NO_ONE until re-chosen.
+_COMMUNITY_GATED_VISIBILITY_FIELDS = (
+    "profile_visibility",
+    "comment_visibility",
+    "friend_request_visibility",
+    "photo_upload_visibility",
+    "viewer_photo_filter",
+    "trip_pin_location_visibility",
+    "contact_visibility",
+)
+
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     """Great-circle distance in kilometres between two (lat, lng) points."""
@@ -47,13 +70,47 @@ def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     return 6_371.0 * 2 * math.asin(math.sqrt(a))
 
 
-class Profile(abstract.HasSlug):
+# Rough lat/lng bounding boxes for the regions that use miles for everyday road
+# distances. Used only to pick a sensible *default* distance unit when the user
+# has not chosen one explicitly; a false negative just falls back to kilometres.
+# Each entry is (min_lat, max_lat, min_lng, max_lng).
+_MILES_REGION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
+    (24.0, 50.0, -125.0, -66.0),  # Contiguous United States
+    (51.0, 72.0, -170.0, -129.0),  # Alaska
+    (18.0, 23.0, -161.0, -154.0),  # Hawaii
+    (49.5, 61.0, -8.7, 2.0),  # United Kingdom
+    (4.0, 9.0, -12.0, -7.0),  # Liberia
+    (9.0, 29.0, 92.0, 102.0),  # Myanmar
+)
+
+
+def _units_for_point(lat: float, lng: float) -> str:
+    """Return the default distance unit for a geographic point.
+
+    Points inside a miles-using region resolve to miles; everything else
+    (and any point that cannot be classified) defaults to kilometres.
+    """
+    for min_lat, max_lat, min_lng, max_lng in _MILES_REGION_BBOXES:
+        if min_lat <= lat <= max_lat and min_lng <= lng <= max_lng:
+            return DistanceUnit.MILES
+    return DistanceUnit.KILOMETERS
+
+
+class Profile(abstract.PublicDashboardModel):
     # Global uniqueness with a shorter cap to fit within username length limits.
     slug = SlugField(max_length=150, null=True, blank=True, unique=True)
 
     avatar = ImageField(upload_to="avatars/", null=True, blank=True)
     profile_setup_complete = BooleanField(default=True)
-    bio = TextField(null=True, blank=True)
+    # Default False so every newly-created profile shows /welcome/ once with no
+    # signup-path race; the migration that adds this field backfills existing
+    # rows to True so pre-existing accounts never see it.
+    welcome_onboarding_complete = BooleanField(default=False)
+    # Set the moment the user checks the "I agree" box on /welcome/. Null means
+    # never agreed - existing accounts are backfilled to their profile creation
+    # date (accepting terms is implied by having used the site already).
+    tos_accepted_at = DateTimeField(null=True, blank=True)
+    bio = TextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
@@ -62,36 +119,41 @@ class Profile(abstract.HasSlug):
     profile_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
     comment_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
     friend_request_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
     photo_upload_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
         help_text="Who can see the photos you upload to locations.",
     )
     viewer_photo_filter = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
         help_text="Whose photos you want to see. Photos from users outside this setting will be blurred.",
     )
     trip_pin_location_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYONE,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
         help_text=("When you share one of your pins as a trip activity, who can see the actual location? Members outside this setting will only see the pin name."),
     )
+
+    # Cached normalized form of user.email (kept in sync by a User post_save
+    # signal) so email-match lookups (friend invites, dup checks, login) are a
+    # single indexed query instead of a full-table Python scan.
+    primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
 
     # Contact information and its visibility
     phone_number = CharField(max_length=30, blank=True, default="")
@@ -118,6 +180,16 @@ class Profile(abstract.HasSlug):
         choices=GuidanceLevel.choices,
         default=GuidanceLevel.ALL,
         help_text="Whether to show feature walkthroughs, and hover hints.",
+    )
+    # Preferred unit for displayed distances. Null means "not chosen yet" - the
+    # effective unit is then inferred from the user's location (see
+    # effective_distance_units), defaulting to kilometres.
+    distance_units = CharField(
+        max_length=4,
+        choices=DistanceUnit.choices,
+        null=True,
+        blank=True,
+        help_text="Unit used for distances and travel stats. Defaults to your region.",
     )
     map_dark_mode = CharField(
         max_length=10,
@@ -170,17 +242,46 @@ class Profile(abstract.HasSlug):
     ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
+    # Voluntary downscale cap (longest edge, px) for future photo uploads.
+    # Null means "use whatever the site policy entitles me to". A value here can
+    # only tighten the site policy (the effective cap is the smaller of the two),
+    # letting users trade image resolution for more photos within their quota.
+    image_downscale_max_dimension = IntegerField(null=True, blank=True)
+
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
+    # Memories preferences. Each independently controls whether a category of
+    # visit/location history is ever saved - including from explicit user actions
+    # like GPX/Takeout imports, not just passive/background tracking.
+    track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from journal entries, imports, and photo tagging.")
+    track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
+    track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
+
+    # When False: your pins are forced private, your profile and privacy
+    # settings are locked to the most restrictive option, and you cannot send
+    # or receive friend requests. Enforced in Pin.save()/Profile.save().
+    community_enabled = BooleanField(default=True, help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.")
+
+    # Master switch for all external API calls made on your behalf (weather,
+    # geocoding, place data, AI, etc). Individual services also have their own
+    # toggles below/elsewhere that remain independently adjustable.
+    external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
+
+    # Set when the user requests account deletion; cleared on cancel/undo.
+    # A non-null value means the account is scheduled for hard deletion at
+    # deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD.
+    deletion_requested_at = DateTimeField(null=True, blank=True, db_index=True)
+    # Idempotency guard so the "1 day left" reminder is sent at most once per
+    # deletion request; cleared alongside deletion_requested_at on cancel.
+    deletion_reminder_sent_at = DateTimeField(null=True, blank=True)
+
     user = OneToOneField(
         User,
         on_delete=CASCADE,
     )
-
-    objects = ProfileManager()
 
     if TYPE_CHECKING:
         user_id: int
@@ -193,6 +294,49 @@ class Profile(abstract.HasSlug):
         triggered_notifications: DjangoManager[NotificationLog]
         markup_items: DjangoManager[PinMarkup]
 
+    objects = ProfileManager()
+
+    def save(self, *args, **kwargs) -> None:
+        """Save the profile, forcing visibility settings to their most restrictive value while Community is off.
+
+        This single enforcement point covers every write path (settings forms,
+        onboarding, admin) so the existing view-level (``_can_view_profile``)
+        and model-level (``can_view_contact_info``) visibility checks work
+        correctly with no changes of their own.
+        """
+        update_fields = kwargs.get("update_fields")
+        if not self.community_enabled:
+            forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
+            for field in forced:
+                setattr(self, field, VisibilityChoice.NO_ONE)
+            if forced and update_fields is not None:
+                kwargs["update_fields"] = [*update_fields, *forced]
+        super().save(*args, **kwargs)
+
+    @property
+    def is_pending_deletion(self) -> bool:
+        """True while this account is soft-deleted and awaiting the hard delete."""
+        return self.deletion_requested_at is not None
+
+    @property
+    def deletion_scheduled_for(self) -> datetime.datetime | None:
+        """When the hard delete will run, or None if deletion isn't pending."""
+        if self.deletion_requested_at is None:
+            return None
+        return self.deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD
+
+    @property
+    def deletion_days_remaining(self) -> int | None:
+        """Whole days left before the hard delete runs, or None if not pending.
+
+        Rounds up so "a few hours left" still reads as 1 day rather than 0.
+        """
+        scheduled_for = self.deletion_scheduled_for
+        if scheduled_for is None:
+            return None
+        remaining_seconds = (scheduled_for - timezone.now()).total_seconds()
+        return max(0, math.ceil(remaining_seconds / 86_400))
+
     @property
     def show_onboarding_tips(self) -> bool:
         """Whether contextual walkthrough cards should be shown."""
@@ -202,6 +346,43 @@ class Profile(abstract.HasSlug):
     def show_hover_tooltips(self) -> bool:
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
+
+    def _best_known_point(self) -> tuple[float, float] | None:
+        """Return a representative (lat, lng) for this profile without extra computation.
+
+        Uses already-persisted coordinates only - the explicit custom center, the
+        cached pin centroid, or the last remembered map position - so it is cheap
+        and side-effect free (it never triggers the O(n²) centroid computation).
+
+        Returns:
+            A (latitude, longitude) tuple, or None if no coordinate is on record.
+        """
+        for lat, lng in (
+            (self.map_custom_latitude, self.map_custom_longitude),
+            (self.map_center_latitude, self.map_center_longitude),
+            (self.remembered_map_lat, self.remembered_map_lng),
+        ):
+            if lat is not None and lng is not None:
+                return float(lat), float(lng)
+        return None
+
+    @property
+    def effective_distance_units(self) -> str:
+        """Return the distance unit to display for this profile.
+
+        An explicit ``distance_units`` choice always wins. Otherwise the unit is
+        inferred from the profile's known location, defaulting to kilometres when
+        the location is unknown or not in a miles-using region.
+
+        Returns:
+            A ``DistanceUnit`` value ("km" or "mi").
+        """
+        if self.distance_units:
+            return self.distance_units
+        point = self._best_known_point()
+        if point is not None:
+            return _units_for_point(*point)
+        return DistanceUnit.KILOMETERS
 
     @property
     def username(self):
@@ -226,11 +407,6 @@ class Profile(abstract.HasSlug):
     def _slugify_base(self) -> str:
         return self.user.username or "user"
 
-    def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug from the username if not already set."""
-        self.ensure_slug()
-        super().save(*args, **kwargs)
-
     def compute_map_center(self) -> tuple[float, float] | None:
         """Find the densest geographic cluster of pins and return its centroid.
 
@@ -245,24 +421,13 @@ class Profile(abstract.HasSlug):
             (latitude, longitude) as floats, or None if the user has no pins
             with resolvable coordinates.
         """
-        from django.db.models import F
-        from django.db.models.functions import Coalesce
-
         from urbanlens.dashboard.models.pin.model import Pin
 
-        rows = list(
-            Pin.objects.filter(profile=self)
-            .annotate(
-                eff_lat=Coalesce(F("latitude"), F("location__latitude")),
-                eff_lng=Coalesce(F("longitude"), F("location__longitude")),
-            )
-            .filter(eff_lat__isnull=False, eff_lng__isnull=False)
-            .values_list("eff_lat", "eff_lng"),
-        )
-        if not rows:
+        # A Pin's coordinates live on its linked Location (see AddressableModel).
+        rows = list(Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude"))
+        pts = [(float(lat), float(lng)) for lat, lng in rows if lat is not None and lng is not None]
+        if not pts:
             return None
-
-        pts = [(float(lat), float(lng)) for lat, lng in rows]
 
         # For each point count how many other points fall within the cluster radius.
         # The point with the highest count is the cluster seed.
@@ -335,6 +500,137 @@ class Profile(abstract.HasSlug):
             "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
         }
 
+    @staticmethod
+    def are_friends(subject: Profile, other: Profile) -> bool:
+        """Return True when the two profiles share an accepted friendship.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when an accepted Friendship row exists in either direction.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(
+            models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+            status=FriendshipStatus.ACCEPTED,
+        ).exists()
+
+    @staticmethod
+    def _have_common_pin(subject: Profile, other: Profile) -> bool:
+        """Return True when both profiles have pinned at least one shared Location.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when the profiles' pinned location sets intersect.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        my_locs = set(
+            Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
+        )
+        their_locs = set(
+            Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
+        )
+        return bool(my_locs & their_locs)
+
+    @staticmethod
+    def _have_common_friend(subject: Profile, other: Profile) -> bool:
+        """Return True when the two profiles share at least one mutual accepted friend.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when the profiles' accepted-friend sets intersect.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        accepted = FriendshipStatus.ACCEPTED
+        my_friends = set(
+            Friendship.objects.filter(from_profile=subject, status=accepted).values_list(
+                "to_profile_id",
+                flat=True,
+            ),
+        ) | set(
+            Friendship.objects.filter(to_profile=subject, status=accepted).values_list(
+                "from_profile_id",
+                flat=True,
+            ),
+        )
+        their_friends = set(
+            Friendship.objects.filter(from_profile=other, status=accepted).values_list(
+                "to_profile_id",
+                flat=True,
+            ),
+        ) | set(
+            Friendship.objects.filter(to_profile=other, status=accepted).values_list(
+                "from_profile_id",
+                flat=True,
+            ),
+        )
+        return bool(my_friends & their_friends)
+
+    @staticmethod
+    def _have_common_trip(subject: Profile, other: Profile) -> bool:
+        """Return True when the two profiles are members of at least one shared trip.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when the profiles' trip-membership sets intersect.
+        """
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
+        their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+        return bool(my_trips & their_trips)
+
+    @staticmethod
+    def visibility_permits(visibility: str, subject: Profile, other: Profile) -> bool:
+        """Return True if ``subject``'s ``visibility`` setting permits ``other``.
+
+        Shared evaluator for every per-field ``VisibilityChoice`` setting on
+        this model (contact info, profile, photos, etc.) so the friend/common-pin/
+        common-friend/common-trip relationship queries live in exactly one place.
+
+        Accepted friends qualify for every option except NO_ONE - a friend is
+        never more of a stranger than someone who merely shares a pin or trip.
+
+        Args:
+            visibility: The ``VisibilityChoice`` value being evaluated.
+            subject: The profile whose setting is being checked.
+            other: The profile requesting access.
+
+        Returns:
+            True when ``other`` satisfies the visibility requirement.
+        """
+        if visibility == VisibilityChoice.ANYONE:
+            return True
+        if visibility == VisibilityChoice.NO_ONE:
+            return False
+        if Profile.are_friends(subject, other):
+            return True
+        if visibility == VisibilityChoice.FRIENDS:
+            return False
+        if visibility == VisibilityChoice.COMMON_PIN:
+            return Profile._have_common_pin(subject, other)
+        if visibility == VisibilityChoice.COMMON_FRIEND:
+            return Profile._have_common_friend(subject, other)
+        if visibility == VisibilityChoice.COMMON_TRIP:
+            return Profile._have_common_trip(subject, other)
+        if visibility == VisibilityChoice.ANYTHING_IN_COMMON:
+            return Profile._have_common_pin(subject, other) or Profile._have_common_friend(subject, other) or Profile._have_common_trip(subject, other)
+        return False
+
     def can_view_photos_from(self, uploader: Profile) -> bool:
         """Return True if this profile is allowed to see photos uploaded by ``uploader``.
 
@@ -345,69 +641,11 @@ class Profile(abstract.HasSlug):
         if self == uploader:
             return True
 
-        def _check(visibility: str, subject: Profile, other: Profile) -> bool:
-            """Return True if ``subject``'s ``visibility`` setting permits ``other``."""
-            if visibility == VisibilityChoice.ANYONE:
-                return True
-            if visibility == VisibilityChoice.NO_ONE:
-                return False
-            if visibility == VisibilityChoice.FRIENDS:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                return Friendship.objects.filter(
-                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
-                    status=FriendshipStatus.ACCEPTED,
-                ).exists()
-            if visibility == VisibilityChoice.COMMON_PIN:
-                from urbanlens.dashboard.models.pin.model import Pin
-
-                my_locs = set(
-                    Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
-                )
-                their_locs = set(
-                    Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
-                )
-                return bool(my_locs & their_locs)
-            if visibility == VisibilityChoice.COMMON_FRIEND:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                accepted = FriendshipStatus.ACCEPTED
-                my_friends = set(
-                    Friendship.objects.filter(from_profile=subject, status=accepted).values_list(
-                        "to_profile_id",
-                        flat=True,
-                    ),
-                ) | set(
-                    Friendship.objects.filter(to_profile=subject, status=accepted).values_list(
-                        "from_profile_id",
-                        flat=True,
-                    ),
-                )
-                their_friends = set(
-                    Friendship.objects.filter(from_profile=other, status=accepted).values_list(
-                        "to_profile_id",
-                        flat=True,
-                    ),
-                ) | set(
-                    Friendship.objects.filter(to_profile=other, status=accepted).values_list(
-                        "from_profile_id",
-                        flat=True,
-                    ),
-                )
-                return bool(my_friends & their_friends)
-            if visibility == VisibilityChoice.COMMON_TRIP:
-                from urbanlens.dashboard.models.trips.model import TripMembership
-
-                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
-                return bool(my_trips & their_trips)
-            return False
-
         # Uploader must allow this viewer.
-        if not _check(uploader.photo_upload_visibility, uploader, self):
+        if not self.visibility_permits(uploader.photo_upload_visibility, uploader, self):
             return False
         # This viewer's filter must allow the uploader.
-        return _check(self.viewer_photo_filter, self, uploader)
+        return self.visibility_permits(self.viewer_photo_filter, self, uploader)
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.
@@ -420,50 +658,33 @@ class Profile(abstract.HasSlug):
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
-
-        def _ck(visibility: str, subject: Profile, other: Profile) -> bool:
-            if visibility == VisibilityChoice.ANYONE:
-                return True
-            if visibility == VisibilityChoice.NO_ONE:
-                return False
-            if visibility == VisibilityChoice.FRIENDS:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                return Friendship.objects.filter(
-                    models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
-                    status=FriendshipStatus.ACCEPTED,
-                ).exists()
-            if visibility == VisibilityChoice.COMMON_PIN:
-                from urbanlens.dashboard.models.pin.model import Pin
-
-                my_locs = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
-                their_locs = set(Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True))
-                return bool(my_locs & their_locs)
-            if visibility == VisibilityChoice.COMMON_FRIEND:
-                from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-                accepted = FriendshipStatus.ACCEPTED
-                my_friends = set(Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True))
-                their_friends = set(Friendship.objects.filter(from_profile=other, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=other, status=accepted).values_list("from_profile_id", flat=True))
-                return bool(my_friends & their_friends)
-            if visibility == VisibilityChoice.COMMON_TRIP:
-                from urbanlens.dashboard.models.trips.model import TripMembership
-
-                my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-                their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
-                return bool(my_trips & their_trips)
-            return False
-
         if self.contact_visibility == VisibilityChoice.ANYONE:
             return True
         if viewer is None:
             return False
-        return _ck(self.contact_visibility, self, viewer)
+        return self.visibility_permits(self.contact_visibility, self, viewer)
+
+    def can_view_profile(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see this profile's identity (name, etc).
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when the viewer passes the profile_visibility setting.
+        """
+        if viewer is not None and self.pk == viewer.pk:
+            return True
+        if self.profile_visibility == VisibilityChoice.ANYONE:
+            return True
+        if viewer is None:
+            return False
+        return self.visibility_permits(self.profile_visibility, self, viewer)
 
     def __str__(self):
         return self.username
 
-    class Meta(abstract.HasSlug.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_profiles"
 
         indexes = [

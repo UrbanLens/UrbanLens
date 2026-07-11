@@ -208,6 +208,21 @@ def test_extract_pins_requires_profile_ai_enabled(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.django_db
+def test_extract_pins_requires_profile_external_apis_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=False)
+    monkeypatch.setattr(
+        "urbanlens.dashboard.services.ai.document_import.user_has_feature",
+        lambda _user, feature: feature == SiteFeature.AI,
+    )
+
+    with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway:
+        result = document_import.extract_pins_from_document("notes.txt", b"Visited the old mill.", profile)
+
+    assert result is None
+    get_gateway.assert_not_called()
+
+
+@pytest.mark.django_db
 def test_extract_pins_wraps_document_text_and_geocodes(monkeypatch: pytest.MonkeyPatch) -> None:
     """The document text must be sent wrapped in <USER_DATA> tags (injection guard),
     and extracted rows must be geocoded before becoming preview pin dicts."""

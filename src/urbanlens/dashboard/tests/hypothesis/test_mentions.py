@@ -236,12 +236,6 @@ try:
             result = viewer_pinned_uuids(user1.profile)
             self.assertNotIn(location.uuid, result)
 
-        def test_pin_without_location_is_excluded(self) -> None:
-            user: _User = baker.make(_User)
-            baker.make("dashboard.Pin", profile=user.profile, location=None)
-            result = viewer_pinned_uuids(user.profile)
-            self.assertEqual(len(result), 0)
-
     class FilterVisibleCommentsTests(DjangoTestCase):
         """filter_visible_comments returns only comments visible to the profile."""
 

@@ -101,14 +101,79 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
         return {"env_indicator_type": "", "env_indicator_label": ""}
 
 
+#: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
+#: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
+_NAV_SECTION_ALIASES = {"pin": "map"}
+
+
 def add_page_name(request: HttpRequest) -> dict[str, str]:
+    """Expose the current page and nav-bar section to every template.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``page_name`` (the resolved URL name, sanitized for use as a
+        CSS class) and ``nav_section`` (the URL name's leading ``section.``
+        segment, used by the nav bar to highlight the active link).
+    """
     resolver_match = request.resolver_match
     if resolver_match is None:
-        return {"page_name": ""}
-    page_name = resolver_match.url_name or ""
+        return {"page_name": "", "nav_section": ""}
+    url_name = resolver_match.url_name or ""
     # This will be a className, so replace anything that would trip up css
-    page_name = re.sub(r"[^a-zA-Z0-9]", "-", page_name)
-    return {"page_name": page_name}
+    page_name = re.sub(r"[^a-zA-Z0-9]", "-", url_name)
+    section = url_name.split(".", 1)[0] if url_name else ""
+    nav_section = _NAV_SECTION_ALIASES.get(section, section)
+    return {"page_name": page_name, "nav_section": nav_section}
+
+
+def add_distance_units(request: HttpRequest) -> dict[str, str]:
+    """Expose the viewer's effective distance unit to every template.
+
+    Templates render distances (stored internally in kilometres) in this unit via
+    the ``distance`` filter, e.g. ``{{ value_km|distance:distance_units }}``.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``distance_units`` ("km" or "mi"), defaulting to "km" for
+        anonymous users or when the profile is unavailable.
+    """
+    from urbanlens.dashboard.models.profile.meta import DistanceUnit
+
+    units = DistanceUnit.KILOMETERS.value
+    if isinstance(request.user, User):
+        try:
+            units = request.user.profile.effective_distance_units
+        except (AttributeError, DatabaseError):
+            units = DistanceUnit.KILOMETERS.value
+    return {"distance_units": units}
+
+
+def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
+    """Expose the current user's pending-deletion state for the site-wide warning banner.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``pending_account_deletion`` (bool), ``account_deletion_date``
+        (datetime or None), and ``account_deletion_days_left`` (int or None).
+    """
+    if isinstance(request.user, User):
+        try:
+            profile = request.user.profile
+            if profile.is_pending_deletion:
+                return {
+                    "pending_account_deletion": True,
+                    "account_deletion_date": profile.deletion_scheduled_for,
+                    "account_deletion_days_left": profile.deletion_days_remaining,
+                }
+        except (AttributeError, DatabaseError):
+            pass
+    return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
 
 
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:

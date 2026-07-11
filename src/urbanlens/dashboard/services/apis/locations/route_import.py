@@ -43,12 +43,17 @@ def import_routes_streaming(parsed_routes: list[ParsedRoute], profile: Profile) 
         SSE-formatted strings (``data: {...}\\n\\n``).
     """
     from urbanlens.dashboard.services.import_formats.gpx_tracks import detect_dwells_and_create_visits
+    from urbanlens.dashboard.services.visits import route_import_allowed
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"
 
     total = len(parsed_routes)
     if total == 0:
+        return
+
+    if not route_import_allowed(profile):
+        yield sse({"type": "complete", "total": total, "created": 0, "skipped": total, "subtype": "route", "reason": "routes_disabled"})
         return
 
     yield sse({"type": "start", "total": total, "subtype": "route"})

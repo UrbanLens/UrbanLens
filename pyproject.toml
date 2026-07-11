@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.3.0b0"
+version = "0.4.0b0"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -37,6 +37,7 @@ dependencies = [
     "orjson~=3.11.9",
     "pandas~=3.0.3",
     "pillow>=12.2,<12.4",
+    "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
     "pydantic-settings~=2.14.1",
@@ -884,7 +885,7 @@ implicit_optional = true
 disable_error_code = ['misc', 'annotation-unchecked', 'override']
 
 [tool.django-stubs]
-django_settings_module = "urbanlens.UrbanLens.settings.base"
+django_settings_module = "urbanlens.UrbanLens.settings.test"
 ignore_missing_model_attributes = true
 #strict_settings = true
 

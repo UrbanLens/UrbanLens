@@ -8,19 +8,19 @@
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
         <div class="card-header-actions">
-            <button type="button" class="view-toggle-btn" id="trip-show-completed-btn"
+            <button type="button" class="btn btn--secondary view-toggle-btn" id="trip-show-completed-btn"
                     data-view="completed"
                     title="Show completed activities"
                     onclick="window.tripToggleShowCompleted()">
                 <i class="material-symbols-outlined">check_circle</i>
             </button>
             <div class="view-toggle-group" role="group" aria-label="Activities view">
-                <button type="button" class="view-toggle-btn view-toggle-btn--active"
+                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active"
                         data-view="list" title="List view"
                         onclick="tripSetView('list')">
                     <i class="material-symbols-outlined">view_list</i>
                 </button>
-                <button type="button" class="view-toggle-btn"
+                <button type="button" class="btn btn--secondary view-toggle-btn"
                         data-view="calendar" title="Calendar view"
                         onclick="tripSetView('calendar')">
                     <i class="material-symbols-outlined">date_range</i>
@@ -59,7 +59,7 @@
                 data-act-end-date="{% if act.scheduled_end %}{{ act.scheduled_end|date:'Y-m-d' }}{% endif %}"
                 data-act-end-time="{% if act.scheduled_end %}{% with t=act.scheduled_end|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
                 data-act-location-uuid="{{ act.location.slug|default:'' }}"
-                data-act-location-name="{{ act.location.name|default:'' }}"
+                data-act-location-name="{{ act.location.display_name|default:'' }}"
                 data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
                 data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
                 data-act-status="{{ act.status }}"
@@ -165,7 +165,7 @@
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}')">
+                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
                         <i class="material-symbols-outlined">check</i>
                     </button>
                     <button type="button"

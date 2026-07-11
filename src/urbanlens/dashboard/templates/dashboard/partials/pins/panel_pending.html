@@ -1,0 +1,29 @@
+{% comment %}
+Self-polling placeholder for an external-data panel whose background fetch is
+still in flight (see services/external_data.py). Keeps the section's DOM id so
+the page's existing htmx handlers (204 removal, quiet error fallback) apply to
+every poll exactly as they did to the original load request. Replaces itself
+via outerHTML until the poll endpoint returns real content, a 204 (nothing
+found / gave up), or an error.
+{% endcomment %}
+<div id="{{ section_id }}"{% if outer_class %} class="{{ outer_class }}"{% endif %}
+    hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+    hx-trigger="load delay:{{ poll_interval }}s"
+    hx-swap="outerHTML"
+    hx-timeout="25000">
+    {% if outer_is_card %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ icon }}</i>
+        <h3>{{ title }}</h3>
+    </div>
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+    {% else %}
+    <div class="card card--secondary">
+        <div class="card-header">
+            <i class="material-symbols-outlined">{{ icon }}</i>
+            <h3>{{ title }}</h3>
+        </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+    </div>
+    {% endif %}
+</div>

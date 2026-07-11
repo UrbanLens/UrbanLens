@@ -81,12 +81,14 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    # Innermost: swaps in the simulated viewer for "view profile as" previews.
+    "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
     "social_core.backends.google.GoogleOAuth2",
     "social_core.backends.discord.DiscordOAuth2",
-    "django.contrib.auth.backends.ModelBackend",
+    "urbanlens.dashboard.services.auth_backend.EmailOrUsernameModelBackend",
 ]
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"
@@ -106,7 +108,9 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_site_settings",
                 "urbanlens.dashboard.context_processors.add_dev_toolbar",
                 "urbanlens.dashboard.context_processors.add_feature_access",
+                "urbanlens.dashboard.context_processors.add_pending_account_deletion",
                 "urbanlens.dashboard.context_processors.add_environment_indicator",
+                "urbanlens.dashboard.context_processors.add_distance_units",
             ],
         },
     },
@@ -217,9 +221,29 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
     },
+    "safety-checkin-final-warnings": {
+        "task": "urbanlens.dashboard.tasks.send_final_checkin_warnings",
+        "schedule": 5 * 60,
+    },
     "safety-checkin-escalation": {
         "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
         "schedule": 5 * 60,
+    },
+    "account-deletion-reminders": {
+        "task": "urbanlens.dashboard.tasks.send_account_deletion_reminders",
+        "schedule": 60 * 60,
+    },
+    "account-deletion-hard-delete": {
+        "task": "urbanlens.dashboard.tasks.hard_delete_expired_accounts",
+        "schedule": 60 * 60,
+    },
+    "safety-checkin-auto-delete": {
+        "task": "urbanlens.dashboard.tasks.delete_expired_safety_checkins",
+        "schedule": 60 * 60,
+    },
+    "undo-action-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_expired_undo_actions",
+        "schedule": 60 * 60,
     },
 }
 
@@ -382,7 +406,17 @@ EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).
-SITE_URL = os.getenv("UL_SITE_URL", "http://localhost:21080")
+_site_url_env = os.getenv("UL_SITE_URL")
+SITE_URL = _site_url_env or "http://localhost:21080"
+if not _site_url_env and not _is_dev:
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "UL_SITE_URL is not set outside a local/development environment - falling back to "
+        "%r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to "
+        "this deployment's real public URL.",
+        SITE_URL,
+    )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")
 GOOGLE_DOMAIN_RESTRICTED_API_KEY = os.getenv("UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY", "")

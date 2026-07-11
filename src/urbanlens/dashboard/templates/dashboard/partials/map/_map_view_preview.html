@@ -1,0 +1,21 @@
+{% comment %}
+Shared attached-map preview: a live Leaflet thumbnail plus an "Expand map"
+trigger. Initialized by themes/base.html's _initThumbs (which also makes the
+whole preview clickable) and opened via _expandCommentMap(map_id).
+
+Context:
+  map_id - unique id suffix; must match the paired _map_view_dialog.html.
+  marker_lat / marker_lng - optional reference-marker coordinates for the
+           thumbnail (e.g. the pin the map belongs to).
+{% endcomment %}
+{% with map_id_str=map_id|stringformat:"s" %}
+<div class="comment-map-preview" data-comment-id="{{ map_id_str }}"
+     {% if marker_lat or marker_lng %}data-marker-lat="{{ marker_lat }}" data-marker-lng="{{ marker_lng }}"{% endif %}>
+    <div class="comment-map-thumb" id="comment-map-thumb-{{ map_id_str }}"></div>
+    <button type="button" class="comment-map-expand-btn"
+            onclick="_expandCommentMap('{{ map_id_str }}')">
+        <i class="material-symbols-outlined">open_in_full</i>
+        Expand map
+    </button>
+</div>
+{% endwith %}

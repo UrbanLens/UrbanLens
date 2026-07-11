@@ -37,7 +37,7 @@ def suggest_badge_style(name: str, profile: Profile) -> BadgeStyleSuggestion:
     appearance when subscription, profile preference, site settings, or the AI gateway
     prevents a suggestion.
     """
-    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled:
+    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
         return BadgeStyleSuggestion()
 
     prompt = _build_prompt(name)
@@ -47,7 +47,7 @@ def suggest_badge_style(name: str, profile: Profile) -> BadgeStyleSuggestion:
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     try:
-        gateway = get_gateway("badge_style_suggestions", instructions=_build_instructions())
+        gateway = get_gateway("badge_style_suggestions", profile=profile, instructions=_build_instructions())
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning("AI gateway unavailable for badge style suggestion %r: %s", name, exc)
         return BadgeStyleSuggestion()

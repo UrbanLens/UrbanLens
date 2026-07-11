@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -120,83 +121,92 @@
         </div>
     </div>{# end .location-map #}
 
-    {# -- Satellite / street view: always present, directly below the map ---- #}
-    <div id="satellite-view-section" class="satellite-view card card--primary"
-        hx-get="{% url 'pin.satellite_view' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-symbols-outlined">globe</i>
-            <h3>Satellite View</h3>
+    {# -- Satellite / street view / photos: each card grows to fill the space -- #}
+    {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
+    {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
+    <div class="pin-media-row">
+        <div id="satellite-view-section" class="satellite-view card card--primary"
+            hx-get="{% url 'pin.satellite_view' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','satellite')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="satellite">
+            <div class="card-header">
+                <i class="material-symbols-outlined">globe</i>
+                <h3>Satellite View</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading...
+            </div>
         </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading...
-        </div>
-    </div>
 
-    <div id="street-view-section" class="street-view card card--primary"
-        hx-get="{% url 'pin.street_view' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML">
-        <div class="card-header">
-            <i class="material-symbols-outlined">streetview</i>
-            <h3>Street View</h3>
+        <div id="street-view-section" class="street-view card card--primary"
+            hx-get="{% url 'pin.street_view' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','street-view')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="street-view">
+            <div class="card-header">
+                <i class="material-symbols-outlined">streetview</i>
+                <h3>Street View</h3>
+            </div>
+            <div class="view-loading">
+                <i class="material-icons spin">autorenew</i>
+                Loading...
+            </div>
         </div>
-        <div class="view-loading">
-            <i class="material-icons spin">autorenew</i>
-            Loading...
-        </div>
-    </div>
 
-    {# -- Gallery: alongside satellite / street view in the detail grid ---- #}
-    <div id="pin-gallery-panel"
-     hx-get="{% url 'pin.gallery' pin.slug %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-        <div class="card card--secondary">
+        <div id="pin-gallery-panel" class="card card--secondary"
+         hx-get="{% url 'pin.gallery' pin.slug %}"
+         hx-trigger="load[!window.ulSectionCollapsed('pin','gallery')], ul:unhide"
+         hx-swap="outerHTML"
+         data-collapse-scope="pin" data-collapse-section="gallery">
             <div class="card-header">
                 <i class="material-symbols-outlined">photo_library</i>
                 <span>Photos</span>
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
-    </div>
+    </div>{# end .pin-media-row #}
 
-    {# -- Visits / categories / aliases: always present ------------------- #}
-    <div hx-get="{% url 'pin.visits' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        class="visit-history card card--secondary">
-        <div class="card-header">
-            <i class="material-symbols-outlined">history</i>
-            <span>Visit History</span>
+    {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
+    <div class="pin-lists-row">
+        <div hx-get="{% url 'pin.visits' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','visits')], ul:unhide"
+            hx-swap="outerHTML"
+            class="visit-history card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="visits">
+            <div class="card-header">
+                <i class="material-symbols-outlined">history</i>
+                <span>Visit History</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
 
-    <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        class="tag-panel card card--secondary">
-        <div class="tag-panel-header">
-            <i class="material-symbols-outlined">category</i>
-            <span>Badges</span>
+        <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
+            hx-swap="outerHTML"
+            class="tag-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="categories">
+            <div class="tag-panel-header">
+                <i class="material-symbols-outlined">category</i>
+                <span>Badges</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
 
-    <div hx-get="{% url 'pin.aliases' pin.slug %}"
-        hx-trigger="load"
-        hx-swap="outerHTML"
-        id="pin-aliases-panel"
-        class="aliases-panel card card--secondary">
-        <div class="card-header">
-            <i class="material-symbols-outlined">label_important</i>
-            <span>Aliases</span>
+        <div hx-get="{% url 'pin.aliases' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
+            hx-swap="outerHTML"
+            id="pin-aliases-panel"
+            class="aliases-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="aliases">
+            <div class="card-header">
+                <i class="material-symbols-outlined">label_important</i>
+                <span>Aliases</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
-        <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-    </div>
+    </div>{# end .pin-lists-row #}
 
     {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
     {# space left by any card that doesn't render (optional cards, or cards -- #}
@@ -217,21 +227,25 @@
             <div class="pagination-bar" data-adaptive-pagination-controls
                  data-server-page="1" data-server-pages="1" hidden></div>
         </div>
-        <div class="media-provider-loader"
+        {# Loader ids are load-bearing: while a provider's background fetch is #}
+        {# in flight, the server's pending response retargets itself onto the #}
+        {# requesting loader by id (HX-Retarget) so the loader re-polls itself #}
+        {# instead of appending into the gallery grid. #}
+        <div class="media-provider-loader" id="media-loader-smithsonian"
             hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader"
+        <div class="media-provider-loader" id="media-loader-wikimedia"
             hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
-        <div class="media-provider-loader"
+        <div class="media-provider-loader" id="media-loader-loc"
             hx-get="{% url 'pin.media' pin.slug 'loc' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -242,8 +256,9 @@
         {% if pin.meaningful_name and can_use_web_search %}
         <div id="web-search-section" class="web-search card card--secondary"
             hx-get="{% url 'pin.web_search' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-trigger="load[!window.ulSectionCollapsed('pin','web-search')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="web-search">
             <div class="card-header">
                 <i class="material-symbols-outlined">search</i>
                 <h3>Web Results</h3>
@@ -255,58 +270,54 @@
         </div>
         {% endif %}
 
-        <div id="wikipedia-section"
+        <div id="wikipedia-section" class="card card--secondary"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
             hx-swap="outerHTML"
-            hx-timeout="25000">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">menu_book</i>
-                    <h3>Wikipedia</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="wikipedia">
+            <div class="card-header">
+                <i class="material-symbols-outlined">menu_book</i>
+                <h3>Wikipedia</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nominatim-section"
+        <div id="nominatim-section" class="card card--secondary"
             hx-get="{% url 'pin.nominatim' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','nominatim')], ul:unhide"
             hx-swap="outerHTML"
-            hx-timeout="25000">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">map</i>
-                    <h3>OpenStreetMap</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="nominatim">
+            <div class="card-header">
+                <i class="material-symbols-outlined">map</i>
+                <h3>OpenStreetMap</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nps-section"
+        <div id="nps-section" class="card card--secondary"
             hx-get="{% url 'pin.nps' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">park</i>
-                    <h3>National Park Service</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-trigger="load[!window.ulSectionCollapsed('pin','nps')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="nps">
+            <div class="card-header">
+                <i class="material-symbols-outlined">park</i>
+                <h3>National Park Service</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="loopnet-section"
+        <div id="loopnet-section" class="card card--secondary"
             hx-get="{% url 'pin.loopnet' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">business_center</i>
-                    <h3>LoopNet Listings</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-trigger="load[!window.ulSectionCollapsed('pin','loopnet')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="loopnet">
+            <div class="card-header">
+                <i class="material-symbols-outlined">business_center</i>
+                <h3>LoopNet Listings</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div id="usgs-topo-section"
@@ -325,19 +336,26 @@
     </div>{# end .pin-aux-grid #}
 
     {# -- Comments: always present ----------------------------------------- #}
-    <div id="comment-panel"
+    <div id="comment-panel" class="card card--secondary"
      hx-get="{% url 'pin.comments' pin.slug %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-        <div class="card card--secondary">
-            <div class="card-header">
-                <i class="material-symbols-outlined">chat</i>
-                <span>Comments</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+     hx-trigger="load[!window.ulSectionCollapsed('pin','comments')], ul:unhide"
+     hx-swap="outerHTML"
+     data-collapse-scope="pin" data-collapse-section="comments">
+        <div class="card-header">
+            <i class="material-symbols-outlined">chat</i>
+            <span>Comments</span>
         </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
     </div>
 </div>{# end .pin-detail-grid #}
+
+{# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
+<dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
+    <div id="pin-wiki-create-dialog-body"></div>
+</dialog>
+
+{# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
+<dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
@@ -352,7 +370,7 @@
 
         <div class="pin-edit-form-body ul-dialog-body">
         <div class="form-row">
-            <label for="pe-name">Name <span class="form-optional">(leave blank to use location name)</span></label>
+            <label for="pe-name">Name <span class="form-optional">(leave blank to use wiki name)</span></label>
             <input type="text" name="name" id="pe-name"
                    value="{{ pin.name|default:'' }}" maxlength="255"
                    placeholder="{{ pin.effective_name }}">
@@ -455,9 +473,27 @@
 {% url 'pin.detail_pins.json' pin.slug as detail_pins_json_url %}
 {% url 'pin.detail_pins' pin.slug as detail_pin_create_url %}
 {% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
-{% url 'campus.pin' pin.slug as boundary_url %}
+{% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
-{% include "dashboard/partials/layout/_map_annotations_script.html" with map_center_lat=pin.effective_latitude|default:"42.6525" map_center_lng=pin.effective_longitude|default:"-73.7579" main_marker_owner_uuid=pin.uuid default_map_view=default_map_view openweathermap_api_key=openweathermap_api_key markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template detail_pins_json_url=detail_pins_json_url detail_pin_create_url=detail_pin_create_url detail_pin_edit_url_template=detail_pin_edit_url_template boundary_url=boundary_url photo_gallery_json_url=photo_gallery_json_url %}
+<div id="map-annotations-config" hidden
+     data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
+     data-map-center-lng="{{ pin.effective_longitude|default:"-73.7579" }}"
+     data-main-marker-owner-uuid="{{ pin.uuid }}"
+     data-pin-slug="{{ pin.slug }}"
+     data-default-map-view="{{ default_map_view }}"
+     data-openweathermap-api-key="{{ openweathermap_api_key }}"
+     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-create-url="{{ markup_create_url }}"
+     data-markup-edit-url-template="{{ markup_edit_url_template }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pin-create-url="{{ detail_pin_create_url }}"
+     data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-boundary-url="{{ boundary_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
+     data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+<script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 
 
@@ -705,6 +741,7 @@
             'wikipedia-section', 'nominatim-section', 'nps-section',
             'loopnet-section', 'usgs-topo-section',
             'web-search-section',
+            'satellite-view-section', 'street-view-section',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the
@@ -728,6 +765,10 @@
             var xhr = evt.detail.xhr;
             if (el.id === 'web-search-section' && xhr && xhr.status === 403 && xhr.responseText) {
                 el.outerHTML = xhr.responseText;
+                return;
+            }
+            if (el.id === 'loopnet-section') {
+                el.remove();
                 return;
             }
             el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
@@ -866,18 +907,6 @@
         });
     }());
 
-    // Swap a broken/missing thumbnail <img> for an icon tile instead of
-    // hiding its wrapper - keeps records with no (or a dead) preview image
-    // visible, and their row/tile the same size as ones that have an image,
-    // instead of collapsing and breaking the grid/row's consistent styling.
-    window.urbanlensMediaThumbFallback = function (img, icon, className) {
-        var span = document.createElement('span');
-        span.className = className || 'media-item-thumb media-item-thumb-fallback';
-        span.setAttribute('aria-hidden', 'true');
-        span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
-        img.replaceWith(span);
-    };
-
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one
     // slow provider never blocks the others from appearing. Each loader is a
@@ -946,6 +975,11 @@
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (!isMediaLoader(el)) return;
+            // A pending response means the provider's background fetch is still
+            // running: the response body is a replacement loader that re-polls
+            // itself (via HX-Retarget), so this provider hasn't reported in yet -
+            // don't count it as finished or touch the gallery.
+            if (evt.detail.xhr.getResponseHeader('UL-Panel-Pending') === '1') return;
             if (evt.detail.xhr.status === 200) {
                 var section = document.getElementById('media-gallery-section');
                 if (section) section.hidden = false;

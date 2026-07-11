@@ -30,22 +30,18 @@ class GooglePlaceServiceTests(TestCase):
         self.assertNotEqual(first.pk, second.pk)
         self.assertEqual(GooglePlace.objects.count(), 2)
 
-    def test_location_and_pin_share_google_place_at_same_coordinates(self) -> None:
+    def test_pin_reads_google_place_through_its_location(self) -> None:
         google_place = GooglePlace.objects.create(
             latitude=Decimal("40.000000"),
             longitude=Decimal("-74.000000"),
             cached_place_name="Shared Place",
         )
         location = baker.make(Location, latitude="40.000000", longitude="-74.000000", google_place=google_place)
-        pin = baker.make_recipe(
-            "dashboard.pin",
-            latitude="40.000000",
-            longitude="-74.000000",
-            google_place=google_place,
-            location=location,
-        )
-        self.assertEqual(location.google_place_id, pin.google_place_id)
-        self.assertEqual(location.place_name, pin.place_name)
+        # google_place lives on the Location; a Pin has no google_place of its own
+        # and reads place metadata through the Location it references.
+        pin = baker.make_recipe("dashboard.pin", location=location)
+        self.assertEqual(location.place_name, "Shared Place")
+        self.assertEqual(pin.place_name, location.place_name)
 
     def test_set_cid_for_entity_links_and_stores_cid(self) -> None:
         location = baker.make(Location, latitude="40.000000", longitude="-74.000000", google_place=None)

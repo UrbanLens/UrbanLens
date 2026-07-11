@@ -17,11 +17,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
 
-    {% load static %}
-    {# -- Shared markup engine - must load before {% block content %} scripts -- #}
-    {% include 'dashboard/partials/layout/_markup_engine.html' %}
-    {# -- Shared "jump to" location search engine - same reason -- #}
-    {% include 'dashboard/partials/layout/_location_search_engine.html' %}
+    {% load static map_components %}
+    <script src="{% static 'dashboard/js/core.js' %}"></script>
     {% block header %}{% endblock %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
@@ -35,6 +32,7 @@
 
 <body class="{% if page_name %}page-{{ page_name }}{% endif %}">
     {% include 'dashboard/partials/layout/_env_indicator.html' %}
+    {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}
     {% include 'dashboard/partials/layout/header.html' %}
 
     <div class="container">
@@ -150,6 +148,43 @@
                 });
             });
         }());
+
+        // Global: while previewing your own profile as another user (see
+        // ProfilePreviewMiddleware), the page is rendered exactly as that
+        // viewer would see it - including forms/links that would mutate data
+        // or 404/403 if actually submitted. Intercept every interactive
+        // element in the capture phase so nothing fires while the preview
+        // banner is present, instead of letting each action fail server-side.
+        (function () {
+            function _previewActive() {
+                return !!document.querySelector('.profile-preview-banner');
+            }
+            function _isExitControl(el) {
+                return !!(el.closest && el.closest('.profile-preview-banner'));
+            }
+            function _guard(e) {
+                if (!_previewActive()) return;
+                var el = e.target.closest('a, button, input[type="submit"], input[type="button"], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]');
+                if (!el || _isExitControl(el)) return;
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (window.toastr) toastr.warning("You're previewing your profile - exit preview to interact.");
+            }
+            document.addEventListener('click', _guard, true);
+            document.addEventListener('submit', _guard, true);
+        }());
+
+        // Swap a broken/missing thumbnail <img> for an icon tile instead of
+        // hiding its wrapper - keeps records with no (or a dead) preview image
+        // visible, and their row/tile the same size as ones that have an image,
+        // instead of collapsing and breaking the grid/row's consistent styling.
+        window.urbanlensMediaThumbFallback = function (img, icon, className) {
+            var span = document.createElement('span');
+            span.className = className || 'media-item-thumb media-item-thumb-fallback';
+            span.setAttribute('aria-hidden', 'true');
+            span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
+            img.replaceWith(span);
+        };
     </script>
     <script>
     // -- Comment utilities -----------------------------------------------------
@@ -521,27 +556,24 @@
       <div class="comment-map-composer-body">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
-          <div class="cmcc-pin-search-wrap">
-            <input type="text" class="cmcc-pin-search" id="cmcc-search-input"
-                   placeholder="Pin name, address, or lat,lng (Enter to search)" autocomplete="off">
-            <button type="button" class="cmcc-go-btn" id="cmcc-go-btn" title="Go to location">
-              <i class="material-symbols-outlined">search</i>
-            </button>
-            <div class="cmcc-pin-dropdown" hidden></div>
-          </div>
+          {# Shared jump-to search component - same multi-source search as the #}
+          {# main map: local pins, addresses (Nominatim), Google Places,       #}
+          {# coordinates, Plus Codes.                                          #}
+          {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
+        </div>
+        {# Title field - only shown in standalone mode (the "take a screenshot" #}
+        {# buttons), where the map isn't attached to a comment/visit/trip form  #}
+        {# and needs its own identity for browsing later on Memories > Maps.   #}
+        <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
+          <label class="cmcc-label" for="cmc-title-input">Title</label>
+          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200"
+                 placeholder="Leave blank to use a default title">
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">
           <span class="cmc-toolbar-label">Layer:</span>
-          <button type="button" class="cmc-layer-btn is-active" data-layer="standard" title="Street map">
-            <i class="material-symbols-outlined">map</i>
-          </button>
-          <button type="button" class="cmc-layer-btn" data-layer="satellite" title="Satellite">
-            <i class="material-symbols-outlined">globe</i>
-          </button>
-          <button type="button" class="cmc-layer-btn" data-layer="topo" title="Topographic">
-            <i class="material-symbols-outlined">terrain</i>
-          </button>
+          {# Shared layers component (compact strip variant), driven by window.MapLayers. #}
+          {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="cmc-layers" %}
           <span class="cmc-toolbar-sep"></span>
           <span class="cmc-toolbar-label">Draw:</span>
           <button type="button" class="cmc-tool-btn" data-tool="arrow" title="Arrow">
@@ -569,10 +601,17 @@
           <button type="button" class="cmc-clear-btn" id="cmc-clear" title="Clear all markup">
             <i class="material-symbols-outlined">delete_sweep</i>
           </button>
+          <button type="button" class="cmc-download-btn" id="cmc-download" title="Download current view as JPEG">
+            <i class="material-symbols-outlined">download</i>
+          </button>
           <span class="cmc-toolbar-sep"></span>
           <label class="cmc-color-wrap" title="Markup color">
             <span>Color</span>
             <input type="color" id="cmc-color" value="#e74c3c">
+          </label>
+          <label class="cmc-width-wrap" title="Line width">
+            <span>Width</span>
+            <input type="range" id="cmc-width" min="1" max="12" step="1" value="3">
           </label>
           {# text label input - shown only when text tool is active #}
           <input type="text" id="cmc-text-label" class="cmc-text-label-input"
@@ -642,58 +681,93 @@
     {# guards every Leaflet call with typeof L checks so it degrades gracefully on other pages. #}
     <script>
     (function () {
-        // -- Shared tile layer factory -----------------------------------------
-        var _TILE_LAYERS = {
-            standard: {
-                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                options: { attribution: '© OpenStreetMap contributors', maxZoom: 19 }
-            },
-            satellite: {
-                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                options: { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
-            },
-            topo: {
-                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-                options: { attribution: '© OpenTopoMap contributors', maxZoom: 17 }
-            }
-        };
+        // Tile layers come from the shared window.MapLayers factory
+        // (ts/shared/map-layers.ts) - the same canonical sources as every
+        // other map on the site.
 
-        function _makeTileLayer(mode) {
-            var cfg = _TILE_LAYERS[mode] || _TILE_LAYERS.standard;
-            return L.tileLayer(cfg.url, cfg.options);
+        // -- Reference marker --------------------------------------------------
+        // A non-interactive pin marker (used to show a PinVisit's location on its
+        // map). Uses a divIcon so it needs no external image assets.
+        function _makeRefMarker(lat, lng) {
+            return L.marker([lat, lng], {
+                interactive: false,
+                keyboard: false,
+                icon: L.divIcon({
+                    className: 'ul-ref-marker',
+                    html: '<i class="material-symbols-outlined">location_on</i>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 28]
+                })
+            });
+        }
+
+        // Read a [lat, lng] reference-marker location off an element's dataset,
+        // returning null when either coordinate is absent or non-numeric.
+        function _readMarkerLatLng(el) {
+            if (!el) return null;
+            var lat = parseFloat(el.dataset.markerLat);
+            var lng = parseFloat(el.dataset.markerLng);
+            if (isNaN(lat) || isNaN(lng)) return null;
+            return [lat, lng];
         }
 
         // -- Composer state ----------------------------------------------------
         var _composerMap = null;
-        var _composerTileLayer = null;    // active tile layer
-        var _composerLayerMode = 'standard';
+        var _composerLayers = null;       // shared MapLayers engine instance
+        var _composerLayerMode = 'street';
+        var _composerShowBorders = false;
         var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
         var _composerSession = null;      // MarkupEngine draw session
+        var _composerRefMarker = null;    // optional pin-location reference marker
         var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
         var _originForm = null;           // the .comment-compose element that opened the dialog
-        var _pinSearchTimer = null;
-        var _pinCache = [];
+        var _composerSearch = null;       // LocationSearchEngine instance (created lazily)
+
+        // -- Standalone mode -----------------------------------------------------
+        // Opened without a host form (the "take a screenshot" toolbar buttons on
+        // the main map / pin detail / wiki pages): Save persists a brand-new,
+        // standalone MarkupMap directly instead of writing to a hidden form field.
+        var _standaloneMode = false;
+        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | null
+        var _standaloneOnSaved = null;    // optional callback(uuid)
 
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
+        var _saveBtn = document.getElementById('comment-map-composer-save');
+        var _titleRow = document.getElementById('cmc-title-row');
+        var _titleInput = document.getElementById('cmc-title-input');
 
         // -- Open composer -----------------------------------------------------
-        window._openCommentMapComposer = function (form) {
+        // Accepts either a host form element (existing comment/visit/trip-comment
+        // usage - back-compat) or an options object { form, context, onSaved }
+        // with no form, which switches on standalone mode.
+        window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
                 toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
                 return;
             }
+            var opts = (formOrOptions instanceof HTMLElement) ? { form: formOrOptions } : (formOrOptions || {});
+            var form = opts.form || null;
             _originForm = form;
+            _standaloneMode = !form;
+            _standaloneContext = opts.context || null;
+            _standaloneOnSaved = opts.onSaved || null;
+
+            _titleRow.hidden = !_standaloneMode;
+            _titleInput.value = '';
+            _saveBtn.textContent = _standaloneMode ? 'Save map' : 'Attach map';
 
             // Restore existing map_data if the form already has one
             var existing = null;
-            var hiddenField = form.querySelector('.comment-map-data-field');
-            if (hiddenField && hiddenField.value) {
-                try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+            if (form) {
+                var hiddenField = form.querySelector('.comment-map-data-field');
+                if (hiddenField && hiddenField.value) {
+                    try { existing = JSON.parse(hiddenField.value); } catch (_) {}
+                }
             }
 
             _dialog.showModal();
-            _loadPinsForSearch();
+            _ensureComposerSearch();
 
             // showModal() sets [open] synchronously, but the browser hasn't run
             // style recalculation yet. Reading offsetHeight forces an immediate
@@ -704,18 +778,26 @@
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
                 _composerMap = L.map(mapEl, { zoomControl: true });
-                _composerTileLayer = _makeTileLayer(_composerLayerMode);
-                _composerTileLayer.addTo(_composerMap);
+                // Shared layers engine bound to the strip rendered by
+                // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} in this dialog.
+                _composerLayers = window.MapLayers.create(_composerMap, {
+                    root: document.getElementById('cmc-layers'),
+                    onStateChange: function (state) {
+                        _composerLayerMode = state.base;
+                        _composerShowBorders = state.borders;
+                    },
+                });
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
+                    getWidth: function () { return _composerWidth(); },
                     getTextLabel: function () {
                         var inp = document.getElementById('cmc-text-label');
                         return inp ? inp.value.trim() : '';
                     },
                     onCommit: function (type, latlngs, extras) {
                         var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                        var s = { type: type, latlngs: latlngs, color: color };
+                        var s = { type: type, latlngs: latlngs, color: color, stroke_width: _composerWidth() };
                         if (type === 'text') {
                             var label = extras.label || '';
                             if (!label) {
@@ -761,15 +843,27 @@
             if (existing) {
                 _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
                 _composerShapes = existing.markup || [];
-                var savedMode = existing.layer_mode || 'standard';
-                if (savedMode !== _composerLayerMode) {
-                    _setComposerLayer(savedMode);
-                }
+                _composerLayers.setBase(existing.layer_mode || 'street');
+                _composerLayers.setOverlay('borders', !!existing.show_borders);
+            } else if (opts.initialView) {
+                _composerMap.setView([opts.initialView.lat, opts.initialView.lng], opts.initialView.zoom || 14);
+                _composerShapes = [];
+                _composerLayers.setOverlay('borders', false);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
                 _composerMap.setView([defLat, defLng], 14);
                 _composerShapes = [];
+                _composerLayers.setOverlay('borders', false);
+            }
+
+            // Show a reference marker at the pin's coordinates when the origin
+            // form provides them (e.g. the PinVisit map composer), so the user
+            // can see where the pin sits while drawing.
+            if (_composerRefMarker) { _composerMap.removeLayer(_composerRefMarker); _composerRefMarker = null; }
+            var refLatLng = _readMarkerLatLng(form);
+            if (refLatLng) {
+                _composerRefMarker = _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(_composerMap);
             }
 
             // invalidateSize() tells Leaflet to re-read the container pixel size
@@ -780,21 +874,12 @@
             if (_composerSession) _composerSession.deactivate();
         };
 
-        // -- Layer switching ---------------------------------------------------
-        function _setComposerLayer(mode) {
-            if (!_composerMap || !_TILE_LAYERS[mode]) return;
-            if (_composerTileLayer) _composerMap.removeLayer(_composerTileLayer);
-            _composerLayerMode = mode;
-            _composerTileLayer = _makeTileLayer(mode);
-            _composerTileLayer.addTo(_composerMap);
-            document.querySelectorAll('.cmc-layer-btn').forEach(function (b) {
-                b.classList.toggle('is-active', b.dataset.layer === mode);
-            });
+        // Current stroke-width slider value (also font-size fallback for text).
+        function _composerWidth() {
+            var el = document.getElementById('cmc-width');
+            var n = el ? parseInt(el.value, 10) : 3;
+            return isNaN(n) ? 3 : Math.max(1, Math.min(50, n));
         }
-
-        document.querySelectorAll('.cmc-layer-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () { _setComposerLayer(btn.dataset.layer); });
-        });
 
         // -- Close / cancel ----------------------------------------------------
         document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
@@ -806,17 +891,43 @@
         }
 
         // -- Save --------------------------------------------------------------
-        document.getElementById('comment-map-composer-save').addEventListener('click', function () {
-            if (!_composerMap || !_originForm) return;
+        _saveBtn.addEventListener('click', function () {
+            if (!_composerMap) return;
             var center = _composerMap.getCenter();
             var snapshot = {
                 center_lat: center.lat,
                 center_lng: center.lng,
                 zoom: _composerMap.getZoom(),
                 layer_mode: _composerLayerMode,
-                detail_pins: [],
+                show_borders: _composerShowBorders,
                 markup: _composerShapes.slice()
             };
+
+            if (_standaloneMode) {
+                var title = _titleInput.value.trim();
+                if (title) snapshot.title = title;
+                if (_standaloneContext && _standaloneContext.pinSlug) snapshot.pin_slug = _standaloneContext.pinSlug;
+                if (_standaloneContext && _standaloneContext.locationSlug) snapshot.location_slug = _standaloneContext.locationSlug;
+
+                _saveBtn.disabled = true;
+                fetch('{% url "markup_map.create" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify(snapshot)
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.ok) throw new Error();
+                        toastr.success('Map saved.');
+                        if (_standaloneOnSaved) _standaloneOnSaved(data.uuid);
+                        _closeComposer();
+                    })
+                    .catch(function () { toastr.error('Failed to save map.'); })
+                    .finally(function () { _saveBtn.disabled = false; });
+                return;
+            }
+
+            if (!_originForm) return;
             var hiddenField = _originForm.querySelector('.comment-map-data-field');
             if (hiddenField) hiddenField.value = JSON.stringify(snapshot);
 
@@ -827,6 +938,16 @@
             _closeComposer();
         });
 
+        // -- Download current view as JPEG -------------------------------------
+        document.getElementById('cmc-download').addEventListener('click', function () {
+            if (!_composerMap) return;
+            window.MapExport.download(_composerMap, {
+                layers: _composerLayers,
+                getShapes: function () { return _composerShapes; },
+                filename: 'map-screenshot.jpg',
+            });
+        });
+
         // -- Clear attached map from a form ------------------------------------
         window._clearCommentMap = function (form) {
             var hf = form && form.querySelector('.comment-map-data-field');
@@ -834,6 +955,20 @@
             var chip = form && form.querySelector('.comment-map-chip');
             if (chip) chip.hidden = true;
         };
+
+        // Wire the read-only viewer's Download button (event delegation - the
+        // dialog is rendered per-map-id and may be swapped in dynamically).
+        document.addEventListener('click', function (e) {
+            var downloadBtn = e.target.closest('.comment-map-download-btn');
+            if (!downloadBtn) return;
+            var cached = _viewerMaps[downloadBtn.dataset.mapId];
+            if (!cached) return;
+            window.MapExport.download(cached.map, {
+                layers: cached.layers,
+                getShapes: function () { return cached.shapes; },
+                filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
+            });
+        });
 
         // Wire chip buttons (event delegation - forms are dynamic via HTMX)
         document.addEventListener('click', function (e) {
@@ -876,102 +1011,28 @@
             });
         }
 
-        // -- Pin search / address / coordinate autocomplete --------------------
-        function _loadPinsForSearch() {
-            if (_pinCache.length) return;
-            fetch('/dashboard/comments/map-pins/', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { return r.json(); })
-                .then(function (d) { _pinCache = d.pins || []; });
+        // -- Jump-to search (shared window.LocationSearchEngine) ----------------
+        // Same multi-source search as the main map and the safety destination
+        // picker: local pins, addresses (Nominatim), Google Places, raw
+        // coordinates, and Plus Codes. Created lazily on first open so pages
+        // without Leaflet never touch it.
+        function _ensureComposerSearch() {
+            if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
+            _composerSearch = window.LocationSearchEngine.attach('cmcc', {
+                historyKey: 'ul_composer_search_history_v1',
+                sources: {
+                    localPins: { url: '{% url "map.autocomplete.local" %}' },
+                    osmNominatim: true,
+                    googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
+                },
+                resolvePlaceUrl: '{% url "map.resolve_place" %}',
+                enableMyLocation: true,
+                defaultZoom: 15,
+                onSelect: function (result) {
+                    if (_composerMap) _composerMap.setView([result.lat, result.lng], result.zoom || 15);
+                },
+            });
         }
-
-        // Try to interpret the input as a lat,lng string. Returns true and pans
-        // the map if successful; returns false otherwise.
-        function _tryCoordInput(raw) {
-            var parts = raw.split(',');
-            if (parts.length !== 2) return false;
-            var lat = parseFloat(parts[0]);
-            var lng = parseFloat(parts[1]);
-            if (isNaN(lat) || isNaN(lng)) return false;
-            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
-            if (_composerMap) _composerMap.setView([lat, lng], 15);
-            return true;
-        }
-
-        // Geocode a free-text address via the settings endpoint; pan map on success.
-        function _geocodeAndCenter(q) {
-            var input = document.getElementById('cmcc-search-input');
-            if (input) input.disabled = true;
-            fetch('/dashboard/settings/geocode/?address=' + encodeURIComponent(q))
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    if (input) input.disabled = false;
-                    if (d.lat != null && d.lng != null) {
-                        if (_composerMap) _composerMap.setView([d.lat, d.lng], 15);
-                        _closePinDropdown();
-                        if (input) input.value = '';
-                    } else {
-                        toastr.warning('Location not found.');
-                    }
-                })
-                .catch(function () {
-                    if (input) input.disabled = false;
-                    toastr.error('Geocoding failed.');
-                });
-        }
-
-        function _closePinDropdown() {
-            var dd = document.querySelector('.cmcc-pin-dropdown');
-            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
-        }
-
-        // Called when the user commits a search (Enter key or Go button).
-        function _commitSearch() {
-            var input = document.getElementById('cmcc-search-input');
-            var q = input ? input.value.trim() : '';
-            if (!q) return;
-            _closePinDropdown();
-            if (_tryCoordInput(q)) { input.value = ''; return; }
-            _geocodeAndCenter(q);
-        }
-
-        var _searchInput = document.getElementById('cmcc-search-input');
-
-        _searchInput.addEventListener('input', function () {
-            clearTimeout(_pinSearchTimer);
-            var q = this.value.toLowerCase().trim();
-            var dd = document.querySelector('.cmcc-pin-dropdown');
-            if (!q) { _closePinDropdown(); return; }
-            _pinSearchTimer = setTimeout(function () {
-                var results = _pinCache.filter(function (p) {
-                    return p.name.toLowerCase().includes(q);
-                }).slice(0, 8);
-                dd.innerHTML = '';
-                if (!results.length) { dd.hidden = true; return; }
-                results.forEach(function (p) {
-                    var item = document.createElement('div');
-                    item.className = 'cmcc-pin-option';
-                    item.textContent = p.name;
-                    item.addEventListener('mousedown', function (e) {
-                        e.preventDefault();  // keeps focus on input, preventing premature blur
-                        if (_composerMap) _composerMap.setView([p.lat, p.lng], 15);
-                        _closePinDropdown();
-                        _searchInput.value = p.name;
-                    });
-                    dd.appendChild(item);
-                });
-                dd.hidden = false;
-            }, 150);
-        });
-
-        _searchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); _commitSearch(); }
-        });
-
-        _searchInput.addEventListener('blur', function () {
-            setTimeout(_closePinDropdown, 200);
-        });
-
-        document.getElementById('cmcc-go-btn').addEventListener('click', _commitSearch);
 
         // Belt-and-suspenders: re-invalidate after dialog CSS transitions finish.
         _dialog.addEventListener('transitionend', function () {
@@ -1026,7 +1087,8 @@
         }
 
         // -- Comment map viewer ------------------------------------------------
-        var _viewerMaps = {};   // commentId → L.Map
+        // commentId → { map }
+        var _viewerMaps = {};
 
         window._expandCommentMap = function (commentId) {
             if (typeof L === 'undefined') return;
@@ -1038,8 +1100,8 @@
             // Reuse cached map only when its container is still in the live document.
             // After an HTMX swap the old element is detached, so we must reinitialise.
             var cached = _viewerMaps[commentId];
-            if (cached && document.body.contains(cached.getContainer())) {
-                cached.invalidateSize();
+            if (cached && document.body.contains(cached.map.getContainer())) {
+                cached.map.invalidateSize();
                 return;
             }
             delete _viewerMaps[commentId];
@@ -1057,14 +1119,23 @@
             el.style.minHeight = '300px';
 
             var viewMap = L.map(el);
-            _makeTileLayer(data.layer_mode || 'standard').addTo(viewMap);
+            // The layer strip is server-rendered inside the dialog by the
+            // shared _map_view_dialog.html partial ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %}).
+            var viewLayers = window.MapLayers.create(viewMap, {
+                root: dlg.querySelector('.map-layers-strip'),
+                defaultBase: data.layer_mode || 'street',
+                initialOverlays: data.show_borders ? ['borders'] : [],
+            });
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
             (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, markupGroup); });
 
+            var refLatLng = _readMarkerLatLng(el);
+            if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
+
             viewMap.invalidateSize();
-            _viewerMaps[commentId] = viewMap;
+            _viewerMaps[commentId] = { map: viewMap, layers: viewLayers, shapes: data.markup || [] };
 
             // Belt-and-suspenders: re-invalidate after any dialog transition finishes.
             dlg.addEventListener('transitionend', function () {
@@ -1079,6 +1150,18 @@
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
+
+                // Clicking anywhere on the preview (not just the "Expand" button)
+                // opens the read-only, larger map viewer.
+                if (!preview.dataset.expandBound) {
+                    preview.dataset.expandBound = '1';
+                    preview.classList.add('comment-map-preview--clickable');
+                    preview.addEventListener('click', function (e) {
+                        if (e.target.closest('.comment-map-expand-btn')) return;
+                        if (id) window._expandCommentMap(id);
+                    });
+                }
+
                 if (!thumb || thumb.dataset.initialized) return;
                 var script = document.getElementById('comment-map-data-' + id);
                 if (!script) return;
@@ -1092,11 +1175,15 @@
                 thumb.style.width = '100%';
                 var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
                                           scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                _makeTileLayer(data.layer_mode || 'standard').addTo(tmap);
+                window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
+                if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
                 _fitMapToMarkup(tmap, data);
                 tmap.invalidateSize();
                 var mg = L.layerGroup().addTo(tmap);
                 (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+
+                var refLatLng = _readMarkerLatLng(preview);
+                if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
             });
         }
 
@@ -1120,10 +1207,16 @@
     // -- Collapsible sections ---------------------------------------------------
     // Any element with [data-collapse-scope][data-collapse-section] gets a
     // chevron button injected into its header that toggles an .is-collapsed
-    // class. State is persisted in localStorage keyed by scope ("pin", "wiki",
-    // "trip") + section name only - deliberately NOT by entity id, so
-    // collapsing "Comments" on one pin collapses it on every pin, independent
-    // of the wiki and trip pages.
+    // class, which hides the whole section (header included). State is
+    // persisted in localStorage keyed by scope ("pin", "wiki", "trip") +
+    // section name only - deliberately NOT by entity id, so collapsing
+    // "Comments" on one pin collapses it on every pin, independent of the
+    // wiki and trip pages.
+    //
+    // Because collapsing hides the section entirely, there's no header left to
+    // click to bring it back. Any element with [data-collapse-restore-scope]
+    // is populated with a list of that scope's currently-collapsed sections
+    // (see _updateRestoreControls) so the user can restore them individually.
     (function () {
         function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
 
@@ -1131,6 +1224,11 @@
             try { return localStorage.getItem(_key(scope, section)) === '1'; }
             catch (_) { return false; }
         }
+
+        // Exposed so hx-trigger conditions on lazy-loaded sections can skip
+        // firing their request entirely when the section is already hidden
+        // (see the hx-trigger="load[...]" attributes on pin/wiki pages).
+        window.ulSectionCollapsed = _isCollapsed;
 
         function _setCollapsed(scope, section, collapsed) {
             try {
@@ -1153,6 +1251,16 @@
             return container.querySelector(':scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs');
         }
 
+        // Reads the section's display name from its header title so the
+        // restore menu can show something more useful than the section slug.
+        function _label(container, header) {
+            if (container.dataset.collapseLabel) return container.dataset.collapseLabel;
+            var titleEl = header && header.querySelector(':scope > span:not(.badge):not(.visit-count), :scope > h2, :scope > h3, :scope > h4');
+            var label = (titleEl && titleEl.textContent.trim()) || container.dataset.collapseSection;
+            container.dataset.collapseLabel = label;
+            return label;
+        }
+
         function _actionsGroup(header) {
             var group = header.querySelector(':scope > .card-header-actions');
             if (group) return group;
@@ -1173,8 +1281,9 @@
         // Headers can arrive after this container is first seen (HTMX content
         // still loading), so this is safe to call repeatedly and idempotent.
         function _ensureToggle(container) {
-            if (container.dataset.collapseInit === '1') { _applyState(container); return; }
             var header = _header(container);
+            if (header) _label(container, header);
+            if (container.dataset.collapseInit === '1') { _applyState(container); return; }
             if (!header) return;
             var actions = _actionsGroup(header);
             if (!actions.querySelector('.section-collapse-btn')) {
@@ -1189,19 +1298,85 @@
             _applyState(container);
         }
 
+        // Fills in every [data-collapse-restore-scope] control with the list of
+        // currently-collapsed sections sharing its scope, hiding the control
+        // entirely when nothing in that scope is collapsed.
+        function _updateRestoreControls() {
+            document.querySelectorAll('[data-collapse-restore-scope]').forEach(function (control) {
+                var scope = control.dataset.collapseRestoreScope;
+                var hiddenSections = document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed');
+                var menu = control.querySelector('.collapse-restore-menu');
+                var countEl = control.querySelector('.collapse-restore-count');
+
+                if (!hiddenSections.length) {
+                    control.hidden = true;
+                    control.classList.remove('is-open');
+                    if (menu) menu.innerHTML = '';
+                    return;
+                }
+
+                control.hidden = false;
+                if (countEl) countEl.textContent = String(hiddenSections.length);
+                if (!menu) return;
+
+                menu.innerHTML = '';
+                hiddenSections.forEach(function (section) {
+                    var item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'collapse-restore-item';
+                    item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
+                    item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
+                    item.addEventListener('click', function () {
+                        section.classList.remove('is-collapsed');
+                        var toggleBtn = section.querySelector('.section-collapse-btn');
+                        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+                        _setCollapsed(scope, section.dataset.collapseSection, false);
+                        // Section was hidden before its hx-get ever fired (see the
+                        // hx-trigger="load[...]" skip condition) - its content was
+                        // never loaded, so kick off that request now.
+                        if (section.getAttribute('hx-get') && window.htmx) {
+                            htmx.trigger(section, 'ul:unhide');
+                        }
+                        var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
+                        if (innerLoader && window.htmx) {
+                            htmx.trigger(innerLoader, 'ul:unhide');
+                        }
+                        _updateRestoreControls();
+                    });
+                    menu.appendChild(item);
+                });
+            });
+        }
+
         function _scanAll() {
             document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
+            _updateRestoreControls();
         }
 
         document.addEventListener('click', function (e) {
+            var restoreToggle = e.target.closest('.collapse-restore-toggle');
+            if (restoreToggle) {
+                var control = restoreToggle.closest('[data-collapse-restore-scope]');
+                if (control) control.classList.toggle('is-open');
+                return;
+            }
+
             var btn = e.target.closest('.section-collapse-btn');
-            if (!btn) return;
-            var container = btn.closest('[data-collapse-scope][data-collapse-section]');
-            if (!container) return;
-            var collapsed = !container.classList.contains('is-collapsed');
-            container.classList.toggle('is-collapsed', collapsed);
-            btn.setAttribute('aria-expanded', String(!collapsed));
-            _setCollapsed(container.dataset.collapseScope, container.dataset.collapseSection, collapsed);
+            if (btn) {
+                var container = btn.closest('[data-collapse-scope][data-collapse-section]');
+                if (!container) return;
+                var collapsed = !container.classList.contains('is-collapsed');
+                container.classList.toggle('is-collapsed', collapsed);
+                btn.setAttribute('aria-expanded', String(!collapsed));
+                _setCollapsed(container.dataset.collapseScope, container.dataset.collapseSection, collapsed);
+                _updateRestoreControls();
+                return;
+            }
+
+            // Click outside an open restore menu closes it.
+            document.querySelectorAll('[data-collapse-restore-scope].is-open').forEach(function (control) {
+                if (!control.contains(e.target)) control.classList.remove('is-open');
+            });
         });
 
         document.addEventListener('DOMContentLoaded', _scanAll);
@@ -1211,6 +1386,7 @@
 
     {% include 'dashboard/partials/ui/_tooltips_script.html' %}
     {% include 'dashboard/partials/ui/_page_explainer_script.html' %}
+    {% include 'dashboard/partials/layout/_notification_push.html' %}
     {% block scripts %}{% endblock %}
 
 </body>

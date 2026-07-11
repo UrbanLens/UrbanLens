@@ -1,6 +1,6 @@
 {
     "name": "urbanlens",
-    "version": "0.3.0b0",
+    "version": "0.4.0b0",
     "description": "Mapping for Urban Explorers",
     "main": "index.js",
     "scripts": {
@@ -9,21 +9,27 @@
         "sass": "sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "build": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
-        "deploy": "bun build src/urbanlens/dashboard/frontend/ts/index.tsx --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser",
-        "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent",
+        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js/*.js",
+        "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife",
+        "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --minify",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
         "lint": "pyright src/urbanlens",
         "up": "git pull && sudo docker compose build && sudo docker compose up",
         "test": "python -m coverage run --source='src' src/urbanlens/manage.py test",
         "coverage": "python -m coverage report",
         "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
-        "pre-commit": "pre-commit run --all-files"
+        "pre-commit": "pre-commit run --all-files &> /dev/null || true && pre-commit run --all-files"
     },
     "author": "Jess Mann",
     "license": "N/A",
     "devDependencies": {
-        "bun-types": "latest"
+        "@types/leaflet": "^1.9.21",
+        "@types/leaflet-draw": "^1.0.13",
+        "@types/sortablejs": "^1.15.9",
+        "bun-types": "latest",
+        "sortablejs": "^1.15.7"
     },
     "peerDependencies": {
         "typescript": "^6.0.3"

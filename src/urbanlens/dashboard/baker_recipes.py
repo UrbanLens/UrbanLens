@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models import (
         Badge,
         BadgeCustomization,
-        Campus,
+        Boundary,
         Comment,
         EmailVerification,
         Friendship,
@@ -46,8 +46,6 @@ if TYPE_CHECKING:
         GooglePlace,
         Image,
         Location,
-        LocationAlias,
-        LocationEdit,
         NotificationLog,
         NotificationPreference,
         Pin,
@@ -62,6 +60,9 @@ if TYPE_CHECKING:
         Trip,
         TripActivity,
         TripComment,
+        Wiki,
+        WikiAlias,
+        WikiEdit,
     )
     from urbanlens.dashboard.models.trips.model import TripActivityVote, TripMembership
 
@@ -93,9 +94,25 @@ user: Recipe[User] = Recipe(
 
 location: Recipe[Location] = Recipe(
     "dashboard.Location",
-    name=seq("Location "),
+    official_name=seq("Location "),
     latitude=seq(Decimal("40.001"), increment_by=Decimal("0.001")),
     longitude=seq(Decimal("-74.001"), increment_by=Decimal("0.001")),
+)
+
+# Community wiki page for a location.
+wiki: Recipe[Wiki] = Recipe(
+    "dashboard.Wiki",
+    name=seq("Wiki "),
+    location=foreign_key("dashboard.location"),
+    parent_wiki=None,
+)
+
+# A wiki nested under another wiki (community sub-marker / child wiki).
+child_wiki: Recipe[Wiki] = Recipe(
+    "dashboard.Wiki",
+    name=seq("Child Wiki "),
+    location=foreign_key("dashboard.location"),
+    parent_wiki=foreign_key("dashboard.wiki"),
 )
 
 # -- Badges --------------------------------------------------------------------
@@ -111,30 +128,24 @@ badge_customization: Recipe[BadgeCustomization] = Recipe(
     badge=foreign_key("dashboard.badge"),
 )
 
-# -- Campus --------------------------------------------------------------------
+# -- Boundary --------------------------------------------------------------------
 
-# Location-level default campus (profile=None, pin=None) - community wiki boundary.
-campus: Recipe[Campus] = Recipe(
-    "dashboard.Campus",
+# Location-default property boundary (profile=None, pin=None, wiki=None) - the
+# shared, API-generated geometry used for point matching.
+boundary: Recipe[Boundary] = Recipe(
+    "dashboard.Boundary",
     location=foreign_key("dashboard.location"),
+    wiki=None,
     profile=None,
     pin=None,
+    boundary_type="property",
     default_radius_meters=50,
 )
 
-# Alias kept for clarity in tests that explicitly want the location default.
-admin_campus: Recipe[Campus] = Recipe(
-    "dashboard.Campus",
-    location=foreign_key("dashboard.location"),
-    profile=None,
-    pin=None,
-    default_radius_meters=100,
-)
-
-# Pin-scoped campuses must be created via baker.make() directly so that
+# Pin-scoped boundaries must be created via baker.make() directly so that
 # location and profile can be wired to match the pin:
-#   baker.make("dashboard.Campus", pin=my_pin, location=my_pin.location,
-#              profile=my_pin.profile)
+#   baker.make("dashboard.Boundary", pin=my_pin, location=my_pin.location,
+#              profile=my_pin.profile, boundary_type="property")
 
 # -- Pin -----------------------------------------------------------------------
 
@@ -143,7 +154,6 @@ pin: Recipe[Pin] = Recipe(
     profile=_make_profile,
     location=foreign_key("dashboard.location"),
     parent_pin=None,
-    parent_location=None,
 )
 
 # A pin nested under another pin (detail/sub-pin).
@@ -182,9 +192,9 @@ pin_alias: Recipe[PinAlias] = Recipe(
     name=seq("alias_"),
 )
 
-location_alias: Recipe[LocationAlias] = Recipe(
-    "dashboard.LocationAlias",
-    location=foreign_key("dashboard.location"),
+location_alias: Recipe[WikiAlias] = Recipe(
+    "dashboard.WikiAlias",
+    wiki=foreign_key("dashboard.wiki"),
     name=seq("loc_alias_"),
     created_by=_make_profile,
 )
@@ -218,19 +228,19 @@ comment: Recipe[Comment] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=foreign_key("dashboard.pin"),
-    location=None,
+    wiki=None,
     parent=None,
     text="A test comment.",
 )
 
-# Location / wiki comment.
+# Wiki (community) comment.
 location_comment: Recipe[Comment] = Recipe(
     "dashboard.Comment",
     profile=_make_profile,
     pin=None,
-    location=foreign_key("dashboard.location"),
+    wiki=foreign_key("dashboard.wiki"),
     parent=None,
-    text="A test location comment.",
+    text="A test wiki comment.",
 )
 
 reaction: Recipe[Reaction] = Recipe(
@@ -245,10 +255,9 @@ reaction: Recipe[Reaction] = Recipe(
 
 review: Recipe[Review] = Recipe(
     "dashboard.Review",
-    user=foreign_key("dashboard.user"),
+    profile=_make_profile,
     pin=foreign_key("dashboard.pin"),
     rating=4,
-    review="A test review.",
 )
 
 # -- Friendships ---------------------------------------------------------------
@@ -368,9 +377,9 @@ social_link: Recipe[SocialLink] = Recipe(
 
 # -- Location Edit History -----------------------------------------------------
 
-location_edit: Recipe[LocationEdit] = Recipe(
-    "dashboard.LocationEdit",
-    location=foreign_key("dashboard.location"),
+location_edit: Recipe[WikiEdit] = Recipe(
+    "dashboard.WikiEdit",
+    wiki=foreign_key("dashboard.wiki"),
     editor=_make_profile,
     changes={"name": {"old": "Old Name", "new": "New Name"}},
     reverted=False,

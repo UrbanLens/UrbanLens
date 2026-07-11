@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.validators import MaxLengthValidator
 from django.db import DatabaseError
 from django.db.models import (
     CASCADE,
+    RESTRICT,
     SET_NULL,
     ForeignKey,
     ImageField,
@@ -25,6 +27,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -47,7 +50,7 @@ class PinType(TextChoices):
     OTHER = "other", "Other"
 
 
-class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
+class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -57,23 +60,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
     A Pin belongs to exactly one Profile (user). Multiple users can each have
     their own Pin that references the same Location. Everything stored here is
     specific to that one user: their custom label, notes, visit history, status,
-    priority, and an optional coordinate override to reposition the marker.
+    priority, and the marker coordinates.
     """
-
-    # Optional per-user marker override. When unset, coordinates fall back to the
-    # linked Location's canonical latitude/longitude.
-    # TODO: LSP violation - AddressableModel.latitude is non-nullable but Pin needs nullable
-    # for its coordinate-override feature. Proper fix: make AddressableModel.latitude nullable
-    # (requires a migration for Location and other subclasses).
-    latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
-    longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # type: ignore[assignment]
-
-    # When True this pin is entirely personal: it will not be linked to a shared
-    # Location and will never contribute to the community wiki.  User-specific
-    # data (name, description, coordinates) must not be surfaced to others
-    # regardless of this flag, but is_private=True is the explicit opt-out from
-    # having any community presence at these coordinates.
-    is_private = BooleanField(default=False)
 
     # True when ``name`` was explicitly typed by the user. External API naming
     # refreshes may replace placeholder/auto-generated labels only while this is False.
@@ -82,20 +70,21 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
     )
 
-    # User's custom label. None = show location.name instead (see effective_name).
+    # User's custom label. None = show location.display_name instead (see effective_name).
     name = CharField(max_length=255, null=True, blank=True)
-    # External-source name for this pin. User edits must never write this field.
-    official_name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
     # User's personal notes. Unrelated to Location.description (place-level info).
-    description = TextField(null=True, blank=True)
+    description = TextField(null=True, blank=True, max_length=MAX_PIN_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_PIN_DESCRIPTION_LENGTH)])
     priority = IntegerField(default=0)
     vulnerability = IntegerField(default=0)
     danger = IntegerField(default=0)
     last_visited = DateTimeField(null=True, blank=True)
+    # Set when the user dismisses this pin from the Memories "log your visits"
+    # queue without logging a visit or clearing its visited status - keeps that
+    # queue finite without affecting whether the pin counts as visited elsewhere.
+    unlogged_visit_dismissed = BooleanField(default=False)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
-    point = PointField(geography=True, default=Point(0, 0))
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -116,10 +105,14 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         on_delete=CASCADE,
         related_name="pins",
     )
-    # The shared place this pin points at. SET_NULL so deleting a Location
-    # doesn't cascade-delete all users' Pins for that place.
+    # The shared place this pin points at.
     location = ForeignKey(
         "dashboard.Location",
+        on_delete=RESTRICT,
+        related_name="pins",
+    )
+    wiki = ForeignKey(
+        "dashboard.Wiki",
         on_delete=SET_NULL,
         null=True,
         blank=True,
@@ -138,29 +131,111 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         blank=True,
         related_name="detail_pins",
     )
-    # Community detail pin - attached directly to a Location (wiki-level, shared).
-    parent_location = ForeignKey(
-        "dashboard.Location",
-        on_delete=CASCADE,
+    # The accepted PinShare this pin was created from, when the owner added it
+    # by accepting a friend's share. Links reshares of this pin back into the
+    # original share chain (see PinShare.parent_share).
+    source_share = ForeignKey(
+        "dashboard.PinShare",
+        on_delete=SET_NULL,
         null=True,
         blank=True,
-        related_name="location_detail_pins",
+        related_name="pins_created",
     )
 
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
-        parent_location_id: int | None
         parent_pin_id: int | None
+        source_share_id: int | None
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
         markup_items: DjangoManager[PinMarkup]
         visit_history: DjangoManager[PinVisit]
+        wiki_id: int | None
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
     # ------------------------------------------------------------------
-    # Effective values - resolve overrides against the linked Location
+    # Name/alias invariant
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_db(cls, db, field_names, values) -> Pin:
+        """Track the persisted name so ``save()`` can detect renames.
+
+        Args:
+            db: Database alias the row was loaded from.
+            field_names: Names of the loaded fields.
+            values: Loaded field values.
+
+        Returns:
+            The loaded Pin instance.
+        """
+        instance = super().from_db(db, field_names, values)
+        if "name" in field_names:
+            instance._loaded_name = instance.name  # noqa: SLF001
+        return instance
+
+    def save(self, *args, **kwargs) -> None:
+        """Save the pin, keeping the alias list in sync with the name.
+
+        The alias list is the full set of names a pin has ever had, including
+        the current one - so whenever a meaningful ``name`` is persisted, an
+        alias row for it is ensured. This single enforcement point covers
+        every write path (HTMX controllers, REST serializer, Django admin).
+        """
+        update_fields = kwargs.get("update_fields")
+        super().save(*args, **kwargs)
+        if update_fields is not None and "name" not in update_fields:
+            return
+        if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
+            from urbanlens.dashboard.models.aliases.model import PinAlias
+
+            try:
+                PinAlias.objects.get_or_create(pin=self, name=(self.name or "").strip())
+            except DatabaseError:
+                logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
+        self._loaded_name = self.name
+
+    # ------------------------------------------------------------------
+    # Hierarchy
+    # ------------------------------------------------------------------
+
+    def would_create_cycle(self, new_parent: Pin | None) -> bool:
+        """Return True if ``new_parent`` becoming this pin's parent would close a loop.
+
+        Walks ``new_parent``'s own ``parent_pin`` chain looking for this pin's pk.
+        A ``visited`` guard bounds the walk to the number of distinct pins actually
+        in the chain, so the check still terminates promptly even against data that
+        is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk
+        in ``Badge.get_badge_and_descendants``).
+
+        Args:
+            new_parent: The pin that would be assigned to ``self.parent_pin``, or
+                None (clearing the parent never creates a cycle).
+
+        Returns:
+            True if the assignment would make this pin its own ancestor.
+        """
+        if new_parent is None:
+            return False
+        if self.pk is not None and new_parent.pk == self.pk:
+            return True
+        visited: set[int] = set()
+        current: Pin | None = new_parent
+        while current is not None:
+            if current.pk is None:
+                return False
+            if current.pk in visited:
+                return False  # pre-existing cycle among ancestors, not involving self
+            visited.add(current.pk)
+            if self.pk is not None and current.pk == self.pk:
+                return True
+            current = current.parent_pin
+        return False
+
+    # ------------------------------------------------------------------
+    # Effective values
     # ------------------------------------------------------------------
 
     def display_badge(self) -> Badge | None:
@@ -302,8 +377,8 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
 
     @property
     def effective_name(self) -> str:
-        """User's custom name, or the location's canonical name."""
-        return self.name or (self.location.name if self.location else "")
+        """User's custom name, or the place's community/official name."""
+        return self.name or (self.location.display_name if self.location else "")
 
     @property
     def effective_official_name(self) -> str:
@@ -321,18 +396,16 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
         return self.effective_name if is_meaningful_name(self.effective_name) else None
 
     @property
-    def effective_latitude(self) -> float | None:
-        """User's position override, or the location's latitude."""
-        if self.latitude is not None:
-            return float(self.latitude)
-        return float(self.location.latitude) if self.location else None
+    def effective_latitude(self) -> float:
+        """Pin marker latitude."""
+        # TODO: Delete this.
+        return float(self.location.latitude)
 
     @property
-    def effective_longitude(self) -> float | None:
-        """User's position override, or the location's longitude."""
-        if self.longitude is not None:
-            return float(self.longitude)
-        return float(self.location.longitude) if self.location else None
+    def effective_longitude(self) -> float:
+        """Pin marker longitude."""
+        # TODO: Delete this.
+        return float(self.location.longitude)
 
     @property
     def effective_date_last_active(self):
@@ -461,30 +534,11 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             qs = qs.exclude(pk=self.pk)
         return qs
 
-    def save(self, *args, **kwargs) -> None:
-        """Auto-generate a unique slug and keep ``point`` synced to the effective coordinates.
+    # A Pin no longer stores its own coordinates or ``point``; they are read from
+    # the linked Location (see AddressableModel). Slug generation is handled by
+    # PublicDashboardModel.save, so no custom save() is needed here.
 
-        ``point`` (not latitude/longitude) is what distance-based queries filter on, so
-        it must always reflect ``effective_latitude``/``effective_longitude`` - the pin's
-        own override if set, otherwise the linked Location's coordinates. Forcing
-        ``point`` into ``update_fields`` (when given) guards against callers that save a
-        partial update after reassigning ``location`` without also refreshing ``point``.
-        """
-        if not self.slug:
-            self.slug = self._generate_slug()
-
-        latitude = self.effective_latitude
-        longitude = self.effective_longitude
-        if latitude is not None and longitude is not None:
-            self.point = Point(longitude, latitude, srid=4326)
-
-        update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "point" not in update_fields and ("latitude" in update_fields or "longitude" in update_fields):
-            kwargs["update_fields"] = {*update_fields, "point"}
-
-        super().save(*args, **kwargs)
-
-    class Meta(abstract.AddressableModel.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta, abstract.SecurityModel.Meta, abstract.AddressableModel.Meta):
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
@@ -493,14 +547,13 @@ class Pin(abstract.HasSlug, abstract.SecurityModel, abstract.AddressableModel):
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
-            Index(fields=["latitude", "longitude"], name="idxdb_pin_lat_long"),
+            Index(fields=["location"], name="idxdb_pin_location"),
             Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
-            Index(fields=["parent_location"], name="idxdb_pin_parent_loc"),
         ]
         constraints = [
             UniqueConstraint(
-                fields=["latitude", "longitude", "profile"],
-                condition=Q(parent_pin__isnull=True, parent_location__isnull=True),
+                fields=["location", "profile"],
+                condition=Q(parent_pin__isnull=True),
                 name="db_pin_unique_location_per_profile",
             ),
             UniqueConstraint(

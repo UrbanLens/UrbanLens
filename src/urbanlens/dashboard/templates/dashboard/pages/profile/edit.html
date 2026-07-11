@@ -27,7 +27,7 @@
         <i class="material-icons setup-banner-icon">waving_hand</i>
         <div class="setup-banner-text">
             <strong>Welcome! Set up your profile.</strong>
-            <span>Choose a username and avatar before you start exploring.</span>
+            <span>Fill in anything you'd like. You'll stay invisible until you choose to enter a public space.</span>
         </div>
         <button class="setup-banner-skip" id="setup-skip-btn" type="button">
             Skip for now
@@ -266,6 +266,13 @@
         </div>
     </section>
 
+    {# -- Additional email addresses ------------------------------------------- #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Additional Email Addresses</h2>
+        <p class="edit-card-desc">Add other emails you're known by - once verified, friends can find you by them and you can use them to log in.</p>
+        {% include "dashboard/partials/profile/profile_emails.html" %}
+    </section>
+
 </div>
 {% endblock %}
 
@@ -280,6 +287,7 @@ function closeDateErrorDialog() {
 
 (function () {
     var SAVE_URL = '{% url "profile.field.update" %}';
+    var MAP_URL = '{% url "map.view" %}';
 
     // -- date error dialog (created dynamically for auto-save errors) ----------
     function showDateDialog(message) {
@@ -504,8 +512,8 @@ function closeDateErrorDialog() {
             fd.append('csrfmiddlewaretoken', csrftoken);
             fd.append('field', 'setup_complete');
             fetch(SAVE_URL, { method: 'POST', body: fd })
-                .then(function () { banner.remove(); })
-                .catch(function () { banner.remove(); });
+                .then(function () { window.location.href = MAP_URL; })
+                .catch(function () { window.location.href = MAP_URL; });
         });
     }
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -40,16 +41,17 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestion = get_object_or_404(VisitSuggestion, pk=suggestion_id, suggested_to=profile)
         action = request.POST.get("action")
+        blocked = False
         if suggestion.status == VisitSuggestionStatus.PENDING:
             if suggestion.offers_merge:
                 if action == "add_participants":
                     merge_visit_suggestion(suggestion, profile)
                 elif action == "new_entry":
-                    accept_visit_suggestion(suggestion, profile)
+                    blocked = accept_visit_suggestion(suggestion, profile) is None
                 elif action == "reject":
                     reject_visit_suggestion(suggestion)
             elif action == "accept":
-                accept_visit_suggestion(suggestion, profile)
+                blocked = accept_visit_suggestion(suggestion, profile) is None
             elif action == "reject":
                 reject_visit_suggestion(suggestion)
 
@@ -72,4 +74,12 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             "dashboard/partials/notifications/notification_dropdown.html",
             {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(profile).unread().count()},
         )
-        return _trigger_badge_refresh(response)
+        response = _trigger_badge_refresh(response)
+        if blocked:
+            response["HX-Trigger"] = json.dumps(
+                {
+                    "notifCountRefresh": {"target": "body"},
+                    "showToast": {"message": "Visit logging is turned off - enable it in Settings to add this to your visit history.", "level": "info"},
+                }
+            )
+        return response

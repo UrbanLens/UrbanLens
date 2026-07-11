@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from django.db.models import (
@@ -25,12 +25,12 @@ from urbanlens.dashboard.models.badges.queryset import BadgeManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.badges.customization import BadgeCustomization
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class Badge(abstract.Model):
+class Badge(abstract.FrontendDashboardModel):
     """A named label that can be applied to pins.
 
     Badges are either global (profile=None, visible to all users) or user-specific
@@ -45,7 +45,6 @@ class Badge(abstract.Model):
     and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True)
     # Hex color string chosen from COLOR_CHOICES (e.g. "#2196F3").
@@ -83,7 +82,7 @@ class Badge(abstract.Model):
     if TYPE_CHECKING:
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
-        locations: ManyToManyField[Location, Location]
+        wikis: ManyToManyField[Wiki, Wiki]
 
     objects = BadgeManager()
 
@@ -179,7 +178,7 @@ class Badge(abstract.Model):
             return f"{self.name} ({self.profile})"
         return f"{self.name} [global]"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_tags"
         ordering = ["-order", "name"]
         get_latest_by = "updated"

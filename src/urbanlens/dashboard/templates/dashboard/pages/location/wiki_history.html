@@ -26,15 +26,29 @@
             {% endfor %}
         </ul>
 
-        {% if not edit.reverted %}
-        <button type="button"
-                class="wiki-revert-btn"
-                hx-post="{% url 'location.wiki.revert' location.slug edit.id %}"
-                hx-target="closest .wiki-history-item"
-                hx-swap="outerHTML"
-                hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">
-            <i class="material-symbols-outlined">undo</i> Revert
-        </button>
+        {% if not edit.reverted or edit.editor_id == current_profile.id %}
+        <div class="wiki-history-actions">
+            {% if not edit.reverted %}
+            <button type="button"
+                    class="wiki-revert-btn"
+                    hx-post="{% url 'location.wiki.revert' location.slug edit.id %}"
+                    hx-target="#wiki-tab-content"
+                    hx-swap="innerHTML"
+                    hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">
+                <i class="material-symbols-outlined">undo</i> Revert
+            </button>
+            {% endif %}
+            {% if edit.editor_id == current_profile.id %}
+            <button type="button"
+                    class="wiki-revert-btn wiki-delete-btn"
+                    hx-post="{% url 'location.wiki.history.delete' location.slug edit.id %}"
+                    hx-target="#wiki-tab-content"
+                    hx-swap="innerHTML"
+                    hx-confirm="Permanently delete this edit? This reverts your edit and erases it from the history forever - use this if you accidentally posted private information. This cannot be undone.">
+                <i class="material-symbols-outlined">delete_forever</i> Expunge
+            </button>
+            {% endif %}
+        </div>
         {% endif %}
     </li>
     {% endfor %}

@@ -79,6 +79,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
     service_key: ClassVar[str | None] = "microsoft_building_footprints"
     paid_service: ClassVar[bool] = False
+    boundary_kind: ClassVar[str] = "building"
 
     quadkey_zoom: int = 9
     _dataset_links: list[dict[str, str]] | None = field(default=None, repr=False)
@@ -111,7 +112,12 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
         features: list[dict] = []
         for row in matches:
-            response = self.session.get(row["Url"], timeout=180)
+            # Runs inside the boundary panel-fetch Celery task (via
+            # BoundaryProviderChain, see services/external_data.py), whose
+            # soft time limit is the real budget - the (connect, read) tuple
+            # just keeps a dead connection from eating that budget while a
+            # genuinely slow shard download may keep trickling within it.
+            response = self.session.get(row["Url"], timeout=(5, 60))
             response.raise_for_status()
             raw = gzip.decompress(response.content)
             for line in raw.splitlines():

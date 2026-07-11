@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.notifications.queryset import NotificationManage
 logger = logging.getLogger(__name__)
 
 
-class NotificationLog(abstract.Model):
+class NotificationLog(abstract.DashboardModel):
     """Records a notification sent to a specific user profile."""
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
@@ -48,7 +48,6 @@ class NotificationLog(abstract.Model):
     if TYPE_CHECKING:
         profile_id: int | None
         source_profile_id: int | None
-        pin_share_id: int | None
 
     objects = NotificationManager()
 
@@ -74,7 +73,7 @@ class NotificationLog(abstract.Model):
         friendship = Friendship.objects.between(self.source_profile_id, self.profile_id)
         return friendship is not None and friendship.status == FriendshipStatus.REQUESTED
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
         indexes = [
@@ -85,14 +84,9 @@ class NotificationLog(abstract.Model):
         ]
 
 
-class NotificationPreference(abstract.Model):
+class NotificationPreference(abstract.DashboardModel):
     """Per-user delivery preferences for each notification type."""
 
-    profile = models.OneToOneField(
-        "dashboard.Profile",
-        on_delete=models.CASCADE,
-        related_name="notification_preferences",
-    )
     trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     friend_request = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     message = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
@@ -103,6 +97,18 @@ class NotificationPreference(abstract.Model):
     wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    # Defaults to BOTH (not SITE like the rest): this alerts pin owners that someone may be
+    # missing at their pinned place - an email is the point when the recipient isn't logged in.
+    wiki_safety_checkin = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
 
-    class Meta(abstract.Model.Meta):
+    profile = models.OneToOneField(
+        "dashboard.Profile",
+        on_delete=models.CASCADE,
+        related_name="notification_preferences",
+    )
+
+    if TYPE_CHECKING:
+        profile_id: int
+
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notification_preferences"

@@ -18,6 +18,7 @@ from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.abstract.addressable import AddressableModel
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ class GooglePlaceService:
                 raise
             return self._merge_into_existing(existing, place_name=place_name, cid=cid, fetch_if_missing=fetch_if_missing)
 
-    def ensure_linked(self, entity: AddressableModel) -> GooglePlace | None:
+    def ensure_linked(self, location: Location) -> GooglePlace:
         """Attach entity.google_place to the shared row for its coordinates.
 
         Args:
@@ -116,16 +117,17 @@ class GooglePlaceService:
         Returns:
             Linked GooglePlace, or None when coordinates are invalid.
         """
-        if entity.latitude is None or entity.longitude is None:
-            return None
-        google_place = self.get_or_create_for_coordinates(entity.latitude, entity.longitude)
-        if entity.google_place_id != google_place.pk:
-            entity.__class__.objects.filter(pk=entity.pk).update(google_place_id=google_place.pk)
-            entity.google_place_id = google_place.pk
-            entity.google_place = google_place
+        if location.google_place is not None:
+            return location.google_place
+
+        google_place = self.get_or_create_for_coordinates(location.latitude, location.longitude)
+        if location.google_place_id != google_place.pk:
+            location.google_place = google_place
+            location.save(update_fields=["google_place"])
+
         return google_place
 
-    def set_cid_for_entity(self, entity: AddressableModel, cid: int | Decimal) -> GooglePlace:
+    def set_cid_for_entity(self, location: Location, cid: int | Decimal) -> GooglePlace:
         """Store a Google Maps CID on the shared row for an entity's coordinates.
 
         Args:
@@ -135,19 +137,13 @@ class GooglePlaceService:
         Returns:
             The GooglePlace row that now holds the CID.
         """
-        google_place = self.get_or_create_for_coordinates(
-            entity.latitude,
-            entity.longitude,
-            cid=cid,
-            fetch_if_missing=False,
-        )
-        self.ensure_linked(entity)
+        google_place = self.ensure_linked(location)
         if google_place.cid is None:
-            GooglePlace.objects.filter(pk=google_place.pk, cid__isnull=True).update(cid=cid)
             google_place.cid = cid
+            google_place.save(update_fields=["cid"])
         return google_place
 
-    def ensure_linked_by_place_id(self, entity: AddressableModel, place_id: str) -> GooglePlace | None:
+    def ensure_linked_by_place_id(self, location: Location, place_id: str) -> GooglePlace | None:
         """Attach entity.google_place using a Google Place ID string.
 
         Stores the ``place_id`` on the shared GooglePlace row and links the entity,
@@ -160,20 +156,17 @@ class GooglePlaceService:
         Returns:
             The linked GooglePlace, or None when coordinates are missing.
         """
-        if entity.latitude is None or entity.longitude is None:
-            return None
         google_place = self.get_or_create_for_coordinates(
-            entity.latitude,
-            entity.longitude,
+            location.latitude,
+            location.longitude,
             fetch_if_missing=False,
         )
         if place_id and not google_place.place_id:
-            GooglePlace.objects.filter(pk=google_place.pk).update(place_id=place_id)
             google_place.place_id = place_id
-        if entity.google_place_id != google_place.pk:
-            entity.__class__.objects.filter(pk=entity.pk).update(google_place_id=google_place.pk)
-            entity.google_place_id = google_place.pk
-            entity.google_place = google_place
+            google_place.save(update_fields=["place_id"])
+        if location.google_place_id != google_place.pk:
+            location.google_place = google_place
+            location.save(update_fields=["google_place"])
         return google_place
 
     def resolve_place_name(self, google_place: GooglePlace) -> str:

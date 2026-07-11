@@ -5,64 +5,48 @@ from __future__ import annotations
 from unittest import mock
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.location.signals import suggest_and_add_categories
-from urbanlens.dashboard.models.pin.signals import enqueue_location_creation
+from urbanlens.dashboard.models.wiki.signals import suggest_and_add_categories
 
 
-class _Pin:
-    pk = 10
-    location_id = None
-    is_private = False
-    parent_pin_id = None
-    parent_location_id = None
-    effective_latitude = 40.0
-    effective_longitude = -74.0
-
-
-class _Location:
+class _Wiki:
     pk = 20
 
 
-class PinLocationCreationSignalTests(TestCase):
-    """New public root pins with coordinates enqueue background Location creation."""
+class PinCreationExternalWorkTests(TestCase):
+    """Pin creation triggers no wiki/boundary/external-API work.
 
-    def test_enqueues_after_commit_for_eligible_new_pin(self) -> None:
+    Wikis are user-created from the pin detail page and default boundaries are
+    generated lazily on first view, so the old ``enqueue_location_creation``
+    post_save signal must stay gone - bulk imports rely on this.
+    """
+
+    def test_location_creation_signal_removed(self) -> None:
+        from urbanlens.dashboard.models.pin import signals as pin_signals
+
+        self.assertFalse(hasattr(pin_signals, "enqueue_location_creation"))
+
+
+class WikiCategorySignalTests(TestCase):
+    """New Wikis enqueue category suggestion after commit.
+
+    Category auto-tagging moved from Location to Wiki in the wiki split (see
+    urbanlens.dashboard.models.wiki.signals); location.signals is now an
+    intentionally-empty stub.
+    """
+
+    def test_enqueues_wiki_category_suggestion_after_commit(self) -> None:
         callbacks = []
         with (
-            mock.patch("urbanlens.dashboard.models.pin.signals.transaction.on_commit", side_effect=callbacks.append),
+            mock.patch("urbanlens.dashboard.models.wiki.signals.transaction.on_commit", side_effect=callbacks.append),
             mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
         ):
-            enqueue_location_creation(sender=object, instance=_Pin(), created=True)
-            self.assertEqual(len(callbacks), 1)
+            suggest_and_add_categories(sender=object, instance=_Wiki(), created=True)
             callbacks[0]()
 
         enqueue.assert_called_once()
-        self.assertEqual(enqueue.call_args.args[1], _Pin.pk)
+        self.assertEqual(enqueue.call_args.args[1], _Wiki.pk)
 
-    def test_skips_existing_or_ineligible_pin(self) -> None:
-        pin = _Pin()
-        pin.is_private = True
-        with mock.patch("urbanlens.dashboard.models.pin.signals.transaction.on_commit") as on_commit:
-            enqueue_location_creation(sender=object, instance=pin, created=True)
-        on_commit.assert_not_called()
-
-
-class LocationCategorySignalTests(TestCase):
-    """New Locations enqueue category suggestion after commit."""
-
-    def test_enqueues_location_category_suggestion_after_commit(self) -> None:
-        callbacks = []
-        with (
-            mock.patch("urbanlens.dashboard.models.location.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
-        ):
-            suggest_and_add_categories(sender=object, instance=_Location(), created=True)
-            callbacks[0]()
-
-        enqueue.assert_called_once()
-        self.assertEqual(enqueue.call_args.args[1], _Location.pk)
-
-    def test_skips_existing_location(self) -> None:
-        with mock.patch("urbanlens.dashboard.models.location.signals.transaction.on_commit") as on_commit:
-            suggest_and_add_categories(sender=object, instance=_Location(), created=False)
+    def test_skips_existing_wiki(self) -> None:
+        with mock.patch("urbanlens.dashboard.models.wiki.signals.transaction.on_commit") as on_commit:
+            suggest_and_add_categories(sender=object, instance=_Wiki(), created=False)
         on_commit.assert_not_called()

@@ -1,0 +1,83 @@
+{% comment %}
+A single actionable photo card for the Memories "needs attention" queue.
+
+Every organize action posts to memories.photos.action and targets this card by id,
+swapping outerHTML - a success response is empty (the card vanishes and a toast
+fires), an error response re-renders the card unchanged with an error toast.
+
+Context:
+  image      - the Image
+  state      - "suggested" | "needs_pin" | "needs_location"
+  suggestion - the pending VisitSuggestion (only for state == "suggested")
+{% endcomment %}
+<article class="photo-card photo-card--{{ state }}" id="photo-card-{{ image.pk }}">
+    <a class="photo-card-thumb" href="{{ image.image.url }}" target="_blank" rel="noopener">
+        <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy"
+             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-card-thumb-fallback')">
+    </a>
+
+    <div class="photo-card-body">
+        <div class="photo-card-meta">
+            {% if image.taken_at %}
+            <span class="photo-card-date"><i class="material-symbols-outlined">event</i>{{ image.taken_at|date:"N j, Y" }}</span>
+            {% else %}
+            <span class="photo-card-date"><i class="material-symbols-outlined">schedule</i>Uploaded {{ image.created|date:"N j, Y" }}</span>
+            {% endif %}
+        </div>
+
+        {% if state == "suggested" %}
+        <p class="photo-card-prompt">
+            Looks like you visited
+            {% if suggestion.location %}<strong>{{ suggestion.location.display_name }}</strong>{% else %}one of your pins{% endif %}
+            on {{ suggestion.visited_at|date:"N j, Y" }}. Add it to your visit history?
+        </p>
+        <div class="photo-card-actions">
+            <button type="button" class="btn btn--sm btn--primary"
+                    hx-post="{% url 'memories.photos.action' image.pk 'accept' %}"
+                    hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
+                <i class="material-symbols-outlined">check</i> Confirm
+            </button>
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.photos.action' image.pk 'reject' %}"
+                    hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
+                Not this
+            </button>
+        </div>
+
+        {% elif state == "needs_pin" %}
+        <p class="photo-card-prompt">
+            This photo has a location but isn't near any of your pins.
+        </p>
+        <div class="photo-card-actions">
+            <button type="button" class="btn btn--sm btn--primary"
+                    onclick="photosLoadPinConfirm('{% url 'memories.photos.pin_confirm' image.pk %}')">
+                <i class="material-symbols-outlined">add_location_alt</i> Create pin &amp; log visit
+            </button>
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.photos.action' image.pk 'dismiss' %}"
+                    hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
+                Skip
+            </button>
+        </div>
+        <details class="photo-card-search">
+            <summary>Pick an existing pin instead</summary>
+            {% include "dashboard/partials/memories/_photo_card_search.html" %}
+        </details>
+
+        {% else %}{# needs_location #}
+        <p class="photo-card-prompt">
+            No location on this photo. Search for the pin it belongs to.
+        </p>
+        <div class="photo-card-search">
+            {% include "dashboard/partials/memories/_photo_card_search.html" %}
+        </div>
+        <div class="photo-card-actions">
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.photos.action' image.pk 'dismiss' %}"
+                    hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
+                Skip for now
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</article>

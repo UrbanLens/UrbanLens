@@ -16,8 +16,10 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.images import extract_gps_coords, image_to_gallery_json
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.storage import quota_error_for_upload
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -25,6 +27,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
+
+
+def _wiki_for_location(location: Location | None) -> Wiki | None:
+    """Return the community Wiki for a Location, or None when it has no wiki yet."""
+    return Wiki.objects.get_for_location(location)
 
 
 # -- Pin gallery --------------------------------------------------------------
@@ -45,19 +52,29 @@ class PinGalleryView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
-        """Upload an image to a pin."""
+        """Upload an image to a pin. Rejects a file the uploader already has on this pin."""
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
         img = Image.objects.create(
             image=image_file,
             pin=pin,
+            wiki=_wiki_for_location(pin.location),
             location=pin.location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
+            checksum=checksum,
+            file_size=image_file.size,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -113,31 +130,44 @@ class PinImageView(LoginRequiredMixin, View):
 
 
 class WikiGalleryView(LoginRequiredMixin, View):
-    """HTML gallery panel for the location wiki page."""
+    """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).order_by("-created")
+        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
-        return {"location": location, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
+        return {"location": location, "wiki": wiki, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)
         return render(request, "dashboard/partials/pins/_photo_gallery.html", ctx)
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
         img = Image.objects.create(
             image=image_file,
+            wiki=wiki,
             location=location,
             profile=profile,
             caption=request.POST.get("caption", "").strip() or None,
+            checksum=checksum,
+            file_size=image_file.size,
         )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -151,17 +181,18 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         location = get_object_or_404(Location, slug=location_slug)
+        wiki = _wiki_for_location(location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(location=location).select_related("profile").visible_to(profile).with_coords()
+        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
 
 class WikiImageView(LoginRequiredMixin, View):
-    """Reposition or delete a single image on a location wiki."""
+    """Reposition or delete a single image on a wiki."""
 
     def _get_image(self, image_id: int, location_slug: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, location__slug=location_slug)
+        return get_object_or_404(Image, pk=image_id, wiki__location__slug=location_slug)
 
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
         img = self._get_image(image_id, location_slug)

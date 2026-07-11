@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load map_components %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -19,8 +20,10 @@
     {# -- Activity map ---------------------------------------------------- #}
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
+        {# Shared layers panel - same component and engine as the main map. #}
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
         <div class="trip-map-overlay">
-            <button type="button" class="btn btn--icon trip-map-past-btn" id="trip-map-completed-toggle"
+            <button type="button" class="btn btn--icon btn--secondary trip-map-past-btn" id="trip-map-completed-toggle"
                     onclick="window.tripToggleShowCompleted()"
                     data-tooltip="Toggle past activities on the trip map."
                     aria-label="Show completed activities">
@@ -121,7 +124,17 @@
             <label for="edit-trip-description">Description</label>
             <textarea name="description" id="edit-trip-description" rows="3">{{ trip.description|default:"" }}</textarea>
         </div>
-        <div class="form-row form-row--two-col">
+        <div class="form-row trip-dates-toggle-row">
+            <button type="button" class="btn btn--ghost trip-add-dates-btn" id="edit-trip-dates-toggle"
+                    data-tooltip="Dates are set automatically once you add confirmed activities to the trip. Click here to set them yourself instead."
+                    data-tooltip-pos="right" data-tooltip-wide
+                    {% if trip.start_date or trip.end_date %}hidden{% endif %}
+                    onclick="_tripRevealDates('edit-trip')">
+                <i class="material-symbols-outlined">event</i> Add dates
+            </button>
+        </div>
+        <div class="form-row form-row--two-col trip-dates-row" id="edit-trip-dates-row"
+             {% if not trip.start_date and not trip.end_date %}hidden{% endif %}>
             <div>
                 <label for="edit-trip-start">Start date</label>
                 <input type="date" name="start_date" id="edit-trip-start"
@@ -422,7 +435,6 @@
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
-          hx-on::response-error="toastr.error(event.detail.xhr.responseText || 'Could not add member.')"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
@@ -612,23 +624,12 @@
     }
 
     function _initMap() {
-        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19,
-        });
-        var satellite = L.tileLayer(
-            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-            maxZoom: 18,
-        });
-        var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
-            maxZoom: 17,
-        });
-
         _map = L.map('trip-map', {contextmenu: false});
-        osm.addTo(_map);
-        L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(_map);
+        // Shared layers engine + panel - the exact same component as the main
+        // map (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in this page's map wrapper).
+        window.MapLayers.create(_map, {
+            root: document.getElementById('trip-map-layers'),
+        });
         _markersGroup = L.layerGroup().addTo(_map);
 
         // Right-click on map → context menu to add activity at those coords
@@ -934,6 +935,7 @@ window.tripToggleShowCompleted = function () {
                     var shownHeaders = {};
 
                     results.forEach(function (loc) {
+                        var displayName = loc.display_name || loc.name;
                         if (!shownHeaders[loc.type]) {
                             var header = document.createElement('li');
                             header.className = 'location-suggestion-header';
@@ -947,9 +949,9 @@ window.tripToggleShowCompleted = function () {
                             ((loc.type === 'geocoded' || loc.type === 'coordinates') ? ' location-suggestion-geocoded' : '');
 
                         if (loc.type === 'geocoded' || loc.type === 'coordinates') {
-                            li.textContent = loc.name;
+                            li.textContent = displayName;
                         } else {
-                            li.textContent = loc.name +
+                            li.textContent = displayName +
                                 (loc.locality ? ', ' + loc.locality : '') +
                                 (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
                         }
@@ -960,7 +962,7 @@ window.tripToggleShowCompleted = function () {
                                 uuidInput.value = '';
                                 if (latInput)  latInput.value  = loc.lat;
                                 if (lngInput)  lngInput.value  = loc.lng;
-                                if (nameInput) nameInput.value = loc.name;
+                                if (nameInput) nameInput.value = displayName;
                             } else if (loc.type === 'pin') {
                                 uuidInput.value = '';
                                 if (pinInput) pinInput.value = loc.uuid;
@@ -973,7 +975,7 @@ window.tripToggleShowCompleted = function () {
                                 if (lngInput)  lngInput.value  = '';
                                 if (nameInput) nameInput.value = '';
                             }
-                            display.textContent = loc.name;
+                            display.textContent = displayName;
                             searchInput.value = '';
                             suggestions.innerHTML = '';
                             suggestions.hidden = true;
@@ -1291,6 +1293,22 @@ function _initCalDragDrop(calEl) {
 }
 
 // -- Status pill toggle helper --------------------------------------------
+// -- Trip dates: hidden until "Add dates" is clicked ----------------------
+function _tripRevealDates(prefix) {
+    var row = document.getElementById(prefix + '-dates-row');
+    var toggle = document.getElementById(prefix + '-dates-toggle');
+    if (row) { row.hidden = false; }
+    if (toggle) { toggle.hidden = true; }
+    var startInput = document.getElementById(prefix === 'trip-create' ? 'trip-start' : 'edit-trip-start');
+    if (startInput) { startInput.focus(); }
+}
+function _tripHideDates(prefix) {
+    var row = document.getElementById(prefix + '-dates-row');
+    var toggle = document.getElementById(prefix + '-dates-toggle');
+    if (row) { row.hidden = true; }
+    if (toggle) { toggle.hidden = false; }
+}
+
 function _setStatusPill(prefix, value) {
     var inputId  = (prefix === 'add') ? 'add-activity-status-input' : 'edit-activity-status-input';
     var groupSel = (prefix === 'add') ? '#add-activity-dialog .status-pill-toggle' : '#edit-activity-dialog .status-pill-toggle';
@@ -1516,7 +1534,7 @@ window.tripSetTab = function (tab) {
 };
 
 // -- Mark-as-completed dialog ---------------------------------------------
-window.tripOpenCompleteDialog = function (url) {
+window.tripOpenCompleteDialog = function (url, activityDate) {
     var form = document.getElementById('trip-complete-form');
     if (form) {
         form.setAttribute('hx-post', url);
@@ -1525,7 +1543,9 @@ window.tripOpenCompleteDialog = function (url) {
     var today = new Date().toISOString().slice(0, 10);
     var dateInput = document.getElementById('trip-complete-date');
     if (dateInput) {
-        dateInput.value = today;
+        // Default to the activity's scheduled date when it has one, clamped to
+        // today (completed dates can't be in the future); otherwise today.
+        dateInput.value = (activityDate && activityDate <= today) ? activityDate : today;
         dateInput.max = today;
     }
     var dlg = document.getElementById('trip-complete-dialog');

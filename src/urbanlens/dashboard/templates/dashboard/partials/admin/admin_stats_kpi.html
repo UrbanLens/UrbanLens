@@ -150,9 +150,9 @@
                 <td class="stats-table-rank">{{ forloop.counter }}</td>
                 <td>
                     {% if loc.slug %}
-                    <a href="{% url 'location.wiki' loc.slug %}" class="stats-table-link">{{ loc.name }}</a>
+                    <a href="{% url 'location.wiki' loc.slug %}" class="stats-table-link">{{ loc.display_name }}</a>
                     {% else %}
-                    {{ loc.name }}
+                    {{ loc.display_name }}
                     {% endif %}
                 </td>
                 <td class="stats-table-count">{{ loc.pin_count }}</td>

@@ -1,0 +1,83 @@
+{% comment %}
+Reference maps attached to a safety check-in beyond the primary route map
+(checkin.markup_map, drawn inline via _safety_map_script.html). Reuses the shared
+"comment map" preview/expand JS (see themes/base.html, _initThumbs/_expandCommentMap)
+keyed by "mm-<uuid>" - the same convention Memories > Maps uses for its own cards.
+
+Expects: checkin, attached_maps (queryset/list of MarkupMap).
+
+Swapped in whole (hx-swap="outerHTML") by the attach/detach views, so its own
+id must stay stable across re-renders.
+{% endcomment %}
+<div class="safety-attached-maps" id="safety-attached-maps">
+    {% for map in attached_maps %}
+    {% with uuid_str=map.uuid|stringformat:"s" %}
+    <div class="safety-attached-map-card" id="safety-attached-map-{{ map.uuid }}">
+        {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
+        <div class="safety-attached-map-body">
+            <span class="safety-attached-map-title">{{ map.title|default:"Untitled map" }}</span>
+            <button type="button" class="safety-attached-map-remove"
+                    hx-post="{% url 'safety.checkin.maps.detach' checkin.slug|default:checkin.uuid map.uuid %}"
+                    hx-target="#safety-attached-maps" hx-swap="outerHTML"
+                    hx-confirm="Detach this map? The map itself won't be deleted."
+                    title="Detach map">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+    </div>
+    {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=map.to_snapshot title=map.title|default:"Map" %}
+    {% endwith %}
+    {% endfor %}
+    {% if not attached_maps %}
+    <p class="safety-attached-maps-empty form-hint">No additional maps attached yet.</p>
+    {% endif %}
+    <div class="safety-attached-map-actions">
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-get="{% url 'safety.checkin.maps.picker' checkin.slug|default:checkin.uuid %}"
+                hx-target="#safety-map-picker-body" hx-swap="innerHTML"
+                onclick="var f=document.getElementById('safety-map-picker-search'); if(f) f.value=''; document.getElementById('safety-map-picker-dialog').showModal();">
+            <i class="material-symbols-outlined">add_location_alt</i> Attach existing map
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm safety-new-map-btn"
+                data-create-url="{% url 'markup_map.create' %}"
+                data-attach-url="{% url 'safety.checkin.maps.attach' checkin.slug|default:checkin.uuid %}"
+                data-lat="{{ checkin.destination_latitude|default_if_none:'' }}"
+                data-lng="{{ checkin.destination_longitude|default_if_none:'' }}">
+            <i class="material-symbols-outlined">add</i> New map
+        </button>
+    </div>
+</div>
+<script>
+(function () {
+    document.querySelectorAll('.safety-new-map-btn').forEach(function (btn) {
+        if (btn.dataset.newMapInit) return;
+        btn.dataset.newMapInit = '1';
+        btn.addEventListener('click', function () {
+            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            var body = {};
+            if (btn.dataset.lat) {
+                body.center_lat = parseFloat(btn.dataset.lat);
+                body.center_lng = parseFloat(btn.dataset.lng);
+                body.zoom = 13;
+            }
+            fetch(btn.dataset.createUrl, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (!data.ok) throw new Error('create failed');
+                // Route the attach step through htmx.ajax (not a raw fetch) so the
+                // swapped-in #safety-attached-maps re-runs this very <script> tag -
+                // a manual .outerHTML assignment would silently skip it.
+                htmx.ajax('POST', btn.dataset.attachUrl, {
+                    target: '#safety-attached-maps',
+                    swap: 'outerHTML',
+                    values: { map_uuid: data.uuid },
+                });
+            }).catch(function () {
+                if (window.toastr) toastr.error('Could not create a new map.');
+            });
+        });
+    });
+}());
+</script>

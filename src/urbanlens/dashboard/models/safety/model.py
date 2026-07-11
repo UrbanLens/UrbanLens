@@ -10,6 +10,7 @@ from uuid import uuid4
 from django.db.models import (
     CASCADE,
     SET_NULL,
+    BooleanField,
     CheckConstraint,
     DecimalField,
     DurationField,
@@ -18,6 +19,7 @@ from django.db.models import (
     Index,
     IntegerField,
     Manager as DjangoManager,
+    ManyToManyField,
     OneToOneField,
     Q,
     TextField,
@@ -32,10 +34,24 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 
+# How long before a check-in escalates to emergency contacts that the owner gets one
+# last "check in now" warning. Matches the polling cadence of the Celery beat tasks
+# that drive this feature, so it can't realistically be tightened further without
+# also tightening send_due_checkin_reminders/escalate_overdue_checkins.
+FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
+
+# How often the owner editing the trip plan, destination, or route markup after contacts have
+# already been notified is allowed to trigger another "plan updated" notification - keeps rapid,
+# incremental edits (e.g. drawing several map annotations in a row) from spamming contacts with
+# one email per change.
+PLAN_UPDATE_NOTIFICATION_COOLDOWN = timedelta(minutes=15)
+
 DEFAULT_CONTACT_MESSAGE = (
-    "Hi! I'm heading out and set up this automatic check-in as a precaution. If you're seeing this, "
-    "I haven't checked in by my expected time - please try to reach me, and if you can't, take a look "
-    "at my trip plan and last known destination below to help figure out where I might be."
+    "Hi! I went on a trip and set up an automated safety check-in: if I don't confirm I'm safe by "
+    "my expected return time, this message is sent to my emergency contacts. If you're reading this, "
+    "I didn't come home and may need help - please try to reach me, and if you can't, use the trip plan "
+    "included with this alert to help find me. I may not be able to use "
+    "my phone to contact anyone else for help, so it's important you try to help me."
 )
 
 
@@ -58,7 +74,7 @@ def humanize_hours_minutes(delta: timedelta) -> str:
     return " ".join(parts)
 
 
-class EmergencyContactDefault(abstract.Model):
+class EmergencyContactDefault(abstract.DashboardModel):
     """A reusable emergency contact saved to a profile's safety defaults.
 
     Copied onto each new SafetyCheckin as a SafetyCheckinContact snapshot at
@@ -98,7 +114,7 @@ class EmergencyContactDefault(abstract.Model):
         """
         return f"{self.display_name} (default for {self.owner_id})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_defaults"
         ordering = ["order", "created"]
         indexes = [Index(fields=["owner"], name="idxdb_ecd_owner")]
@@ -110,12 +126,15 @@ class EmergencyContactDefault(abstract.Model):
         ]
 
 
-class SafetyPreference(abstract.Model):
+class SafetyPreference(abstract.DashboardModel):
     """Per-profile defaults applied to new safety check-ins."""
 
-    profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
     default_message = TextField(blank=True, default=DEFAULT_CONTACT_MESSAGE)
     default_grace_period = DurationField(default=DEFAULT_GRACE_PERIOD)
+    # Days after a check-in resolves (checked in / found safe / cancelled) before it's
+    # auto-deleted; null means "never" - see SafetyCheckinQuerySet.due_for_auto_delete().
+    auto_delete_after_days = IntegerField(null=True, blank=True)
+    profile = OneToOneField("dashboard.Profile", on_delete=CASCADE, related_name="safety_preference")
 
     if TYPE_CHECKING:
         profile_id: int
@@ -146,7 +165,7 @@ class SafetyPreference(abstract.Model):
         """
         return f"Safety preferences for {self.profile_id}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_preferences"
 
 
@@ -170,7 +189,7 @@ class SafetyCheckinStatus(abstract.TextChoices):
         return (cls.CHECKED_IN, cls.FOUND_SAFE, cls.CANCELLED)
 
 
-class SafetyCheckin(abstract.HasSlug):
+class SafetyCheckin(abstract.PublicDashboardModel):
     """A planned trip with an expected check-in time and emergency contacts.
 
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
@@ -179,7 +198,7 @@ class SafetyCheckin(abstract.HasSlug):
     VisitSuggestion for the destination via ``services.safety._conclude_checkin``,
     reusing the same confirm/reject flow as any other tentative visit.
 
-    ``slug`` (from ``HasSlug``) is scoped per-profile - only the owner-facing
+    ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing
     detail/check-in pages use it for a human-readable URL; the contact portal
     keeps using its unguessable ``token``, since that's a security credential,
     not just an identifier.
@@ -196,8 +215,17 @@ class SafetyCheckin(abstract.HasSlug):
         destination_latitude: Destination latitude, used for the concluding VisitSuggestion.
         destination_longitude: Destination longitude, used for the concluding VisitSuggestion.
         reminder_sent_at: When the check-in-due reminder was sent, if at all.
+        final_warning_sent_at: When the owner's last "check in now" warning was sent, if at all.
         escalated_at: When emergency contacts were notified, if at all.
         resolved_at: When the check-in concluded, if at all.
+        plan_update_notified_at: When contacts were last re-notified of a trip plan/destination/
+            route change made after escalation, if at all.
+        markup_map: The standalone MarkupMap holding the route/plan drawing shown on the
+            detail page and contact portal, if any.
+        notify_community_wiki: Whether escalation should also post a comment to the destination's
+            community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
+        wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
+            escalation-time wiki notification idempotent.
     """
 
     title = CharField(max_length=200)
@@ -211,8 +239,13 @@ class SafetyCheckin(abstract.HasSlug):
     destination_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     reminder_sent_at = DateTimeField(null=True, blank=True)
+    final_warning_sent_at = DateTimeField(null=True, blank=True)
     escalated_at = DateTimeField(null=True, blank=True)
     resolved_at = DateTimeField(null=True, blank=True)
+    plan_update_notified_at = DateTimeField(null=True, blank=True)
+
+    notify_community_wiki = BooleanField(default=False)
+    wiki_notified_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     destination_location = ForeignKey(
@@ -222,14 +255,30 @@ class SafetyCheckin(abstract.HasSlug):
         blank=True,
         related_name="safety_checkins",
     )
-
-    objects = SafetyCheckinManager()
+    # Standalone route/plan map (viewport + markup items). Created on the
+    # check-in creation page (before the check-in exists) or lazily on the
+    # detail page, then linked here.
+    markup_map = ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_checkins",
+    )
+    # Additional, previously-drawn maps attached for reference alongside the primary
+    # markup_map (the interactively-drawn route). Reference-only for the owner - unlike
+    # markup_map, these are not surfaced to emergency contacts in emails or the contact
+    # portal. See controllers.safety's SafetyCheckinMap*View.
+    markup_maps = ManyToManyField("dashboard.MarkupMap", blank=True, related_name="attached_safety_checkins")
 
     if TYPE_CHECKING:
         profile_id: int
         destination_location_id: int | None
+        markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
+
+    objects = SafetyCheckinManager()
 
     @property
     def is_resolved(self) -> bool:
@@ -239,6 +288,30 @@ class SafetyCheckin(abstract.HasSlug):
             True when status is checked_in, found_safe, or cancelled.
         """
         return self.status in SafetyCheckinStatus.resolved_statuses()
+
+    @property
+    def contacts_locked(self) -> bool:
+        """Whether title/message/contacts are frozen because contacts were already notified.
+
+        Returns:
+            True once ``escalated_at`` is set - the trip plan, destination, and route markup
+            stay editable after that point (editing them re-notifies contacts), but the title,
+            contact message, and contact list are locked so contacts already told to look for
+            certain information aren't sent conflicting details later.
+        """
+        return self.escalated_at is not None
+
+    @property
+    def notifications_locked(self) -> bool:
+        """Whether the message/contacts/wiki-notify fields are frozen against further edits.
+
+        Returns:
+            True once contacts have already been notified (``contacts_locked``) or the
+            owner has already checked in - editing who/whether to notify no longer makes
+            sense past either point. Unlike ``contacts_locked``, this does not cover the
+            title field, which stays editable until contacts are actually notified.
+        """
+        return self.contacts_locked or self.status == SafetyCheckinStatus.CHECKED_IN
 
     def _slugify_base(self) -> str:
         """Return the raw text the URL slug is derived from.
@@ -267,7 +340,7 @@ class SafetyCheckin(abstract.HasSlug):
         """
         return f"{self.title} ({self.profile_id})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_safety_checkins"
         ordering = ["-checkin_by"]
         indexes = [
@@ -277,7 +350,7 @@ class SafetyCheckin(abstract.HasSlug):
         ]
 
 
-class SafetyCheckinContact(abstract.Model):
+class SafetyCheckinContact(abstract.DashboardModel):
     """A single emergency contact attached to one specific check-in.
 
     A snapshot, not a live link back to ``EmergencyContactDefault`` - editing
@@ -287,13 +360,14 @@ class SafetyCheckinContact(abstract.Model):
     into.
     """
 
-    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")
-    contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     email = EmailField(null=True, blank=True)
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
     notified_at = DateTimeField(null=True, blank=True)
     found_safe_at = DateTimeField(null=True, blank=True)
+
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")
+    contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
 
     if TYPE_CHECKING:
         checkin_id: int
@@ -320,7 +394,7 @@ class SafetyCheckinContact(abstract.Model):
         """
         return f"{self.display_name} for checkin {self.checkin_id}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_contacts"
         indexes = [
             Index(fields=["checkin"], name="idxdb_scc_checkin"),
@@ -334,7 +408,69 @@ class SafetyCheckinContact(abstract.Model):
         ]
 
 
-class SafetyCheckinMessage(abstract.Model):
+class SafetyContactOptOutScope(abstract.TextChoices):
+    """How broadly a ``SafetyContactOptOut`` suppresses notifications."""
+
+    CHECKIN = "checkin", "This check-in"
+    OWNER = "owner", "All future check-ins from this person"
+    GLOBAL = "global", "All safety check-in notifications"
+
+
+class SafetyContactOptOut(abstract.DashboardModel):
+    """Records that a contact (by profile or email) no longer wants safety check-in notifications.
+
+    Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of
+    ``contact_profile``/``email``. Which of ``owner``/``checkin`` is set (if either) depends on
+    ``scope``: a ``CHECKIN``-scoped row silences one specific check-in, an ``OWNER``-scoped row
+    silences every future check-in created by that one owner, and a ``GLOBAL``-scoped row silences
+    every safety check-in notification from the site, regardless of who created the check-in.
+    """
+
+    email = EmailField(null=True, blank=True)
+    scope = CharField(max_length=10, choices=SafetyContactOptOutScope.choices)
+    owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, null=True, blank=True, related_name="contact_opt_outs")
+    contact_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
+
+    if TYPE_CHECKING:
+        contact_profile_id: int | None
+        owner_id: int | None
+        checkin_id: int | None
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this opt-out.
+
+        Returns:
+            String like "<contact> opted out (<scope>)".
+        """
+        who = self.contact_profile.username if self.contact_profile else (self.email or "Unknown contact")
+        return f"{who} opted out ({self.scope})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_safety_contact_opt_outs"
+        indexes = [
+            Index(fields=["contact_profile"], name="idxdb_scoo_profile"),
+            Index(fields=["email"], name="idxdb_scoo_email"),
+            Index(fields=["owner"], name="idxdb_scoo_owner"),
+            Index(fields=["checkin"], name="idxdb_scoo_checkin"),
+        ]
+        constraints = [
+            CheckConstraint(
+                condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
+                name="db_safety_contact_optout_exactly_one_target",
+            ),
+            CheckConstraint(
+                condition=(
+                    (Q(scope=SafetyContactOptOutScope.CHECKIN) & Q(checkin__isnull=False) & Q(owner__isnull=True))
+                    | (Q(scope=SafetyContactOptOutScope.OWNER) & Q(owner__isnull=False) & Q(checkin__isnull=True))
+                    | (Q(scope=SafetyContactOptOutScope.GLOBAL) & Q(owner__isnull=True) & Q(checkin__isnull=True))
+                ),
+                name="db_safety_contact_optout_scope_fields_match",
+            ),
+        ]
+
+
+class SafetyCheckinMessage(abstract.DashboardModel):
     """A chat message on a check-in, from either the owner or an emergency contact.
 
     Exactly one of ``sender_profile``/``sender_contact`` is set at the
@@ -343,10 +479,11 @@ class SafetyCheckinMessage(abstract.Model):
     ``sender_contact`` so their display name still resolves without a login.
     """
 
+    body = TextField()
+
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="messages")
     sender_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     sender_contact = ForeignKey(SafetyCheckinContact, on_delete=SET_NULL, null=True, blank=True, related_name="+")
-    body = TextField()
 
     if TYPE_CHECKING:
         checkin_id: int
@@ -374,7 +511,7 @@ class SafetyCheckinMessage(abstract.Model):
         """
         return f"[{self.sender_name}] {self.body[:60]}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_messages"
         ordering = ["created"]
         indexes = [Index(fields=["checkin"], name="idxdb_scm_checkin")]

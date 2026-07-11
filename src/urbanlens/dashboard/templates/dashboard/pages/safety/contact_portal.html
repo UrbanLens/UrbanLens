@@ -43,7 +43,7 @@
     {% endif %}
 
     {% url 'safety.contact.markup.json' contact.token as markup_json_url %}
-    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url %}
+    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_json_url=markup_json_url %}
 
     {% if checkin.images.all %}
     <div class="card safety-photos">
@@ -76,6 +76,36 @@
     {% endif %}
 
     {% include "dashboard/partials/safety/_chat_panel.html" %}
+
+    <div class="card safety-optout-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">notifications_off</i>
+            <h3>Manage notifications</h3>
+        </div>
+        <ul class="safety-optout-list">
+            <li>
+                <div>
+                    <strong>Stop notifications about this trip</strong>
+                    <p class="form-hint">You won't get any more updates about "{{ checkin.title }}".</p>
+                </div>
+                <a class="btn btn--ghost" href="{% url 'safety.contact.optout' contact.token 'checkin' %}">Opt out</a>
+            </li>
+            <li>
+                <div>
+                    <strong>Stop notifications about future check-ins from {{ checkin.profile.username }}</strong>
+                    <p class="form-hint">You won't be notified as an emergency contact on any check-in {{ checkin.profile.username }} creates from now on.</p>
+                </div>
+                <a class="btn btn--ghost" href="{% url 'safety.contact.optout' contact.token 'owner' %}">Opt out</a>
+            </li>
+            <li>
+                <div>
+                    <strong>Unsubscribe from all safety check-in notifications</strong>
+                    <p class="form-hint">You won't be notified as an emergency contact on any check-in from anyone on UrbanLens.</p>
+                </div>
+                <a class="btn btn--ghost" href="{% url 'safety.contact.optout' contact.token 'global' %}">Unsubscribe</a>
+            </li>
+        </ul>
+    </div>
 
 </div>
 {% endblock %}

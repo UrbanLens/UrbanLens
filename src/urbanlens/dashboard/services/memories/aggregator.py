@@ -74,7 +74,9 @@ def _date_to_datetime(value: date) -> datetime:
 def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Route that started within the given range."""
     from urbanlens.dashboard.models.routes.model import Route
+    from urbanlens.dashboard.services.units import format_distance
 
+    units = profile.effective_distance_units
     routes = Route.objects.for_profile(profile).in_date_range(start, end)
     if bbox is not None:
         routes = routes.intersecting_bbox(bbox.min_lat, bbox.min_lng, bbox.max_lat, bbox.max_lng)
@@ -87,7 +89,7 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             occurred_at=route.started_at,
             ended_at=route.ended_at,
             title=route.name or route.get_source_display(),
-            subtitle=f"{distance_km:.1f} km",
+            subtitle=format_distance(distance_km, units),
             latitude=start_lat,
             longitude=start_lng,
             url="",
@@ -190,7 +192,7 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             thumbnail_url=None,
             icon="pin_drop",
             color="#4CAF50",
-            extra={"source": visit.source, "pin_slug": pin.slug},
+            extra={"source": visit.source, "pin_slug": pin.slug, "visit_id": visit.pk},
         )
 
 
@@ -198,7 +200,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
-    photos = Image.objects.filter(profile=profile).with_coords().annotate(effective_taken_at=Coalesce("taken_at", "created")).filter(effective_taken_at__date__range=(start, end)).select_related("pin", "location")
+    photos = Image.objects.filter(profile=profile).with_coords().annotate(effective_taken_at=Coalesce("taken_at", "created")).filter(effective_taken_at__date__range=(start, end)).select_related("pin", "wiki", "wiki__location")
     if bbox is not None:
         photos = photos.filter(
             latitude__range=(bbox.min_lat, bbox.max_lat),
@@ -206,12 +208,12 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
     for image in photos:
-        target = image.pin or image.location
+        target = image.pin or image.wiki
         url = ""
         if image.pin:
             url = reverse("pin.gallery", kwargs={"pin_slug": image.pin.slug})
-        elif image.location and image.location.slug:
-            url = reverse("location.wiki.gallery", kwargs={"location_slug": image.location.slug})
+        elif image.wiki and image.wiki.location and image.wiki.location.slug:
+            url = reverse("location.wiki.gallery", kwargs={"location_slug": image.wiki.location.slug})
 
         subtitle = ""
         if target is not None:

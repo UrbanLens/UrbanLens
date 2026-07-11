@@ -38,6 +38,66 @@
 .trips-header-right {
     display: flex;
     align-items: center;
+    gap: 0.5rem;
+}
+
+.trips-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+
+.trips-view-toggle .view-toggle-btn {
+    width: auto;
+    height: 34px;
+    padding: 0 .8rem;
+    gap: .35rem;
+    font-size: .85rem;
+    font-weight: 600;
+
+    .material-symbols-outlined { font-size: 1.15rem; }
+}
+
+.trips-view {
+    &--calendar {
+        background-color: var(--ul-grey-1b);
+        border: 1px solid var(--ul-grey-1a);
+        padding: 1.5rem 0.5rem 0;
+    }
+}
+
+.trip-sort-control {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.trip-sort-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.trip-sort-select {
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .4rem .6rem;
+    font-size: .85rem;
+    cursor: pointer;
+
+    &:hover { border-color: var(--ul-grey-2); }
+    &:focus-visible { outline: 2px solid $color-blue-500; outline-offset: 1px; }
 }
 
 .trips-empty {
@@ -103,7 +163,7 @@
 .trip-card {
     position: relative;
     border: 1px solid var(--ul-grey-1a);
-    background-color: var(--ul-grey-0b);
+    background-color: var(--ul-grey-0);
     border-radius: 14px;
     overflow: hidden;
     transition: box-shadow .2s, border-color .2s, transform .2s;
@@ -563,10 +623,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 5px;
-    border: none;
-    background: transparent;
-    color: var(--ul-grey-6);
+    border-radius: 0;
     cursor: pointer;
     transition: background .15s, color .15s;
 
@@ -581,8 +638,6 @@
     }
 
     &.view-toggle-btn--active {
-        background: var(--ul-grey-0);
-        color: $color-blue-500;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
     }
 }
@@ -668,7 +723,7 @@
 
         .cal-day-num {
             background: $color-blue-500;
-            color: var(--ul-grey-5);
+            color: var(--ul-black);
         }
     }
 }
@@ -703,11 +758,23 @@
     padding: 1px 4px;
     cursor: pointer;
     overflow: hidden;
+    text-decoration: none;
     transition: background .1s;
 
     &:hover {
         background: $color-blue-600;
     }
+
+    &--upcoming { background: $color-blue-500; &:hover { background: $color-blue-600; } }
+    &--active { background: #2e9e5b; &:hover { background: #268049; } }
+    &--past { background: var(--ul-grey-6); &:hover { background: var(--ul-grey-7); } }
+    &--planning { background: #a06ad1; &:hover { background: #8f52c7; } }
+}
+
+.cal-event-more {
+    font-size: .65rem;
+    color: var(--ul-grey-6);
+    padding: 0 2px;
 }
 
 .cal-event-num {
@@ -1150,6 +1217,35 @@
     }
 }
 
+.trip-dates-toggle-row {
+    margin-top: -.35rem;
+}
+
+.trip-add-dates-btn {
+    align-self: flex-start;
+    font-size: .82rem;
+    padding: .3rem .65rem;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.trip-dates-row {
+    animation: ul-fade-in-down .15s ease;
+}
+
+@keyframes ul-fade-in-down {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .trip-invite-friend-list {
     list-style: none;
     margin: 0;
@@ -1265,8 +1361,12 @@
     margin: 0 0 1.5rem;
     border-radius: 10px;
     border: 1px solid var(--ul-grey-1a);
-    ;
     position: relative;
+    // Mirrors #trip-map's own height below so this wrapper has a definite
+    // size for @include map-query-container to safely contain against
+    // (`contain: size` collapses an "auto" height to 0 otherwise).
+    height: 340px;
+    @include map-query-container;
 
     #trip-map {
         height: 340px;
@@ -1294,13 +1394,14 @@
 
 .trip-map-overlay {
     position: absolute;
-    bottom: 30px;
-    left: 10px;
+    top: 0.5em;
+    right: 0.5em;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     gap: 4px;
     pointer-events: none;
+    justify-self: right;
 
     >* {
         pointer-events: auto;
@@ -2024,7 +2125,7 @@
 
 .trip-weather-slot-desc {
     font-size: .78rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     margin: 0 0 .25rem;
     line-height: 1.3;
 }
@@ -2193,7 +2294,7 @@
 
         &:hover {
             background: var(--ul-grey-0);
-            color: $text-secondary;
+            color: var(--ul-grey-6);
         }
     }
 }
@@ -2216,7 +2317,7 @@
     gap: .4rem;
     cursor: pointer;
     font-size: .84rem;
-    color: $text-secondary;
+    color: var(--ul-grey-6);
     user-select: none;
 
     input[type="checkbox"] {
@@ -2345,5 +2446,201 @@
             border-color: var(--primary-color);
             color: $color-blue-300;
         }
+    }
+}
+// ---------------------------------------------------------------------------
+// Google Calendar import dialog
+// ---------------------------------------------------------------------------
+
+.calendar-import-account,
+.calendar-import-empty,
+.calendar-import-error p {
+    margin: 0 0 1rem;
+    color: var(--ul-grey-6);
+}
+
+.calendar-import-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    max-height: 20rem;
+    overflow-y: auto;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+}
+
+.calendar-import-item {
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.calendar-import-label {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .75rem;
+    cursor: pointer;
+    font-weight: normal;
+
+    input[type="checkbox"] {
+        // Undo Materialize's global checkbox reset (position:absolute;
+        // opacity:0) so the box is actually visible.
+        position: static;
+        opacity: 1;
+        pointer-events: auto;
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex-shrink: 0;
+
+        &:disabled {
+            cursor: default;
+        }
+    }
+
+    &:has(input:disabled) {
+        cursor: default;
+        opacity: .55;
+    }
+}
+
+.calendar-import-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-import-dates {
+    color: var(--ul-grey-6);
+    font-size: .85em;
+    flex-shrink: 0;
+}
+
+.calendar-import-note {
+    color: var(--ul-grey-6);
+    font-size: .8em;
+    font-style: italic;
+    flex-shrink: 0;
+}
+
+.calendar-import-footer {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-grey-1a);
+    display: flex;
+    justify-content: flex-end;
+}
+
+// -- Import dialog page 2: review step ---------------------------------------
+
+.calendar-import-preview-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    max-height: 24rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.calendar-import-preview {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    padding: .6rem .75rem;
+
+    &--skipped {
+        opacity: .55;
+    }
+}
+
+.calendar-import-preview-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.calendar-import-preview-title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-import-preview-desc {
+    margin: .35rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
+.calendar-import-preview-option {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    margin-top: .5rem;
+    cursor: pointer;
+    font-weight: normal;
+    font-size: .88rem;
+
+    input[type="checkbox"] {
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        margin-top: .15rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        // Undo Materialize's global checkbox reset inside the dialog.
+        opacity: 1;
+        position: static;
+        pointer-events: auto;
+    }
+}
+
+.calendar-import-preview-option-text {
+    min-width: 0;
+}
+
+.calendar-import-preview-participants {
+    margin-top: .6rem;
+    padding-top: .5rem;
+    border-top: 1px dashed var(--ul-grey-1a);
+}
+
+.calendar-import-preview-subhead {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.calendar-import-preview-others {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: .5rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
     }
 }

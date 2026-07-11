@@ -2,28 +2,103 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+from typing import TYPE_CHECKING
 
 from celery import shared_task
 
 from urbanlens.dashboard.services.celery import update_task_progress
-from urbanlens.dashboard.services.locations.creation import LocationCreationService
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def create_location_for_pin(self, pin_id: int) -> int | None:
-    """Create or find a shared Location for a pin, then link the pin to it."""
-    logger.info("Creating background location for pin %s", pin_id)
-    update_task_progress(self, current=0, total=1, message="Creating location...")
-    location = LocationCreationService().create_for_pin(pin_id)
-    update_task_progress(self, current=1, total=1, message="Location ready")
-    if location:
-        logger.info("Created/linked location %s for pin %s", location.pk, pin_id)
-        return location.pk
-    logger.info("No location created for pin %s", pin_id)
-    return None
+def enrich_wiki_location(self, wiki_id: int) -> bool:
+    """Enrich a freshly user-created Wiki's Location with external data.
+
+    Runs after the user clicks "Create community wiki": links the Location to
+    its Google Place, resolves a canonical name when the wiki is still
+    unnamed, and generates the location's default property/building
+    boundaries. This is the only place these APIs are hit for a new wiki -
+    pin creation and bulk imports do no external work.
+
+    Args:
+        wiki_id: PK of the newly created Wiki.
+
+    Returns:
+        True when the wiki still existed and enrichment ran.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
+
+    wiki = Wiki.objects.select_related("location").filter(pk=wiki_id).first()
+    if wiki is None or wiki.location_id is None:
+        logger.info("enrich_wiki_location: wiki %s no longer exists or has no location", wiki_id)
+        return False
+
+    location = wiki.location
+    update_task_progress(self, current=0, total=2, message="Resolving place details...")
+
+    name_resolver = PlaceNameResolverChain()
+    try:
+        if location.google_place_id is None:
+            GooglePlaceService(name_resolver=name_resolver).ensure_linked(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
+
+    if not wiki.name or wiki.name == "Unnamed Location":
+        try:
+            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
+        except Exception:
+            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+            place_name = None
+        if place_name:
+            Wiki.objects.filter(pk=wiki.pk, name__in=["", "Unnamed Location"]).update(name=place_name)
+
+    update_task_progress(self, current=1, total=2, message="Generating boundaries...")
+    if not boundary_generation_ran(location):
+        generate_location_boundaries(location, name=wiki.name or None)
+
+    update_task_progress(self, current=2, total=2, message="Wiki ready")
+    return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def generate_boundaries_for_location(location_id: int) -> bool:
+    """Generate the default property/building boundaries for a Location.
+
+    Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
+    page) - the pin detail page uses the "boundary" panel source instead, which
+    calls the same ``generate_location_boundaries`` function.
+
+    Args:
+        location_id: PK of the Location.
+
+    Returns:
+        True when the location existed and generation ran (or had already run).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+
+    try:
+        location = Location.objects.filter(pk=location_id).first()
+        if location is None:
+            logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
+            return False
+        if not boundary_generation_ran(location):
+            generate_location_boundaries(location)
+        return True
+    finally:
+        cache.delete(f"ul_boundary_generation_{location_id}")
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -109,18 +184,18 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def suggest_location_category(self, location_id: int) -> list[str]:
-    """Suggest and attach badges for a Location outside model signals."""
-    from urbanlens.dashboard.models.location import Location
+def suggest_wiki_category(self, wiki_id: int) -> list[str]:
+    """Suggest and attach badges for a community Wiki outside model signals."""
+    from urbanlens.dashboard.models.wiki import Wiki
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
-    update_task_progress(self, current=0, total=1, message="Suggesting location category...")
-    location = Location.objects.filter(pk=location_id).first()
-    if location is None:
-        logger.info("Location %s no longer exists; skipping auto-tagging", location_id)
+    update_task_progress(self, current=0, total=1, message="Suggesting wiki category...")
+    wiki = Wiki.objects.filter(pk=wiki_id).select_related("location").first()
+    if wiki is None:
+        logger.info("Wiki %s no longer exists; skipping auto-tagging", wiki_id)
         return []
-    badges = AutoTagService().suggest_for_location(location, apply=True)
-    update_task_progress(self, current=1, total=1, message="Location auto-tagging complete")
+    badges = AutoTagService().suggest_for_wiki(wiki, apply=True)
+    update_task_progress(self, current=1, total=1, message="Wiki auto-tagging complete")
     return [b.name for b in badges]
 
 
@@ -179,31 +254,23 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 "street_number": location.street_number or "",
                 "administrative_area_level_1": location.administrative_area_level_1 or "",
             }
-            name = location.official_name or location.name or ""
+            name = location.official_name or location.display_name or ""
             article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
             LocationCache.set(location, "wikipedia", article or {}, query_key=name)
-            update_location_name_from_external_sources(
-                location,
-                extra_candidates=[("wikipedia", (article or {}).get("title"))],
-            )
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
 
-    # NPS (US locations only)
+    # NPS: caches the park the location sits inside, if any. Non-US coordinates
+    # are filtered out (before any network call) by find_park_containing_location.
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-    state_code = location.administrative_area_level_1 or ""
-    if state_code and app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
+    if app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
         try:
             from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
-            park = NPSGateway().find_park_near_location(lat, lng, state_code=state_code, location_name=location.official_name or "")
-            LocationCache.set(location, "nps", park or {}, query_key=state_code)
-            update_location_name_from_external_sources(
-                location,
-                extra_candidates=[("nps", (park or {}).get("fullName") or (park or {}).get("name"))],
-            )
+            park = NPSGateway().find_park_containing_location(lat, lng)
+            LocationCache.set(location, "nps", park or {}, query_key=f"{lat:.5f},{lng:.5f}")
             logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
@@ -217,12 +284,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             place_data = django_cache.get(f"ul_place_details_{google_place_id}")
             if place_data:
                 LocationCache.set(location, "google_places", place_data, query_key=google_place_id)
-                update_location_name_from_external_sources(
-                    location,
-                    extra_candidates=[
-                        ("google_places", place_data.get("name") if isinstance(place_data, dict) else None),
-                    ],
-                )
                 logger.info(
                     "prefetch_location_external_data: migrated Google Places cache for location %s",
                     location_id,
@@ -233,24 +294,67 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 location_id,
             )
 
+    # Resolve the official name once, after every cache write above has landed,
+    # so the plugin name providers see all fresh candidates in a single pass
+    # (per-source refreshes let whichever source ran last win).
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
+
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def process_image_upload(self, image_id: int) -> bool:
-    """Extract image metadata after upload and update the Image row."""
+    """Extract image metadata after upload and update the Image row.
+
+    Besides EXIF GPS/capture time, this backfills two derived fields when
+    missing: the duplicate-detection ``checksum`` (rows predating that field)
+    and the shared ``location`` link - taken from the pin/wiki the photo is
+    attached to, or resolved from its GPS via ``get_nearby_or_create``.
+
+    It also snapshots the full EXIF metadata (before any re-encoding), applies
+    the storage downscale/WebP policy for the uploader, and records the stored
+    file size that counts against the uploader's storage quota.
+
+    Attribution fields (author/source_url/caption/copyright) are filled from
+    EXIF/PNG metadata when present and not already set. When none of those
+    four fields are present at all and the filename matches a common phone/
+    camera auto-naming convention (e.g. ``PXL_20260709_123456.jpg``), the
+    uploader is assumed to be the author; any other unattributed photo is
+    left blank rather than guessed at.
+    """
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.services.images import extract_gps_coords, extract_taken_at
-    from urbanlens.dashboard.services.memories.visits import maybe_create_photo_visit
+    from urbanlens.dashboard.services.images import (
+        compute_checksum,
+        downscale_stored_image,
+        extract_author,
+        extract_caption_from_metadata,
+        extract_copyright_notice,
+        extract_exif_data,
+        extract_gps_coords,
+        extract_source_url,
+        extract_taken_at,
+        is_camera_generated_filename,
+    )
+    from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
+    from urbanlens.dashboard.services.storage import get_downscale_policy
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
-    image = Image.objects.filter(pk=image_id).select_related("pin").first()
+    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
     if image is None or not image.image:
         return False
     try:
         with image.image.open("rb") as image_file:
             coords = extract_gps_coords(image_file)
             taken_at = extract_taken_at(image_file)
+            checksum = compute_checksum(image_file) if not image.checksum else None
+            exif_data = extract_exif_data(image_file) if image.exif_data is None else None
+            author = extract_author(image_file) if not image.author else None
+            copyright_notice = extract_copyright_notice(image_file) if not image.copyright else None
+            metadata_caption = extract_caption_from_metadata(image_file) if not image.caption else None
+            source_url = extract_source_url(image_file) if not image.source_url else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
@@ -265,13 +369,91 @@ def process_image_upload(self, image_id: int) -> bool:
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at
+    if checksum:
+        image.checksum = checksum
+        update_fields["checksum"] = checksum
+    if exif_data:
+        image.exif_data = exif_data
+        update_fields["exif_data"] = exif_data
+    if author:
+        image.author = author
+        update_fields["author"] = author
+    if copyright_notice:
+        image.copyright = copyright_notice
+        update_fields["copyright"] = copyright_notice
+    if metadata_caption:
+        image.caption = metadata_caption
+        update_fields["caption"] = metadata_caption
+    if source_url:
+        image.source_url = source_url
+        update_fields["source_url"] = source_url
+
+    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name):
+        uploader_name = image.profile.full_name or image.profile.username
+        if uploader_name:
+            image.author = uploader_name
+            update_fields["author"] = uploader_name
+
+    # Downscale/convert per the uploader's storage policy, then record the
+    # stored size that counts against their quota. The EXIF snapshot above is
+    # taken from the original file, so nothing is lost in the re-encode.
+    stored_size: int | None = None
+    with contextlib.suppress(OSError):
+        stored_size = image.image.size
+    if image.profile is not None:
+        max_dimension, convert_webp = get_downscale_policy(image.profile)
+        if max_dimension is not None or convert_webp:
+            try:
+                new_size = downscale_stored_image(image, max_dimension, convert_webp)
+            except (OSError, ValueError) as exc:
+                logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
+            else:
+                if new_size is not None:
+                    stored_size = new_size
+                    update_fields["image"] = image.image.name
+    if stored_size is not None and stored_size != image.file_size:
+        image.file_size = stored_size
+        update_fields["file_size"] = stored_size
+
+    if image.location_id is None:
+        location = _resolve_image_location(image, coords)
+        if location is not None:
+            image.location = location
+            update_fields["location"] = location
+
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
 
-    maybe_create_photo_visit(image)
+    maybe_suggest_photo_visit(image)
 
     update_task_progress(self, current=1, total=1, message="Image metadata processed")
     return True
+
+
+def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:
+    """Resolve the shared Location an image belongs to, if determinable.
+
+    Prefers the Location of the pin or wiki the photo is attached to; otherwise
+    falls back to matching/creating a Location at the photo's GPS coordinates.
+
+    Args:
+        image: The Image needing a location link.
+        coords: (latitude, longitude) extracted from EXIF, or None.
+
+    Returns:
+        The resolved Location, or None when nothing places the photo.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    if image.pin is not None and image.pin.location_id is not None:
+        return image.pin.location
+    if image.wiki is not None and image.wiki.location_id is not None:
+        return image.wiki.location
+    if coords:
+        lat, lng = coords
+        location, _created = Location.objects.get_nearby_or_create(lat, lng)
+        return location
+    return None
 
 
 def _run_database_backup(task=None) -> bool:
@@ -311,18 +493,15 @@ def run_scheduled_database_backup(self) -> bool:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def refresh_pin_web_search(self, pin_id: int) -> int:
-    """Refresh cached web-search results for a pin detail page."""
+    """Pre-warm the shared web-search cache for a pin's Location."""
     from urllib.parse import urlparse
 
-    from django.core.cache import cache
-
-    from urbanlens.core.cache_keys import make_cache_key
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.pin import Pin
-    from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    query = pin.get_unique_search_name(quote_name=True) if pin else None
+    query = pin.get_unique_search_name(quote_name=True) if pin and pin.location else None
     if not query:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search...")
@@ -333,9 +512,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
         except (ValueError, AttributeError):
             result["domain"] = ""
         result["date_display"] = format_search_date(result.get("date"))
-    cache_hours = SiteSettings.get_current().search_cache_hours
-    if cache_hours > 0:
-        cache.set(make_cache_key("web_search_pin", str(pin.pk)), results, cache_hours * 3600)
+    LocationCache.set(pin.location, "web_search", {"results": results}, query_key=query)
     update_task_progress(self, current=1, total=1, message="Web search refreshed")
     return len(results)
 
@@ -356,6 +533,21 @@ def send_due_checkin_reminders() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_final_checkin_warnings() -> int:
+    """Send a final "check in now" warning for every safety check-in about to escalate."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import send_final_warning
+
+    count = 0
+    for checkin in SafetyCheckin.objects.due_for_final_warning():
+        send_final_warning(checkin)
+        count += 1
+    if count:
+        logger.info("Sent %s safety check-in final warning(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
@@ -368,3 +560,91 @@ def escalate_overdue_checkins() -> int:
     if count:
         logger.info("Escalated %s overdue safety check-in(s)", count)
     return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def delete_expired_safety_checkins() -> int:
+    """Permanently delete every resolved safety check-in past its owner's auto-delete window."""
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+
+    due = SafetyCheckin.objects.due_for_auto_delete()
+    count = due.count()
+    due.delete()
+    if count:
+        logger.info("Auto-deleted %s expired safety check-in(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def prune_expired_undo_actions() -> int:
+    """Delete UndoAction rows past their retention window.
+
+    The cached payload each row points at has already expired via its own
+    TTL by this point - this just tidies up the DB-side index so the
+    settings page's history list doesn't need to filter expired rows forever.
+    """
+    from urbanlens.dashboard.models.undo import UndoAction
+
+    expired = UndoAction.objects.expired()
+    count = expired.count()
+    expired.delete()
+    if count:
+        logger.info("Pruned %s expired undo action(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_account_deletion_reminders() -> int:
+    """Send the "1 day left" reminder for every account approaching its hard delete."""
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.account_deletion import send_deletion_reminder
+
+    count = 0
+    for profile in Profile.objects.due_for_deletion_reminder():
+        send_deletion_reminder(profile)
+        count += 1
+    if count:
+        logger.info("Sent %s account deletion reminder(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def hard_delete_expired_accounts() -> int:
+    """Permanently delete every account whose 7-day deletion grace period has elapsed."""
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.account_deletion import hard_delete_profile
+
+    count = 0
+    for profile in Profile.objects.due_for_hard_delete():
+        hard_delete_profile(profile)
+        count += 1
+    if count:
+        logger.info("Hard-deleted %s expired account(s)", count)
+    return count
+
+
+# No autoretry here, deliberately: run_panel_fetch owns the failure policy
+# (suppression markers with their own TTLs), and Celery-level retries would
+# race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
+# sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
+# single-flight marker expires right after the task does.
+@shared_task(soft_time_limit=110, time_limit=130)
+def fetch_panel_source(source_key: str, pin_id: int) -> None:
+    """Fetch one external-data panel's upstream data in the background.
+
+    Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
+    finds a panel's store empty; the page polls until this task persists the
+    result (LocationCache row, Boundary geometry column, or warmed slide caches).
+
+    Args:
+        source_key: An ``external_data.panel_sources()`` key.
+        pin_id: PK of the pin whose panel data should be fetched.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.external_data import run_panel_fetch
+
+    pin = Pin.objects.select_related("location").filter(pk=pin_id).first()
+    if pin is None:
+        logger.info("fetch_panel_source: pin %s no longer exists", pin_id)
+        return
+    run_panel_fetch(source_key, pin)

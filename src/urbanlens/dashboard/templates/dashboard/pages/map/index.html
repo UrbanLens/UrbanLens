@@ -1,5 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load dashboard_tags static %}
+{% load dashboard_tags map_components static %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -41,83 +41,31 @@
                 <i class="material-symbols-outlined">search</i>
                 <span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>
             </button>
+            <button id="select-pins-button" class="map-btn-icon"
+                    data-tooltip="Select multiple pins to merge, edit, or delete" data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Select pins"
+                    onclick="toggleSelectMode()">
+                <i class="material-symbols-outlined">check_box</i>
+            </button>
+            <button id="screenshot-map-button" class="map-btn-icon"
+                    data-tooltip="Take a screenshot of the map" data-tooltip-float="true"
+                    data-tooltip-pos="below"
+                    aria-label="Take a screenshot"
+                    onclick="_openCommentMapComposer({ initialView: window.map ? { lat: window.map.getCenter().lat, lng: window.map.getCenter().lng, zoom: window.map.getZoom() } : null })">
+                <i class="material-symbols-outlined">photo_camera</i>
+            </button>
         </div>
     </div>
 
-    {# -- Layers panel (bottom-left, Google-Maps style) ------------------------ #}
-    <div class="map-layers-panel" id="map-layers-panel">
-        <button class="map-layers-toggle" id="map-layers-toggle"
-                onclick="_toggleLayersPanel()"
-                aria-label="Toggle map layers"
-                aria-expanded="false">
-            <span class="map-layer-thumb map-layers-toggle-thumb">
-                <img src="{% static 'dashboard/images/map_layers.jpg' %}" alt="" loading="lazy">
-            </span>
-            <i class="material-icons map-layers-toggle-icon">layers</i>
-            <span class="map-layers-label">Layers</span>
-        </button>
-        {# Menu flies out to the right. Tile thumbnails from Swiss Alps at z12 (good visual variety). #}
-        <div class="map-layers-menu" id="map-layers-menu" hidden aria-hidden="true">
-            <button id="street-button" class="map-layer-btn"
-                    onclick="toggleStreetView();" aria-label="Street Map">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_street.jpg' %}" alt="Street Layer" loading="lazy">
-                </span>
-                <span>Street</span>
-            </button>
-            <button id="topography-button" class="map-layer-btn"
-                    onclick="toggleTopographyView();" aria-label="Topography Map">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_topography.jpg' %}" alt="Terrain Layer" loading="lazy">
-                </span>
-                <span>Terrain</span>
-            </button>
-            <button id="satellite-button" class="map-layer-btn"
-                    onclick="toggleSatelliteView();" aria-label="Satellite Map">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_satellite.jpg' %}" alt="Satellite Imagery Layer" loading="lazy">
-                </span>
-                <span>Satellite</span>
-            </button>
-            <button id="weather-button" class="map-layer-btn"
-                    onclick="toggleWeatherView();" aria-label="Weather overlay">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_weather.jpg' %}" alt="Weather Layer" loading="lazy">
-                </span>
-                <span>Weather</span>
-            </button>
-            <button id="toggle-pins-button" class="map-layer-btn"
-                    onclick="togglePins();" aria-label="Show or hide pins">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_pins.jpg' %}" alt="Pins Layer" loading="lazy">
-                </span>
-                <span>Pins</span>
-            </button>
-            <button id="dark-mode-button" class="map-layer-btn"
-                    onclick="_toggleMapDarkMode();" aria-label="Toggle Dark Mode">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_dark.jpg' %}" alt="Dark Mode" loading="lazy">
-                </span>
-                <span>Dark</span>
-            </button>
-            <button id="boundaries-button" class="map-layer-btn"
-                    onclick="toggleBoundariesLayer();" aria-label="Toggle Geopolitical boundaries">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_borders.jpg' %}" alt="Borders Layer" loading="lazy">
-                </span>
-                <span>Borders</span>
-            </button>
-            {% if show_places_layer %}
-            <button id="places-button" class="map-layer-btn"
-                    onclick="togglePlacesLayer();" aria-label="Toggle Places layer">
-                <span class="map-layer-thumb">
-                    <img src="{% static 'dashboard/images/map_layer_places.jpg' %}" alt="Places Layer" loading="lazy">
-                </span>
-                <span>Places</span>
-            </button>
-            {% endif %}
-        </div>
-    </div>
+    {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
+    {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
+    {# window.MapLayers - the same code every other map on the site uses.       #}
+    {% if show_places_layer %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders,places" %}
+    {% else %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders" %}
+    {% endif %}
 
     {# -- Place info panel (shown when user clicks "More information" on a Places marker) #}
     {% if show_places_layer %}
@@ -130,22 +78,14 @@
     </div>
     {% endif %}
 
-    {# -- Floating address search bar ------------------------------------- #}
-    <div id="addr-search-bar" class="addr-search-bar">
-        <i class="material-icons addr-search-icon">place</i>
-        <input type="text" id="address-search-input" class="addr-search-input"
-               placeholder="Search pins, addresses, coordinates..."
-               autocomplete="off" spellcheck="false">
-        <button type="button" class="addr-search-history" id="addr-search-history"
-                aria-label="Previous searches">
-            <i class="material-symbols-outlined">arrow_upward</i>
-        </button>
-        <button type="button" class="addr-search-clear" id="addr-search-clear"
-                aria-label="Clear search">
-            <i class="material-symbols-outlined">close</i>
-        </button>
-        <div id="addr-search-suggestions" class="addr-search-suggestions" hidden></div>
-    </div>
+    {# -- Multi-select tool: floating action bar + bulk action dialogs ------- #}
+    {% include "dashboard/partials/pins/_bulk_select_toolbar.html" %}
+    {% include "dashboard/partials/pins/_bulk_delete_dialog.html" %}
+    {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
+    {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
+
+    {# -- Floating address search bar (shared component) -------------------- #}
+    {% map_search_bar prefix="addr" %}
 
     {# -- Filter panel ---------------------------------------------------- #}
     <div id="filter-panel">
@@ -320,7 +260,7 @@
                         </button>
                         {% endfor %}
                     </div>
-                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude &nbsp;·&nbsp; Drag into Include/Exclude, or drag selected chips to move/remove</div>
+                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
                 </div>
             </details>
             {% endif %}
@@ -379,7 +319,7 @@
         {# Name #}
         <div class="form-field">
             <label class="form-label">Name</label>
-            <input type="text" id="apdlg-name" class="form-input" placeholder="Location name" autocomplete="off">
+            <input type="text" id="apdlg-name" class="form-input" placeholder="Pin name" autocomplete="off">
         </div>
 
         {# Location - combined address/coordinates smart input #}
@@ -430,7 +370,7 @@
             </summary>
             <div class="apdlg-customize-body">
                 <p class="apdlg-customize-hint">
-                    Badges are usually the best way to group and style pins on your map.
+                    Badges group and style pins on your map. Go to the Organize page to customize badges.
                     Use icon and color here only when you want this pin to override what your badges would show.
                 </p>
                 <div class="form-field">
@@ -457,24 +397,14 @@
             </div>
         </details>
 
-        {# Privacy toggle #}
-        <div class="apdlg-privacy-row">
-            <label class="toggle-switch" title="Private pins are never shared or linked to the community wiki.">
-                <input type="checkbox" id="apdlg-private" value="1">
-                <span class="toggle-slider"></span>
-            </label>
-            <span class="apdlg-privacy-label">
-                <i class="material-symbols-outlined">lock</i>
-                Private pin
-                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Private pins are never linked to a community wiki." wide=True %}
-            </span>
-        </div>
-
     </div>
     <div class="apdlg-footer">
-        <button type="button" class="btn btn--danger" id="apdlg-delete" style="margin-right:auto;" onclick="_apdlgDeletePin()" hidden>
+        <button type="button" class="btn btn--danger" id="apdlg-delete" onclick="_apdlgDeletePin()" hidden>
             <i class="material-symbols-outlined">delete</i>Delete
         </button>
+        <a class="btn btn--ghost" id="apdlg-view-details" href="#" style="margin-right:auto;" title="Open this pin's details page" hidden>
+            <i class="material-symbols-outlined">open_in_new</i>View details
+        </a>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
@@ -576,6 +506,11 @@
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
     let   _contextMenuDismiss = null;   // document click handler for the active context menu
+
+    // -- Multi-select tool -------------------------------------------------------
+    let   _selectMode      = false;   // true while the select tool is active
+    const _selectedPinUuids = new Set();
+    let   _dragSelectRect   = null;   // Leaflet rectangle preview during an active drag-select gesture
 
     // -- Map -------------------------------------------------------------------
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
@@ -725,10 +660,9 @@
     });
 
     // minZoom: prevent zooming out past the point where the world-tile fills the container
-    const map = L.map('map', { maxZoom: 19, minZoom: 2, attributionControl: false }).setView(_initialCenter, _initialZoom);
-    // Dedicated pane for topo tiles so the invert filter never touches satellite or street.
-    map.createPane('topoPane');
-    map.getPane('topoPane').style.zIndex = 401;
+    // maxZoom is higher than any layer's native tile depth; layers set maxNativeZoom so their
+    // tiles upscale past that depth (Google-like) instead of the layer disappearing.
+    const map = L.map('map', { maxZoom: 21, minZoom: 2, attributionControl: false }).setView(_initialCenter, _initialZoom);
     window.map = map;
     window.pin = null;
 
@@ -1247,7 +1181,7 @@
     function _buildMarker(pin) {
         if (!pin.latitude || !pin.longitude) return null;
         const coords = [parseFloat(pin.latitude), parseFloat(pin.longitude)];
-        const marker = L.marker(coords, { draggable: true });
+        const marker = L.marker(coords, { draggable: !_selectMode });
 
         if (pin.icon && pin.icon !== 'undefined' && pin.icon !== 'null') {
             const resolvedColor = _resolvePinColor(pin);
@@ -1289,12 +1223,12 @@
             let icon = '';
             if (t.icon) {
                 if (/^https?:\/\/|^\//.test(t.icon)) {
-                    icon = `<img src="${t.icon}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
+                    icon = `<img src="${_escHtml(t.icon)}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
                 } else {
-                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${t.icon}</span>`;
+                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${_escHtml(t.icon)}</span>`;
                 }
             }
-            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${t.name}</span>`;
+            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${_escHtml(t.name)}</span>`;
         }).join('');
 
         const rating = parseInt(pin.rating) || 0;
@@ -1308,11 +1242,11 @@
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
-                <div class="popup-title">${pin.name || ''}</div>
-                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${pin.address}</div>` : ''}
-                ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
+                <div class="popup-title">${_escHtml(pin.name || '')}</div>
+                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
+                ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 <div class="popup-meta">
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Not Visited'}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(pin.last_visited || 'Not Visited')}</span>
                 </div>
                 <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
                     ${starDisplay}
@@ -1320,67 +1254,79 @@
                 </div>
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
-                    <a href="${pin.viewLocationUrl}" class="view-full-pin">View Details</a>
+                    <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
             </div>`;
         marker.bindPopup(popupContent);
 
+        // Select-mode click toggles selection instead of opening the popup. The
+        // popup already opened by the time this runs (Leaflet's own popup-click
+        // handler fires first), so close it back out immediately.
+        marker.on('click', function (e) {
+            if (!_selectMode) return;
+            marker.closePopup();
+            L.DomEvent.stop(e);
+            _togglePinSelection(pin.uuid);
+        });
+
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
-            let _dragUnlocked = false;
-            const PIN_DRAG_CONFIRM_ZOOM = 14;
 
+            // Return the marker to the cluster group, wherever it currently sits.
+            const _reclusterMarker = function () {
+                if (map.hasLayer(marker)) map.removeLayer(marker);
+                clusterGroup.addLayer(marker);
+            };
+
+            // Drag freely; the position is only committed once the user confirms on drop.
             marker.on('dragstart', function () {
-                if (map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !_dragUnlocked) {
-                    marker.dragging.disable();
-                    marker.setLatLng([_savedLat, _savedLng]);
-                    window.confirmDialog({
-                        title: 'Move pin?',
-                        message: 'At this zoom level it is easy to move a pin by accident.\n\nDrag again after confirming to reposition it.',
-                        confirmLabel: 'Enable move',
-                        danger: false,
-                    }).then(function (ok) {
-                        if (ok) {
-                            _dragUnlocked = true;
-                            marker.dragging.enable();
-                            toastr.info('Drag the pin to its new location.');
-                        }
-                    });
-                    return;
-                }
+                if (_selectMode) return;
                 clusterGroup.removeLayer(marker);
                 marker.addTo(map);
             });
             marker.on('dragend', function () {
-                _dragUnlocked = false;
                 const pos = marker.getLatLng();
-                fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                    body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
-                })
-                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-                .then(() => {
-                    _savedLat = pos.lat;
-                    _savedLng = pos.lng;
-                    if (_pinStore.has(pin.uuid)) {
-                        const cached = _pinStore.get(pin.uuid);
-                        cached.latitude = pos.lat.toFixed(6);
-                        cached.longitude = pos.lng.toFixed(6);
-                        _scheduleCache();
+                // Ignore an incidental click-drag that left the pin where it started.
+                if (pos.lat.toFixed(6) === _savedLat.toFixed(6) && pos.lng.toFixed(6) === _savedLng.toFixed(6)) {
+                    _reclusterMarker();
+                    return;
+                }
+                window.confirmDialog({
+                    title: 'Move pin here?',
+                    message: 'Save this pin at its new location?',
+                    confirmLabel: 'Move pin',
+                    danger: false,
+                }).then(function (ok) {
+                    if (!ok) {
+                        marker.setLatLng([_savedLat, _savedLng]);
+                        _reclusterMarker();
+                        return;
                     }
-                    toastr.success('Pin moved.');
-                })
-                .catch(() => {
-                    toastr.error('Failed to save new position.');
-                    marker.setLatLng([_savedLat, _savedLng]);
-                })
-                .finally(() => {
-                    if (map.hasLayer(marker)) map.removeLayer(marker);
-                    clusterGroup.addLayer(marker);
+                    fetch(`/dashboard/rest/pins/${pin.uuid}/`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                        body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
+                    })
+                    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(() => {
+                        _savedLat = pos.lat;
+                        _savedLng = pos.lng;
+                        if (_pinStore.has(pin.uuid)) {
+                            const cached = _pinStore.get(pin.uuid);
+                            cached.latitude = pos.lat.toFixed(6);
+                            cached.longitude = pos.lng.toFixed(6);
+                            _scheduleCache();
+                        }
+                        toastr.success('Pin moved.');
+                    })
+                    .catch(() => {
+                        toastr.error('Failed to save new position.');
+                        marker.setLatLng([_savedLat, _savedLng]);
+                    })
+                    .finally(_reclusterMarker);
                 });
             });
         }
@@ -1448,9 +1394,9 @@
             body: 'Topographic, satellite, and weather overlays can reveal access, terrain, and conditions.',
             button: 'Show satellite',
             target: 'satellite-button',
-            shouldShow: () => !map.hasLayer(satelliteLayer),
+            shouldShow: () => _mapLayers.baseKey() !== 'satellite',
             watchSelector: '#satellite-button',
-            action: () => { if (!map.hasLayer(satelliteLayer)) toggleSatelliteView(); },
+            action: () => { if (_mapLayers.baseKey() !== 'satellite') _mapLayers.setBase('satellite'); },
         },
     ];
 
@@ -1747,172 +1693,51 @@
         setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();
 
-    const standardLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-    });
-    const topographyLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        pane: 'topoPane',
-    });
-    // ESRI Satellite tile layer
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-    });
-    // CartoDB Dark Matter - used when map dark mode is active (street/topographic base only)
-    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 19,
-    });
-    // OpenWeatherMap tile layer
-    const rainLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
-        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
-        layer: 'precipitation_new',
-    });
-    const cloudLayer = L.tileLayer('https://tile.openweathermap.org/map/{layer}/{z}/{x}/{y}.png?appid={{openweathermap_api_key}}', {
-        attribution: 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
-        layer: 'clouds_new',
-    });
-    // Geopolitical boundaries (OpenStreetMap-based, off by default)
-    const boundariesLayer = L.tileLayer(
-        'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        {
-            attribution: 'Boundaries &copy; Esri',
-            maxZoom: 19,
-            opacity: 0.6,
-            pane: 'overlayPane',
-        }
-    );
     // Places layer group (landmarks from external APIs, including Google Places)
     const _placesLayerGroup = L.layerGroup();
     const _placesMarkerMap = new Map();  // place_id → L.Marker
     let _placesLayerActive = false;
     const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
-    // -- Dark map mode helpers -------------------------------------------------
-    function _isDarkMapActive() {
-        if (_MAP_DARK_MODE === 'dark') return true;
-        if (_MAP_DARK_MODE === 'light') return false;
-        return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-
-    // Apply invert filter to the topo pane when dark map mode is active.
-    function _applyTopoFilter() {
-        const pane = map.getPane('topoPane');
-        if (!pane) return;
-        pane.style.filter = (_isDarkMapActive() && map.hasLayer(topographyLayer))
-            ? 'invert(100%) hue-rotate(180deg) brightness(90%)'
-            : '';
-    }
-
-    // Expose effective map style on #map for SCSS (e.g. #map[data-map-style="dark"]).
-    function _syncMapStyleAttribute() {
-        map.getContainer().dataset.mapStyle = _isDarkMapActive() ? 'dark' : 'light';
-    }
-
-    // Swap between standardLayer and darkLayer without touching satellite/topo.
-    function _syncBaseLayer() {
-        const useDark = _isDarkMapActive();
-        if (useDark) {
-            if (map.hasLayer(standardLayer)) map.removeLayer(standardLayer);
-            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
-        } else {
-            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
-            if (!map.hasLayer(standardLayer)) standardLayer.addTo(map);
-        }
-        _applyTopoFilter();
-        _syncMapStyleAttribute();
-    }
-
-    // Re-apply topo filter when the topo layer is toggled.
-    map.on('layeradd layerremove', function(e) {
-        if (e.layer === topographyLayer) _applyTopoFilter();
+    // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
+    // Tile layers, the layers flyout panel, dark map mode, "remember"
+    // persistence, tile-loading feedback, and footer attribution all live in
+    // window.MapLayers - the exact same code every other map on the site runs.
+    // This page only contributes its own custom toggles (pins, places).
+    const _mapLayers = window.MapLayers.create(map, {
+        root: document.getElementById('map-layers-panel'),
+        apiKey: '{{ openweathermap_api_key }}',
+        darkMode: _MAP_DARK_MODE,
+        defaultBase: _DEFAULT_MAP_VIEW,
+        storageKey: _LAYER_CACHE_KEY,
+        loadingTarget: document.getElementById('map'),
+        // Footer attribution replaces Leaflet's on-map control (see {% templatetag openblock %} block footer {% templatetag closeblock %}).
+        onAttribution: function (text) {
+            const el = document.getElementById('map-footer-attribution-text');
+            if (el) el.textContent = text;
+        },
+        // Persist dark mode to the server so the preference survives page refresh.
+        onDarkModeChange: function (mode) {
+            _MAP_DARK_MODE = mode;
+            const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+            fetch('{% url "settings.save_map_dark_mode" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `mode=${encodeURIComponent(mode)}`,
+            }).catch(() => {});
+        },
+        custom: {
+            // The pins button highlights when pins are HIDDEN (activeWhenOff).
+            pins:   { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
+            places: { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
+        },
     });
-
-    // In system mode, re-sync whenever the OS preference changes.
-    if (_MAP_DARK_MODE === 'system') {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', _syncBaseLayer);
-    }
-
-    // -- Footer attribution (replaces Leaflet's on-map control) ----------------
-    function _updateFooterAttribution() {
-        const el = document.getElementById('map-footer-attribution-text');
-        if (!el) return;
-        const parts = [];
-        if (map.hasLayer(satelliteLayer)) {
-            parts.push('© Esri');
-        } else if (map.hasLayer(topographyLayer)) {
-            parts.push('© OpenTopoMap');
-        } else if (map.hasLayer(darkLayer)) {
-            parts.push('© OSM · CARTO');
-        } else {
-            parts.push('© OpenStreetMap');
-        }
-        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            parts.push('© OpenWeatherMap');
-        }
-        if (map.hasLayer(boundariesLayer) && !map.hasLayer(satelliteLayer)) {
-            parts.push('© Esri');
-        }
-        parts.push('Leaflet');
-        el.textContent = parts.join(' · ');
-    }
-
-    map.on('layeradd layerremove', _updateFooterAttribution);
 
     // Dev toolbar: apply map dark mode without a full page reload.
     window.applyMapDarkMode = function (mode) {
         _MAP_DARK_MODE = mode;
-        _syncBaseLayer();
+        _mapLayers.setDarkMode(mode);
     };
-
-    // -- Apply initial base layer from user preference -------------------------
-    // standardLayer / darkLayer is the bottom-most base; satellite/topo sit on top.
-    _syncBaseLayer();
-    (function _applyInitialLayers() {
-        let baseView = _DEFAULT_MAP_VIEW;
-        let weatherOn = false;
-
-        if (baseView === 'remember') {
-            try {
-                const saved = JSON.parse(localStorage.getItem(_LAYER_CACHE_KEY) || 'null');
-                if (saved) { baseView = saved.base || 'street'; weatherOn = !!saved.weather; }
-                else { baseView = 'street'; }
-            } catch (_) { baseView = 'street'; }
-        }
-
-        if (baseView === 'satellite') {
-            satelliteLayer.addTo(map);
-        } else if (baseView === 'topographic') {
-            topographyLayer.addTo(map);
-        }
-
-        if (weatherOn) {
-            rainLayer.addTo(map);
-            cloudLayer.addTo(map);
-            document.querySelector('#weather-button')?.classList.add('active');
-        }
-
-        _syncBaseViewButtons();
-    }());
-
-    // -- Tile loading visual feedback ------------------------------------------
-    // Grey-dim the tile pane while map tiles are downloading; restore when done.
-    // Each layer tracks its own loading state via a counter so that swapping
-    // layers doesn't leave the map permanently dimmed.
-    let _tileLoadingCount = 0;
-    function _onTileLayerLoading() {
-        _tileLoadingCount++;
-        document.getElementById('map').classList.add('tiles-loading');
-    }
-    function _onTileLayerLoad() {
-        _tileLoadingCount = Math.max(0, _tileLoadingCount - 1);
-        if (_tileLoadingCount === 0) document.getElementById('map').classList.remove('tiles-loading');
-    }
-    [standardLayer, topographyLayer, satelliteLayer, darkLayer].forEach(layer => {
-        layer.on('loading', _onTileLayerLoading);
-        layer.on('load',    _onTileLayerLoad);
-        layer.on('error',   _onTileLayerLoad);
-    });
 
     map.on('popupopen', function() {
         // -- Rating stars -------------------------------------------------------
@@ -2262,6 +2087,9 @@
         });
     }());
 
+    // Pins visibility is page-specific state (the cluster layer), registered
+    // with the shared layers engine as the "pins" custom toggle - the engine
+    // owns the button state, this owns the layer.
     function togglePins() {
         if (pinsVisible) {
             map.removeLayer(pinsLayerGroup);
@@ -2269,88 +2097,7 @@
             pinsLayerGroup.addTo(map);
         }
         pinsVisible = !pinsVisible;
-        const pinBtn = document.querySelector('#toggle-pins-button');
-        if (pinBtn) pinBtn.classList.toggle('active', !pinsVisible);
         updatePinCounter();
-    }
-
-    function toggleMapView( layer ) {
-        // Check if this layer is already present
-        if (map.hasLayer(layer)) {
-            // Turn it off, and the standard layer back on
-            map.removeLayer(layer);
-            return;
-        }
-
-        // Add the selected layer
-        layer.addTo(map);
-    }
-
-    // Persist active layers to localStorage when the user has chosen "Remember".
-    function _saveLayerState() {
-        if (_DEFAULT_MAP_VIEW !== 'remember') return;
-        try {
-            const base = map.hasLayer(satelliteLayer) ? 'satellite'
-                       : map.hasLayer(topographyLayer) ? 'topographic'
-                       : 'street';
-            const weather = map.hasLayer(rainLayer) || map.hasLayer(cloudLayer);
-            localStorage.setItem(_LAYER_CACHE_KEY, JSON.stringify({ base, weather }));
-        } catch (_) {}
-    }
-
-    function _syncBaseViewButtons() {
-        const streetActive = !map.hasLayer(satelliteLayer) && !map.hasLayer(topographyLayer);
-        document.querySelector('#street-button')?.classList.toggle('active', streetActive);
-        document.querySelector('#topography-button')?.classList.toggle('active', map.hasLayer(topographyLayer));
-        document.querySelector('#satellite-button')?.classList.toggle('active', map.hasLayer(satelliteLayer));
-    }
-
-    function toggleStreetView() {
-        if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
-        if (map.hasLayer(topographyLayer)) map.removeLayer(topographyLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleTopographyView() {
-        // Satellite and topography are mutually exclusive
-        if (map.hasLayer(satelliteLayer)) {
-            map.removeLayer(satelliteLayer);
-        }
-        toggleMapView(topographyLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleSatelliteView() {
-        // Satellite and topography are mutually exclusive
-        if (map.hasLayer(topographyLayer)) {
-            map.removeLayer(topographyLayer);
-        }
-        toggleMapView(satelliteLayer);
-        _syncBaseViewButtons();
-        _saveLayerState();
-    }
-
-    function toggleWeatherView() {
-        if (map.hasLayer(rainLayer) || map.hasLayer(cloudLayer)) {
-            map.removeLayer(rainLayer);
-            map.removeLayer(cloudLayer);
-        } else {
-            rainLayer.addTo(map);
-            cloudLayer.addTo(map);
-        }
-        document.querySelector('#weather-button').classList.toggle('active', map.hasLayer(rainLayer));
-        _saveLayerState();
-    }
-
-    function toggleBoundariesLayer() {
-        if (map.hasLayer(boundariesLayer)) {
-            map.removeLayer(boundariesLayer);
-        } else {
-            boundariesLayer.addTo(map);
-        }
-        document.querySelector('#boundaries-button')?.classList.toggle('active', map.hasLayer(boundariesLayer));
     }
 
     // -- Places layer (VIP only) -----------------------------------------------
@@ -2615,85 +2362,6 @@
         if (_placesLayerActive) _schedulePlacesFetch();
     });
 
-    const _LAYERS_PANEL_MS = 220;
-    let _layersPanelCloseTimer = null;
-
-    function _isLayersPanelOpen() {
-        return document.getElementById('map-layers-panel')?.classList.contains('is-open') ?? false;
-    }
-
-    function _closeLayersPanel() {
-        const panel = document.getElementById('map-layers-panel');
-        const menu = document.getElementById('map-layers-menu');
-        const toggle = document.getElementById('map-layers-toggle');
-        if (!panel?.classList.contains('is-open')) return;
-
-        panel.classList.remove('is-open');
-        if (toggle) {
-            toggle.classList.remove('active');
-            toggle.setAttribute('aria-expanded', 'false');
-        }
-        if (menu) {
-            menu.setAttribute('aria-hidden', 'true');
-            let closed = false;
-            const finishClose = (e) => {
-                if (e && e.target !== menu) return;
-                if (closed || panel.classList.contains('is-open')) return;
-                closed = true;
-                if (_layersPanelCloseTimer) {
-                    window.clearTimeout(_layersPanelCloseTimer);
-                    _layersPanelCloseTimer = null;
-                }
-                menu.hidden = true;
-                menu.removeEventListener('transitionend', finishClose);
-            };
-            menu.addEventListener('transitionend', finishClose);
-            _layersPanelCloseTimer = window.setTimeout(finishClose, _LAYERS_PANEL_MS + 40);
-        }
-    }
-
-    function _openLayersPanel() {
-        const panel = document.getElementById('map-layers-panel');
-        const menu = document.getElementById('map-layers-menu');
-        const toggle = document.getElementById('map-layers-toggle');
-        if (_layersPanelCloseTimer) {
-            window.clearTimeout(_layersPanelCloseTimer);
-            _layersPanelCloseTimer = null;
-        }
-        if (menu) {
-            menu.hidden = false;
-            menu.setAttribute('aria-hidden', 'false');
-        }
-        if (menu) void menu.offsetWidth;
-        if (panel) panel.classList.add('is-open');
-        if (toggle) {
-            toggle.classList.add('active');
-            toggle.setAttribute('aria-expanded', 'true');
-        }
-    }
-
-    // -- Map dark mode toggle --------------------------------------------------
-    function _toggleMapDarkMode() {
-        const currentMode = _MAP_DARK_MODE;
-        const newMode = (currentMode === 'dark') ? 'light' : 'dark';
-        _MAP_DARK_MODE = newMode;
-        _syncBaseLayer();
-        const btn = document.getElementById('dark-mode-button');
-        if (btn) btn.classList.toggle('active', newMode === 'dark');
-        // Persist to server so the preference survives page refresh
-        const csrf = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-        fetch('{% url "settings.save_map_dark_mode" %}', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `mode=${encodeURIComponent(newMode)}`,
-        }).catch(() => {});
-    }
-    // Sync initial state of dark-mode button
-    (function _initDarkModeBtn() {
-        const btn = document.getElementById('dark-mode-button');
-        if (btn) btn.classList.toggle('active', _isDarkMapActive());
-    }());
-
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
         iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -2746,20 +2414,352 @@
         await _deletePinByUuid(pinUuid, pinName);
     }
 
+    // ============================================================
+    // Multi-select tool: select, merge, delete (+undo), bulk edit
+    // ============================================================
+
+    function toggleSelectMode() {
+        if (_selectMode) { exitSelectMode(); } else { enterSelectMode(); }
+    }
+
+    function enterSelectMode() {
+        if (_selectMode) return;
+        _selectMode = true;
+        document.getElementById('select-pins-button')?.classList.add('active');
+        document.getElementById('map')?.classList.add('select-mode');
+        map.dragging.disable();
+        _addPinClickMode = false;
+        _markerMap.forEach(function (m) { if (m.dragging) m.dragging.disable(); });
+        document.getElementById('bulk-select-toolbar').hidden = false;
+        _renderBulkSelectToolbar();
+    }
+
+    function exitSelectMode() {
+        if (!_selectMode) return;
+        _selectMode = false;
+        document.getElementById('select-pins-button')?.classList.remove('active');
+        document.getElementById('map')?.classList.remove('select-mode');
+        map.dragging.enable();
+        _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
+        _clearSelection();
+        document.getElementById('bulk-select-toolbar').hidden = true;
+    }
+
+    function _togglePinSelection(uuid) {
+        if (_selectedPinUuids.has(uuid)) { _selectedPinUuids.delete(uuid); } else { _selectedPinUuids.add(uuid); }
+        const marker = _markerMap.get(uuid);
+        marker?.getElement()?.classList.toggle('is-selected', _selectedPinUuids.has(uuid));
+        _renderBulkSelectToolbar();
+    }
+
+    function _clearSelection() {
+        _selectedPinUuids.forEach(function (uuid) { _markerMap.get(uuid)?.getElement()?.classList.remove('is-selected'); });
+        _selectedPinUuids.clear();
+        _renderBulkSelectToolbar();
+    }
+
+    function _renderBulkSelectToolbar() {
+        const n = _selectedPinUuids.size;
+        const countEl = document.getElementById('bulk-select-count');
+        if (countEl) countEl.textContent = n === 1 ? '1 selected' : `${n} selected`;
+        const mergeBtn = document.getElementById('bulk-select-merge-btn');
+        const editBtn = document.getElementById('bulk-select-edit-btn');
+        const delBtn = document.getElementById('bulk-select-delete-btn');
+        if (mergeBtn) mergeBtn.disabled = n < 2;
+        if (editBtn) editBtn.disabled = n < 1;
+        if (delBtn) delBtn.disabled = n < 1;
+    }
+
+    function _selectedPinName(uuid) {
+        const pin = _pinStore.get(uuid);
+        return (pin && (pin.name || pin.address)) || 'Untitled pin';
+    }
+
+    // -- Rectangle drag-select: mousedown-move-up on the map container while
+    // select mode is active. A 6px move threshold keeps a plain click on empty
+    // map space from being treated as a (zero-size) drag-select. -------------
+    (function _initSelectDragRectangle() {
+        map.getContainer().addEventListener('mousedown', function (e) {
+            if (!_selectMode || e.button !== 0) return;
+            const startLL = map.mouseEventToLatLng(e);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            let dragging = false;
+
+            function onMove(ev) {
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+                dragging = true;
+                if (_dragSelectRect) map.removeLayer(_dragSelectRect);
+                _dragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+                    color: '#1E88E5', weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false,
+                }).addTo(map);
+            }
+            function onUp(ev) {
+                document.removeEventListener('mousemove', onMove);
+                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                if (!dragging) return;
+                const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+                _markerMap.forEach(function (marker, uuid) {
+                    if (!_selectedPinUuids.has(uuid) && bounds.contains(marker.getLatLng())) _togglePinSelection(uuid);
+                });
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+        });
+    }());
+
+    // -- Bulk delete + undo -------------------------------------------------
+    function openBulkDeleteDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        const n = uuids.length;
+        document.getElementById('bulk-delete-warning').textContent =
+            `Delete ${n} pin${n === 1 ? '' : 's'}? This also removes ${n === 1 ? 'its' : 'their'} reviews, visit history, notes, and map annotations - those are not recoverable by Undo.`;
+        document.getElementById('bulk-delete-pin-list').innerHTML = uuids.map(function (uuid) {
+            return `<li>${_escHtml(_selectedPinName(uuid))}</li>`;
+        }).join('');
+        const phrase = `delete ${n} pin${n === 1 ? '' : 's'}`;
+        document.getElementById('bulk-delete-confirm-label').textContent = `Type "${phrase}" to confirm`;
+        const input = document.getElementById('bulk-delete-confirm-input');
+        input.value = '';
+        const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
+        confirmBtn.disabled = true;
+        input.oninput = function () { confirmBtn.disabled = input.value !== phrase; };
+        confirmBtn.onclick = function () { _submitBulkDelete(uuids); };
+        document.getElementById('bulk-delete-dialog').showModal();
+    }
+
+    function _submitBulkDelete(uuids) {
+        const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
+        confirmBtn.disabled = true;
+        fetch('{% url "pin.bulk_delete" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ uuids: uuids }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (data) {
+            document.getElementById('bulk-delete-dialog').close();
+            uuids.forEach(function (uuid) {
+                if (_markerMap.has(uuid)) { clusterGroup.removeLayer(_markerMap.get(uuid)); _markerMap.delete(uuid); }
+                _pinStore.delete(uuid);
+            });
+            _totalPins = _pinStore.size;
+            exitSelectMode();
+            _showUndoDeleteToast(data.count, data.undo_token);
+        })
+        .catch(function () { toastr.error('Failed to delete pins.'); confirmBtn.disabled = false; });
+    }
+
+    function _showUndoDeleteToast(count, token) {
+        const msg = `${count} pin${count === 1 ? '' : 's'} deleted. `
+            + `<button type="button" class="toast-undo-btn" onclick="_undoBulkDelete('${token}', this)">Undo</button>`;
+        toastr.success(msg, '', { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
+    }
+
+    function _undoBulkDelete(token, btn) {
+        if (btn) btn.disabled = true;
+        fetch('{% url "pin.bulk_undo" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ token: token }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            toastr.clear();
+            toastr.success('Pins restored.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Could not undo - the delete may have expired.'); });
+    }
+
+    // -- Merge ----------------------------------------------------------------
+    let _bulkMergeTargetUuid = null;
+
+    function _pinCardIconHtml(pin) {
+        if (!pin || !pin.icon) return '<i class="material-icons tag-icon-empty">place</i>';
+        if (/^[a-z_]+$/.test(pin.icon)) return `<i class="material-icons">${_escHtml(pin.icon)}</i>`;
+        if (/^(https?:\/\/|\/)/.test(pin.icon)) return `<img src="${_escHtml(pin.icon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;
+        return `<span class="tag-icon-emoji">${_escHtml(pin.icon)}</span>`;
+    }
+
+    function _pinMiniCardHtml(uuid, isTarget) {
+        const pin = _pinStore.get(uuid) || {};
+        const style = pin.color ? `color:${pin.color}` : '';
+        const swapBtn = isTarget ? '' : `<button type="button" class="cat-merge-swap-btn" data-swap-uuid="${uuid}" title="Make this the top-level pin"><i class="material-symbols-outlined">swap_vert</i></button>`;
+        return `<div class="cat-merge-mini-card${isTarget ? ' cat-merge-mini-card--target' : ''}" data-merge-uuid="${uuid}">`
+            + `<div class="tag-card-icon cat-merge-mini-icon" style="${style}">${_pinCardIconHtml(pin)}</div>`
+            + `<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">${_escHtml(_selectedPinName(uuid))}</div></div>`
+            + swapBtn + `</div>`;
+    }
+
+    function _renderBulkMergeDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!_bulkMergeTargetUuid || !_selectedPinUuids.has(_bulkMergeTargetUuid)) _bulkMergeTargetUuid = uuids[0];
+        const sources = uuids.filter(function (u) { return u !== _bulkMergeTargetUuid; });
+        document.getElementById('bulk-merge-dialog-title').textContent = `Merge ${uuids.length} pins`;
+        document.getElementById('bulk-merge-target-card').innerHTML = _pinMiniCardHtml(_bulkMergeTargetUuid, true);
+        document.getElementById('bulk-merge-sources-list').innerHTML = sources.map(function (u) { return _pinMiniCardHtml(u, false); }).join('');
+        const confirmBtn = document.getElementById('bulk-merge-confirm-btn');
+        confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${_escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
+        confirmBtn.disabled = false;
+    }
+
+    function openBulkMergeDialog() {
+        if (_selectedPinUuids.size < 2) return;
+        _bulkMergeTargetUuid = null;
+        _renderBulkMergeDialog();
+        document.getElementById('bulk-merge-dialog').showModal();
+    }
+
+    document.getElementById('bulk-merge-sources-list').addEventListener('click', function (e) {
+        const btn = e.target.closest('.cat-merge-swap-btn');
+        if (!btn) return;
+        _bulkMergeTargetUuid = btn.dataset.swapUuid;
+        _renderBulkMergeDialog();
+    });
+
+    document.getElementById('bulk-merge-confirm-btn').addEventListener('click', function () {
+        const uuids = Array.from(_selectedPinUuids);
+        const sources = uuids.filter(function (u) { return u !== _bulkMergeTargetUuid; });
+        const btn = this;
+        const saved = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
+        fetch('{% url "pin.bulk_merge" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify({ target_uuid: _bulkMergeTargetUuid, source_uuids: sources }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            document.getElementById('bulk-merge-dialog').close();
+            exitSelectMode();
+            toastr.success('Pins merged.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
+    });
+
+    // -- Bulk edit: description replace + badge add/remove --------------------
+    function _makeBadgeChipPicker(chipsElId, searchElId, suggElId) {
+        const chipsEl = document.getElementById(chipsElId);
+        const searchEl = document.getElementById(searchElId);
+        const suggEl = document.getElementById(suggElId);
+        let candidates = [];
+        let selected = [];
+
+        function renderChips() {
+            chipsEl.innerHTML = '';
+            selected.forEach(function (b) {
+                const chip = document.createElement('span');
+                chip.className = 'apdlg-badge-chip-item';
+                chip.dataset.id = b.id;
+                const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${_escHtml(b.icon)}</span>` : '';
+                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
+                chip.querySelector('.apdlg-chip-remove').addEventListener('click', function () {
+                    selected = selected.filter(function (s) { return s.id !== b.id; });
+                    renderChips();
+                });
+                chipsEl.appendChild(chip);
+            });
+        }
+
+        function renderSuggestions(query) {
+            const q = (query || '').toLowerCase().trim();
+            const selectedIds = new Set(selected.map(function (b) { return b.id; }));
+            const matches = candidates.filter(function (b) {
+                return !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q));
+            }).slice(0, 12);
+            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
+            suggEl.innerHTML = '';
+            matches.forEach(function (b) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'apdlg-badge-sugg-item';
+                const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${_escHtml(b.icon)}</span>` : '';
+                item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>`;
+                item.addEventListener('click', function () {
+                    selected.push(b);
+                    renderChips();
+                    searchEl.value = '';
+                    suggEl.hidden = true;
+                    searchEl.focus();
+                });
+                suggEl.appendChild(item);
+            });
+            suggEl.hidden = false;
+        }
+
+        searchEl.addEventListener('input', function () { renderSuggestions(searchEl.value); });
+        searchEl.addEventListener('focus', function () { renderSuggestions(searchEl.value); });
+        searchEl.addEventListener('blur', function () { setTimeout(function () { suggEl.hidden = true; }, 150); });
+
+        return {
+            setCandidates: function (list) { candidates = list || []; },
+            reset: function () { selected = []; renderChips(); searchEl.value = ''; suggEl.hidden = true; },
+            getSelectedIds: function () { return selected.map(function (b) { return b.id; }); },
+        };
+    }
+
+    const _bulkEditAddPicker = _makeBadgeChipPicker('bulk-edit-add-badge-chips', 'bulk-edit-add-badge-search', 'bulk-edit-add-badge-suggestions');
+    const _bulkEditRemovePicker = _makeBadgeChipPicker('bulk-edit-remove-badge-chips', 'bulk-edit-remove-badge-search', 'bulk-edit-remove-badge-suggestions');
+
+    function openBulkEditDialog() {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        document.getElementById('bulk-edit-dialog-title').textContent = `Edit ${uuids.length} pins`;
+        document.getElementById('bulk-edit-description-value').value = '';
+        document.getElementById('bulk-edit-description-nochange').checked = true;
+        _bulkEditAddPicker.reset();
+        _bulkEditAddPicker.setCandidates(_apdlgAllBadges);
+        _bulkEditRemovePicker.reset();
+        _bulkEditRemovePicker.setCandidates([]);
+        const removeHint = document.getElementById('bulk-edit-remove-badge-hint');
+        removeHint.textContent = 'Loading...';
+        fetch('{% url "pin.bulk_edit.badge_options" %}?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
+            .then(function (r) { return r.ok ? r.json() : { badges: [] }; })
+            .then(function (data) {
+                _bulkEditRemovePicker.setCandidates(data.badges || []);
+                removeHint.textContent = 'Only badges present on at least one selected pin are offered here.';
+            })
+            .catch(function () { removeHint.textContent = 'Only badges present on at least one selected pin are offered here.'; });
+        document.getElementById('bulk-edit-dialog').showModal();
+    }
+
+    document.getElementById('bulk-edit-confirm-btn').addEventListener('click', function () {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        const btn = this;
+        const saved = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="cat-merge-spinner"></span> Saving...';
+        const payload = { uuids: uuids };
+        if (!document.getElementById('bulk-edit-description-nochange').checked) {
+            payload.description = document.getElementById('bulk-edit-description-value').value;
+        }
+        payload.add_badge_ids = _bulkEditAddPicker.getSelectedIds();
+        payload.remove_badge_ids = _bulkEditRemovePicker.getSelectedIds();
+        fetch('{% url "pin.bulk_edit" %}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+            body: JSON.stringify(payload),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function () {
+            document.getElementById('bulk-edit-dialog').close();
+            toastr.success('Pins updated.');
+            _refreshAllPins();
+        })
+        .catch(function () { toastr.error('Update failed.'); })
+        .finally(function () { btn.disabled = false; btn.innerHTML = saved; });
+    });
+
     document.getElementById('toggle-map-buttons').addEventListener('click', function() {
         const panel = document.getElementById('map-buttons');
         const collapsed = panel.classList.toggle('collapsed');
         this.querySelector('i').textContent = collapsed ? 'chevron_left' : 'chevron_right';
         this.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
-    });
-
-    // -- Layers panel toggle ---------------------------------------------------
-    function _toggleLayersPanel() {
-        if (_isLayersPanelOpen()) { _closeLayersPanel(); } else { _openLayersPanel(); }
-    }
-    document.addEventListener('click', function (e) {
-        const panel = document.getElementById('map-layers-panel');
-        if (panel && !panel.contains(e.target)) { _closeLayersPanel(); }
     });
 
     // -- Keyboard shortcuts (only when map is visible, not in input fields) ------
@@ -2791,21 +2791,24 @@
                 break;
             }
             case 'j':                                                // J - Jump to location
-                document.getElementById('address-search-input')?.focus();
+                document.getElementById('addr-search-input')?.focus();
                 break;
-            case 'p': togglePins(); break;                           // P - Toggle pins
-            case 'l': _toggleLayersPanel(); break;                   // L - Layers
-            case 's': toggleSatelliteView(); break;                  // S - Satellite view
-            case 't': toggleTopographyView(); break;                 // T - Topography view
-            case 'w': toggleWeatherView(); break;                    // W - Weather view
-            case 'd': toggleDarkMode(); break;                       // D - Dark mode
+            case 'p': _mapLayers.toggleCustom('pins'); break;        // P - Toggle pins
+            case 'b': _mapLayers.toggleBorders(); break;             // B - Toggle borders
+            case 'l': _mapLayers.togglePanel(); break;               // L - Layers
+            case 's': _mapLayers.toggleBase('satellite'); break;     // S - Satellite view
+            case 't': _mapLayers.toggleBase('topographic'); break;   // T - Topography view
+            case 'w': _mapLayers.toggleWeather(); break;             // W - Weather view
+            case 'd': _mapLayers.toggleDark(); break;                // D - Dark mode
             case 'escape':
-                if (document.getElementById('filter-panel')?.classList.contains('open')) {
+                if (_selectMode) {
+                    exitSelectMode();
+                } else if (document.getElementById('filter-panel')?.classList.contains('open')) {
                     toggleFilterPanel();
                 } else if (document.getElementById('pin-list-panel')?.classList.contains('open')) {
                     _togglePinListPanel();
-                } else if (_isLayersPanelOpen()) {
-                    _closeLayersPanel();
+                } else if (_mapLayers.isPanelOpen()) {
+                    _mapLayers.closePanel();
                 }
                 break;
         }
@@ -3145,10 +3148,10 @@
 
     // -- Floating address search bar --------------------------------------
     // Uses the shared window.LocationSearchEngine (see
-    // partials/layout/_location_search_engine.html); this page supplies the
-    // map-specific callbacks (panning, temp markers, opening pin popups) and
-    // keeps the pin-recently-viewed tracking, which is specific to this page's
-    // marker/popup model.
+    // ts/shared/location-search-engine.ts) bound to the {% templatetag openblock %} map_search_bar {% templatetag closeblock %}
+    // component; this page supplies the map-specific callbacks (panning, temp
+    // markers, opening pin popups) and keeps the pin-recently-viewed tracking,
+    // which is specific to this page's marker/popup model.
     const _homeLat  = _SERVER_CENTER_LAT !== null ? _SERVER_CENTER_LAT : _GPS_FALLBACK_LAT;
     const _homeLng  = _SERVER_CENTER_LNG !== null ? _SERVER_CENTER_LNG : _GPS_FALLBACK_LNG;
     const _searchHome = (_homeLat !== null && _homeLng !== null && _MAP_CENTER_MODE !== 'gps')
@@ -3224,12 +3227,7 @@
         }
     }
 
-    const _addrSearch = window.LocationSearchEngine.create({
-        input: document.getElementById('address-search-input'),
-        suggestions: document.getElementById('addr-search-suggestions'),
-        bar: document.getElementById('addr-search-bar'),
-        clearBtn: document.getElementById('addr-search-clear'),
-        historyBtn: document.getElementById('addr-search-history'),
+    const _addrSearch = window.LocationSearchEngine.attach('addr', {
         historyKey: 'ul_addr_history_v1',
         recentPinsKey: 'ul_recent_pins_v1',
         sources: {
@@ -4076,10 +4074,6 @@
         const badgeSugg = document.getElementById('apdlg-badge-suggestions');
         if (badgeSugg) badgeSugg.hidden = true;
 
-        // Reset privacy
-        const privCb = document.getElementById('apdlg-private');
-        if (privCb) privCb.checked = false;
-
         const customize = document.getElementById('apdlg-customize');
         if (customize) customize.open = false;
 
@@ -4089,6 +4083,9 @@
 
         const deleteBtn = document.getElementById('apdlg-delete');
         if (deleteBtn) deleteBtn.hidden = true;
+
+        const detailsLink = document.getElementById('apdlg-view-details');
+        if (detailsLink) { detailsLink.hidden = true; detailsLink.href = '#'; }
     }
 
     async function _apdlgDeletePin() {
@@ -4198,6 +4195,12 @@
 
         const deleteBtn = document.getElementById('apdlg-delete');
         if (deleteBtn) deleteBtn.hidden = false;
+
+        const detailsLink = document.getElementById('apdlg-view-details');
+        if (detailsLink && pin.viewLocationUrl) {
+            detailsLink.href = pin.viewLocationUrl;
+            detailsLink.hidden = false;
+        }
 
         document.getElementById('add-pin-dialog').showModal();
     }
@@ -4473,7 +4476,16 @@
             if (e.key === 'Escape') { box.hidden = true; }
             if (e.key === 'Enter') {
                 const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
-                if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); }
+                if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); return; }
+                // No item focused: mirror Tab and select the top real suggestion.
+                if (items.length) {
+                    e.preventDefault();
+                    const q = this.value.trim();
+                    const topMatch = _apdlgAllBadges.find(b =>
+                        !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                    );
+                    if (topMatch) _apdlgSelectBadge(topMatch);
+                }
             }
         });
     }
@@ -4546,8 +4558,6 @@
             _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
             // Send badge_ids key even when empty so the server knows to clear badges
             if (!_apdlgSelectedBadges.length) formData.append('badge_ids', '');
-            const privCb = document.getElementById('apdlg-private');
-            if (privCb && privCb.checked) formData.append('is_private', '1');
 
             const uuid = _editPinUuid;
             this.disabled = true;
@@ -4593,10 +4603,6 @@
 
             // Badges (unified tags/categories/statuses)
             _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
-
-            // Privacy
-            const privCb = document.getElementById('apdlg-private');
-            if (privCb && privCb.checked) formData.append('is_private', '1');
 
             // Pass Google Place ID and canonical name when adding from a Places marker.
             // The canonical name lets the server skip a geocoding API call.
@@ -4658,17 +4664,18 @@
 
         list.innerHTML = '';
         locations.forEach(function (loc) {
+            var displayName = loc.display_name || loc.name || 'Unnamed';
             var item = document.createElement('div');
             item.className = 'loc-conflict-option' + (loc.is_current ? ' loc-conflict-option--current' : '');
             item.innerHTML =
                 '<div class="loc-conflict-option-name">' +
-                    (loc.name || 'Unnamed').replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+                    displayName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
                     (loc.is_current ? ' <span class="loc-conflict-badge">Current</span>' : '') +
                 '</div>' +
                 '<div class="loc-conflict-option-actions">' +
                     '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
                     (!loc.is_current
-                        ? '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + (loc.name || '').replace(/"/g, '&quot;') + '">Use this</button>'
+                        ? '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + displayName.replace(/"/g, '&quot;') + '">Use this</button>'
                         : '') +
                 '</div>';
             list.appendChild(item);

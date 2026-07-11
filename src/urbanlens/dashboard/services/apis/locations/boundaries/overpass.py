@@ -189,15 +189,52 @@ class OverpassGateway(Gateway, BoundaryProvider):
 {out_clause}
 """.strip()
 
-    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+    @staticmethod
+    def _is_building_element(element: dict) -> bool:
+        """True when an OSM element's tags describe a building footprint.
+
+        Anything else (landuse, amenity perimeter, leisure grounds, industrial
+        sites...) is treated as a property boundary - ambiguity resolves to
+        property.
+        """
+        tags = element.get("tags")
+        if not isinstance(tags, dict):
+            return False
+        return bool(tags.get("building") or tags.get("building:part"))
+
+    def _containing_polygons_by_kind(self, latitude: float, longitude: float) -> dict[str, list[Polygon]]:
+        """Collect polygons containing the point, split into building/property kinds."""
         point = Point(float(longitude), float(latitude), srid=4326)
-        candidates: list[Polygon] = []
+        candidates: dict[str, list[Polygon]] = {"building": [], "property": []}
         for element in self.nearby_boundary_candidates(latitude, longitude, self.radius_meters):
             polygon = _polygon_from_element(element)
             if polygon is None or not _is_reasonable_default(polygon):
                 continue
             if polygon.contains(point) or polygon.touches(point):
-                candidates.append(polygon)
-        if not candidates:
-            return None
-        return min(candidates, key=lambda polygon: polygon.area)
+                kind = "building" if self._is_building_element(element) else "property"
+                candidates[kind].append(polygon)
+        return candidates
+
+    def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
+        """Return the smallest containing building footprint and property perimeter.
+
+        One Overpass query yields both kinds: elements tagged ``building`` (or
+        ``building:part``) become the building boundary; every other matching
+        feature (landuse, amenity, leisure, industrial...) competes for the
+        property boundary.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Unused; Overpass matches spatially.
+
+        Returns:
+            Mapping with "building" and "property" keys (values may be None).
+        """
+        candidates = self._containing_polygons_by_kind(latitude, longitude)
+        return {kind: (min(polygons, key=lambda polygon: polygon.area) if polygons else None) for kind, polygons in candidates.items()}
+
+    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        """Smallest containing polygon of any kind (property preferred, else building)."""
+        typed = self.get_typed_boundaries(latitude, longitude, name=name)
+        return typed.get("property") or typed.get("building")

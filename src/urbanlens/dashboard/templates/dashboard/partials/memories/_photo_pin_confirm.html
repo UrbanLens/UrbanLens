@@ -1,0 +1,60 @@
+{% comment %}
+Body of the "confirm where this pin goes" dialog, loaded into #photo-pin-confirm-body.
+
+Lets the user see and drag the marker for a pin about to be created from a
+geotagged photo, search for a different place or one of their own pins (the
+shared {% templatetag openblock %} map_search_bar {% templatetag closeblock %} + window.LocationSearchEngine, same as the main map -
+see dashboard/templatetags/map_components.py), name it, or click one of their
+own nearby pins plotted on the map to file the photo onto it instead. The
+create form and the "use this pin" actions both end by swapping the card by
+id; the enclosing dialog closes itself on any successful POST (see
+#photo-pin-confirm-dialog in photos.html).
+
+Context:
+  image - the Image a pin is being created for (has effective coordinates from
+          its own GPS or its linked Location)
+{% endcomment %}
+{% load map_components %}
+<div id="photo-pin-confirm"
+     data-image-id="{{ image.pk }}"
+     data-lat="{{ image.effective_latitude|stringformat:'f' }}"
+     data-lng="{{ image.effective_longitude|stringformat:'f' }}"
+     data-local-url="{% url 'map.autocomplete.local' %}"
+     data-places-url="{% url 'map.autocomplete.places' %}"
+     data-resolve-url="{% url 'map.resolve_place' %}"
+     data-pins-url="{% url 'map.pins' %}"
+     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}">
+
+    <p class="photo-pin-confirm-intro">
+        We'll drop a pin where this photo was taken. Drag the marker, search for a place or one of your pins, or click one of your pins on the map, then give it a name.
+    </p>
+
+    <div class="photo-pin-confirm-map-wrap">
+        {% map_search_bar prefix="photo-pin-place" placeholder="Search for a place or one of your pins…" show_history=False %}
+        <div id="photo-pin-confirm-map" class="photo-pin-confirm-map"></div>
+        <div class="map-bottom-controls">
+            {% map_layers_panel "street,satellite" panel_id="photo-pin-confirm-layers" extra_class="map-layers-panel--inline" %}
+        </div>
+    </div>
+
+    <form class="photo-pin-confirm-form"
+          hx-post="{% url 'memories.photos.action' image.pk 'create-pin' %}"
+          hx-target="#photo-card-{{ image.pk }}"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="latitude" id="photo-pin-confirm-lat" value="{{ image.effective_latitude|stringformat:'f' }}">
+        <input type="hidden" name="longitude" id="photo-pin-confirm-lng" value="{{ image.effective_longitude|stringformat:'f' }}">
+        <div class="form-row">
+            <label for="photo-pin-confirm-name">Pin name <small>(optional)</small></label>
+            <input type="text" name="name" id="photo-pin-confirm-name"
+                   placeholder="Leave blank to use the place's name">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit">
+                <i class="material-symbols-outlined">add_location_alt</i> Create pin here
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="document.getElementById('photo-pin-confirm-dialog').close()">Cancel</button>
+        </div>
+    </form>
+</div>

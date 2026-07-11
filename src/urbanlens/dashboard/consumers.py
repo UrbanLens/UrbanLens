@@ -26,6 +26,74 @@ class RequestStatusConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({"message": message}))
 
 
+class UserNotificationConsumer(AsyncWebsocketConsumer):
+    """Pushes on-site notifications to a logged-in user's open tabs as they are created.
+
+    Mounted at ``ws/notifications/``. Authentication comes from the session
+    cookie via Channels' ``AuthMiddlewareStack``; each connection joins the
+    per-profile group produced by
+    ``urbanlens.dashboard.models.notifications.signals.notification_group_name``,
+    which the ``NotificationLog`` post_save signal broadcasts to.
+
+    The socket is strictly server → client: incoming frames are ignored, and
+    marking notifications read stays on the existing HTMX endpoints.
+
+    Close codes on ``connect()`` failure (mirroring ``SafetyCheckinChatConsumer``):
+
+    - ``4404``: the session is unauthenticated - permanent, retrying won't help.
+    - ``4500``: an unexpected server-side error - transient, safe to retry.
+    """
+
+    async def connect(self):
+        """Authenticate the session and join the profile's notification group."""
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        try:
+            profile_id = await self._get_profile_id()
+            from urbanlens.dashboard.models.notifications.signals import notification_group_name
+
+            self.group_name = notification_group_name(profile_id)
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+        except Exception:
+            logger.exception("Notification socket connect failed for user %s", getattr(user, "pk", None))
+            await self.close(code=4500)
+
+    async def disconnect(self, close_code):
+        """Leave the notification group, if we ever joined one."""
+        if hasattr(self, "group_name"):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Notification socket failed to leave group %s cleanly", self.group_name)
+
+    async def receive(self, text_data):
+        """Ignore client frames - this socket is server → client only."""
+
+    async def notification_new(self, event):
+        """Deliver one broadcasted notification to this connection.
+
+        Args:
+            event: The group-send event, with a ``notification`` dict payload.
+        """
+        await self.send(text_data=json.dumps({"type": "notification", "notification": event["notification"]}))
+
+    @database_sync_to_async
+    def _get_profile_id(self):
+        """Resolve (creating if needed) the session user's profile id.
+
+        Returns:
+            The primary key of the user's Profile.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=self.scope["user"])
+        return profile.pk
+
+
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     """Real-time chat for a safety check-in, shared by the owner and every emergency contact.
 

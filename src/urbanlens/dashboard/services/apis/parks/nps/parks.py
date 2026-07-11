@@ -67,7 +67,7 @@ class NPSGateway(Gateway):
         Search NPS parks by name query and/or US state code.
 
         Args:
-            query: Free-text search term (location name, etc.).
+            query: Free-text search term (wiki/place name, etc.).
             state_code: Two-letter US state abbreviation (e.g. "NY").
             limit: Maximum number of parks to return.
 
@@ -150,49 +150,62 @@ class NPSGateway(Gateway):
             )
         return places
 
-    def find_park_near_location(
-        self,
-        latitude: float,
-        longitude: float,
-        state_code: str,
-        location_name: str = "",
-        radius_km: float = 50.0,
-    ) -> dict[str, Any] | None:
-        """
-        Return the closest NPS park within *radius_km* of the given coordinates.
+    def get_park(self, park_code: str) -> dict[str, Any] | None:
+        """Fetch full details for a single NPS park by its park code.
 
-        Searches parks in *state_code* (optionally filtered by *location_name*)
-        and returns the one whose centre point is nearest to the target, or None
-        if no park falls within the radius.
+        Args:
+            park_code: NPS park code (e.g. "yell" for Yellowstone).
+
+        Returns:
+            The park data dict (``fullName``, ``description``, ``images``,
+            ``activities``, ``operatingHours``, ...), or None when the code
+            matches no park or the request fails.
+        """
+        if not park_code:
+            return None
+
+        params: dict[str, Any] = {"parkCode": park_code, "limit": 1, "fields": "images,activities,operatingHours"}
+        try:
+            resp = self.session.get(f"{self.base_url}/parks", headers=self._headers, params=params, timeout=20)
+            resp.raise_for_status()
+            data = resp.json().get("data", [])
+            return data[0] if data else None
+        except Exception:
+            logger.exception("NPS park lookup failed (park_code=%r)", park_code)
+            return None
+
+    def find_park_containing_location(self, latitude: float, longitude: float) -> dict[str, Any] | None:
+        """Return NPS details for the park whose boundary contains the point.
+
+        Unlike a proximity search, this returns a park only when the
+        coordinates fall *inside* an NPS unit's boundary -- so the pin-detail
+        panel shows a park because the pinned place is in that park, not merely
+        near it. Boundary containment is resolved server-side by
+        :class:`NPSMapGateway`; the matched unit's rich detail is then fetched
+        from the developer API.
 
         Args:
             latitude: Target latitude (WGS-84).
             longitude: Target longitude (WGS-84).
-            state_code: Two-letter US state code to narrow the search.
-            location_name: Optional name hint for ranking (not used for filtering).
-            radius_km: Maximum distance from the coordinates to accept a park.
 
         Returns:
-            Park data dict or None.
+            The containing park's data dict, or None when the point is outside
+            every NPS unit (or the boundary/detail lookup fails).
         """
         if not require_usa("nps", latitude, longitude):
             return None
 
-        parks = self.search_parks(query=location_name, state_code=state_code, limit=10)
-        if not parks:
-            parks = self.search_parks(state_code=state_code, limit=10)
+        from urbanlens.dashboard.services.apis.parks.nps.map import NPSMapGateway
 
-        best: tuple[float, dict] | None = None
-        for park in parks:
-            park_lat, park_lng = _parse_lat_long(park.get("latLong", ""))
-            if park_lat is None or park_lng is None:
-                continue
-            dist = _haversine_km(latitude, longitude, park_lat, park_lng)
-            if dist <= radius_km:
-                if best is None or dist < best[0]:
-                    best = (dist, park)
+        try:
+            park_code = NPSMapGateway().check_coordinates_within_park(latitude, longitude)
+        except Exception:
+            logger.exception("NPS boundary lookup failed (lat=%r, lng=%r)", latitude, longitude)
+            return None
 
-        return best[1] if best else None
+        if not park_code:
+            return None
+        return self.get_park(park_code)
 
     def handle_response(self, response: requests.Response, request_data: dict[str, Any] | None = None) -> list:
         """

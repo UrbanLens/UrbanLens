@@ -5,6 +5,7 @@ from urbanlens.dashboard.models.subscriptions.model import (
     SiteFeature,
     SubscriptionRole,
     UserSubscription,
+    active_subscription_roles,
     grant_subscription,
     user_has_feature,
 )

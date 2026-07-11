@@ -21,9 +21,6 @@ from django.db.models import (
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.routes.queryset import RouteManager
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 class RouteSource(TextChoices):
     """Origin of a Route record.
@@ -39,7 +36,7 @@ class RouteSource(TextChoices):
     GOOGLE_TAKEOUT_SEMANTIC = "google_takeout_semantic", "Google Takeout (Semantic History)"
 
 
-class Route(abstract.Model):
+class Route(abstract.FrontendDashboardModel):
     """A recorded path a profile travelled, imported from GPX or Google Takeout.
 
     The stored ``path`` is a simplified polyline (see
@@ -49,8 +46,7 @@ class Route(abstract.Model):
     how aggressively the display geometry was simplified.
 
     Unlike Pin/Location, routes are personal GPS data with no shared/wiki
-    analog, so they are always scoped to the owning profile - there is no
-    ``is_private`` flag.
+    analog, so they are always scoped to the owning profile.
 
     Attributes:
         profile: Owning profile - routes are never shared between profiles.
@@ -67,12 +63,6 @@ class Route(abstract.Model):
         ended_at: Timestamp of the last point that carried one, if any.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
-    profile = ForeignKey(
-        "dashboard.Profile",
-        on_delete=CASCADE,
-        related_name="routes",
-    )
     name = CharField(max_length=255, blank=True, default="")
     source = CharField(max_length=30, choices=RouteSource.choices)
     source_filename = CharField(max_length=255, blank=True, default="")
@@ -88,10 +78,16 @@ class Route(abstract.Model):
     started_at = DateTimeField(null=True, blank=True)
     ended_at = DateTimeField(null=True, blank=True)
 
-    objects = RouteManager()
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="routes",
+    )
 
     if TYPE_CHECKING:
         profile_id: int
+
+    objects = RouteManager()
 
     def __str__(self) -> str:
         """Return a human-readable description of this route.
@@ -104,7 +100,7 @@ class Route(abstract.Model):
         when = self.started_at.strftime("%Y-%m-%d") if self.started_at else "unknown date"
         return f"{self.get_source_display()} on {when}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_routes"
         ordering = ["-started_at", "-created"]
         get_latest_by = "started_at"

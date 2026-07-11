@@ -139,9 +139,26 @@
                 {% endif %}
 
                 {% if profile.user == request.user %}
-                <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
-                    <i class="material-symbols-outlined">edit</i> Edit Profile
-                </a>
+                <div class="profile-owner-actions">
+                    {% if preview_modes %}
+                    <details class="profile-viewas">
+                        <summary class="btn btn--secondary" title="See your profile exactly as another user sees it">
+                            <i class="material-symbols-outlined">visibility</i> View as
+                        </summary>
+                        <div class="profile-viewas-menu">
+                            {% for mode, label in preview_modes %}
+                            <form method="post" action="{% url 'profile.preview' mode %}">
+                                {% csrf_token %}
+                                <button type="submit" class="profile-viewas-item">{{ label }}</button>
+                            </form>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                    <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
+                        <i class="material-symbols-outlined">edit</i> Edit Profile
+                    </a>
+                </div>
                 {% endif %}
             </div>
 
@@ -162,7 +179,7 @@
                     <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
                 </span>
                 {% endif %}
-                {% if profile.email %}
+                {% if profile.email and can_view_contact %}
                 <span class="profile-meta-item">
                     <i class="material-symbols-outlined">email</i>{{ profile.email }}
                 </span>
@@ -368,6 +385,15 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && overlay.style.display !== 'none') closeDialog();
     });
+
+    var viewAsMenu = document.querySelector('.profile-viewas');
+    if (viewAsMenu) {
+        document.addEventListener('click', function (e) {
+            if (viewAsMenu.open && !viewAsMenu.contains(e.target)) {
+                viewAsMenu.open = false;
+            }
+        });
+    }
 }());
 
 function panToggleEdit(noteId) {

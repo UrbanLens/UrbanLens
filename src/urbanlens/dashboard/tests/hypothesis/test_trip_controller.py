@@ -281,7 +281,6 @@ class TripActivitiesViewTests(TestCase):
         from urbanlens.dashboard.models.pin.model import Pin
 
         location = Location.objects.create(
-            name="Dropped pin",
             latitude=51.5,
             longitude=-0.12,
         )
@@ -289,8 +288,6 @@ class TripActivitiesViewTests(TestCase):
             profile=self.creator,
             location=location,
             name="Abandoned Factory",
-            latitude=51.5,
-            longitude=-0.12,
         )
         client = Client()
         client.force_login(self.creator_user)
@@ -308,7 +305,6 @@ class TripActivitiesViewTests(TestCase):
         from urbanlens.dashboard.models.pin.model import Pin
 
         location = Location.objects.create(
-            name="Dropped pin",
             latitude=51.5,
             longitude=-0.12,
             route="Baker Street,",
@@ -318,8 +314,6 @@ class TripActivitiesViewTests(TestCase):
         pin = Pin.objects.create(
             profile=self.creator,
             location=location,
-            latitude=51.5,
-            longitude=-0.12,
         )
         client = Client()
         client.force_login(self.creator_user)
@@ -345,7 +339,6 @@ class TripActivityEffectiveTitleTests(TestCase):
         self.profile = self.user.profile
         self.trip = _make_trip(self.profile)
         self.location = Location.objects.create(
-            name="Dropped pin",
             latitude=40.0,
             longitude=-74.0,
             route="Main St,",
@@ -356,8 +349,6 @@ class TripActivityEffectiveTitleTests(TestCase):
             profile=self.profile,
             location=self.location,
             name="Old Mill",
-            latitude=40.0,
-            longitude=-74.0,
         )
 
     def test_custom_title_takes_priority(self):

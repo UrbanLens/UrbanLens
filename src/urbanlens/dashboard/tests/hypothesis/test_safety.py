@@ -12,7 +12,7 @@ import pytest
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-from urbanlens.dashboard.services.safety import check_in, escalate_checkin, mark_found_safe
+from urbanlens.dashboard.services.safety import cancel_checkin, check_in, create_checkin, escalate_checkin, get_active_checkin, mark_found_safe
 
 
 def _checkin(profile, **kwargs) -> SafetyCheckin:
@@ -135,18 +135,31 @@ class SafetyCheckinQuerySetTests(TestCase):
     def test_due_for_reminder_only_includes_scheduled_past_due(self):
         due = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
         not_yet = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + datetime.timedelta(hours=1))
+        past_grace = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.SCHEDULED,
+            checkin_by=timezone.now() - datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
         already_reminded = _checkin(self.profile, status=SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
 
         results = set(SafetyCheckin.objects.due_for_reminder().values_list("pk", flat=True))
 
         self.assertIn(due.pk, results)
         self.assertNotIn(not_yet.pk, results)
+        self.assertNotIn(past_grace.pk, results)
         self.assertNotIn(already_reminded.pk, results)
 
-    def test_overdue_only_includes_awaiting_checkin_past_grace_period(self):
+    def test_overdue_includes_unreminded_scheduled_checkins_past_grace_period(self):
         overdue = _checkin(
             self.profile,
             status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            checkin_by=timezone.now() - datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
+        unreminded_overdue = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.SCHEDULED,
             checkin_by=timezone.now() - datetime.timedelta(hours=2),
             grace_period=datetime.timedelta(hours=1),
         )
@@ -160,4 +173,52 @@ class SafetyCheckinQuerySetTests(TestCase):
         results = set(SafetyCheckin.objects.overdue().values_list("pk", flat=True))
 
         self.assertIn(overdue.pk, results)
+        self.assertIn(unreminded_overdue.pk, results)
         self.assertNotIn(within_grace.pk, results)
+
+    def test_active_excludes_only_resolved_statuses(self):
+        scheduled = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED)
+        awaiting = _checkin(self.profile, status=SafetyCheckinStatus.AWAITING_CHECKIN)
+        overdue = _checkin(self.profile, status=SafetyCheckinStatus.OVERDUE)
+        checked_in = _checkin(self.profile, status=SafetyCheckinStatus.CHECKED_IN)
+        found_safe = _checkin(self.profile, status=SafetyCheckinStatus.FOUND_SAFE)
+        cancelled = _checkin(self.profile, status=SafetyCheckinStatus.CANCELLED)
+
+        results = set(SafetyCheckin.objects.active().values_list("pk", flat=True))
+
+        self.assertEqual(results, {scheduled.pk, awaiting.pk, overdue.pk})
+        self.assertNotIn(checked_in.pk, results)
+        self.assertNotIn(found_safe.pk, results)
+        self.assertNotIn(cancelled.pk, results)
+
+
+class OneActiveCheckinAtATimeTests(TestCase):
+    """create_checkin()/get_active_checkin() enforce a single active check-in per profile."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+
+    def test_get_active_checkin_is_none_with_no_checkins(self):
+        self.assertIsNone(get_active_checkin(self.profile))
+
+    def test_get_active_checkin_returns_the_unresolved_checkin(self):
+        checkin = create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        self.assertEqual(get_active_checkin(self.profile), checkin)
+
+    def test_create_checkin_rejects_a_second_active_checkin(self):
+        create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+
+        with pytest.raises(ValueError):
+            create_checkin(profile=self.profile, title="Another Hike", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
+
+        self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 1)
+
+    def test_create_checkin_allowed_again_once_prior_is_resolved(self):
+        first = create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        cancel_checkin(first)
+
+        second = create_checkin(profile=self.profile, title="Another Hike", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
+
+        self.assertEqual(get_active_checkin(self.profile), second)
+        self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 2)
+        self.assertNotEqual(first.pk, second.pk)

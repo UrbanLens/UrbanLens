@@ -1,16 +1,75 @@
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Share Pin" %}
-<div class="ul-dialog-body">
+<div class="ul-dialog-body pin-share-body">
   {% if shared_to %}
-    <p><strong>{{ pin.display_label }}</strong> was shared with {{ shared_to.username }}.</p>
+    <div class="pin-share-sent">
+      <i class="material-symbols-outlined pin-share-sent-icon">check_circle</i>
+      <p><strong>{{ pin.display_label }}</strong> was shared with {{ shared_to.username }}.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn--primary" onclick="document.getElementById('pin-share-dialog').close()">Done</button>
+    </div>
   {% else %}
-    <p>Choose one friend to share <strong>{{ pin.display_label }}</strong> with.</p>
+    <p class="pin-share-intro">Share <strong>{{ pin.display_label }}</strong> with a friend you trust.</p>
     {% if friends %}
     <form hx-post="{% url 'pin.share.send' pin.slug %}" hx-target="#pin-share-dialog" hx-swap="innerHTML">
       {% csrf_token %}
-      <label for="pin-share-profile">Friend</label>
-      <select id="pin-share-profile" name="profile_id" required>
-        {% for friend in friends %}<option value="{{ friend.id }}">{{ friend.username }}</option>{% endfor %}
-      </select>
+
+      <div class="form-row">
+        <label for="pin-share-profile">Friend</label>
+        <select id="pin-share-profile" name="profile_id" required>
+          {% for friend in friends %}<option value="{{ friend.id }}">{{ friend.username }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="pin-share-message">Message <small>(optional)</small></label>
+        <textarea id="pin-share-message" name="message" rows="2"
+                  placeholder="Let them know why you're sharing this place..."></textarea>
+      </div>
+
+      <section class="pin-share-section">
+        <h3 class="pin-share-section-title"><i class="material-symbols-outlined">label_important</i> Name</h3>
+        <div class="form-row">
+          <select id="pin-share-name-choice" name="name_choice" onchange="_pinShareNameChanged(this)">
+            <option value="">Use current name - {{ pin.effective_name }}</option>
+            {% for alias in aliases %}
+            {% if alias.name != pin.effective_name %}
+            <option value="alias:{{ alias.id }}">{{ alias.name }}</option>
+            {% endif %}
+            {% endfor %}
+            <option value="custom">Other - type a new name&hellip;</option>
+          </select>
+        </div>
+        <div class="form-row" id="pin-share-custom-name-row" hidden>
+          <input type="text" id="pin-share-custom-name" name="custom_name" maxlength="255"
+                 placeholder="Name to share this pin under">
+          <p class="pin-share-section-hint">This also gets added to your own list of aliases for this pin.</p>
+        </div>
+      </section>
+
+      {% if photos %}
+      <section class="pin-share-section">
+        <h3 class="pin-share-section-title"><i class="material-symbols-outlined">photo_library</i> Photos</h3>
+        <p class="pin-share-section-hint">
+          <i class="material-symbols-outlined">visibility_off</i>
+          Your photos are private by default. Tap to include one - only selected photos are sent.
+        </p>
+        <ul class="pin-share-photo-grid">
+          {% for photo in photos %}
+          <li class="pin-share-photo">
+            <label>
+              <input type="checkbox" name="image_ids" value="{{ photo.id }}">
+              <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Photo' }}" loading="lazy"
+                   onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'pin-share-photo-fallback')">
+              <span class="pin-share-photo-ribbon">Private</span>
+              <span class="pin-share-photo-check"><i class="material-symbols-outlined">check</i></span>
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
       <div class="dialog-actions">
         <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-share-dialog').close()">Cancel</button>
         <button type="submit" class="btn btn--primary"><i class="material-symbols-outlined">ios_share</i> Share</button>
@@ -21,3 +80,12 @@
     {% endif %}
   {% endif %}
 </div>
+<script>
+function _pinShareNameChanged(select) {
+    var row = document.getElementById('pin-share-custom-name-row');
+    var input = document.getElementById('pin-share-custom-name');
+    var isCustom = select.value === 'custom';
+    row.hidden = !isCustom;
+    if (isCustom) { input.focus(); } else { input.value = ''; }
+}
+</script>

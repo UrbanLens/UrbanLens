@@ -9,7 +9,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.cache.queryset import GeocodedLocationManager
 
 
-class GeocodedLocation(abstract.Model):
+class GeocodedLocation(abstract.DashboardModel):
     """Records geocoded location data."""
 
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -19,7 +19,7 @@ class GeocodedLocation(abstract.Model):
 
     objects = GeocodedLocationManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_geocoded_locations"
         get_latest_by = "updated"
         indexes = [

@@ -35,7 +35,13 @@ class PinEditCategoryUpdateTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
+        # The rendered overview partial checks pin.has_place_name, which
+        # resolves an uncached Location's place name from Google - mock it
+        # so the response render doesn't make an outbound API call.
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def _categories(self):
@@ -81,7 +87,7 @@ class PinEditCategoryUpdateTests(TestCase):
 
 
 class PinEditNameAliasTests(TestCase):
-    """Regression tests for preserving previous user-provided pin names as aliases."""
+    """Renames preserve every name as an alias, including the current one."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -96,25 +102,32 @@ class PinEditNameAliasTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"):
+        # The rendered overview partial checks pin.has_place_name, which
+        # resolves an uncached Location's place name from Google - mock it
+        # so the response render doesn't make an outbound API call.
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
-    def test_renaming_pin_adds_previous_name_as_alias(self) -> None:
+    def test_renaming_pin_keeps_old_and_new_names_as_aliases(self) -> None:
         response = self._post({"name": "New Factory"})
 
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.name, "New Factory")
-        self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])
+        self.assertCountEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory", "New Factory"])
 
-    def test_resubmitting_same_name_does_not_create_alias(self) -> None:
+    def test_resubmitting_same_name_does_not_add_an_alias(self) -> None:
         response = self._post({"name": "Old Factory"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.pin.aliases.count(), 0)
+        # Only the creation-time alias for the current name exists.
+        self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])
 
-    def test_partial_update_without_name_does_not_create_alias(self) -> None:
+    def test_partial_update_without_name_does_not_add_an_alias(self) -> None:
         response = self._post({"priority": 3})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.pin.aliases.count(), 0)
+        self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])

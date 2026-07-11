@@ -1,0 +1,20 @@
+{% comment %}
+Shared footer for emails sent to an emergency CONTACT (never the check-in owner) - the
+three one-click opt-out links. Included by safety_checkin_overdue.html, the other-contacts
+branch of safety_checkin_resolved.html, and safety_checkin_plan_updated.html. Expects
+optout_checkin_url/optout_owner_url/optout_global_url (built by services.safety._optout_urls).
+
+Each link is a GET to a confirmation page, not the opt-out action itself - a bare GET is
+exactly what an email client's link-scanner prefetches, which would otherwise silently
+unsubscribe a real emergency contact.
+{% endcomment %}
+<tr>
+  <td style="padding:20px 32px;border-top:1px solid #f1f5f9;background:#fafafa">
+    <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;text-align:center">
+      Don't want these emails?
+      <a href="{{ optout_checkin_url }}" style="color:#6b7280">Opt out of this check-in</a> &middot;
+      <a href="{{ optout_owner_url }}" style="color:#6b7280">Opt out of future check-ins from {{ checkin.profile.username }}</a> &middot;
+      <a href="{{ optout_global_url }}" style="color:#6b7280">Unsubscribe from all safety notifications</a>
+    </p>
+  </td>
+</tr>

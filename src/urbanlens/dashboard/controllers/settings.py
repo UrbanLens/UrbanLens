@@ -13,16 +13,20 @@ from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
     AISettingsForm,
+    CommunitySettingsForm,
     ContactSettingsForm,
+    ExternalApiSettingsForm,
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
+    MemoriesSettingsForm,
     PlacesLayerForm,
     PrivacySettingsForm,
     StyleSettingsForm,
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -75,15 +79,19 @@ class SettingsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = {
             "privacy_form": PrivacySettingsForm(instance=profile),
-            "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
+            "contact_form": ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk),
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
+            "memories_form": MemoriesSettingsForm(instance=profile),
+            "community_form": CommunitySettingsForm(instance=profile),
+            "external_api_form": ExternalApiSettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
+            **get_storage_settings_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 
@@ -94,13 +102,16 @@ class SettingsView(LoginRequiredMixin, View):
         section = request.POST.get("section")
 
         privacy_form = PrivacySettingsForm(instance=profile)
-        contact_form = ContactSettingsForm(initial={"email": request.user.email})
+        contact_form = ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk)
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
+        memories_form = MemoriesSettingsForm(instance=profile)
+        community_form = CommunitySettingsForm(instance=profile)
+        external_api_form = ExternalApiSettingsForm(instance=profile)
 
         if section == "places_layer":
             if user_has_feature(request.user, SiteFeature.PLACES):
@@ -133,7 +144,7 @@ class SettingsView(LoginRequiredMixin, View):
                 return redirect("settings.view")
 
         elif section == "contact":
-            contact_form = ContactSettingsForm(request.POST)
+            contact_form = ContactSettingsForm(request.POST, exclude_user_id=request.user.pk)
             if contact_form.is_valid():
                 request.user.email = contact_form.cleaned_data["email"]
                 request.user.save(update_fields=["email"])
@@ -147,6 +158,23 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Style settings saved.")
                 return redirect("settings.view")
 
+        elif section == "storage":
+            raw_dimension = (request.POST.get("image_downscale_max_dimension") or "").strip()
+            if raw_dimension == "":
+                profile.image_downscale_max_dimension = None
+            else:
+                try:
+                    dimension = int(raw_dimension)
+                except (ValueError, TypeError):
+                    dimension = None
+                if dimension is None or dimension not in allowed_user_dimension_values(profile):
+                    messages.error(request, "That photo size is not available.")
+                    return redirect("settings.view")
+                profile.image_downscale_max_dimension = dimension
+            profile.save(update_fields=["image_downscale_max_dimension", "updated"])
+            messages.success(request, "Storage settings saved. The new photo size applies to future uploads.")
+            return redirect("settings.view")
+
         elif section == "map":
             map_display_form = MapDisplayForm(request.POST, instance=profile)
             map_center_form = MapCenterForm(request.POST, instance=profile)
@@ -154,6 +182,27 @@ class SettingsView(LoginRequiredMixin, View):
                 map_display_form.save()
                 map_center_form.save()
                 messages.success(request, "Map settings saved.")
+                return redirect("settings.view")
+
+        elif section == "memories":
+            memories_form = MemoriesSettingsForm(request.POST, instance=profile)
+            if memories_form.is_valid():
+                memories_form.save()
+                messages.success(request, "Memories settings saved.")
+                return redirect("settings.view")
+
+        elif section == "community":
+            community_form = CommunitySettingsForm(request.POST, instance=profile)
+            if community_form.is_valid():
+                community_form.save()
+                messages.success(request, "Community settings saved.")
+                return redirect("settings.view")
+
+        elif section == "external_apis":
+            external_api_form = ExternalApiSettingsForm(request.POST, instance=profile)
+            if external_api_form.is_valid():
+                external_api_form.save()
+                messages.success(request, "External API settings saved.")
                 return redirect("settings.view")
 
         context = {
@@ -165,8 +214,12 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "ai_form": ai_form,
+            "memories_form": memories_form,
+            "community_form": community_form,
+            "external_api_form": external_api_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
+            **get_storage_settings_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 
@@ -194,6 +247,11 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"lat": lat, "lng": lng})
         except ValueError:
             pass
+
+    if request.user.is_authenticated:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.external_apis_enabled:
+            return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
 
     # Try Google Geocoding.
     try:

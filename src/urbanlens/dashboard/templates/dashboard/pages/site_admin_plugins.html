@@ -1,0 +1,95 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="site-admin-page page-content plugins-page">
+    <div class="site-admin-header">
+        <div class="site-admin-breadcrumb">
+            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
+                <i class="material-symbols-outlined">arrow_back</i>
+                Admin Home
+            </a>
+        </div>
+        <h1 class="site-admin-title">
+            <i class="material-symbols-outlined">extension</i>
+            Plugins
+        </h1>
+        <p class="site-admin-subtitle">
+            External integrations discovered for this install. Runtime per-service toggles live on
+            <a href="{% url 'site_admin_api_limits' %}">API Limits</a>; to disable a plugin entirely,
+            list its name in the <code>UL_DISABLED_PLUGINS</code> environment setting and restart.
+        </p>
+    </div>
+
+    <div class="api-limits-toolbar">
+        <span class="admin-home-meta-pill">
+            <i class="material-symbols-outlined">extension</i>
+            {{ plugins|length }} plugin{{ plugins|length|pluralize }}
+        </span>
+    </div>
+
+    <div class="api-limits-grid">
+    {% for entry in plugins %}
+    <section class="site-admin-card ul-section card stats-service-card plugin-card{% if not entry.enabled %} is-disabled{% endif %}"
+             data-plugin="{{ entry.plugin.name }}">
+        <div class="card-header stats-service-card__header">
+            <div class="stats-service-card__title">
+                <i class="material-icons api-state-icon">{% if entry.enabled %}extension{% else %}extension_off{% endif %}</i>
+                <div>
+                    <span class="api-limit-service-name">{{ entry.plugin.verbose_name|default:entry.plugin.name }}</span>
+                    <code class="api-limit-service-key">{{ entry.plugin.name }}</code>
+                </div>
+            </div>
+            <div class="api-limit-header-actions">
+                <span class="ul-chip" title="Discovery source">
+                    <i class="material-symbols-outlined">{% if entry.source == 'builtin' %}inventory_2{% elif entry.source == 'entry-point' %}deployed_code{% else %}settings{% endif %}</i>
+                    {{ entry.source }}
+                </span>
+                {% if not entry.enabled %}
+                <span class="ul-badge ul-badge--danger">disabled</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if entry.plugin.description %}
+        <p class="plugin-card__description">{{ entry.plugin.description }}</p>
+        {% endif %}
+
+        <div class="api-limit-stats">
+            {% if entry.plugin.version %}
+            <span class="ul-chip"><i class="material-symbols-outlined">tag</i>v{{ entry.plugin.version }}</span>
+            {% endif %}
+            {% if entry.plugin.author %}
+            <span class="ul-chip"><i class="material-symbols-outlined">person</i>{{ entry.plugin.author }}</span>
+            {% endif %}
+            {% if entry.panel_count %}
+            <span class="ul-chip"><i class="material-symbols-outlined">dashboard</i>{{ entry.panel_count }} panel{{ entry.panel_count|pluralize }}</span>
+            {% endif %}
+            {% if entry.satellite_count %}
+            <span class="ul-chip"><i class="material-symbols-outlined">globe</i>satellite imagery</span>
+            {% endif %}
+            {% if entry.street_count %}
+            <span class="ul-chip"><i class="material-symbols-outlined">streetview</i>street imagery</span>
+            {% endif %}
+            {% for source in entry.name_sources %}
+            <span class="ul-chip" title="Provides place-name candidates as '{{ source }}'"><i class="material-symbols-outlined">badge</i>names: {{ source }}</span>
+            {% endfor %}
+        </div>
+
+        {% if entry.services %}
+        <div class="api-limit-stats plugin-card__services">
+            {% for svc in entry.services %}
+            <a href="{% url 'site_admin_api_limits' %}" title="Configure on the API Limits page">
+                <span class="ul-badge {% if svc.enabled %}ul-badge--success{% else %}ul-badge--danger{% endif %}">
+                    {{ svc.key }}: {% if svc.enabled %}on{% else %}off{% endif %}
+                </span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <code class="plugin-card__module" title="Defining module">{{ entry.module }}</code>
+    </section>
+    {% endfor %}
+    </div>
+</div>
+{% endblock %}

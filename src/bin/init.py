@@ -312,13 +312,6 @@ class DjangoProjectInitializer:
                 frontend_dir.mkdir(parents=True, exist_ok=True)
                 logger.debug("Created directory %s", frontend_dir)
 
-        # Ensure entrypoint (dashboard/frontend/static/dashboard/js/index.js) exists
-        entry = APP_DIR / "dashboard" / "frontend" / "static" / "dashboard" / "js" / "index.js"
-        if not entry.exists():
-            with entry.open("w") as file:
-                file.write("")
-            logger.debug("Created empty file %s", entry)
-
         match self.environment:
             case "development":
                 sass_command = ["bun", "run", "sass:dev"]

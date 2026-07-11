@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#fff1f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#fff1f2;padding:40px 16px">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)">
+
+  <tr>
+    <td style="background:linear-gradient(135deg,#7f1d1d,#b91c1c,#ef4444);padding:32px 32px 24px;text-align:center">
+      <p style="margin:0;color:#fecaca;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">UrbanLens Safety</p>
+      <h1 style="margin:8px 0 0;color:#fff;font-size:24px;font-weight:800;letter-spacing:-.02em">Safety check-in posted to {{ wiki.name }}</h1>
+    </td>
+  </tr>
+
+  <tr>
+    <td style="padding:32px">
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6">
+        <strong>{{ checkin.profile.username }}</strong> planned a trip to <strong>{{ wiki.name }}</strong> - a place
+        you have pinned - and hasn't checked in as expected (check-in "<strong>{{ checkin.title }}</strong>",
+        expected by {{ checkin.checkin_by }}). Their emergency contacts have been notified, and a comment was
+        posted to the community wiki.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.65">
+        If you've seen them, have been to the area recently, or know something that could help, take a look
+        at the check-in and leave a comment on the wiki.
+      </p>
+
+      <div style="text-align:center;margin:28px 0">
+        <a href="{{ checkin_url }}"
+           style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;
+                  font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;
+                  letter-spacing:.01em">
+          View the check-in
+        </a>
+      </div>
+      <div style="text-align:center;margin:0 0 8px">
+        <a href="{{ wiki_url }}" style="color:#b91c1c;font-size:14px;font-weight:600;text-decoration:none">
+          Open the {{ wiki.name }} community wiki
+        </a>
+      </div>
+    </td>
+  </tr>
+
+  <tr>
+    <td style="padding:0 32px 28px">
+      <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;text-align:center">
+        You're receiving this because you have this place pinned and community wiki safety check-in
+        notifications enabled. You can turn them off under Notifications in your UrbanLens settings.
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

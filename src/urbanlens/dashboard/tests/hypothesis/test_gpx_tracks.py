@@ -11,7 +11,6 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
-from django.contrib.gis.geos import Point
 from django.utils import timezone
 from model_bakery import baker
 
@@ -123,9 +122,6 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
             "dashboard.Pin",
             profile=self.profile,
             location=self.location,
-            latitude=None,
-            longitude=None,
-            point=Point(_PIN_LNG, _PIN_LAT, srid=4326),
         )
 
     def _saved_route(self, raw_points: list[RawTrackPoint]) -> Route:

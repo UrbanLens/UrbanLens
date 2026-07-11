@@ -535,6 +535,24 @@
     min-height: 300px;
 }
 
+// Read-only layer switcher shown below the expanded map (no draw tools -
+// viewing/panning/zooming and swapping tile layers only).
+.comment-map-view-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .45rem .75rem;
+    border-top: 1px solid var(--ul-grey-1);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+// Preview thumbnail is itself clickable (not just its "Expand" button) to
+// open the larger read-only viewer.
+.comment-map-preview--clickable {
+    cursor: pointer;
+}
+
 // -- Comment map composer dialog -----------------------------------------------
 
 .comment-map-composer-dialog {
@@ -545,7 +563,7 @@
         // Explicit height so flex children (body, map) have a real reference to
         // grow into. Without this, flex: 1 on the body resolves to flex-basis: 0
         // and Leaflet reads a 0px container height.
-        height: min(95vh, 680px);
+        height: min(95vh, 70em);
     }
 }
 
@@ -572,87 +590,34 @@
     white-space: nowrap;
 }
 
-.cmcc-pin-search-wrap {
+// Standalone-mode title field (the "take a screenshot" flow) - hidden for
+// the form-bound comment/visit/trip-comment usage of this same dialog.
+.cmcc-title-row {
+    border-bottom: none;
+    padding-top: 0;
+}
+
+.cmcc-title-input {
+    flex: 1;
+    max-width: 460px;
+    padding: .35rem .6rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    font-size: .85rem;
+}
+
+// Inline variant of the map pages' floating jump-to search bar: sits in the
+// composer's controls row instead of floating over the map, but reuses all
+// the .addr-search-* internals (input, suggestions dropdown, sections).
+.addr-search-bar--composer {
     position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
     flex: 1;
-    max-width: 400px;
-    display: flex;
-    gap: .35rem;
-}
-
-.cmcc-pin-search {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 6px;
-    padding: .3rem .65rem;
-    font-size: .82rem;
-    font-family: inherit;
-
-    &:focus {
-        outline: none;
-        border-color: $color-indigo-500;
-    }
-
-    &:disabled {
-        opacity: .6;
-        cursor: wait;
-    }
-}
-
-.cmcc-go-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: .3rem .5rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 6px;
-    background: var(--ul-grey-0);
-    color: var(--ul-grey-7);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background .12s, border-color .12s;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        background: $color-indigo-500;
-        border-color: $color-indigo-500;
-        color: var(--ul-grey-5);
-    }
-}
-
-.cmcc-pin-dropdown {
-    position: absolute;
-    top: calc(100% + 3px);
-    left: 0;
-    right: 0;
-    width: 100%;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, .1);
-    z-index: 600;
-    max-height: 200px;
-    overflow-y: auto;
-
-    &[hidden] {
-        display: none;
-    }
-}
-
-.cmcc-pin-option {
-    padding: .45rem .75rem;
-    font-size: .83rem;
-    cursor: pointer;
-    color: var(--ul-grey-7);
-
-    &:hover {
-        background: var(--ul-grey-0);
-    }
+    max-width: 460px;
 }
 
 .comment-map-composer-map {
@@ -695,10 +660,11 @@
     pointer-events: none;
 }
 
-.cmc-layer-btn,
+.map-layers-strip-btn,
 .cmc-tool-btn,
 .cmc-undo-btn,
-.cmc-clear-btn {
+.cmc-clear-btn,
+.cmc-download-btn {
     background: none;
     border: 1px solid var(--ul-grey-1a);
     border-radius: 6px;
@@ -718,7 +684,8 @@
         background: var(--ul-grey-0);
     }
 
-    &.is-active {
+    &.is-active,
+    &.active {
         background: var(--ul-accent-purple-bg);
         border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);
@@ -740,6 +707,21 @@
         border-radius: 4px;
         padding: 1px;
         cursor: pointer;
+    }
+}
+
+.cmc-width-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    input[type="range"] {
+        width: 72px;
+        cursor: pointer;
+        accent-color: $color-indigo-500;
     }
 }
 

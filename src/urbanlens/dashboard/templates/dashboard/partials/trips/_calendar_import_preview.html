@@ -1,0 +1,92 @@
+{# Google Calendar import dialog, page 2: review what will be created before importing. #}
+{# Context: account, previews, importable_count, profile #}
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Review calendar import" %}
+
+<div class="ul-dialog-body">
+    <p class="calendar-import-account">
+        Review what will be created. Uncheck anything you don't want - no trips
+        are created and no invitations are sent until you confirm.
+    </p>
+
+    <form hx-post="{% url 'trips.calendar.import' %}"
+        hx-target="#trip-list"
+        hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+        class="calendar-import-form">
+        {% csrf_token %}
+
+        <ul class="calendar-import-preview-list">
+            {% for entry in previews %}
+            <li class="calendar-import-preview{% if entry.skip_reason %} calendar-import-preview--skipped{% endif %}">
+                {% if entry.skip_reason %}
+                <div class="calendar-import-preview-head">
+                    <i class="material-symbols-outlined">block</i>
+                    <span class="calendar-import-preview-title">{{ entry.summary|default:"(untitled event)" }}</span>
+                    <span class="calendar-import-note">{{ entry.skip_reason }}</span>
+                </div>
+                {% else %}
+                <input type="hidden" name="event_ids" value="{{ entry.event_id }}">
+                <div class="calendar-import-preview-head">
+                    <i class="material-symbols-outlined">luggage</i>
+                    <span class="calendar-import-preview-title">{{ entry.trip_kwargs.name }}</span>
+                    <span class="calendar-import-dates">
+                        {{ entry.trip_kwargs.start_date|date:"M j, Y" }}{% if entry.trip_kwargs.end_date and entry.trip_kwargs.end_date != entry.trip_kwargs.start_date %} - {{ entry.trip_kwargs.end_date|date:"M j, Y" }}{% endif %}
+                    </span>
+                </div>
+                {% if entry.trip_kwargs.description %}
+                <p class="calendar-import-preview-desc">{{ entry.trip_kwargs.description|truncatechars:180 }}</p>
+                {% endif %}
+
+                {% if entry.location %}
+                <label class="calendar-import-preview-option">
+                    <input type="checkbox" name="create_activity_{{ entry.event_id }}" value="1" checked>
+                    <span class="calendar-import-preview-option-text">
+                        Add an activity for the event location:
+                        <strong>{{ entry.location }}</strong>
+                        {% if entry.scheduled_at %}<span class="calendar-import-dates">({{ entry.scheduled_at|date:"M j, Y g:i A" }})</span>{% endif %}
+                    </span>
+                </label>
+                {% endif %}
+
+                {% if entry.friends %}
+                <div class="calendar-import-preview-participants">
+                    <span class="calendar-import-preview-subhead">
+                        <i class="material-symbols-outlined">group_add</i>
+                        Invite attendees who are your friends:
+                    </span>
+                    {% for friend in entry.friends %}
+                    <label class="calendar-import-preview-option">
+                        <input type="checkbox" name="invite_{{ entry.event_id }}" value="{{ friend.pk }}" checked>
+                        <span class="calendar-import-preview-option-text">{{ friend.username }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if entry.other_attendees %}
+                <p class="calendar-import-preview-others">
+                    <i class="material-symbols-outlined">person_off</i>
+                    Not invited (not friends on UrbanLens): {{ entry.other_attendees|join:", " }}
+                </p>
+                {% endif %}
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit" {% if not importable_count %}disabled{% endif %}>
+                <i class="material-symbols-outlined">download</i>
+                Import {{ importable_count }} trip{{ importable_count|pluralize }}
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    hx-get="{% url 'trips.calendar.import' %}"
+                    hx-target="#calendar-import-dialog"
+                    hx-swap="innerHTML">
+                <i class="material-symbols-outlined">arrow_back</i>
+                Back
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</div>

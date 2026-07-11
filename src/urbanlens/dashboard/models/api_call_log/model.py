@@ -8,7 +8,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
 
 
-class ApiCallLog(abstract.Model):
+class ApiCallLog(abstract.DashboardModel):
     """Log entry for one external API call.
 
     The ``created`` timestamp (from the base model) is the call time.
@@ -49,7 +49,7 @@ class ApiCallLog(abstract.Model):
 
     objects = ApiCallLogManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_api_call_log"
         verbose_name = "API Call Log"
         verbose_name_plural = "API Call Logs"

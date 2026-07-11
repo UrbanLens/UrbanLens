@@ -11,6 +11,7 @@ from datetime import timedelta
 import json
 import logging
 import os
+import re
 import sys
 import time
 from urllib.parse import urlencode
@@ -19,7 +20,8 @@ import django
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
-from django.db.models import Q
+from django.db.models import CharField, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
@@ -33,6 +35,7 @@ from urbanlens.dashboard.models.site_settings import (
     SiteSettings,
 )
 from urbanlens.dashboard.services.infrastructure_stats import _format_duration
+from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -102,8 +105,20 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
 
+        from urbanlens.dashboard.plugins.registry import plugin_registry
+
         settings = SiteSettings.get_current()
         complete_site_admin_onboarding(request.user)
+
+        # Ranked sources first, in the admin's configured priority order, followed
+        # by any remaining available sources (unranked, falling back to plugin
+        # order at resolution time).
+        priority_slugs = settings.name_source_priority_list
+        providers_by_slug = {provider.source: provider.verbose_name for provider in plugin_registry.name_providers()}
+        name_source_order = [(slug, providers_by_slug[slug], True) for slug in priority_slugs if slug in providers_by_slug]
+        ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
+        name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
+
         return render(
             request,
             "dashboard/pages/site_admin.html",
@@ -115,6 +130,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
+                "name_source_order": name_source_order,
             },
         )
 
@@ -144,10 +160,16 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.search_provider = provider
 
         try:
-            cache_hours = int(request.POST.get("search_cache_hours", settings.search_cache_hours))
-            settings.search_cache_hours = max(0, cache_hours)
+            cache_days = int(request.POST.get("external_data_cache_days", settings.external_data_cache_days))
+            settings.external_data_cache_days = max(1, cache_days)
         except (ValueError, TypeError):
             pass
+
+        if "default_name_source_priority" in request.POST:
+            # Unknown slugs are tolerated: the name resolver ignores sources it
+            # never sees, so a disabled plugin's slug can stay configured.
+            slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
+            settings.default_name_source_priority = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
 
         if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
             settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
@@ -175,6 +197,24 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         if "signup_restricted" in request.POST:
             settings.signup_restricted = request.POST.get("signup_restricted") in {"1", "true", "on", "True"}
+
+        for email_limit_field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
+            if email_limit_field in request.POST:
+                with contextlib.suppress(ValueError, TypeError):
+                    setattr(settings, email_limit_field, max(0, int(request.POST.get(email_limit_field, getattr(settings, email_limit_field)))))
+
+        if "storage_quota_gb" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.storage_quota_gb = max(0, int(request.POST.get("storage_quota_gb", settings.storage_quota_gb)))
+        if "image_downscale_enabled" in request.POST:
+            settings.image_downscale_enabled = request.POST.get("image_downscale_enabled") in {"1", "true", "on", "True"}
+        if "image_downscale_max_dimension" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.image_downscale_max_dimension = min(max(256, int(request.POST.get("image_downscale_max_dimension", settings.image_downscale_max_dimension))), 20_000)
+        if "image_convert_webp" in request.POST:
+            settings.image_convert_webp = request.POST.get("image_convert_webp") in {"1", "true", "on", "True"}
+        if "image_downscale_vip" in request.POST:
+            settings.image_downscale_vip = request.POST.get("image_downscale_vip") in {"1", "true", "on", "True"}
 
         settings.save()
 
@@ -320,7 +360,8 @@ class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin,
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         profile.guidance_level = GuidanceLevel.ALL
-        profile.save(update_fields=["guidance_level"])
+        profile.welcome_onboarding_complete = False
+        profile.save(update_fields=["guidance_level", "welcome_onboarding_complete"])
 
         response = HttpResponse(status=204)
         response["HX-Trigger"] = json.dumps({"devOnboardingReset": True})
@@ -364,10 +405,10 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             {
                 "page_name": "site-admin-stats",
                 "server_time": now,
-                "chart_user_labels": json.dumps(user_labels),
-                "chart_user_counts": json.dumps(user_counts),
-                "chart_location_labels": json.dumps(location_labels),
-                "chart_location_counts": json.dumps(location_counts),
+                "chart_user_labels": safe_json_for_script(user_labels),
+                "chart_user_counts": safe_json_for_script(user_counts),
+                "chart_location_labels": safe_json_for_script(location_labels),
+                "chart_location_counts": safe_json_for_script(location_counts),
             },
         )
 
@@ -468,6 +509,38 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 sub.save(update_fields=["expires_at", "updated"])
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
 
+        if action == "role_quota":
+            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            raw_quota = (request.POST.get("storage_quota_gb") or "").strip()
+            if raw_quota == "":
+                quota = None
+            else:
+                try:
+                    quota = max(0, int(raw_quota))
+                except (ValueError, TypeError):
+                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Storage quota must be a whole number of GB."}))
+            SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
+
+        if action == "role_email_limits":
+            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            updates: dict[str, int | None] = {}
+            for field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
+                raw = (request.POST.get(field) or "").strip()
+                if raw == "":
+                    updates[field] = None
+                    continue
+                try:
+                    updates[field] = max(0, int(raw))
+                except (ValueError, TypeError):
+                    return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Email limits must be whole numbers."}))
+            SubscriptionRole.objects.filter(pk=role.pk).update(**updates)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
+
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
         user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
@@ -510,9 +583,9 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def _get_all_configs(self):
         """Return ApiRateLimit rows for every known service, creating missing ones."""
-        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY, get_limit_config
+        from urbanlens.dashboard.services.rate_limiter import all_service_defaults, get_limit_config
 
-        return [get_limit_config(key) for key in sorted(SERVICE_REGISTRY)]
+        return [get_limit_config(key) for key in sorted(all_service_defaults())]
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.api_call_log import ApiCallLog
@@ -594,6 +667,161 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return HttpResponseRedirect(reverse("site_admin_api_limits") + "?saved=1")
 
 
+class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Read-only listing of every discovered UrbanLens plugin.
+
+    GET /site-admin/plugins/ → plugin inventory page
+
+    Shows each plugin's metadata, discovery source, contributions, and the
+    enabled state of the services it declares. Per-service runtime toggles
+    live on the API limits page; install-level plugin disabling is done via
+    the ``UL_DISABLED_PLUGINS`` env setting.
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+    request: HttpRequest
+
+    def handle_no_permission(self) -> HttpResponseRedirect:
+        """Send anonymous users to login; return 403 for authenticated users without permission."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request: HttpRequest):
+        from urbanlens.dashboard.plugins import plugin_registry
+        from urbanlens.dashboard.services.rate_limiter import get_limit_config
+
+        entries = []
+        for info in plugin_registry.plugins():
+            plugin = info.plugin
+            plugin_enabled = plugin_registry.is_enabled(plugin.name)
+            services = []
+            if plugin_enabled:
+                for service_key in sorted(plugin.get_service_defaults()):
+                    config = get_limit_config(service_key)
+                    services.append({"key": service_key, "enabled": config.enabled})
+            entries.append(
+                {
+                    "plugin": plugin,
+                    "source": info.source,
+                    "module": info.module,
+                    "enabled": plugin_enabled,
+                    "services": services,
+                    "panel_count": len(plugin.get_panel_sources()) if plugin_enabled else 0,
+                    "satellite_count": len(plugin.get_satellite_providers()) if plugin_enabled else 0,
+                    "street_count": len(plugin.get_street_view_providers()) if plugin_enabled else 0,
+                    "name_sources": [provider.source for provider in plugin.get_name_providers()] if plugin_enabled else [],
+                }
+            )
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_plugins.html",
+            {
+                "page_name": "site-admin-plugins",
+                "plugins": entries,
+            },
+        )
+
+
+class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Read-only directory of registered users for site administrators.
+
+    GET /site-admin/users/ → paginated, searchable list of users.
+
+    This is deliberately privacy-preserving: even a site admin does not get a
+    backdoor around a user's ``contact_visibility`` setting here. Email is
+    only shown when the viewing admin's own profile would satisfy that
+    user's configured visibility rule, exactly as
+    ``Profile.can_view_contact_info`` evaluates for any other viewer (e.g. a
+    "Friends only" user's email stays hidden unless the admin happens to be
+    their friend).
+    """
+
+    permission_required = "dashboard.view_site_admin"
+    raise_exception = True
+    request: HttpRequest
+    PAGE_SIZE = 25
+
+    def handle_no_permission(self) -> HttpResponseRedirect:
+        """Send anonymous users to login; return 403 for authenticated non-admins."""
+        if not self.request.user.is_authenticated:
+            return redirect_to_login(
+                self.request.get_full_path(),
+                login_url=self.get_login_url(),
+                redirect_field_name=self.get_redirect_field_name(),
+            )
+        return super().handle_no_permission()
+
+    def get(self, request: HttpRequest):
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.subscriptions import active_subscription_roles
+        from urbanlens.dashboard.services.pagination import get_page
+        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes
+
+        if not isinstance(request.user, User):
+            return HttpResponseForbidden()
+
+        search = request.GET.get("q", "").strip()
+        users_qs = User.objects.select_related("profile").prefetch_related("groups").order_by("username")
+        if search:
+            users_qs = users_qs.filter(Q(username__icontains=search) | Q(email__icontains=search) | Q(first_name__icontains=search))
+
+        page = get_page(request, users_qs, self.PAGE_SIZE)
+
+        viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        rows = []
+        for member in page.object_list:
+            profile = getattr(member, "profile", None)
+            if profile is None:
+                # Legacy/incomplete accounts without a Profile row yet - every
+                # user should still appear in the directory.
+                profile, _ = Profile.objects.get_or_create(user=member)
+
+            email_visible = profile.can_view_contact_info(viewer_profile)
+            profile_visible = profile.can_view_profile(viewer_profile)
+            quota_bytes = get_quota_bytes(profile)
+            used_bytes = get_storage_used_bytes(profile)
+            percent_used = 0
+            if quota_bytes:
+                percent_used = min(round(used_bytes * 100 / quota_bytes), 100)
+
+            rows.append(
+                {
+                    "user": member,
+                    "profile": profile,
+                    "profile_visible": profile_visible,
+                    "display_username": member.username if profile_visible else "Invisible User",
+                    "display_first_name": member.first_name if profile_visible else "",
+                    "email_visible": email_visible,
+                    "is_site_admin": member.is_superuser or any(group.name == SITE_ADMIN_GROUP_NAME for group in member.groups.all()),
+                    "roles": active_subscription_roles(member),
+                    "quota_bytes": quota_bytes,
+                    "used_bytes": used_bytes,
+                    "percent_used": percent_used,
+                    "avatar_hue": sum(ord(char) for char in member.username) % 360,
+                }
+            )
+
+        return render(
+            request,
+            "dashboard/pages/site_admin_users.html",
+            {
+                "page_name": "site-admin-users",
+                "rows": rows,
+                "page_obj": page,
+                "search": search,
+                "total_users": page.paginator.count,
+            },
+        )
+
+
 class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """Admin dashboard homepage.
 
@@ -629,7 +857,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         total_users = User.objects.count()
         active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
         new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
+        total_locations = Location.objects.distinct().count()
         total_pins = Pin.objects.count()
         total_photos = Image.objects.count()
 
@@ -719,8 +947,8 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         total_users = User.objects.count()
         active_users_30d = User.objects.filter(last_login__gte=thirty_days_ago).count()
         new_users_30d = User.objects.filter(date_joined__gte=thirty_days_ago).count()
-        total_locations = Location.objects.filter(pins__isnull=False).distinct().count()
-        new_locations_30d = Location.objects.filter(pins__isnull=False, created__gte=thirty_days_ago).distinct().count()
+        total_locations = Location.objects.distinct().count()
+        new_locations_30d = Location.objects.filter(created__gte=thirty_days_ago).distinct().count()
         total_pins = Pin.objects.count()
         total_photos = Image.objects.count()
         total_friendships = Friendship.objects.count()
@@ -754,7 +982,12 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
 
             if hasattr(Loc.objects, "annotate_pin_count"):
                 top_locations = list(
-                    Loc.objects.filter(pins__isnull=False).distinct().annotate_pin_count().order_by("-pin_count")[:10].values("name", "slug", "pin_count"),
+                    Loc.objects.filter(pins__isnull=False)
+                    .distinct()
+                    .annotate_pin_count()
+                    .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
+                    .order_by("-pin_count")[:10]
+                    .values("display_name", "slug", "pin_count"),
                 )
 
         return render(

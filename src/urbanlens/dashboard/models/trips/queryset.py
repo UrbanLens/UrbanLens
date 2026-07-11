@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Count, Prefetch
+from django.db.models import Count, F, Prefetch
 
 # Django Imports
 # App Imports
@@ -15,20 +15,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Valid values for the ``sort`` argument of :meth:`TripQuerySet.for_list_page`, mapped
+#: to the model field each sorts on.
+TRIP_LIST_SORT_FIELDS: dict[str, str] = {
+    "start_date": "start_date",
+    "updated": "updated",
+}
 
-class TripQuerySet(abstract.QuerySet):
+
+class TripQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for Trip models."""
 
-    def for_list_page(self, profile: Profile) -> TripQuerySet:
+    def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet:
         """Return trips for the list page with counts and member prefetch.
 
         Args:
             profile: The viewer's profile; only their trips are included.
+            sort: Which field to order by - one of the keys in ``TRIP_LIST_SORT_FIELDS``
+                (``"start_date"`` or ``"updated"``). Falls back to ``"updated"`` if unrecognized.
+            direction: ``"asc"`` or ``"desc"``. Falls back to ``"desc"`` if unrecognized.
 
         Returns:
-            Annotated queryset ordered by most recently updated.
+            Annotated queryset ordered per ``sort``/``direction``. Trips with no ``start_date``
+            always sort to the end regardless of direction when sorting by ``start_date``.
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
+
+        field = TRIP_LIST_SORT_FIELDS.get(sort, "updated")
+        ascending = direction == "asc"
+        if field == "start_date":
+            order = F(field).asc(nulls_last=True) if ascending else F(field).desc(nulls_last=True)
+        else:
+            order = F(field).asc() if ascending else F(field).desc()
 
         return (
             self.filter(profiles=profile)
@@ -47,9 +65,9 @@ class TripQuerySet(abstract.QuerySet):
                     ),
                 ),
             )
-            .order_by("-updated")
+            .order_by(order)
         )
 
 
-class TripManager(abstract.Manager.from_queryset(TripQuerySet)):
+class TripManager(abstract.DashboardManager.from_queryset(TripQuerySet)):
     """Custom query manager for Trip models."""

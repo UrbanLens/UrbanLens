@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from uuid import uuid4
+from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q, UUIDField
+from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, IntegerField, Q
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
@@ -22,16 +22,11 @@ from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
-class SiteSettings(abstract.Model):
+class SiteSettings(abstract.FrontendDashboardModel):
     """Singleton model for site-wide configurable settings.
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
     """
-
-    # Regenerated each time the database is wiped or the app is redeployed from scratch.
-    # Clients embed this in their local pin cache; a mismatch signals a stale cache that
-    # must be cleared (avoids ghost pins appearing after a DB reset).
-    instance_uuid = UUIDField(default=uuid4, unique=True, editable=False)
 
     # --- Trip settings ---
 
@@ -100,6 +95,36 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(500), MaxValueValidator(200_000)],
     )
 
+    # --- Storage quotas & upload processing ---
+
+    storage_quota_gb = IntegerField(
+        default=10,
+        help_text="Storage quota (GB) for photo/video uploads per regular user. Subscription roles can override this with a larger quota. Set to 0 for unlimited.",
+        verbose_name="Default storage quota (GB)",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+    image_downscale_enabled = BooleanField(
+        default=True,
+        help_text="Downscale uploaded photos that exceed the maximum dimension below, to save storage space. The original EXIF metadata is always preserved on the image record.",
+        verbose_name="Downscale uploaded photos",
+    )
+    image_downscale_max_dimension = IntegerField(
+        default=1920,
+        help_text="Longest edge (pixels) uploaded photos are downscaled to when downscaling is enabled. 1920px keeps plenty of detail for screens while reducing the size of a modern phone photo to roughly 1/8th.",
+        verbose_name="Max photo dimension (px)",
+        validators=[MinValueValidator(256), MaxValueValidator(20_000)],
+    )
+    image_convert_webp = BooleanField(
+        default=True,
+        help_text="Re-encode processed uploads as WebP for additional storage savings.",
+        verbose_name="Convert uploads to WebP",
+    )
+    image_downscale_vip = BooleanField(
+        default=False,
+        help_text="Also downscale/convert uploads from users with an active subscription. When off, subscribers keep their original files (unless they opt into downscaling themselves).",
+        verbose_name="Downscale subscriber uploads",
+    )
+
     # --- Search provider ---
 
     search_provider = CharField(
@@ -110,10 +135,25 @@ class SiteSettings(abstract.Model):
         verbose_name="Search provider",
     )
 
-    search_cache_hours = IntegerField(
-        default=24,
-        help_text="How many hours to cache web search results per pin before re-fetching. Set to 0 to disable caching.",
-        verbose_name="Search cache duration (hours)",
+    external_data_cache_days = IntegerField(
+        default=7,
+        help_text=(
+            "Minimum number of days to cache external API responses before they are considered stale and re-fetched. "
+            "Applies to every shared, Location-scoped external data source (Wikipedia, NPS, LoopNet, USGS, Nominatim, "
+            "media archives, Google Places, web search, and satellite/street view imagery)."
+        ),
+        verbose_name="External data cache (days)",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+
+    # --- Place naming ---
+
+    default_name_source_priority = CharField(
+        max_length=500,
+        blank=True,
+        default="google_places,wikipedia,nps",
+        help_text=("Comma-separated name-provider slugs, highest priority first, used to pick a location's official name from external candidates. Sources not listed rank last, in plugin order. Blank = plugin order only."),
+        verbose_name="Name source priority",
     )
 
     # --- Environment ---
@@ -220,6 +260,30 @@ class SiteSettings(abstract.Model):
         validators=[MinValueValidator(1), MaxValueValidator(1000)],
     )
 
+    # --- Outbound email limits ---
+    # Caps on user-triggered emails to third parties (friend/visit invites).
+    # Subscription roles can raise these per-tier; the largest applicable
+    # limit wins and 0 means unlimited (see services.email_safety).
+
+    email_limit_per_hour = IntegerField(
+        default=5,
+        help_text="Maximum user-triggered emails (invitations etc.) one user may send per hour. Subscription roles can raise this. 0 = unlimited.",
+        verbose_name="Email limit (per hour)",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    email_limit_per_day = IntegerField(
+        default=20,
+        help_text="Maximum user-triggered emails one user may send per day. Subscription roles can raise this. 0 = unlimited.",
+        verbose_name="Email limit (per day)",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    email_limit_per_month = IntegerField(
+        default=100,
+        help_text="Maximum user-triggered emails one user may send per 30 days. Subscription roles can raise this. 0 = unlimited.",
+        verbose_name="Email limit (per month)",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+
     # --- Registration ---
 
     signup_restricted = BooleanField(
@@ -229,7 +293,10 @@ class SiteSettings(abstract.Model):
     )
 
     # --- Bootstrap admin ---
-
+    bootstrap_admin_onboarding_complete = BooleanField(
+        default=False,
+        help_text="True once the bootstrap admin has visited the site admin settings page.",
+    )
     bootstrap_admin_user = ForeignKey(
         "auth.User",
         null=True,
@@ -238,10 +305,9 @@ class SiteSettings(abstract.Model):
         related_name="+",
         help_text="The first user created on this site; receives site admin and a one-time setup redirect.",
     )
-    bootstrap_admin_onboarding_complete = BooleanField(
-        default=False,
-        help_text="True once the bootstrap admin has visited the site admin settings page.",
-    )
+
+    if TYPE_CHECKING:
+        bootstrap_admin_user_id: int | None
 
     objects = SiteSettingsManager()
 
@@ -252,6 +318,15 @@ class SiteSettings(abstract.Model):
     def get_current(cls) -> SiteSettings:
         """Return (and create if missing) the singleton settings record."""
         return cls.objects.get_current()
+
+    @property
+    def name_source_priority_list(self) -> list[str]:
+        """The configured name-source priority as an ordered slug list.
+
+        Returns:
+            Provider slugs in descending priority; empty when unconfigured.
+        """
+        return [slug for raw in self.default_name_source_priority.split(",") if (slug := raw.strip())]
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.
@@ -321,7 +396,7 @@ class SiteSettings(abstract.Model):
             EnvironmentTypes.TESTING,
         }
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_site_settings"
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -335,4 +410,10 @@ class SiteSettings(abstract.Model):
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
+            CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
+            CheckConstraint(condition=Q(storage_quota_gb__gte=0), name="storage_quota_gb_gte_0"),
+            CheckConstraint(condition=Q(email_limit_per_hour__gte=0), name="email_limit_per_hour_gte_0"),
+            CheckConstraint(condition=Q(email_limit_per_day__gte=0), name="email_limit_per_day_gte_0"),
+            CheckConstraint(condition=Q(email_limit_per_month__gte=0), name="email_limit_per_month_gte_0"),
+            CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
         ]

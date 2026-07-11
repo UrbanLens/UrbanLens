@@ -19,7 +19,7 @@
         {% endfor %}
         {% for photo in photos %}
         <a class="memories-on-this-day-chip"
-           href="{% if photo.pin %}{% url 'pin.gallery' photo.pin.slug %}{% elif photo.location.slug %}{% url 'location.wiki.gallery' photo.location.slug %}{% else %}#{% endif %}">
+           href="{% if photo.pin %}{% url 'pin.gallery' photo.pin.slug %}{% elif photo.wiki.location.slug %}{% url 'location.wiki.gallery' photo.wiki.location.slug %}{% else %}#{% endif %}">
             <i class="material-symbols-outlined">photo_camera</i>
             {{ photo.caption|default:"Photo" }} &middot; {{ photo.taken_at.year }}
         </a>

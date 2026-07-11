@@ -10,13 +10,15 @@
         {# -- Primary links ----------------------------------------------------- #}
         <ul class="app-nav-links">
             {% if user.is_authenticated %}
-            <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
-            <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-            <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
-            <li><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
-            <li><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
+            <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+            <li{% if nav_section == 'organize' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+            <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
+            <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
+            <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
             {% else %}
-            <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+            <li{% if nav_section == 'about' %} class="app-nav-link--active"{% endif %}><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+            <li{% if nav_section == 'values' %} class="app-nav-link--active"{% endif %}><a href="{% url 'values' %}" class="app-nav-link">Values</a></li>
+            <li{% if nav_section == 'faq' %} class="app-nav-link--active"{% endif %}><a href="{% url 'faq' %}" class="app-nav-link">FAQ</a></li>
             {% endif %}
         </ul>
 
@@ -128,17 +130,27 @@
     </div>
 </nav>
 
+{% if user.is_authenticated %}
+<div id="safety-active-banner"
+     hx-get="{% url 'safety.active_banner' %}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+</div>
+{% endif %}
+
 {# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
 <div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
     <ul class="app-nav-drawer-links">
-        <li><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
+        <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
         {% if user.is_authenticated %}
-        <li><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-        <li><a href="{% url 'trips.list' %}" class="app-nav-link">Plan</a></li>
-        <li><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
-        <li><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
+        <li{% if nav_section == 'organize' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
+        <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
+        <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
+        <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
         {% endif %}
-        <li><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+        <li{% if nav_section == 'about' %} class="app-nav-link--active"{% endif %}><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
+        <li{% if nav_section == 'values' %} class="app-nav-link--active"{% endif %}><a href="{% url 'values' %}" class="app-nav-link">Values</a></li>
+        <li{% if nav_section == 'faq' %} class="app-nav-link--active"{% endif %}><a href="{% url 'faq' %}" class="app-nav-link">FAQ</a></li>
     </ul>
 </div>
 

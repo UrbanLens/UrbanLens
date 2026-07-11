@@ -9,7 +9,7 @@ from django.db.models import CASCADE, ForeignKey, Index, TextField
 from urbanlens.dashboard.models import abstract
 
 
-class PinNote(abstract.Model):
+class PinNote(abstract.DashboardModel):
     """A private, timestamped note that only the pin owner can see.
 
     Distinct from Pin.description (single editable blob). Notes are append-only
@@ -30,7 +30,7 @@ class PinNote(abstract.Model):
     def __str__(self) -> str:
         return f"[{self.pin_id}] {self.text[:60]}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_notes"
         ordering = ["-created"]
         indexes = [

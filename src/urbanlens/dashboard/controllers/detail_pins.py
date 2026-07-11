@@ -1,4 +1,4 @@
-"""Detail-pin views - sub-markers placed within a pin's or location's bounding box."""
+"""Detail-pin views - sub-markers placed within a pin's or wiki's bounding box."""
 
 from __future__ import annotations
 
@@ -6,16 +6,60 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
+    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki = get_object_or_404(Wiki, location=location)
+    return location, wiki
+
+
+def _location_for_coords(latitude, longitude) -> Location:
+    """Find-or-create the shared Location a detail pin sits at.
+
+    A detail pin has its own coordinates (distinct from its parent's), and a Pin
+    reads its coordinates from its Location, so each detail pin needs its own
+    Location row at its point.
+    """
+    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
+    return location
+
+
+def _location_for_child_wiki(latitude, longitude) -> Location:
+    """Find-or-create a Location for a new child wiki's own coordinates.
+
+    A Wiki's ``location`` is one-to-one, so - unlike a detail pin's plain FK -
+    a child wiki can never share a Location with any other Wiki. The usual
+    proximity-based dedup (``Location.objects.get_nearby_or_create``'s default
+    50m threshold) would otherwise merge two nearby child markers, or a
+    marker and its own parent, onto the same Location and collide. This skips
+    that dedup and only reuses an existing Location when it's an exact
+    coordinate match that has no wiki of its own yet.
+    """
+    latitude, longitude = float(latitude), float(longitude)
+    location, created = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=0)
+    if created:
+        return location
+    try:
+        _existing_wiki = location.wiki
+    except ObjectDoesNotExist:
+        return location
+    return Location.objects.create(latitude=latitude, longitude=longitude)
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -47,13 +91,22 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
+        # Defense-in-depth: this endpoint only ever creates a brand-new child pin
+        # (never re-parents an existing one), so a cycle can't actually form here
+        # today. Guard anyway so this stays safe if that ever changes, and so a
+        # pre-existing corrupted ancestor chain on `parent` is caught rather than
+        # silently extended. Walk from `parent`'s existing parent (not `parent`
+        # itself) - passing `parent` as both self and new_parent would trip the
+        # identity check unconditionally, since any saved pin is trivially its
+        # own pk match against itself.
+        if parent.would_create_cycle(parent.parent_pin):
+            return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
+
         detail_name = body.get("name") or None
         detail_pin = Pin.objects.create(
             name=detail_name,
             name_is_user_provided=bool((detail_name or "").strip()),
             description=body.get("description") or None,
-            latitude=float(lat),
-            longitude=float(lon),
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
@@ -63,7 +116,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_pin=parent,
             profile=parent.profile,
-            location=parent.location,
+            location=_location_for_coords(lat, lon),
         )
         return JsonResponse({"ok": True, "uuid": str(detail_pin.uuid)})
 
@@ -97,17 +150,25 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.detail_bg_opacity = int(body["bg_opacity"])
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = int(body["border_opacity"])
-        if body.get("latitude"):
-            detail_pin.latitude = float(body["latitude"])
-        if body.get("longitude"):
-            detail_pin.longitude = float(body["longitude"])
+
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        if new_latitude and new_longitude:
+            # A move repoints the detail pin to a Location at the new coordinates.
+            detail_pin.location = _location_for_coords(new_latitude, new_longitude)
+
         detail_pin.save()
         return JsonResponse({"ok": True})
 
     def delete(self, request, pin_slug, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
-        detail_pin.delete()
-        return HttpResponse("", status=200)
+        subtree = list(Pin.objects.filter(pk=detail_pin.pk).with_descendants())
+        stash_for_undo("pin", subtree, detail_pin.profile)
+        for descendant in subtree:
+            descendant.delete()
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
@@ -120,47 +181,50 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
-    """Return community detail pins for a location (wiki map overlay)."""
+    """Return a wiki's child wikis as JSON for Leaflet rendering (map overlay).
 
-    def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
-        data = []
-        viewer = request.user if request.user.is_authenticated else None
-        for dp in detail_pins:
-            item = dp.to_detail_json()
-            if dp.profile and dp.profile.user:
-                item["added_by"] = dp.profile.user.username
-                item["is_mine"] = viewer is not None and dp.profile.user_id == viewer.pk
-            else:
-                item["added_by"] = "Unknown"
-                item["is_mine"] = False
-            data.append(item)
-        return JsonResponse({"detail_pins": data})
-
-
-class LocationWikiDetailPinView(LoginRequiredMixin, View):
-    """Community detail pins for a Location wiki page.
-
-    GET  → renders the (legacy, currently unused by the wiki page's own JS) panel partial.
-    POST → creates a new community detail pin, records a LocationEdit, returns JSON.
+    Child wikis are community sub-markers - buildings, entrances, points of
+    interest, hazards - nested under a location's wiki via ``Wiki.parent_wiki``.
+    Unlike the old Pin-backed community detail pins, a Wiki has no owning
+    profile, so there is no per-viewer "added_by"/"is_mine" attribution.
     """
 
     def get(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
-        detail_pins = Pin.objects.filter(parent_location=location, parent_pin__isnull=True).select_related("profile__user").order_by("pin_type", "name")
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            # A location with no wiki yet simply has no child wikis to show -
+            # the map overlay shouldn't error just because nobody has created
+            # a wiki page for this spot.
+            return JsonResponse({"detail_pins": []})
+        child_wikis = wiki.child_wikis.order_by("pin_type", "name")
+        return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
+
+
+class LocationWikiDetailPinView(LoginRequiredMixin, View):
+    """Child wikis for a wiki page.
+
+    GET  → renders the (legacy, currently unused by the wiki page's own JS) panel partial.
+    POST → creates a new child wiki, records a WikiEdit, returns JSON.
+    """
+
+    def get(self, request, location_slug):
+        location, wiki = _resolve_wiki(location_slug)
+        child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",
             {
                 "location": location,
-                "detail_pins": detail_pins,
+                "wiki": wiki,
+                "detail_pins": child_wikis,
                 "pin_type_choices": PinType.choices,
             },
         )
 
     def post(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
+        _location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -173,13 +237,19 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         if not lat or not lon:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
-        pin_name = body.get("name") or None
-        detail_pin = Pin.objects.create(
-            name=pin_name,
-            name_is_user_provided=bool((pin_name or "").strip()),
+        # Defense-in-depth: this endpoint only ever creates a brand-new child
+        # wiki (never re-parents an existing one), so a cycle can't actually
+        # form here today. Guard anyway so this stays safe if that ever
+        # changes, and so a pre-existing corrupted ancestor chain on `wiki`
+        # is caught rather than silently extended. Walk from `wiki`'s existing
+        # parent (not `wiki` itself) - see the matching Pin check for why.
+        if wiki.would_create_cycle(wiki.parent_wiki):
+            return JsonResponse({"ok": False, "error": "Invalid parent wiki."}, status=400)
+
+        child_name = body.get("name") or wiki.name
+        child_wiki = Wiki.objects.create(
+            name=child_name,
             description=body.get("description") or None,
-            latitude=float(lat),
-            longitude=float(lon),
             pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
@@ -187,31 +257,30 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
             detail_border_color=body.get("border_color") or None,
             detail_border_opacity=int(body.get("border_opacity") or 100),
-            parent_location=location,
-            profile=profile,
-            location=location,
+            parent_wiki=wiki,
+            location=_location_for_child_wiki(lat, lon),
         )
 
-        LocationEdit.objects.create(
-            location=location,
+        WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
-            changes={"detail_pin_added": {"from": None, "to": detail_pin.effective_name}},
+            changes={"child_wiki_added": {"from": None, "to": child_wiki.name}},
         )
 
-        return JsonResponse({"ok": True, "uuid": str(detail_pin.uuid)})
+        return JsonResponse({"ok": True, "uuid": str(child_wiki.uuid)})
 
 
 class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
-    """Edit, move, or delete a community detail pin.
+    """Edit, move, or delete a child wiki.
 
     Both verbs share one URL (mirroring the personal-pin equivalent,
     DetailPinEditView) so the frontend can use one base URL for both.
-    Moves and deletes record a LocationEdit.
+    Moves and deletes record a WikiEdit on the *parent* wiki.
     """
 
     def post(self, request, location_slug, detail_pin_uuid):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        _location, wiki = _resolve_wiki(location_slug)
+        child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -219,11 +288,13 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
-        # Style/content fields update silently (no LocationEdit) - same reasoning
+        # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a
         # granular audit entry per keystroke would flood the wiki's edit history.
+        # Unlike Pin.name, Wiki.name is required (non-null) - a blank submission
+        # keeps the current name instead of clearing it.
         for field, value in {
-            "name": body.get("name") or None,
+            "name": body.get("name") or child_wiki.name,
             "description": body.get("description") or None,
             "pin_type": body.get("pin_type") or None,
             "icon": body.get("icon") or None,
@@ -232,30 +303,28 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             "detail_border_color": body.get("border_color") or None,
         }.items():
             if value is not None or field in body:
-                setattr(detail_pin, field, value)
+                setattr(child_wiki, field, value)
         if "bg_opacity" in body:
-            detail_pin.detail_bg_opacity = int(body["bg_opacity"])
+            child_wiki.detail_bg_opacity = int(body["bg_opacity"])
         if "border_opacity" in body:
-            detail_pin.detail_border_opacity = int(body["border_opacity"])
+            child_wiki.detail_border_opacity = int(body["border_opacity"])
 
-        lat = body.get("latitude")
-        lon = body.get("longitude")
-        moved = bool(lat and lon)
-        old_lat, old_lon = detail_pin.latitude, detail_pin.longitude
-        if moved:
-            detail_pin.latitude = float(lat)
-            detail_pin.longitude = float(lon)
-        detail_pin.save()
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        old_lat, old_lon = child_wiki.location.latitude, child_wiki.location.longitude
+        if moved := bool(new_latitude and new_longitude):
+            child_wiki.location = _location_for_child_wiki(new_latitude, new_longitude)
+        child_wiki.save()
 
         if moved:
-            LocationEdit.objects.create(
-                location=location,
+            WikiEdit.objects.create(
+                wiki=wiki,
                 editor=profile,
                 changes={
-                    "detail_pin_moved": {
-                        "pin": detail_pin.effective_name,
+                    "child_wiki_moved": {
+                        "pin": child_wiki.name,
                         "from": [str(old_lat), str(old_lon)],
-                        "to": [str(detail_pin.latitude), str(detail_pin.longitude)],
+                        "to": [str(child_wiki.location.latitude), str(child_wiki.location.longitude)],
                     }
                 },
             )
@@ -263,18 +332,23 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, location_slug, detail_pin_uuid):
-        location = get_object_or_404(Location, slug=location_slug)
-        detail_pin = get_object_or_404(Pin, uuid=detail_pin_uuid, parent_location=location)
+        _location, wiki = _resolve_wiki(location_slug)
+        child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        pin_name = detail_pin.effective_name
+        child_name = child_wiki.name
 
-        detail_pin.delete()
+        subtree = with_wiki_descendants([child_wiki])
+        stash_for_undo("wiki", subtree, profile)
+        for descendant in subtree:
+            descendant.delete()
 
-        LocationEdit.objects.create(
-            location=location,
+        WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
-            changes={"detail_pin_removed": {"from": pin_name, "to": None}},
+            changes={"child_wiki_removed": {"from": child_name, "to": None}},
         )
 
-        return HttpResponse("", status=200)
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail wiki deleted. Undo within 7 days from Settings → Undo History."}})
+        return response

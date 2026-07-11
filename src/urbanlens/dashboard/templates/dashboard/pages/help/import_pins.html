@@ -72,6 +72,7 @@
                                     <li>Maps</li>
                                     <li>Maps (your places)</li>
                                     <li>My Maps</li>
+                                    <li>My Activity - for driving-directions history, open its options and set the Maps output format to HTML (the only format we can read for this section)</li>
                                     <li>Saved</li>
                                     <li>Street View</li>
                                     <li>Timeline</li>
@@ -83,6 +84,7 @@
                         </ol>
                         <div class="help-import-callout"><strong>Tip:</strong> You will have a chance to choose which pins to import.</div>
                         <div class="help-import-callout help-import-callout--tech"><strong>Note:</strong> Google only supports exporting data via Google Takeout; there's nothing we can do to make this process easier.</div>
+                        <div class="help-import-callout help-import-callout--tech"><strong>My Activity imports differently:</strong> "Directions to X" entries aren't saved places, so they don't become pins automatically. A destination near one of your existing pins gets logged as a visit there; anything else shows up as a suggestion in your notifications for you to confirm or dismiss.</div>
                     </div>
                 </div>
             </section>
@@ -205,7 +207,7 @@
                     <h2>Supported import formats</h2>
                 </div>
                 <div class="help-import-format-grid">
-                    <span>KML / KMZ</span><span>GeoJSON</span><span>GPX waypoints</span><span>CSV</span><span>Shapefile ZIP</span><span>WKT / WKB</span><span>OSM XML</span><span>ZIP archives</span>{% if can_use_ai_features %}<span>Text (.txt, AI)</span><span>Word (.docx, AI)</span>{% endif %}
+                    <span>KML / KMZ</span><span>GeoJSON</span><span>GPX waypoints</span><span>CSV</span><span>Shapefile ZIP</span><span>WKT / WKB</span><span>OSM XML</span><span>My Activity (Maps)</span><span>ZIP archives</span>{% if can_use_ai_features %}<span>Text (.txt, AI)</span><span>Word (.docx, AI)</span>{% endif %}
                 </div>
             </section>
         </main>

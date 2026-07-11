@@ -6,7 +6,8 @@ import datetime
 
 from django.contrib.auth.models import User
 from django.http import Http404
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 import pytest
@@ -14,7 +15,7 @@ import pytest
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.safety import SafetyCheckinCreateView, _get_checkin_by_slug
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinMessage
-from urbanlens.dashboard.services.safety import create_checkin, mark_found_safe
+from urbanlens.dashboard.services.safety import cancel_checkin, create_checkin, mark_found_safe
 
 
 def _future(hours: float = 2) -> datetime.datetime:
@@ -33,6 +34,9 @@ class CreateCheckinSlugTests(TestCase):
 
     def test_duplicate_titles_get_distinct_slugs(self) -> None:
         first = create_checkin(profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        # A profile may only have one active check-in at a time - resolve the
+        # first before creating the second so this only exercises slug uniqueness.
+        cancel_checkin(first)
         second = create_checkin(profile=self.profile, title="Solo Hike", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
         self.assertNotEqual(first.slug, second.slug)
 
@@ -82,6 +86,26 @@ class SafetyCheckinCreateViewValidationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         checkin = SafetyCheckin.objects.get(profile=self.profile)
         self.assertTrue(checkin.title)
+
+    def test_rejects_a_second_active_checkin(self) -> None:
+        create_checkin(profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+
+        response = self._post({"checkin_by": _future().isoformat(), "grace_period_hours": "1"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 1)
+
+    def test_get_redirects_to_the_active_checkin(self) -> None:
+        # Uses the Django test client (not RequestFactory) - the view calls
+        # django.contrib.messages, which needs full middleware to back it.
+        active = create_checkin(profile=self.profile, title="Existing Trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+        client = Client()
+        client.force_login(self.user)
+
+        response = client.get(reverse("safety.checkin.create"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(active.slug, response.url)
 
 
 class MarkFoundSafeChatMessageTests(TestCase):

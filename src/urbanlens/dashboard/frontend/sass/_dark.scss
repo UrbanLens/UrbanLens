@@ -298,8 +298,7 @@
     }
 
     .profile-stat,
-    .profile-section,
-    .profile-hero {
+    .profile-section {
         @include standard-section;
     }
 
@@ -389,7 +388,7 @@
 
     .date-error-hint {
         font-size: 0.85rem;
-        color: $text-secondary;
+        color: var(--ul-grey-6);
         margin: 0;
     }
 
@@ -613,10 +612,6 @@
         }
     }
 
-    .view-toggle-group {
-        background-color: var(--ul-grey-4);
-    }
-
     .card-header {
         .view-toggle-group {
             background-color: var(--ul-grey-1);
@@ -652,14 +647,17 @@
         &--has-events {
             background: $dk-cal-event-bg;
         }
-
-        &--today {
-            background: $dk-navy;
-        }
     }
 
     .cal-day-num {
         color: var(--ul-grey-7);
+    }
+
+    .trip-sort-select {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-2);
+
+        &:hover { border-color: var(--ul-grey-4); }
     }
 
     .trip-activity-item {
@@ -944,7 +942,8 @@
         border-color: var(--ul-grey-1a);
     }
 
-    .comment-map-composer-toolbar {
+    .comment-map-composer-toolbar,
+    .comment-map-view-toolbar {
         border-color: var(--ul-grey-1a);
     }
 
@@ -952,30 +951,24 @@
         color: var(--ul-grey-6);
     }
 
-    .cmcc-pin-search {
-        background: var(--ul-grey-1);
-        color: var(--ul-grey-8);
+    .memories-map-card {
+        background: var(--ul-grey-0);
+        border-color: var(--ul-grey-1a);
     }
 
-    .cmcc-pin-option {
-        color: var(--ul-grey-8);
-
-        &:hover {
-            background: var(--ul-hover-bg);
-        }
-    }
-
-    .cmc-layer-btn,
+    .map-layers-strip-btn,
     .cmc-tool-btn,
     .cmc-undo-btn,
-    .cmc-clear-btn {
+    .cmc-clear-btn,
+    .cmc-download-btn {
         color: var(--ul-grey-8);
 
         &:hover {
             background: var(--ul-hover-bg);
         }
 
-        &.is-active {
+        &.is-active,
+        &.active {
             background: rgba($color-indigo-700, .25);
             border-color: $color-indigo-600;
             color: $color-indigo-300;
@@ -1191,21 +1184,6 @@
             }
         }
 
-        .wiki-tabs {
-            background: var(--ul-grey-1);
-            border-bottom-color: var(--ul-grey-1a);
-        }
-
-        .wiki-tab {
-            color: var(--ul-grey-7);
-
-            &--active,
-            &:hover {
-                color: $color-cyan-400;
-                border-bottom-color: $color-cyan-400;
-            }
-        }
-
         .wiki-loading {
             color: var(--ul-grey-6);
         }
@@ -1255,6 +1233,17 @@
             &:hover {
                 background: rgba($color-red-600, .08);
                 border-color: $color-red-400;
+            }
+        }
+
+        .wiki-delete-btn {
+            background: $color-red-700;
+            border-color: $color-red-700;
+            color: #fff;
+
+            &:hover {
+                background: $color-red-600;
+                border-color: $color-red-600;
             }
         }
 
@@ -1319,25 +1308,19 @@
     }
 
     .org-bulk-btn {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-        color: var(--ul-grey-8);
-    }
-
-    .org-bulk-btn--edit:hover:not(:disabled) {
-        background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
-    }
-
-    .org-bulk-btn--merge {
-        color: var(--ul-grey-0);
-
-        &:disabled {
-            color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
+        &--edit:hover:not(:disabled) {
+            background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
         }
-    }
 
-    .org-bulk-btn--delete:hover:not(:disabled) {
-        background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
+        &--merge {
+            &:disabled {
+                color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
+            }
+        }
+
+        &--delete:hover:not(:disabled) {
+            background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
+        }
     }
 }
 // Theme-level refinements for shared surfaces and controls. These catch legacy

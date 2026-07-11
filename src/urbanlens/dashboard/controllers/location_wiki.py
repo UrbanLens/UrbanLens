@@ -1,4 +1,10 @@
-"""Location wiki controller - community-editable page for a shared Location."""
+"""Wiki controller - community-editable page for a shared place.
+
+Routes are keyed by the Location slug (the stable URL token) but every view
+operates on the :class:`~urbanlens.dashboard.models.wiki.model.Wiki` for that
+Location. Wikis are user-created (from the pin detail page); these views 404
+when the place has no wiki yet.
+"""
 
 from __future__ import annotations
 
@@ -6,39 +12,115 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
-from django.http import JsonResponse
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.campus.model import Campus
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.location_edit import LocationEdit
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.locations.boundaries import boundary_as_multipolygon
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
 _WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
-# Fields a community member may edit via "Suggest edits".
-_WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
+# Fields a community member may edit via "Suggest edits". Coordinates are not
+# editable here: a Wiki's Location is fixed at creation and is not something
+# a community edit may repoint.
+_WIKI_EDITABLE_FIELDS = ("name", "description", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
+
+# Metadata for the four community stat votes (danger / vulnerability / priority /
+# rating) shown on the wiki page - the shared-place equivalent of a pin's own
+# STAT_FIELD_META (see controllers/pin_edit.py), reworded for a community voice
+# since these are a composite of every contributing profile's vote, not one
+# person's opinion.
+WIKI_STAT_FIELD_META = {
+    "danger": {
+        "label": "Danger",
+        "help": "How hazardous this site feels to explorers - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme).",
+        "modifier": "danger",
+        "wide": True,
+    },
+    "priority": {
+        "label": "Priority",
+        "help": "How urgently the community feels this place deserves a visit (1 = low, 5 = must visit soon).",
+        "modifier": "priority",
+        "wide": False,
+    },
+    "rating": {
+        "label": "Rating",
+        "help": "The community's overall quality rating for this place.",
+        "modifier": "",
+        "wide": False,
+    },
+    "vulnerability": {
+        "label": "Vulnerability",
+        "help": "How at-risk or fragile this site feels to the community - useful for planning and sharing responsibly.",
+        "modifier": "vulnerability",
+        "wide": True,
+    },
+}
+
+
+def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
+    """Build the template context for one community stat item.
+
+    Args:
+        wiki: The wiki the vote/composite belongs to.
+        field: One of :class:`WikiStatField`'s values.
+        profile: The viewing profile, used to look up their own vote.
+
+    Returns:
+        Dict with the composite, the viewer's own vote, and that field's
+        label/help/modifier/wide metadata.
+    """
+    return {
+        "field": field,
+        "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
+        "composite": WikiStatVote.objects.composite(wiki, field),
+        **WIKI_STAT_FIELD_META[field],
+    }
+
+
+def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
+    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki = get_object_or_404(Wiki, location=location)
+    return location, wiki
 
 
 class LocationWikiView(LoginRequiredMixin, View):
-    """Main wiki page for a Location.
+    """Main wiki page for a place.
 
-    GET  /location/<id>/wiki/  → full wiki page
+    GET  /location/<slug>/wiki/  → full wiki page
     """
 
     def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
+        # First view by someone other than the creator retires their
+        # self-service delete eligibility (see Wiki.can_be_deleted_by).
+        if wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
+            Wiki.objects.filter(pk=wiki.pk).update(viewed_by_other=True)
+            wiki.viewed_by_other = True
+
         # Only count root pins (not detail pins), and count distinct users.
-        root_pins = location.pins.filter(parent_pin__isnull=True, parent_location__isnull=True)
+        # The exact count is never exposed - see services.community_counts.
+        from urbanlens.dashboard.services.community_counts import approximate_pin_count
+
+        root_pins = location.pins.filter(parent_pin__isnull=True)
         pin_count = root_pins.values("profile").distinct().count()
+        pin_count_display = approximate_pin_count(wiki.pk, pin_count)
         first_pinned = root_pins.select_related("profile__user").order_by("created").first()
 
         # The requesting user's own pin for this location (used for the back-link).
@@ -49,7 +131,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         if user_pin:
             lat = user_pin.effective_latitude
             lng = user_pin.effective_longitude
-            other_locations = Location.objects.within_bounding_box(float(lat), float(lng)).exclude(pk=location.pk).order_by("name") if lat is not None and lng is not None else Location.objects.none()
+            other_locations = Location.objects.within_bounding_box(float(lat), float(lng)).exclude(pk=location.pk).order_by("official_name") if lat is not None and lng is not None else Location.objects.none()
         else:
             other_locations = Location.objects.none()
 
@@ -77,9 +159,12 @@ class LocationWikiView(LoginRequiredMixin, View):
             request,
             "dashboard/pages/location/wiki.html",
             {
+                "wiki": wiki,
                 "location": location,
-                "pin_count": pin_count,
+                "can_delete_wiki": wiki.can_be_deleted_by(profile),
+                "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
+                "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -92,29 +177,61 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
                 "location_security_values": [
-                    ("fences", "Fences", location.fences),
-                    ("alarms", "Alarms", location.alarms),
-                    ("cameras", "Cameras", location.cameras),
-                    ("security", "Security", location.security),
-                    ("signs", "Signs", location.signs),
-                    ("vps", "VPS", location.vps),
-                    ("plywood", "Plywood", location.plywood),
-                    ("locked", "Locked", location.locked),
+                    ("fences", "Fences", wiki.fences),
+                    ("alarms", "Alarms", wiki.alarms),
+                    ("cameras", "Cameras", wiki.cameras),
+                    ("security", "Security", wiki.security),
+                    ("signs", "Signs", wiki.signs),
+                    ("vps", "VPS", wiki.vps),
+                    ("plywood", "Plywood", wiki.plywood),
+                    ("locked", "Locked", wiki.locked),
                 ],
             },
         )
 
 
-class LocationWikiEditView(LoginRequiredMixin, View):
-    """Suggest (and immediately apply) a community edit to a Location's wiki fields.
+class LocationWikiDeleteView(LoginRequiredMixin, View):
+    """Let a wiki's creator delete it, before anyone else has seen it.
 
-    POST /location/<id>/wiki/edit/
+    DELETE /location/<slug>/wiki/delete/
+
+    Only available to the profile that created the wiki, and only while
+    ``Wiki.viewed_by_other`` is still false - see ``Wiki.can_be_deleted_by``.
+    Once eligible, deletes the wiki and its full child-wiki subtree (stashed
+    for undo, same as detail-wiki deletion) and unlinks it from the pin.
+    """
+
+    def delete(self, request, location_slug):
+        location, wiki = _resolve_wiki(location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if not wiki.can_be_deleted_by(profile):
+            return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
+
+        user_pin = location.pins.filter(profile=profile).first()
+
+        subtree = with_wiki_descendants([wiki])
+        stash_for_undo("wiki", subtree, profile)
+        for descendant in subtree:
+            descendant.delete()
+
+        redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")
+        response = HttpResponse("", status=200)
+        response["HX-Redirect"] = redirect_url
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Community wiki deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
+
+
+class LocationWikiEditView(LoginRequiredMixin, View):
+    """Suggest (and immediately apply) a community edit to a Wiki's fields.
+
+    POST /location/<slug>/wiki/edit/
     Body (JSON or form): field=value pairs for any subset of _WIKI_EDITABLE_FIELDS.
-    Records a LocationEdit and applies changes to the Location.
+    Records a WikiEdit and applies changes to the Wiki.
     """
 
     def post(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
+        _location, wiki = _resolve_wiki(location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
@@ -125,26 +242,21 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         from datetime import datetime
 
         valid_security = {v for v, _ in SecurityLevel.choices}
-        # new_vals holds the actual Python values to set on the model.
-        # changes holds JSON-safe strings for the LocationEdit audit record.
+        # new_vals holds the actual Python values to set on the wiki.
+        # changes holds JSON-safe strings for the WikiEdit audit record.
         new_vals: dict[str, object] = {}
         changes: dict[str, dict] = {}
         for field in _WIKI_EDITABLE_FIELDS:
             if field not in body:
                 continue
             raw = body[field]
-            old_val = getattr(location, field, None)
+            old_val = getattr(wiki, field, None)
             if str(raw) == str(old_val):
                 continue
-            if field in {"latitude", "longitude"}:
-                try:
-                    new_val = float(raw)
-                except (TypeError, ValueError):
-                    continue
-            elif field in _WIKI_SECURITY_FIELDS:
+            if field in _WIKI_SECURITY_FIELDS:
                 if raw not in valid_security:
                     continue
-                new_val = raw
+                new_val: object = raw
             elif field in {"date_abandoned", "date_last_active"}:
                 if not raw:
                     new_val = None
@@ -153,6 +265,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
                         new_val = datetime.strptime(raw, "%Y-%m-%d").date()
                     except ValueError:
                         continue
+            elif field == "description":
+                length_error = text_length_error(raw, MAX_WIKI_DESCRIPTION_LENGTH, "Description")
+                if length_error:
+                    return JsonResponse({"error": length_error}, status=400)
+                new_val = raw
             else:
                 new_val = raw
             new_vals[field] = new_val
@@ -161,13 +278,13 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         if not changes:
             return JsonResponse({"ok": True, "message": "No changes detected."})
 
-        # Apply changes.
+        # Apply wiki-field changes.
         for field, val in new_vals.items():
-            setattr(location, field, val)
-        location.save()
+            setattr(wiki, field, val)
+        wiki.save()
 
-        LocationEdit.objects.create(
-            location=location,
+        WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
             changes=changes,
         )
@@ -175,129 +292,99 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "changes": list(changes.keys())})
 
 
-class LocationWikiBboxView(LoginRequiredMixin, View):
-    """Update the bounding box polygon for a Location.
+def _render_history(request, location: Location, wiki: Wiki):
+    """Render the edit-history partial, including the requester's own profile.
 
-    GET  /location/<id>/wiki/bbox/  → returns current bbox as GeoJSON
-    POST /location/<id>/wiki/bbox/  → { "polygon": <GeoJSON geometry> }
+    Shared by the history list view and the revert/delete actions below so a
+    successful action re-renders the up-to-date list in place, instead of
+    leaving a stale row (or a raw JSON body) swapped into the DOM.
     """
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
+    return render(
+        request,
+        "dashboard/pages/location/wiki_history.html",
+        {"location": location, "wiki": wiki, "edits": edits, "current_profile": profile},
+    )
 
-    def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
-        if campus.polygon is None:
-            campus.polygon = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.name)
-            campus.save(update_fields=["polygon", "updated"])
-        return JsonResponse({"polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
 
-    def post(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> dict[str, dict]:
+    """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
 
-        try:
-            body = json.loads(request.body)
-            polygon_geojson = body.get("polygon")
-        except (json.JSONDecodeError, ValueError, AttributeError):
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
+    Mutates ``wiki`` (and any associated Boundary rows) in place - the caller
+    is responsible for calling ``wiki.save()`` afterwards.
 
-        if not polygon_geojson:
-            geom = boundary_as_multipolygon(float(location.latitude), float(location.longitude), name=location.name)
+    Returns:
+        A diff dict in the same ``{"field": {"from": ..., "to": ...}}`` shape
+        used by ``WikiEdit.changes``, computed against the values as they
+        stood right before this call.
+    """
+    revert_changes: dict[str, dict] = {}
+    for field, diff in target_edit.changes.items():
+        old_val = diff.get("from")
+        if field == "bounding_box" or field.startswith("boundary_"):
+            # "bounding_box" is the legacy audit key from the single-boundary
+            # era; treat it as the property boundary.
+            boundary_type = field.removeprefix("boundary_") if field.startswith("boundary_") else BoundaryType.PROPERTY
+            if boundary_type not in BoundaryType.values:
+                continue
+            row = Boundary.objects.row_for_wiki(wiki, boundary_type)
+            current_val = row.polygon.wkt if row and row.polygon else None
+            revert_changes[field] = {"from": current_val, "to": old_val}
+            if old_val:
+                restored = GEOSGeometry(old_val, srid=4326)
+                if isinstance(restored, Polygon):
+                    restored = MultiPolygon(restored, srid=restored.srid)
+                if row is None:
+                    row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
+                row.polygon = restored
+                row.save()
+            elif row is not None:
+                row.delete()
+        elif field in {"latitude", "longitude"}:
+            # Coordinates are no longer editable - a Wiki's Location is fixed
+            # at creation. Skip so legacy WikiEdit rows recorded before this
+            # rule don't error out on revert.
+            continue
         else:
-            try:
-                geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-                if isinstance(geom, Polygon):
-                    geom = MultiPolygon(geom, srid=geom.srid)
-            except (GEOSException, ValueError) as exc:
-                logger.exception("Invalid polygon GeoJSON: %s", exc)
-                return JsonResponse({"error": "Invalid polygon geometry"}, status=400)
-
-        # Check area against the site-wide limit.  Project to an equal-area CRS
-        # (EPSG:6933) so the area calculation is meaningful globally.
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-
-        max_km2 = SiteSettings.get_current().max_bbox_area_km2
-        try:
-            area_km2 = geom.transform(6933, clone=True).area / 1_000_000
-        except GEOSException:
-            area_km2 = 0.0
-        if area_km2 > max_km2:
-            return JsonResponse(
-                {
-                    "error": f"Bounding box is too large ({area_km2:,.0f} km²). Maximum allowed area is {max_km2:,.0f} km².",
-                },
-                status=400,
-            )
-
-        campus, _ = Campus.objects.get_or_create(location=location, profile=None)
-        old_wkt = campus.polygon.wkt if campus.polygon else None
-        campus.polygon = geom
-        campus.save(update_fields=["polygon", "updated"])
-
-        LocationEdit.objects.create(
-            location=location,
-            editor=profile,
-            changes={"bounding_box": {"from": old_wkt, "to": geom.wkt}},
-        )
-
-        return JsonResponse({"ok": True, "polygon": json.loads(campus.polygon.geojson) if campus.polygon else None})
+            current_val = getattr(wiki, field, None)
+            revert_changes[field] = {"from": current_val, "to": old_val}
+            setattr(wiki, field, old_val)
+    return revert_changes
 
 
 class LocationWikiHistoryView(LoginRequiredMixin, View):
-    """HTMX partial: edit history list for a Location.
+    """HTMX partial: edit history list for a wiki.
 
-    GET /location/<id>/wiki/history/
+    GET /location/<slug>/wiki/history/
     """
 
     def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
-        edits = location.edits.select_related("editor__user", "reverted_by").order_by("-created")
-        return render(
-            request,
-            "dashboard/pages/location/wiki_history.html",
-            {"location": location, "edits": edits},
-        )
+        location, wiki = _resolve_wiki(location_slug)
+        return _render_history(request, location, wiki)
 
 
 class LocationWikiRevertView(LoginRequiredMixin, View):
-    """Revert a specific LocationEdit.
+    """Revert a specific WikiEdit.
 
-    POST /location/<id>/wiki/history/<edit_id>/revert/
-    Creates a new LocationEdit that restores the "from" values and marks the
+    POST /location/<slug>/wiki/history/<edit_id>/revert/
+    Creates a new WikiEdit that restores the "from" values and marks the
     original edit as reverted.
     """
 
     def post(self, request, location_slug, edit_id: int):
-        location = get_object_or_404(Location, slug=location_slug)
-        target_edit = get_object_or_404(LocationEdit, id=edit_id, location=location)
+        location, wiki = _resolve_wiki(location_slug)
+        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
 
-        revert_changes: dict[str, dict] = {}
-        for field, diff in target_edit.changes.items():
-            old_val = diff.get("from")
-            if field == "bounding_box":
-                campus, _ = Campus.objects.get_or_create(location=location, profile=None)
-                current_val = campus.polygon.wkt if campus.polygon else None
-                revert_changes[field] = {"from": current_val, "to": old_val}
-                if old_val:
-                    restored = GEOSGeometry(old_val, srid=4326)
-                    if isinstance(restored, Polygon):
-                        restored = MultiPolygon(restored, srid=restored.srid)
-                    campus.polygon = restored
-                else:
-                    campus.polygon = None
-                campus.save(update_fields=["polygon", "updated"])
-            else:
-                current_val = getattr(location, field, None)
-                revert_changes[field] = {"from": current_val, "to": old_val}
-                setattr(location, field, old_val)
+        revert_changes = _revert_edit_fields(location, wiki, target_edit)
+        wiki.save()
 
-        location.save()
-
-        revert_edit = LocationEdit.objects.create(
-            location=location,
+        revert_edit = WikiEdit.objects.create(
+            wiki=wiki,
             editor=profile,
             changes=revert_changes,
         )
@@ -305,4 +392,72 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         target_edit.reverted_by = revert_edit
         target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
-        return JsonResponse({"ok": True})
+        return _render_history(request, location, wiki)
+
+
+class LocationWikiEditDeleteView(LoginRequiredMixin, View):
+    """Permanently erase one of the requesting user's own wiki edits.
+
+    POST /location/<slug>/wiki/history/<edit_id>/delete/
+
+    Unlike a plain revert (which keeps the edit visible in history, just
+    flagged as reverted), this restores the fields to their pre-edit values
+    (if not already reverted) and hard-deletes the WikiEdit row - and its
+    revert record, if any, since that also carries the original value as its
+    "from" - so no copy of the data lingers anywhere. Intended for cases like
+    accidentally pasting private information into a public wiki field.
+
+    Only the editor who made the original edit may delete it.
+    """
+
+    def post(self, request, location_slug, edit_id: int):
+        location, wiki = _resolve_wiki(location_slug)
+        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if target_edit.editor_id != profile.id:
+            return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
+
+        if not target_edit.reverted:
+            _revert_edit_fields(location, wiki, target_edit)
+            wiki.save()
+
+        revert_record = target_edit.reverted_by
+        if revert_record is not None:
+            revert_record.delete()
+        target_edit.delete()
+
+        return _render_history(request, location, wiki)
+
+
+class WikiStatVoteView(LoginRequiredMixin, View):
+    """Cast or clear the requester's vote on one community stat field.
+
+    POST /location/<slug>/wiki/stat/<field>/vote/
+    Body: ``value`` (1-5) to cast a vote, or 0/absent to clear it.
+
+    Re-renders just that stat item - both the recalculated composite and the
+    viewer's own vote - never a full page reload.
+    """
+
+    def post(self, request, location_slug, field):
+        if field not in WikiStatField.values:
+            raise Http404
+        _location, wiki = _resolve_wiki(location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        try:
+            value = int(request.POST.get("value") or 0)
+        except (TypeError, ValueError):
+            value = 0
+
+        if 1 <= value <= 5:
+            WikiStatVote.objects.update_or_create(wiki=wiki, profile=profile, field=field, defaults={"value": value})
+        else:
+            WikiStatVote.objects.filter(wiki=wiki, profile=profile, field=field).delete()
+
+        return render(
+            request,
+            "dashboard/partials/pins/_wiki_stat_rating_item.html",
+            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile)},
+        )

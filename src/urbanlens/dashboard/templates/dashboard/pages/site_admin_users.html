@@ -1,0 +1,141 @@
+{% extends 'dashboard/themes/base.html' %}
+{% block content %}
+<div class="site-admin-page page-content users-admin-page">
+  <div class="site-admin-header">
+    <h1 class="site-admin-title"><i class="material-symbols-outlined">group</i> Users</h1>
+    <p class="site-admin-subtitle">{{ total_users }} registered user{{ total_users|pluralize }}.</p>
+    <div class="site-admin-breadcrumb"><a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link"><i class="material-symbols-outlined">arrow_back</i> Admin Home</a></div>
+  </div>
+
+  <div class="ul-notice ul-notice--info users-admin-privacy-notice">
+    <i class="material-symbols-outlined">shield_lock</i>
+    <span>Email addresses respect each user's contact visibility setting - hidden emails stay hidden here too, even from site admins.</span>
+  </div>
+
+  <section class="site-admin-card ul-section card users-admin-card">
+    <div class="card-header">
+      <i class="material-symbols-outlined">group</i>
+      <span>User directory</span>
+    </div>
+
+    <form method="get" class="users-admin-search">
+      <div class="users-admin-search__field">
+        <i class="material-symbols-outlined">search</i>
+        <input type="search" name="q" value="{{ search }}" placeholder="Search by username, name, or email…" aria-label="Search users">
+      </div>
+      <button class="btn btn--primary" type="submit">Search</button>
+      {% if search %}<a class="btn btn--ghost" href="{% url 'site_admin_users' %}">Clear</a>{% endif %}
+    </form>
+
+    <div class="users-list">
+      <div class="users-list__head" aria-hidden="true">
+        <span class="users-list__col users-list__col--user">User</span>
+        <span class="users-list__col users-list__col--email">Email</span>
+        <span class="users-list__col users-list__col--login">Last login</span>
+        <span class="users-list__col users-list__col--subscriptions">Subscriptions</span>
+        <span class="users-list__col users-list__col--storage">Storage</span>
+        <span class="users-list__col users-list__col--admin">Admin</span>
+      </div>
+      <ul class="users-list__items">
+        {% for row in rows %}
+        <li class="users-list__item">
+          <div class="users-list__col users-list__col--user">
+            <span class="users-list__label">User</span>
+            <div class="users-list__identity{% if not row.profile_visible %} users-list__identity--hidden{% endif %}">
+              {% if row.profile_visible %}
+              <span class="users-list__avatar" style="background: hsl({{ row.avatar_hue }}, 62%, 45%)">{{ row.display_username|slice:":1"|upper }}</span>
+              {% else %}
+              <span class="users-list__avatar users-list__avatar--hidden" title="Hidden by this user's profile visibility setting ({{ row.profile.get_profile_visibility_display }})">
+                <i class="material-symbols-outlined">visibility_off</i>
+              </span>
+              {% endif %}
+              <div class="users-list__identity-text">
+                <strong class="users-list__username{% if not row.profile_visible %} users-list__username--hidden{% endif %}">{{ row.display_username }}</strong>
+                {% if row.display_first_name %}<span class="users-list__name">{{ row.display_first_name }}</span>{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="users-list__col users-list__col--email">
+            <span class="users-list__label">Email</span>
+            <div class="users-list__value">
+              {% if row.email_visible %}
+              <span class="users-list__email">{{ row.user.email|default:"—" }}</span>
+              {% else %}
+              <span class="users-list__hidden" title="Hidden by this user's contact visibility setting ({{ row.profile.get_contact_visibility_display }})">
+                <i class="material-symbols-outlined">lock</i> Hidden
+              </span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="users-list__col users-list__col--login">
+            <span class="users-list__label">Last login</span>
+            <div class="users-list__value">
+              {% if row.user.last_login %}{{ row.user.last_login|timesince }} ago{% else %}<span class="users-list__muted">Never</span>{% endif %}
+            </div>
+          </div>
+
+          <div class="users-list__col users-list__col--subscriptions">
+            <span class="users-list__label">Subscriptions</span>
+            <div class="users-list__value users-list__chips">
+              {% for role in row.roles %}
+              <span class="ul-chip"><i class="material-symbols-outlined">workspace_premium</i>{{ role.name }}</span>
+              {% empty %}
+              <span class="users-list__muted">None</span>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="users-list__col users-list__col--storage">
+            <span class="users-list__label">Storage</span>
+            <div class="users-list__value">
+              {% if row.quota_bytes %}
+              <div class="storage-usage__bar users-list__storage-bar" role="progressbar" aria-valuenow="{{ row.percent_used }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="storage-usage__fill{% if row.percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ row.percent_used }}%;"></div>
+              </div>
+              <span class="users-list__storage-text">{{ row.used_bytes|filesizeformat }} of {{ row.quota_bytes|filesizeformat }}</span>
+              {% else %}
+              <span class="users-list__storage-text">{{ row.used_bytes|filesizeformat }} <span class="users-list__muted">(unlimited)</span></span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="users-list__col users-list__col--admin">
+            <span class="users-list__label">Admin</span>
+            <div class="users-list__value">
+              {% if row.is_site_admin %}
+              <span class="ul-badge ul-badge--primary"><i class="material-symbols-outlined">shield_person</i> Admin</span>
+              {% else %}
+              <span class="users-list__muted">—</span>
+              {% endif %}
+            </div>
+          </div>
+        </li>
+        {% empty %}
+        <li class="users-list__empty">
+          <i class="material-symbols-outlined">person_search</i>
+          <span>No users match "{{ search }}".</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="users-admin-pagination">
+      {% if page_obj.has_previous %}
+      <a class="btn btn--ghost" href="?{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}"><i class="material-symbols-outlined">chevron_left</i> Previous</a>
+      {% else %}
+      <span class="btn btn--ghost is-disabled"><i class="material-symbols-outlined">chevron_left</i> Previous</span>
+      {% endif %}
+      <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a class="btn btn--ghost" href="?{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next <i class="material-symbols-outlined">chevron_right</i></a>
+      {% else %}
+      <span class="btn btn--ghost is-disabled">Next <i class="material-symbols-outlined">chevron_right</i></span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

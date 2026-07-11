@@ -102,7 +102,6 @@
   position: relative;
   border-radius: 6px;
   overflow: hidden;
-  background: var(--ul-grey-0);
   box-shadow: 0 1px 3px rgba(0,0,0,.08);
 
   &:hover .gallery-delete-btn { opacity: 1; }
@@ -272,6 +271,29 @@
   padding: .5rem 1rem;
   text-align: center;
   min-height: 2rem;
+}
+
+.lightbox-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem 1rem;
+  padding: 0 1rem .75rem;
+}
+
+.lightbox-meta-line {
+  color: rgba(255,255,255,.55);
+  font-size: .75rem;
+  margin: 0;
+
+  &[hidden] { display: none; }
+}
+
+.lightbox-source-link {
+  color: var(--color-accent, #60a5fa);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 // Photo map marker

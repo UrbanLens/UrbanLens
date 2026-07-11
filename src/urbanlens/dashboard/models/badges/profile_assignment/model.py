@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db.models import CASCADE, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.badges.profile_assignment.queryset import ProfileBadgeAssignmentManager
 
 
-class ProfileBadgeAssignment(abstract.Model):
+class ProfileBadgeAssignment(abstract.DashboardModel):
     """Records that *author* has privately applied a user-type Badge to *subject*.
 
     Only the author can see this assignment; the subject profile owner cannot.
@@ -31,9 +33,14 @@ class ProfileBadgeAssignment(abstract.Model):
         related_name="profile_assignments",
     )
 
+    if TYPE_CHECKING:
+        author_id: int
+        subject_id: int
+        badge_id: int
+
     objects = ProfileBadgeAssignmentManager()
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         constraints = [
             UniqueConstraint(
                 fields=["author", "subject", "badge"],

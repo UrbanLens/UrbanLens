@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, CharField, ForeignKey
 
-from urbanlens.dashboard.models.abstract import Model, TextChoices
+from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
@@ -12,7 +13,7 @@ from urbanlens.dashboard.models.profile import Profile
 logger = logging.getLogger(__name__)
 
 
-class Friendship(Model):
+class Friendship(DashboardModel):
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
     permissions = CharField(max_length=16, choices=Permission.choices)
@@ -28,6 +29,10 @@ class Friendship(Model):
         related_name="friends_to_me",
     )
 
+    if TYPE_CHECKING:
+        from_profile_id: int
+        to_profile_id: int
+
     objects = Manager()
 
     @classmethod
@@ -40,6 +45,25 @@ class Friendship(Model):
         """
         Create a new friendship request.
         """
+        if isinstance(from_profile, int):
+            from_profile = Profile.objects.get(pk=from_profile)
+        if isinstance(to_profile, int):
+            to_profile = Profile.objects.get(pk=to_profile)
+
+        if not from_profile or not to_profile:
+            logger.warning("Could not find profiles")
+            raise ValueError("Could not find profiles")
+        assert isinstance(from_profile, Profile)  # noqa: S101 - resolved from int above; narrows for mypy
+        assert isinstance(to_profile, Profile)  # noqa: S101 - resolved from int above; narrows for mypy
+
+        # A profile with Community turned off can neither send nor be sent
+        # friend requests - checked here since this is the one chokepoint
+        # every request path (button click, invite acceptance, pending
+        # invitation auto-accept) routes through.
+        if not from_profile.community_enabled or not to_profile.community_enabled:
+            logger.info("Friendship request blocked: Community disabled for from=%s or to=%s", from_profile.pk, to_profile.pk)
+            return None
+
         # Check if a request has already been made
         if friendship := cls.objects.all().between(from_profile, to_profile):
             # Check if we can make another request
@@ -51,15 +75,6 @@ class Friendship(Model):
             friendship.status = FriendshipStatus.REQUESTED
 
         else:
-            if isinstance(from_profile, int):
-                from_profile = Profile.objects.get(pk=from_profile)
-            if isinstance(to_profile, int):
-                to_profile = Profile.objects.get(pk=to_profile)
-
-            if not from_profile or not to_profile:
-                logger.warning("Could not find profiles")
-                raise ValueError("Could not find profiles")
-
             friendship = cls.objects.create(
                 from_profile=from_profile,
                 to_profile=to_profile,
@@ -70,10 +85,20 @@ class Friendship(Model):
         friendship.save()
         return friendship
 
-    def accept(self):
-        """Accept a friendship request."""
+    def accept(self) -> bool:
+        """Accept a friendship request.
+
+        Returns:
+            True if accepted, False (no-op) if either profile has Community
+            disabled - accepting would create a mutual, visible friendship,
+            which a Community-disabled profile cannot have.
+        """
+        if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
+            logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
+            return False
         self.status = FriendshipStatus.ACCEPTED
         self.save()
+        return True
 
     def decline(self):
         """Decline a friendship request (requester can re-send later)."""
@@ -147,6 +172,6 @@ class Friendship(Model):
     def __str__(self):
         return f"{self.from_profile.username} to {self.to_profile.username} - {self.relationship_type} - {self.status}"
 
-    class Meta(Model.Meta):
+    class Meta(DashboardModel.Meta):
         db_table = "dashboard_friendships"
         unique_together = ("from_profile", "to_profile")

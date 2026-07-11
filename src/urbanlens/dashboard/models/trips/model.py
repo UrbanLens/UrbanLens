@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -12,7 +13,6 @@ from django.db.models import (
     ImageField,
     Index,
     IntegerField,
-    JSONField,
     Manager as DjangoManager,
     ManyToManyField,
     UUIDField,
@@ -22,6 +22,11 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.trips.queryset import TripManager
+from urbanlens.dashboard.services.text_limits import (
+    MAX_COMMENT_TEXT_LENGTH,
+    MAX_TRIP_ACTIVITY_NOTES_LENGTH,
+    MAX_TRIP_DESCRIPTION_LENGTH,
+)
 
 if TYPE_CHECKING:
     from datetime import date
@@ -31,19 +36,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Trip(abstract.Model):
+class Trip(abstract.FrontendDashboardModel):
     """A planned trip shared among one or more users.
 
     The creator is the user who created the trip. Members includes the creator
     plus any additional users added. Only members can view and edit the trip.
     """
 
-    uuid = UUIDField(default=uuid4, unique=True, editable=False)
     name = CharField(max_length=255)
-    description = TextField(null=True, blank=True)
+    description = TextField(null=True, blank=True, max_length=MAX_TRIP_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_DESCRIPTION_LENGTH)])
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
 
+    # TODO: Convert to TextChoices
     PERM_NONE = "none"
     PERM_ORGANIZERS = "organizers"
     PERM_EVERYONE = "everyone"
@@ -144,7 +149,7 @@ class Trip(abstract.Model):
             return (end - start).days + 1
         return None
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
@@ -154,7 +159,7 @@ class Trip(abstract.Model):
         ]
 
 
-class TripActivity(abstract.Model):
+class TripActivity(abstract.DashboardModel):
     """A single planned activity within a trip.
 
     Each activity is associated with a Location and has an optional scheduled
@@ -172,7 +177,7 @@ class TripActivity(abstract.Model):
     ]
 
     title = CharField(max_length=255, null=True, blank=True)
-    notes = TextField(null=True, blank=True)
+    notes = TextField(null=True, blank=True, max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_ACTIVITY_NOTES_LENGTH)])
     scheduled_at = DateTimeField(null=True, blank=True)
     scheduled_end = DateTimeField(null=True, blank=True)
     order = IntegerField(default=0)
@@ -192,6 +197,7 @@ class TripActivity(abstract.Model):
         on_delete=CASCADE,
         related_name="activities",
     )
+    # TODO: Reassess linking both location and pin.
     location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
@@ -199,8 +205,6 @@ class TripActivity(abstract.Model):
         blank=True,
         related_name="trip_activities",
     )
-    # Optional link to the adding user's personal Pin (for icon/status context).
-    # TODO: I don't think this should be necessary. Probably remove it.
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
@@ -233,7 +237,7 @@ class TripActivity(abstract.Model):
 
     @property
     def effective_title(self) -> str:
-        """Display label: custom title, linked pin name/address, location name/address, or fallback."""
+        """Display label: custom title, linked pin name/address, wiki display name/address, or fallback."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         if self.title:
@@ -243,7 +247,7 @@ class TripActivity(abstract.Model):
             if pin_label:
                 return pin_label
         if self.location:
-            name = self.location.name
+            name = self.location.display_name
             if is_meaningful_name(name):
                 return name
             if self.location.address:
@@ -253,7 +257,7 @@ class TripActivity(abstract.Model):
     def __str__(self) -> str:
         return f"{self.effective_title} ({self.trip})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activities"
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
@@ -262,7 +266,7 @@ class TripActivity(abstract.Model):
         ]
 
 
-class TripMembership(abstract.Model):
+class TripMembership(abstract.DashboardModel):
     """RSVP through-model linking a Profile to a Trip.
 
     Replaces the implicit M2M join table so each membership can carry an RSVP
@@ -291,10 +295,14 @@ class TripMembership(abstract.Model):
         related_name="trip_memberships",
     )
 
+    if TYPE_CHECKING:
+        trip_id: int
+        profile_id: int
+
     def __str__(self) -> str:
         return f"{self.profile} in {self.trip} ({self.rsvp or 'no response'})"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
         indexes = [
@@ -305,8 +313,19 @@ class TripMembership(abstract.Model):
         ]
 
 
-class TripComment(abstract.Model):
+class TripComment(abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
+
+    text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
+    image = ImageField(upload_to="comment_images/", null=True, blank=True)
+    # Standalone map (viewport + markup items) attached to this comment.
+    markup_map = ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=SET_NULL,
+        related_name="trip_comments",
+        null=True,
+        blank=True,
+    )
 
     trip = ForeignKey(
         Trip,
@@ -327,15 +346,30 @@ class TripComment(abstract.Model):
         null=True,
         blank=True,
     )
-    text = TextField()
-    image = ImageField(upload_to="comment_images/", null=True, blank=True)
-    map_data = JSONField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        markup_map_id: int | None
+        trip_id: int
+        author_id: int | None
+        parent_id: int | None
+
+    @property
+    def map_data(self) -> dict | None:
+        """Client snapshot of the attached markup map, if any.
+
+        Kept as a property so templates and viewer JS that consumed the old
+        ``map_data`` JSON column keep working against the MarkupMap relation.
+
+        Returns:
+            Snapshot dict or None when no map is attached.
+        """
+        return self.markup_map.to_snapshot() if self.markup_map else None
 
     def __str__(self) -> str:
         author = self.author.user.username if self.author and self.author.user else "Unknown"
         return f"[{author}] {self.text[:60]}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
         indexes = [
@@ -343,19 +377,21 @@ class TripComment(abstract.Model):
         ]
 
 
-class TripActivityVote(abstract.Model):
+class TripActivityVote(abstract.DashboardModel):
     """A member's thumbs-up or thumbs-down vote on a proposed activity.
 
     Only one vote per (activity, profile) pair is allowed. Votes are only
     meaningful while the activity is in the 'proposed' status.
     """
 
+    # TODO: Convert to TextChoices
     VOTE_UP = "up"
     VOTE_DOWN = "down"
     VOTE_CHOICES = [
         ("up", "Up"),
         ("down", "Down"),
     ]
+    vote = CharField(max_length=4, choices=VOTE_CHOICES)
 
     activity = ForeignKey(
         TripActivity,
@@ -367,12 +403,15 @@ class TripActivityVote(abstract.Model):
         on_delete=CASCADE,
         related_name="activity_votes",
     )
-    vote = CharField(max_length=4, choices=VOTE_CHOICES)
+
+    if TYPE_CHECKING:
+        activity_id: int
+        profile_id: int
 
     def __str__(self) -> str:
         return f"{self.profile} {self.vote} on {self.activity}"
 
-    class Meta(abstract.Model.Meta):
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
         indexes = [

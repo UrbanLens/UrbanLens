@@ -19,28 +19,63 @@ from urbanlens.dashboard.services.redact import redact_coordinate
 logger = logging.getLogger(__name__)
 
 
-class PinQuerySet(abstract.QuerySet):
+class PinQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for Pin - the user-specific half of the place model.
 
     Filters here operate on per-user data (profile, visit history, status, priority).
-    For filtering by place attributes (address, CID, canonical name) use LocationQuerySet
-    or join through the location FK: Pin.objects.filter(location__name__icontains=...).
+    For filtering by place attributes (address, CID, official name) use LocationQuerySet
+    or join through the location FK: Pin.objects.filter(location__official_name__icontains=...).
     """
 
     def root_pins(self) -> Self:
-        """Return only top-level pins (excludes both personal and community detail pins)."""
-        return self.filter(parent_pin__isnull=True, parent_location__isnull=True)
+        """Return only top-level pins (excludes personal detail pins)."""
+        return self.filter(parent_pin__isnull=True)
 
     def detail_pins(self) -> Self:
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
         return self.filter(parent_pin__isnull=False)
 
-    def location_detail_pins(self) -> Self:
-        """Return only community detail pins (attached directly to a Location for the wiki)."""
-        return self.filter(parent_location__isnull=False, parent_pin__isnull=True)
+    def with_descendants(self) -> Self:
+        """Expand this queryset to include the full personal detail-pin subtree of each pin.
+
+        Walks ``parent_pin`` children level by level (BFS) until no new
+        descendants are found, so pins of any nesting depth are included -
+        needed because deleting a pin cascades to its entire subtree
+        (``Pin.parent_pin`` is ``on_delete=CASCADE``).
+
+        Returns:
+            A fresh QuerySet over this queryset's pins plus every descendant.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        root_ids = set(self.values_list("pk", flat=True))
+        all_ids = set(root_ids)
+        frontier = root_ids
+        while frontier:
+            children = set(Pin.objects.filter(parent_pin_id__in=frontier).values_list("pk", flat=True))
+            frontier = children - all_ids
+            all_ids |= frontier
+        return Pin.objects.filter(pk__in=all_ids)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
+
+    def visited_without_record(self) -> Self:
+        """Return top-level pins marked visited that have no dated PinVisit record.
+
+        A pin counts as "visited" when it either has a ``last_visited`` timestamp
+        or carries the profile's "Visited" status badge - mirroring the
+        ``has_visits`` filter used elsewhere. Such a pin can still lack any
+        ``PinVisit`` row (e.g. imported pins, or a status set by hand), leaving a
+        gap the Memories page surfaces so the user can log a concrete, dated visit.
+        Pins the user dismissed from that queue are excluded.
+
+        Returns:
+            Distinct top-level pins that are marked visited but have zero rows in
+            their ``visit_history``.
+        """
+        visited_q = Q(last_visited__isnull=False) | Q(badges__name="Visited", badges__kind="status")
+        return self.root_pins().filter(visited_q).filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
     def not_visited_this_year(self):
         return self.filter(last_visited__year__lt=timezone.now().year)
@@ -52,19 +87,17 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(priority=priority)
 
     def by_latitude(self, latitude):
-        return self.filter(latitude=latitude)
+        # A Pin's coordinates live on its Location.
+        return self.filter(location__latitude=latitude)
 
     def by_longitude(self, longitude):
-        return self.filter(longitude=longitude)
+        return self.filter(location__longitude=longitude)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)
 
     def by_profile(self, profile):
         return self.filter(profile=profile)
-
-    def by_user(self, user):
-        return self.filter(user=user)
 
     def by_created_year(self, year):
         return self.filter(created__year=year)
@@ -77,8 +110,8 @@ class PinQuerySet(abstract.QuerySet):
         R = 6371  # radius of the Earth in km
         lat1 = radians(latitude)
         lon1 = radians(longitude)
-        lat2 = radians(F("latitude"))
-        lon2 = radians(F("longitude"))
+        lat2 = radians(F("location__latitude"))
+        lon2 = radians(F("location__longitude"))
         dlon = lon2 - lon1
         dlat = lat2 - lat1
         a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
@@ -144,7 +177,7 @@ class PinQuerySet(abstract.QuerySet):
         qs = self
         if name := (criteria.get("name") or "").strip():
             qs = qs.filter(
-                Q(name__icontains=name) | Q(location__name__icontains=name) | Q(aliases__name__icontains=name),
+                Q(name__icontains=name) | Q(location__official_name__icontains=name) | Q(location__wiki__name__icontains=name) | Q(aliases__name__icontains=name),
             )
         if badge_statuses := criteria.get("status"):
             qs = qs.filter(badges__id__in=[s.id if hasattr(s, "id") else s for s in badge_statuses])
@@ -224,7 +257,7 @@ class PinQuerySet(abstract.QuerySet):
         return self.filter(reviews__rating__lte=rating)
 
 
-class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
+class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
     """Manager for Pin. Use get_nearby_or_create to avoid duplicate pins for the same profile+location."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
@@ -270,27 +303,30 @@ class PinManager(abstract.Manager.from_queryset(PinQuerySet)):
 
         latitude, longitude = lat_f, lon_f
 
-        point = Point(float(longitude), float(latitude), srid=4326)
+        defaults = dict(defaults or {})
+        # Coordinates live on the Location; drop any legacy coord kwargs.
+        for legacy in ("latitude", "longitude", "point"):
+            defaults.pop(legacy, None)
 
-        # Find existing pins within the threshold distance
-        existing_pins = self.filter(
-            point__distance_lte=(point, D(m=threshold_meters)),
+        # A Pin no longer stores its own coordinates: it references a shared
+        # Location (deduped by coordinates). Callers may pass a specific
+        # Location via defaults; otherwise resolve/create one from the
+        # coordinates, then find-or-create the profile's root pin for it.
+        location = defaults.pop("location", None)
+        if location is None:
+            from urbanlens.dashboard.models.location.model import Location
+
+            location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
+
+        existing_pin = self.filter(
+            location=location,
             profile=profile,
-        )
+            parent_pin__isnull=True,
+        ).first()
+        if existing_pin is not None:
+            return existing_pin, False
 
-        if existing_pins.exists():
-            # Return the first close enough pin and False for 'created'
-            return existing_pins.first(), False
-
-        # No existing pin found within the threshold, create a new one
-        pin_data = {
-            "latitude": latitude,
-            "longitude": longitude,
-            "profile": profile,
-            "point": point,
-            **(defaults or {}),
-        }
-        pin = self.create(**pin_data)
+        pin = self.create(location=location, profile=profile, **defaults)
 
         # Return the new pin and True for 'created'
         return pin, True

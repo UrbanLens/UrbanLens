@@ -65,11 +65,12 @@ class BuildVisitSuggestionMessageTests(TestCase):
         self.assertEqual(build_visit_suggestion_message(), "at a location")
 
     def test_meaningful_official_name_is_used(self) -> None:
-        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill", name="Unnamed Location")
+        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
         self.assertEqual(build_visit_suggestion_message(location=location), "at Old Mill")
 
-    def test_falls_back_to_name_when_official_name_not_meaningful(self) -> None:
-        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="N/A", name="Riverside Mill")
+    def test_falls_back_to_wiki_name_when_official_name_not_meaningful(self) -> None:
+        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="N/A")
+        baker.make("dashboard.Wiki", location=location, name="Riverside Mill")
         self.assertEqual(build_visit_suggestion_message(location=location), "at Riverside Mill")
 
     def test_falls_back_to_city_and_state(self) -> None:
@@ -78,7 +79,6 @@ class BuildVisitSuggestionMessageTests(TestCase):
             latitude="40.0",
             longitude="-74.0",
             official_name=None,
-            name="Unnamed Location",
             locality="Springfield",
             administrative_area_level_1="IL",
         )
@@ -90,7 +90,6 @@ class BuildVisitSuggestionMessageTests(TestCase):
             latitude="40.0",
             longitude="-74.0",
             official_name=None,
-            name="Unnamed Location",
             locality="Springfield",
             administrative_area_level_1=None,
         )
@@ -102,7 +101,6 @@ class BuildVisitSuggestionMessageTests(TestCase):
             latitude="40.0",
             longitude="-74.0",
             official_name=None,
-            name="Unnamed Location",
             locality=None,
             administrative_area_level_1=None,
         )
@@ -121,38 +119,34 @@ class BuildVisitSuggestionMessageTests(TestCase):
 
 
 class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
-    """When there's no Location (e.g. a private, unlinked pin), fall back to the pin's own official_name/city/state."""
+    """With no shared Location on the suggestion, the caller's fallback place
+    metadata (the origin pin's own official_name/city/state, sourced from its
+    Location) is used instead."""
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.profile = baker.make("auth.User").profile
-
-    def test_falls_back_to_pin_official_name_when_no_location(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=None, is_private=True, official_name="Old Mill", name="my secret spot")
-        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "at Old Mill")
-
-    def test_falls_back_to_pin_city_state_when_no_official_name(self) -> None:
-        pin = baker.make(
-            Pin,
-            profile=self.profile,
-            location=None,
-            is_private=True,
-            official_name=None,
-            locality="Springfield",
-            administrative_area_level_1="IL",
-        )
-        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name, city=pin.city, state=pin.state), "in Springfield, IL")
-
-    def test_never_falls_back_to_pins_private_name(self) -> None:
-        """Pin.name is the user's private custom label and must never appear in the message."""
-        pin = baker.make(Pin, profile=self.profile, location=None, is_private=True, official_name=None, name="TOTALLY-SECRET-PIN-NAME", locality=None, administrative_area_level_1=None)
-        self.assertEqual(build_visit_suggestion_message(location=None, official_name=pin.official_name), "at a location")
-
-    def test_location_takes_priority_over_origin_pin_fallback(self) -> None:
-        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Location Wins")
-        pin = baker.make(Pin, profile=self.profile, location=location, official_name="Pin Name Ignored", locality="Ignored City", administrative_area_level_1="ZZ")
+    def test_falls_back_to_official_name_when_no_location(self) -> None:
         self.assertEqual(
-            build_visit_suggestion_message(location=location, official_name=pin.official_name, city=pin.city, state=pin.state),
+            build_visit_suggestion_message(location=None, official_name="Old Mill"),
+            "at Old Mill",
+        )
+
+    def test_falls_back_to_city_state_when_no_official_name(self) -> None:
+        self.assertEqual(
+            build_visit_suggestion_message(location=None, official_name=None, city="Springfield", state="IL"),
+            "in Springfield, IL",
+        )
+
+    def test_never_surfaces_an_unrecognised_private_label(self) -> None:
+        """The user's private pin label is not one of the fields this function
+        reads, so it can never leak into a suggestion message."""
+        self.assertEqual(
+            build_visit_suggestion_message(location=None, name="TOTALLY-SECRET-PIN-NAME"),
+            "at a location",
+        )
+
+    def test_location_takes_priority_over_fallback(self) -> None:
+        location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Location Wins")
+        self.assertEqual(
+            build_visit_suggestion_message(location=location, official_name="Ignored", city="Ignored City", state="ZZ"),
             "at Location Wins",
         )
 
@@ -168,12 +162,13 @@ class FindPinAtTests(TestCase):
         self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
 
     def test_matches_by_location_id(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=self.location, latitude=None, longitude=None)
+        pin = baker.make(Pin, profile=self.profile, location=self.location)
         found = find_pin_at(self.profile, location_id=self.location.pk, latitude=99.0, longitude=99.0)
         self.assertEqual(found, pin)
 
-    def test_matches_by_coordinates_when_no_location(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=None, latitude="41.5", longitude="-75.5")
+    def test_matches_by_coordinates_when_no_location_id(self) -> None:
+        location = baker.make(Location, latitude="41.5", longitude="-75.5")
+        pin = baker.make(Pin, profile=self.profile, location=location)
         found = find_pin_at(self.profile, location_id=None, latitude=41.5, longitude=-75.5)
         self.assertEqual(found, pin)
 
@@ -182,7 +177,7 @@ class FindPinAtTests(TestCase):
         self.assertIsNone(found)
 
     def test_excludes_detail_pins(self) -> None:
-        parent = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None, parent_location=None)
+        parent = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
         baker.make(Pin, profile=self.profile, location=self.location, parent_pin=parent)
         found = find_pin_at(self.profile, location_id=self.location.pk)
         self.assertEqual(found, parent)
@@ -239,9 +234,11 @@ class CreateVisitSuggestionTests(TestCase):
         self.assertEqual(suggestion.status, VisitSuggestionStatus.PENDING)
         self.assertFalse(suggestion.offers_merge)
 
-    def test_uses_origin_pins_official_name_when_pin_has_no_location(self) -> None:
-        """A private, unlinked origin pin still has a useful official_name to fall back to."""
-        origin_pin = baker.make(Pin, profile=self.suggester, location=None, is_private=True, official_name="Secret Warehouse")
+    def test_uses_origin_pins_official_name_when_suggestion_has_no_location(self) -> None:
+        """When the suggestion carries no shared Location, the origin pin's own
+        official_name (from its Location) is a useful fallback for the message."""
+        origin_loc = baker.make(Location, latitude="41.5", longitude="-75.5", official_name="Secret Warehouse")
+        origin_pin = baker.make(Pin, profile=self.suggester, location=origin_loc)
         origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
 
         suggestion = create_visit_suggestion(
@@ -249,8 +246,8 @@ class CreateVisitSuggestionTests(TestCase):
             suggested_by=self.suggester,
             visited_at=self.visited_at,
             location=None,
-            latitude=40.0,
-            longitude=-74.0,
+            latitude=41.5,
+            longitude=-75.5,
             candidate_profiles=[],
             origin_visit=origin_visit,
             origin_pin=origin_pin,

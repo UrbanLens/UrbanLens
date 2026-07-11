@@ -1,0 +1,22 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block content %}
+<div class="safety-page page-content safety-checkin-confirm">
+    <h1 class="safety-title">
+        <i class="material-symbols-outlined">notifications_off</i>
+        Opt out of notifications?
+    </h1>
+    {% if scope == 'checkin' %}
+    <p>You won't get any more updates about "{{ checkin.title }}".</p>
+    {% elif scope == 'owner' %}
+    <p>You won't be notified as an emergency contact on any check-in {{ checkin.profile.username }} creates from now on.</p>
+    {% else %}
+    <p>You won't be notified as an emergency contact on any check-in from anyone on UrbanLens.</p>
+    {% endif %}
+    <form method="post" action="{% url 'safety.contact.optout' contact.token scope %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primary btn--lg">Yes, opt me out</button>
+    </form>
+    <a href="{% url 'safety.contact.portal' contact.token %}" class="btn btn--ghost">Cancel</a>
+</div>
+{% endblock %}

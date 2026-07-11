@@ -19,12 +19,14 @@
             <div class="visit-item-main">
                 <span class="visit-date">{{ suggestion.visited_at|date:"N j, Y" }}</span>
                 <span class="visit-source visit-source--pending" title="Awaiting confirmation">
-                    <i class="material-icons" style="font-size:14px">hourglass_empty</i>
+                    <i class="material-symbols-outlined">hourglass_empty</i>
                     Pending
                 </span>
             </div>
             <div class="visit-pending-message">
-                {% if suggestion.offers_merge %}
+                {% if suggestion.is_from_photo %}
+                A photo you added suggests you visited here on {{ suggestion.visited_at|date:"N j, Y" }}. Add it to your visit history?
+                {% elif suggestion.offers_merge %}
                 {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} says you were also there - add them to your existing visit on {{ suggestion.existing_visit.visited_at|date:"N j" }}, or log it separately?
                 {% else %}
                 {% if suggestion.suggested_by %}{{ suggestion.suggested_by.username }}{% else %}Someone{% endif %} suggested you also visited here on {{ suggestion.visited_at|date:"N j, Y" }}.
@@ -55,37 +57,117 @@
     <ul class="visit-list">
         {% for visit in visits %}
         <li class="visit-item">
-            <div class="visit-item-main">
-                <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
-                {% if visit.visited_at|time:"H:i" != "00:00" %}
-                <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
-                {% endif %}
-                <span class="visit-source visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
-                    {% if visit.source == "google_takeout" %}
-                    <i class="material-icons" style="font-size:14px">cloud_download</i>
-                    {% else %}
-                    <i class="material-icons" style="font-size:14px">edit</i>
+            {# -- Leading source icon, doubles as a timeline marker -------------- #}
+            <span class="visit-item-icon visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
+                {% if visit.source == "history" %}<i class="material-symbols-outlined">cloud_download</i>
+                {% elif visit.source == "trip" %}<i class="material-symbols-outlined">luggage</i>
+                {% elif visit.source == "user" %}<i class="material-symbols-outlined">group</i>
+                {% elif visit.source == "photo" %}<i class="material-symbols-outlined">photo_camera</i>
+                {% elif visit.source == "geolocation" %}<i class="material-symbols-outlined">my_location</i>
+                {% elif visit.source == "safety_checkin" %}<i class="material-symbols-outlined">health_and_safety</i>
+                {% else %}<i class="material-symbols-outlined">edit_note</i>{% endif %}
+            </span>
+
+            <div class="visit-item-body">
+                <div class="visit-item-main">
+                    <span class="visit-date">{{ visit.visited_at|date:"N j, Y" }}</span>
+                    {% if visit.visited_at|time:"H:i" != "00:00" %}
+                    <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
                     {% endif %}
-                    {{ visit.get_source_display }}
-                </span>
+                    <span class="visit-source-label">{{ visit.get_source_display }}</span>
+                </div>
+                {% if visit.notes %}
+                <div class="visit-notes">{{ visit.notes }}</div>
+                {% endif %}
+                {% with visit_participants=visit.participants.all %}
+                {% if visit_participants %}
+                <div class="visit-participants">
+                    <i class="material-symbols-outlined">group</i>
+                    <span class="visit-participant-avatars">
+                        {% for p in visit_participants %}
+                        <a href="{% url 'profile.view_user' p.slug %}" class="visit-participant-avatar" title="{{ p.username }}">
+                            {% if p.avatar %}
+                            <img src="{{ p.avatar.url }}" alt="{{ p.username }}" class="visit-participant-avatar-img">
+                            {% else %}
+                            <span class="visit-participant-avatar-initial">{{ p.username|first|upper }}</span>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- External (non-member) participants -------------------------- #}
+                {% with external_participants=visit.external_participants.all %}
+                {% if external_participants %}
+                <div class="visit-participants visit-participants--external">
+                    <i class="material-symbols-outlined">person_outline</i>
+                    <span class="visit-external-names">
+                        {% for ext in external_participants %}
+                        <span class="visit-external-name" title="{% if ext.matched_profile %}Joined as {{ ext.matched_profile.username }}{% elif ext.invite_sent %}Invited to join UrbanLens{% else %}Not on UrbanLens{% endif %}">
+                            {{ ext.display_name }}{% if ext.invite_sent and not ext.matched_profile %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
+                        </span>{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- Attached photos: click a thumbnail to open the lightbox ----- #}
+                {% with visit_images=visit.images.all %}
+                {% if visit_images %}
+                <div class="visit-photos">
+                    {% for img in visit_images %}
+                    <a href="{{ img.image.url }}" class="visit-photo-thumb"
+                       data-full="{{ img.image.url }}" data-caption="{{ img.caption|default:'' }}"
+                       title="{{ img.caption|default:'Photo' }}"
+                       onclick="visitOpenLightbox(event, this)">
+                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {# -- Attached map snapshot: small live preview, click to enlarge -- #}
+                {# Custom compact preview (badge trigger) + the shared viewer dialog. #}
+                {% if visit.map_data %}
+                <div class="comment-map-preview visit-map-preview" data-comment-id="visit-{{ visit.id }}"
+                     data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
+                     data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
+                    <div class="comment-map-thumb" id="comment-map-thumb-visit-{{ visit.id }}"></div>
+                    <button type="button" class="visit-map-open" aria-label="Enlarge map"
+                            onclick="_expandCommentMap('visit-{{ visit.id }}')">
+                        <span class="visit-map-open-badge"><i class="material-symbols-outlined">open_in_full</i></span>
+                    </button>
+                </div>
+                {% with visit_map_id=visit.id|stringformat:"d" %}
+                {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="visit-"|add:visit_map_id map_data=visit.map_data title="Visit map" marker_lat=pin.effective_latitude|default_if_none:'' marker_lng=pin.effective_longitude|default_if_none:'' %}
+                {% endwith %}
+                {% endif %}
             </div>
-            {% if visit.notes %}
-            <div class="visit-notes">{{ visit.notes }}</div>
-            {% endif %}
-            {% with visit_participants=visit.participants.all %}
-            {% if visit_participants %}
-            <div class="visit-participants">with {% for p in visit_participants %}{{ p.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
-            {% endif %}
-            {% endwith %}
-            <button type="button"
-                    hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
-                    hx-target="#visit-history-panel"
-                    hx-swap="outerHTML"
-                    hx-confirm="Delete this visit record?"
-                    class="icon-btn visit-delete-btn"
-                    title="Delete visit">
-                <i class="material-symbols-outlined">delete_outline</i>
-            </button>
+
+            <div class="visit-item-actions">
+                <button type="button"
+                        hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
+                        hx-target="#visit-edit-body-{{ pin.slug }}"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('visit-edit-dialog-{{ pin.slug }}').showModal()"
+                        class="icon-btn visit-edit-btn"
+                        title="Edit visit">
+                    <i class="material-symbols-outlined">edit</i>
+                </button>
+                <button type="button"
+                        hx-post="{% url 'pin.visit.delete' pin.slug visit.id %}"
+                        hx-target="#visit-history-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete this visit record?"
+                        class="icon-btn visit-delete-btn"
+                        title="Delete visit">
+                    <i class="material-symbols-outlined">delete_outline</i>
+                </button>
+            </div>
         </li>
         {% endfor %}
     </ul>
@@ -97,40 +179,81 @@
     {# -- Log-a-visit dialog -------------------------------------------- #}
     <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Log a Visit" %}
-        <form hx-post="{% url 'pin.visits' pin.slug %}"
-              hx-target="#visit-history-panel"
-              hx-swap="outerHTML"
-              class="visit-add-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="visited_date_{{ pin.slug }}">Date</label>
-                <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required>
-            </div>
-            <div class="form-row">
-                <label for="visited_time_{{ pin.slug }}">Time <small>(optional)</small></label>
-                <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}">
-            </div>
-            <div class="form-row">
-                <label for="visit_notes_{{ pin.slug }}">Notes <small>(optional)</small></label>
-                <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="3" placeholder="What did you see?"></textarea>
-            </div>
-            {% if connections %}
-            <div class="form-row">
-                <label>Who else was there? <small>(optional)</small></label>
-                <div class="visit-participant-picker">
-                    {% for friend in connections %}
-                    <label class="visit-participant-option">
-                        <input type="checkbox" name="participant_ids" value="{{ friend.id }}">
-                        {{ friend.username }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Visit</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-            </div>
-        </form>
+        {% include "dashboard/partials/pins/_visit_form.html" with dialog_id="visit-add-dialog-"|add:pin.slug %}
+    </dialog>
+
+    {# -- Edit-visit dialog: the form is lazily loaded via HTMX on click -- #}
+    <dialog id="visit-edit-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Visit" %}
+        <div id="visit-edit-body-{{ pin.slug }}" class="visit-edit-body">
+            <p class="visit-edit-loading">Loading&hellip;</p>
+        </div>
+    </dialog>
+
+    {# -- Shared lightbox for photos attached to a visit ------------------ #}
+    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog">
+        <div class="lightbox-inner">
+            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)">
+                <i class="material-symbols-outlined">chevron_left</i>
+            </button>
+            <img class="lightbox-img" src="" alt="">
+            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)">
+                <i class="material-symbols-outlined">chevron_right</i>
+            </button>
+            <p class="lightbox-caption"></p>
+        </div>
     </dialog>
 </div>
+
+<script>
+(function () {
+    var LB = document.getElementById('visit-photo-lightbox-{{ pin.slug }}');
+    if (!LB) return;
+    var imgEl = LB.querySelector('.lightbox-img');
+    var capEl = LB.querySelector('.lightbox-caption');
+    var set = [];
+    var idx = 0;
+
+    function _show() {
+        var it = set[idx];
+        if (!it) return;
+        imgEl.src = it.url;
+        capEl.textContent = it.caption || '';
+    }
+
+    // Open the lightbox on the photo the user clicked, navigating within the
+    // photos of that same visit row.
+    window.visitOpenLightbox = function (evt, el) {
+        if (evt) evt.preventDefault();
+        var container = el.closest('.visit-photos');
+        if (!container) return;
+        set = Array.prototype.map.call(container.querySelectorAll('.visit-photo-thumb'), function (a) {
+            return { url: a.dataset.full, caption: a.dataset.caption || '' };
+        });
+        idx = set.findIndex(function (it) { return it.url === el.dataset.full; });
+        if (idx < 0) idx = 0;
+        _show();
+        LB.showModal();
+    };
+
+    window.visitLightboxNav = function (dir) {
+        if (!set.length) return;
+        idx = (idx + dir + set.length) % set.length;
+        _show();
+    };
+
+    // Arrow-key navigation, registered once regardless of HTMX re-swaps.
+    if (!window._visitLightboxKeys) {
+        window._visitLightboxKeys = true;
+        document.addEventListener('keydown', function (e) {
+            var open = document.querySelector('.visit-photo-lightbox[open]');
+            if (!open) return;
+            if (e.key === 'ArrowLeft') window.visitLightboxNav(-1);
+            else if (e.key === 'ArrowRight') window.visitLightboxNav(1);
+        });
+    }
+})();
+</script>

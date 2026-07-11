@@ -31,7 +31,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        shape = result["shapes"][0]
+        shape = result["markup"][0]
         assert shape["color"] == "#e74c3c", f"Expected fallback hex, got {shape['color']!r}"  # nosec B101
 
     def test_css_expression_in_color_is_rejected(self) -> None:
@@ -43,7 +43,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["color"] == "#e74c3c"  # nosec B101
+        assert result["markup"][0]["color"] == "#e74c3c"  # nosec B101
 
     def test_invalid_center_coordinates_are_rejected(self) -> None:
         import json
@@ -59,7 +59,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["color"] == "#2196F3"  # nosec B101
+        assert result["markup"][0]["color"] == "#2196F3"  # nosec B101
 
     def test_unknown_shape_type_is_dropped(self) -> None:
         import json
@@ -69,7 +69,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"] == []  # nosec B101
+        assert result["markup"] == []  # nosec B101
 
     def test_out_of_range_latlng_pairs_are_stripped(self) -> None:
         import json
@@ -79,7 +79,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert len(result["shapes"][0]["latlngs"]) == 2  # nosec B101
+        assert len(result["markup"][0]["latlngs"]) == 2  # nosec B101
 
     def test_stroke_width_is_clamped(self) -> None:
         import json
@@ -89,7 +89,7 @@ class CommentMapDataSanitizationTests(TestCase):
         })
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
-        assert result["shapes"][0]["stroke_width"] <= 50  # nosec B101
+        assert result["markup"][0]["stroke_width"] <= 50  # nosec B101
 
     def test_zoom_is_clamped(self) -> None:
         import json

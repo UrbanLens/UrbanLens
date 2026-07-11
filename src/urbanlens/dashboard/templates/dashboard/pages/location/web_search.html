@@ -11,6 +11,15 @@
         <i class="material-symbols-outlined">travel_explore</i>
         <h3>Web Results</h3>
         {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+        {% if can_refresh %}
+        <button type="button" class="btn--icon-sm web-search-refresh-btn" title="Refresh search results"
+                hx-post="{% url 'pin.web_search.refresh' pin.slug %}"
+                hx-target="#web-search-section"
+                hx-swap="outerHTML"
+                hx-indicator="this">
+            <i class="material-symbols-outlined">refresh</i>
+        </button>
+        {% endif %}
     </div>
     {% if search_results %}
     <ul class="search-results-list" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="5">

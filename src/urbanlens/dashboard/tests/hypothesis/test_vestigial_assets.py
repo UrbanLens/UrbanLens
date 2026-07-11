@@ -59,6 +59,20 @@ class CleanupVestigialAssetsTests(TestCase):
             self.assertTrue(recent_export.exists())
             self.assertTrue(marker_file.exists())
 
+    def test_creates_missing_managed_directories_without_warning(self) -> None:
+        now = datetime(2026, 1, 1, 12, tzinfo=UTC)
+
+        with TemporaryDirectory() as tmp:
+            media_root = Path(tmp)
+
+            with mock.patch("urbanlens.dashboard.services.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
+                with self.assertNoLogs("urbanlens.dashboard.services.vestigial_assets", level="WARNING"):
+                    result = cleanup_vestigial_assets(now=now)
+
+            self.assertEqual(result.total, 0)
+            self.assertTrue((media_root / "exports").is_dir())
+            self.assertTrue((media_root / "imports").is_dir())
+
 
 class CleanupVestigialAssetsTaskTests(TestCase):
     """The scheduled Celery task returns a serializable cleanup summary."""

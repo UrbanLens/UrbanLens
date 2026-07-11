@@ -128,7 +128,8 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     """
     existing = Friendship.objects.all().between(from_profile, to_profile)
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
-        existing.accept()
+        if not existing.accept():
+            return None
         NotificationLog.objects.create(
             profile=to_profile,
             status=Status.UNREAD,
@@ -162,7 +163,7 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     profile page and the full friends page share this data but use different
     markup, so dispatch on HX-Target (the id of the element htmx is swapping).
     """
-    viewer_profile = Profile.objects.get_or_create(user=request.user)
+    viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
     ctx = _friend_list_ctx(viewer_profile, viewer_profile)
     if request.headers.get("HX-Target") == "friends_page_list":
         return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
@@ -189,59 +190,20 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         requesting = request.user.profile
         visibility = to_profile.friend_request_visibility
 
-        if visibility in {VisibilityChoice.NO_ONE, VisibilityChoice.FRIENDS}:
+        if visibility == VisibilityChoice.NO_ONE:
             return HttpResponse("This user is not accepting friend requests.", status=403)
 
-        if visibility == VisibilityChoice.COMMON_PIN:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            req_locs = set(
-                Pin.objects.filter(profile=requesting).exclude(location__isnull=True).values_list("location_id", flat=True),
-            )
-            their_locs = set(
-                Pin.objects.filter(profile=to_profile).exclude(location__isnull=True).values_list("location_id", flat=True),
-            )
-            if not req_locs & their_locs:
-                return HttpResponse(
-                    "This user only accepts requests from people who share a pinned location.",
-                    status=403,
-                )
-
-        elif visibility == VisibilityChoice.COMMON_FRIEND:
-            req_friends = set(
-                Friendship.objects.filter(from_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            )
-            req_friends |= set(
-                Friendship.objects.filter(to_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends = set(
-                Friendship.objects.filter(from_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends |= set(
-                Friendship.objects.filter(to_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            if not req_friends & their_friends:
-                return HttpResponse("This user only accepts requests from friends of friends.", status=403)
-
-        elif visibility == VisibilityChoice.COMMON_TRIP:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
-            req_trips = set(TripMembership.objects.filter(profile=requesting).values_list("trip_id", flat=True))
-            their_trips = set(TripMembership.objects.filter(profile=to_profile).values_list("trip_id", flat=True))
-            if not req_trips & their_trips:
-                return HttpResponse("This user only accepts requests from people on a shared trip.", status=403)
+        # Shared evaluator: friends always qualify, ANYTHING_IN_COMMON accepts
+        # any of pin/friend/trip overlap.
+        if not Profile.visibility_permits(visibility, to_profile, requesting):
+            rejection_messages = {
+                VisibilityChoice.FRIENDS: "This user is not accepting friend requests.",
+                VisibilityChoice.COMMON_PIN: "This user only accepts requests from people who share a pinned location.",
+                VisibilityChoice.COMMON_FRIEND: "This user only accepts requests from friends of friends.",
+                VisibilityChoice.COMMON_TRIP: "This user only accepts requests from people on a shared trip.",
+                VisibilityChoice.ANYTHING_IN_COMMON: "This user only accepts requests from people with a pin, friend, or trip in common.",
+            }
+            return HttpResponse(rejection_messages.get(visibility, "This user is not accepting friend requests."), status=403)
 
         friendship = request_or_accept_friendship(requesting, to_profile)
         if not friendship:
@@ -263,7 +225,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Friend request not found.", status=404)
 
-        friendship.accept()
+        if not friendship.accept():
+            return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
 
         # Notify the original requester that their request was accepted.
         requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile
@@ -455,9 +418,15 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.
 
-        If the email belongs to an existing user, send them a friend request
-        directly.  Otherwise create a FriendInvitation and email the address
-        with a join link; on sign-up the pending request is auto-accepted.
+        If the email belongs to an existing account (primary or verified
+        secondary email), send that account a friend request. Otherwise
+        create a FriendInvitation and email the address with a join link; on
+        sign-up the pending request is auto-accepted.
+
+        The response is identical in every case - it never reveals the
+        target's username or whether the email belongs to a registered
+        account, since that would let a caller enumerate site membership by
+        trying addresses one at a time.
         """
         import smtplib
 
@@ -467,7 +436,10 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         from django.core.validators import validate_email
         from django.template.loader import render_to_string
 
+        from urbanlens.dashboard.models.email_log import EmailType
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+        from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
+        from urbanlens.dashboard.services.email_safety import email_rate_limit_error, has_sent_join_email, record_email_sent
 
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
@@ -479,6 +451,16 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Please enter a valid email address.", status=400)
 
         inviter = request.user.profile
+        if normalize_email(email) == normalize_email(inviter.email):
+            return HttpResponse("That's your own email address.", status=400)
+
+        # Rate limiting must be checked before we know whether the address is
+        # registered - erroring only on the actually-sends-an-email path would
+        # let a capped caller distinguish member from non-member addresses.
+        rate_limit_error = email_rate_limit_error(inviter)
+        if rate_limit_error:
+            return HttpResponse(rate_limit_error, status=429)
+
         subscription_role_slug = request.POST.get("subscription_role", "").strip()
         subscription_duration = request.POST.get("subscription_duration", "")
         subscription_role = None
@@ -488,78 +470,60 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
 
-        # Check if a registered user already has this email
-        existing_user = User.objects.filter(email__iexact=email, is_active=True).select_related("profile").first()
+        existing_user = find_user_by_email(email)
         if existing_user:
             to_profile = existing_user.profile
-            if to_profile == inviter:
-                return HttpResponse("That's your own email address.", status=400)
+            # Respect visibility settings silently - no error, no distinguishable response.
+            if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
+                friendship = request_or_accept_friendship(inviter, to_profile)
+                if friendship and subscription_role is not None:
+                    from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
+                    from urbanlens.dashboard.models.subscriptions import grant_subscription
 
-            # Send a normal friend request (respects visibility settings)
-            visibility = to_profile.friend_request_visibility
-            if visibility == VisibilityChoice.NO_ONE:
-                return HttpResponse(
-                    f"{to_profile.username} is not accepting friend requests.",
-                    status=403,
+                    grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
+        else:
+            # No registered account - create an invitation token and send email.
+            # Avoid duplicate pending invitations from the same inviter.
+            FriendInvitation.objects.filter(
+                inviter=inviter,
+                email=email,
+                accepted_at__isnull=True,
+            ).delete()
+
+            invitation = FriendInvitation(inviter=inviter, email=email)
+            invitation.save()
+            if subscription_role is not None:
+                from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
+
+                PendingSubscriptionGrant.objects.create(
+                    invitation=invitation,
+                    role=subscription_role,
+                    granted_by=request.user,
+                    duration_months="" if subscription_duration == "indefinite" else subscription_duration,
                 )
 
-            friendship = request_or_accept_friendship(inviter, to_profile)
-            if not friendship:
-                return HttpResponse("Could not send friend request.", status=400)
+            # A given user only ever sends one join-the-site email to a given
+            # address - the invitation row above still enables auto-friending
+            # on sign-up, but the mailbox is not contacted again.
+            if not has_sent_join_email(inviter, email):
+                signup_url = request.build_absolute_uri(
+                    f"/signup/?invite={invitation.token}",
+                )
+                context = {
+                    "inviter": inviter,
+                    "signup_url": signup_url,
+                }
+                subject = f"{inviter.username} invited you to join UrbanLens"
+                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+                html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
-            if subscription_role is not None:
-                from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
-                from urbanlens.dashboard.models.subscriptions import grant_subscription
+                try:
+                    msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+                    msg.attach_alternative(html_body, "text/html")
+                    msg.send()
+                except (smtplib.SMTPException, OSError):
+                    logger.exception("Failed to send friend invitation to %s", email)
+                else:
+                    record_email_sent(inviter, email, EmailType.JOIN_INVITE)
 
-                grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
-
-            result = "friend_added" if friendship.status == FriendshipStatus.ACCEPTED else "request_sent"
-            return render(
-                request,
-                "dashboard/partials/profile/invite_result.html",
-                {"result": result, "username": to_profile.username},
-            )
-
-        # No registered user - create an invitation token and send email
-        # Avoid duplicate pending invitations from the same inviter
-        FriendInvitation.objects.filter(
-            inviter=inviter,
-            email=email,
-            accepted_at__isnull=True,
-        ).delete()
-
-        invitation = FriendInvitation(inviter=inviter, email=email)
-        invitation.save()
-        if subscription_role is not None:
-            from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
-
-            PendingSubscriptionGrant.objects.create(
-                invitation=invitation,
-                role=subscription_role,
-                granted_by=request.user,
-                duration_months="" if subscription_duration == "indefinite" else subscription_duration,
-            )
-
-        signup_url = request.build_absolute_uri(
-            f"/signup/?invite={invitation.token}",
-        )
-        context = {
-            "inviter": inviter,
-            "signup_url": signup_url,
-        }
-        subject = f"{inviter.username} invited you to join UrbanLens"
-        text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-        html_body = render_to_string("dashboard/email/friend_invite.html", context)
-
-        try:
-            msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
-            msg.attach_alternative(html_body, "text/html")
-            msg.send()
-        except (smtplib.SMTPException, OSError):
-            logger.exception("Failed to send friend invitation to %s", email)
-
-        return render(
-            request,
-            "dashboard/partials/profile/invite_result.html",
-            {"result": "invite_sent", "email": email},
-        )
+        return render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})

@@ -17,7 +17,8 @@ import re
 from typing import TYPE_CHECKING
 import uuid
 
-from django.utils.html import conditional_escape, format_html, format_html_join
+from django.utils.html import conditional_escape, format_html, format_html_join, urlize
+from django.utils.safestring import mark_safe
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -30,6 +31,20 @@ if TYPE_CHECKING:
 
 _LOC_RE = re.compile(r"@\[([^\]]+)\]\(loc:([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\)")
 _ACT_RE = re.compile(r"@act:(\d+)")
+
+
+def _linkify(segment: str) -> SafeString:
+    """Escape a plain-text segment, turning bare URLs into anchors.
+
+    Args:
+        segment: Raw (untrusted) comment text between mentions.
+
+    Returns:
+        Safe HTML - urlize(autoescape=True) escapes everything it doesn't turn
+        into a link, so marking the result safe mirrors Django's own ``urlize``
+        template filter and keeps ``format_html_join`` from double-escaping it.
+    """
+    return mark_safe(urlize(segment, nofollow=True, autoescape=True))  # noqa: S308 - input is fully escaped by urlize
 
 
 def extract_location_uuids(text: str) -> list[uuid.UUID]:
@@ -108,11 +123,14 @@ def render_comment_text(
 
     mentions.sort(key=operator.itemgetter(0))
 
+    # Plain (non-mention) segments are escaped *and* linkified, so a bare URL in a
+    # comment - e.g. the check-in link a safety escalation posts to a wiki - is
+    # clickable.
     for start, end, html in mentions:
-        parts.extend((conditional_escape(text[last_end:start]), html))
+        parts.extend((_linkify(text[last_end:start]), html))
         last_end = end
 
-    parts.append(conditional_escape(text[last_end:]))
+    parts.append(_linkify(text[last_end:]))
     return format_html_join("", "{}", ((part,) for part in parts))
 
 

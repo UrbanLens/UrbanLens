@@ -149,7 +149,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
     """
     from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
 
-    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled:
+    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
         return None
 
     if len(data) > MAX_DOCUMENT_BYTES:
@@ -169,7 +169,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
 
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
-    gateway = get_gateway("document_pin_import", instructions=_build_instructions())
+    gateway = get_gateway("document_pin_import", profile=profile, instructions=_build_instructions())
     if not gateway:
         return None
 

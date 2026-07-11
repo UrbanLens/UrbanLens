@@ -7,7 +7,7 @@ from typing import Self
 from urbanlens.dashboard.models import abstract
 
 
-class NotificationQuerySet(abstract.QuerySet):
+class NotificationQuerySet(abstract.DashboardQuerySet):
     """QuerySet for NotificationLog with convenience filters."""
 
     def unread(self) -> Self:
@@ -27,5 +27,5 @@ class NotificationQuerySet(abstract.QuerySet):
         return self.update(status=Status.READ)
 
 
-class NotificationManager(abstract.Manager.from_queryset(NotificationQuerySet)):
+class NotificationManager(abstract.DashboardManager.from_queryset(NotificationQuerySet)):
     """Manager for NotificationLog."""

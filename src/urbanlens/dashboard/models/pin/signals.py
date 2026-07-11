@@ -90,16 +90,7 @@ def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs)
         _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 
-@receiver(post_save, sender=Pin, dispatch_uid="pin_enqueue_location_creation")
-def enqueue_location_creation(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Queue background Location creation for newly-created public root pins."""
-    if not created or instance.location_id or instance.is_private or instance.parent_pin_id or instance.parent_location_id or instance.effective_latitude is None or instance.effective_longitude is None:
-        return
-
-    def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import create_location_for_pin
-
-        safely_enqueue_task(create_location_for_pin, instance.pk)
-
-    transaction.on_commit(_enqueue)
+# NOTE: Pins no longer trigger any community wiki or boundary creation on save.
+# Wikis are created explicitly by the user from the pin detail page, and default
+# boundaries are generated lazily when a pin detail page is first viewed - so
+# bulk imports create zero external API work.

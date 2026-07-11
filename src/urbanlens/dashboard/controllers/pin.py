@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.viewsets import GenericViewSet
 
@@ -20,34 +21,24 @@ from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.apis.locations.bing_maps import BingMapsGateway
-from urbanlens.dashboard.services.apis.locations.esri import EsriGateway
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.apis.locations.kartaview import KartaViewGateway
-from urbanlens.dashboard.services.apis.locations.mapbox import MapboxGateway
-from urbanlens.dashboard.services.apis.locations.mapillary import MapillaryGateway
-from urbanlens.dashboard.services.apis.locations.nasa_gibs import NasaGibsGateway
-from urbanlens.dashboard.services.apis.locations.open_aerial_map import OpenAerialMapGateway
-from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError
 from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
+    from urbanlens.dashboard.services.external_data import ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
+_WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -64,6 +55,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import PinType
+        from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
             pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
@@ -78,24 +70,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     status=404,
                 )
 
-        # Auto-link legacy pins that pre-date the Location requirement.
-        # Private pins are intentionally unlinked - never create a wiki entry for them.
-        if not pin.is_private and pin.location is None and pin.effective_latitude and pin.effective_longitude:
-            lat, lon = pin.effective_latitude, pin.effective_longitude
-            location = Location.objects.get_for_point(lat, lon)
-            if not location:
-                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
-
-                location = _create_location_with_canonical_name(lat, lon)
-            pin.location = location
-            pin.save(update_fields=["location"])
-        elif pin.location and not pin.location.slug:
-            pin.location.ensure_slug()
-
         # Backfill slug for legacy pins created before slug generation was automatic.
+        if pin.wiki and not pin.wiki.slug:
+            pin.wiki.ensure_slug()
         if not pin.slug:
             pin.slug = pin.ensure_slug()
-            pin.save(update_fields=["slug"])
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -226,6 +205,99 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return None
         return DebugEntry(source=source, query=query, from_cache=from_cache, count=count)
 
+    # -- Async external-data panel plumbing --------------------------------------
+    #
+    # External-data panels never fetch upstream data on the request path: on a
+    # store miss the controller schedules a Celery task (single-flight) and
+    # returns a self-polling placeholder; polls re-enter the same endpoint with
+    # ?attempt=N until the task lands the data or the attempt budget runs out.
+    # See services/external_data.py for the source registry and failure policy.
+
+    @staticmethod
+    def _poll_attempt(request: HttpRequest) -> int:
+        """Which poll cycle this request is (0 for the initial page-load request)."""
+        try:
+            return max(int(request.GET.get("attempt", "0")), 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str):
+        """Schedule a panel's background fetch and return its polling placeholder.
+
+        Args:
+            request: The current request (its path doubles as the poll URL).
+            pin: The pin whose panel data is being fetched.
+            source_key: An ``external_data.panel_sources()`` key.
+
+        Returns:
+            The self-polling placeholder fragment, or a 204 when the source is
+            suppressed or the poll budget is exhausted (the page's existing
+            htmx 204 handler removes the section quietly).
+        """
+        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
+
+        attempt = self._poll_attempt(request)
+        if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
+            return HttpResponse(status=204)
+        source = get_panel_source(source_key)
+        if source is None:
+            return HttpResponse(status=204)
+        return render(
+            request,
+            "dashboard/partials/pins/panel_pending.html",
+            {
+                "section_id": source.section_id,
+                "outer_class": source.outer_class,
+                "outer_is_card": source.outer_is_card,
+                "icon": source.icon,
+                "title": source.title,
+                "poll_url": request.path,
+                "next_attempt": attempt + 1,
+                "poll_interval": POLL_INTERVAL_SECONDS,
+            },
+        )
+
+    def _pending_media(self, request: HttpRequest, pin: Pin, source_key: str):
+        """Schedule a media provider's fetch and return its polling loader.
+
+        Media loaders differ from section panels: they're hidden divs whose
+        responses append into the shared gallery grid, and the gallery JS
+        counts responses to know when every provider has reported in. The
+        pending response therefore (a) retargets the swap back onto the
+        requesting loader itself via HX-Retarget/HX-Reswap, and (b) carries
+        the UL-Panel-Pending header so the gallery JS ignores it instead of
+        counting it as a provider result.
+
+        Args:
+            request: The current request (its path doubles as the poll URL).
+            pin: The pin whose media is being fetched.
+            source_key: One of the media ``panel_sources()`` keys.
+
+        Returns:
+            The self-polling loader fragment, or a 204 when the source is
+            suppressed or the poll budget is exhausted (the gallery JS counts
+            a 204 as "this provider is done, with nothing").
+        """
+        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+
+        attempt = self._poll_attempt(request)
+        if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
+            return HttpResponse(status=204)
+        response = render(
+            request,
+            "dashboard/partials/pins/media_loader_pending.html",
+            {
+                "source": source_key,
+                "poll_url": request.path,
+                "next_attempt": attempt + 1,
+                "poll_interval": POLL_INTERVAL_SECONDS,
+            },
+        )
+        response["UL-Panel-Pending"] = "1"
+        response["HX-Retarget"] = f"#media-loader-{source_key}"
+        response["HX-Reswap"] = "outerHTML"
+        return response
+
     def media_provider(self, request: HttpRequest, pin_slug: str, source: str):
         """
         HTMX partial: captioned media items for the pin's location from a single provider.
@@ -236,19 +308,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         ``media-gallery-section`` in the pin detail template), so a slow
         provider never blocks the others from appearing.
         """
-        from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
-        from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-        from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.assets.base import MediaItem
+        from urbanlens.dashboard.services.external_data import MediaPanelSource, get_panel_source
         from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
-        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
-        factories: dict[str, Callable[[], MediaProvider]] = {
-            "smithsonian": lambda: SmithsonianGateway(api_key=settings.smithsonian_api_key or ""),
-            "wikimedia": WikimediaGateway,
-            "loc": LOCJsonGateway,
-        }
-        factory = factories.get(source)
-        if factory is None:
+        panel = get_panel_source(source)
+        if not isinstance(panel, MediaPanelSource):
             return HttpResponse(status=404)
 
         try:
@@ -260,30 +326,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not location:
             return HttpResponse(status=204)
 
-        gateway = factory()
+        gateway = panel.make_gateway()
         if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
             return HttpResponse(status=204)
-
-        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name)
-        if not search_term:
+        if not panel.search_terms(pin, gateway):
             return HttpResponse(status=204)
 
-        # Some search engines (e.g. Wikimedia Commons) return nothing for an
-        # overly specific query like a full street address, but do match a
-        # broader name + city/state query -- give those providers a second,
-        # narrower candidate to widen recall (see MediaProvider.get_media).
-        search_terms = [search_term]
-        if gateway.multi_query:
-            narrow_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=False)
-            if narrow_term and narrow_term not in search_terms:
-                search_terms.append(narrow_term)
-
-        empty_media: list[MediaItem] = []
-        items, from_cache = call_with_deadline(
-            lambda: gateway.get_media(location, search_terms),
-            timeout=20,
-            default=(empty_media, False),
-        )
+        cached = LocationCache.get_fresh(location, panel.cache_source)
+        if cached is None:
+            return self._pending_media(request, pin, source)
+        items = [MediaItem(**item) for item in (cached.data or {}).get("items", [])]
 
         # Render even when a provider found nothing, so admins can see what was
         # searched (including every candidate query tried) in the debug overlay
@@ -292,18 +344,32 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # that case, so it's a no-op for regular users and doesn't add a visible
         # empty tile to the gallery (see the media-item-count check that hides
         # the whole section when no provider found anything, in index.html).
-        debug_query = " | ".join(search_terms)
-        context = {"items": items, "debug": self._debug_entry(request, source, debug_query, from_cache=from_cache, count=len(items))}
+        context = {"items": items, "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items))}
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 
     def web_search(self, request: HttpRequest, pin_slug):
         """
         Returns the web search results for a pin.
         """
-        from urbanlens.dashboard.models.site_settings import SiteSettings
+        return self._web_search_response(request, pin_slug, force_refresh=False)
+
+    @action(detail=True, methods=["post"])
+    def web_search_refresh(self, request: HttpRequest, pin_slug):
+        """
+        HTMX partial: force a fresh web search, bypassing the shared cache.
+
+        Only allowed once the cached results are at least
+        ``_WEB_SEARCH_MIN_REFRESH_AGE`` old, so the refresh button can't be
+        used to burn through search-API quota faster than a real cache miss
+        would.
+        """
+        return self._web_search_response(request, pin_slug, force_refresh=True)
+
+    def _web_search_response(self, request: HttpRequest, pin_slug: str, *, force_refresh: bool):
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         try:
-            pin: Pin = Pin.objects.get(slug=pin_slug)
+            pin: Pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -320,45 +386,69 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"error": "Web search is available to VIP subscribers."},
+                {"pin": pin, "error": "Web search is available to VIP subscribers."},
                 status=403,
             )
 
-        cache_key = make_cache_key("web_search_pin", str(pin.pk))
-        site_settings = SiteSettings.get_current()
-        cache_hours = site_settings.search_cache_hours
+        location = pin.location
+        # Shared across every pin/wiki at this Location, keyed on the search
+        # query text -- two pins with the same effective name (the common
+        # case) hit the same cache entry instead of each paying for their own.
+        # A pin with a custom override name produces a different query, which
+        # is treated as a miss rather than serving another pin's results.
+        cached = LocationCache.get_fresh(location, "web_search") if location else None
+        if cached is not None and cached.query_key != search_name:
+            cached = None
 
-        if cache_hours > 0:
-            cached = cache.get(cache_key)
-            if cached is not None:
-                page_obj = get_page(request, cached, _WEB_SEARCH_PAGE_SIZE)
-                return render(
-                    request,
-                    "dashboard/pages/location/web_search.html",
-                    {
-                        "search_results": page_obj.object_list,
-                        "page_obj": page_obj,
-                        "adaptive_pagination": True,
-                        "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(cached)),
-                    },
-                )
+        can_refresh = cached is not None and timezone.now() - cached.updated >= _WEB_SEARCH_MIN_REFRESH_AGE
+
+        if force_refresh:
+            if not can_refresh:
+                return HttpResponse("Search results were cached too recently to refresh.", status=429)
+            cached = None
+
+        if cached is not None:
+            results = cached.data.get("results", [])
+            page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {
+                    "pin": pin,
+                    "search_results": page_obj.object_list,
+                    "page_obj": page_obj,
+                    "adaptive_pagination": True,
+                    "can_refresh": can_refresh,
+                    "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(results)),
+                },
+            )
+
+        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
             search_gateway = get_search_gateway()
-            if query := pin.get_unique_search_name(quote_name=True):
-                search_results = search_gateway.search(query)
-            else:
+            # Deadline-bounded: this is the one external fetch still made on
+            # the request path (interactive, VIP-gated, and cached below), so
+            # a slow search backend degrades to the error card instead of
+            # holding the request open.
+            search_results = call_with_deadline(
+                lambda: search_gateway.search(search_name),
+                timeout=EXTERNAL_CALL_DEADLINE,
+                default=None,
+                name="web_search",
+            )
+            if search_results is None:
                 return render(
                     request,
                     "dashboard/pages/location/web_search.html",
-                    {"error": "This pin does not have a descriptive name to search for."},
+                    {"pin": pin, "error": "Search unavailable. Please try again later."},
                 )
         except (OSError, ValueError, RuntimeError) as e:
             logger.exception("Unable to contact web search API: %s", e)
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
-                {"error": "Search unavailable. Please try again later."},
+                {"pin": pin, "error": "Search unavailable. Please try again later."},
             )
 
         for r in search_results:
@@ -368,17 +458,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 r["domain"] = ""
             r["date_display"] = format_search_date(r.get("date"))
 
-        if cache_hours > 0:
-            cache.set(cache_key, search_results, cache_hours * 3600)
+        if location:
+            LocationCache.set(location, "web_search", {"results": search_results}, query_key=search_name)
 
         page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
         return render(
             request,
             "dashboard/pages/location/web_search.html",
             {
+                "pin": pin,
                 "search_results": page_obj.object_list,
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
+                "can_refresh": False,
                 "debug": self._debug_entry(request, "web_search", search_name, from_cache=False, count=len(search_results)),
             },
         )
@@ -396,8 +488,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Bing Maps Aerial (current, high-res) - fetched server-side
         - OpenAerialMap community imagery - browser-loaded thumbnails
         """
+        from urbanlens.dashboard.services.external_data import collect_satellite_slides, panel_sources
+        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         try:
-            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
+            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -410,30 +505,29 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 {"error": "No coordinates available."},
             )
 
+        # First visit for these coordinates: warm every provider's slide cache
+        # in a Celery task and let the placeholder poll -- the provider chain
+        # is six sequential upstreams and must never run on the request path.
+        if not panel_sources()["satellite"].is_ready(pin):
+            return self._pending_panel(request, pin, "satellite")
+
+        # Ready: the same collector now runs against warm per-provider caches,
+        # so this is normally instant. The deadline guards the rare gap where
+        # an individual provider's entry was evicted before the ready marker
+        # expired -- bounded staleness beats an unbounded inline refetch.
         coord_query = f"{lat:.5f}, {lng:.5f}"
-        slides: list[SatelliteSlide] = []
+        satellite_default: tuple[list[SatelliteSlide], list[ProviderFetchResult]] = ([], [])
+        slides, provider_results = call_with_deadline(
+            lambda: collect_satellite_slides(float(lat), float(lng)),
+            timeout=EXTERNAL_CALL_DEADLINE,
+            default=satellite_default,
+            name="satellite-replay",
+        )
+        # Failures surface as count=0 entries, matching the old inline behaviour.
         debug_entries = []
-        gateways: list[SatelliteViewProvider] = [
-            GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
-            EsriGateway(),
-            NasaGibsGateway(),
-            MapboxGateway(),
-            BingMapsGateway(),
-            OpenAerialMapGateway(),
-        ]
-        for gateway in gateways:
-            try:
-                gateway_slides, from_cache = gateway.get_satellite_slides(lat, lng)
-                slides.extend(gateway_slides)
-                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=from_cache, count=len(gateway_slides)):
-                    debug_entries.append(entry)
-            except RequestCancelledError as rce:
-                logger.debug("Satellite view provider %s request cancelled -> %s", gateway.service_key, rce)
-            except Exception as e:
-                # TODO: Catch specific exceptions
-                logger.warning("Satellite view provider %s failed -> %s", gateway.service_key, e)
-                if entry := self._debug_entry(request, gateway.service_key or gateway.__class__.__name__, coord_query, from_cache=False, count=0):
-                    debug_entries.append(entry)
+        for result in provider_results:
+            if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
+                debug_entries.append(entry)
 
         return render(
             request,
@@ -449,8 +543,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
+        from urbanlens.dashboard.services.external_data import collect_street_view_slides, panel_sources
+        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
         try:
-            pin = Pin.objects.get(slug=kwargs["pin_slug"], profile__user=request.user)
+            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
@@ -459,27 +556,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if lat is None or lng is None:
             return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
 
+        # See satellite_view_carousell: warm provider caches in Celery on first
+        # visit, then render from those caches with a deadline safety net.
+        if not panel_sources()["street_view"].is_ready(pin):
+            return self._pending_panel(request, pin, "street_view")
+
         coord_query = f"{lat:.5f}, {lng:.5f}"
-        slides: list[StreetViewSlide] = []
+        street_view_default: tuple[list[StreetViewSlide], list[ProviderFetchResult]] = ([], [])
+        slides, provider_results = call_with_deadline(
+            lambda: collect_street_view_slides(float(lat), float(lng)),
+            timeout=EXTERNAL_CALL_DEADLINE,
+            default=street_view_default,
+            name="street-view-replay",
+        )
         debug_entries = []
-        providers: list[StreetViewProvider] = [
-            GoogleMapsGateway(api_key=settings.google_unrestricted_api_key or ""),
-            MapillaryGateway(),
-            KartaViewGateway(),
-        ]
-        for provider in providers:
-            try:
-                provider_slides, from_cache = provider.get_street_view_slides(lat, lng)
-                slides.extend(provider_slides)
-                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=from_cache, count=len(provider_slides)):
-                    debug_entries.append(entry)
-            except RequestCancelledError as rce:
-                logger.debug("Street view provider %s request cancelled -> %s", provider.service_key, rce)
-            except Exception:
-                # TODO: Catch specific exceptions
-                logger.warning("Street view provider %s failed", provider.__class__.__name__, exc_info=True)
-                if entry := self._debug_entry(request, provider.service_key or provider.__class__.__name__, coord_query, from_cache=False, count=0):
-                    debug_entries.append(entry)
+        for result in provider_results:
+            if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
+                debug_entries.append(entry)
 
         return render(
             request,
@@ -494,13 +587,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["get"])
     def import_form(self, request: HttpRequest):
-        """
-        View the import pins form
+        """View the import wizard dialog.
+
+        The same wizard powers both the pin importer and the Memories
+        "Import routes & history" flow; only the surrounding copy differs.
+
+        Args:
+            request: The incoming request. An optional ``variant`` query
+                parameter of ``"memories"`` swaps the dialog's title and intro
+                text for routes/location-history wording; any other value uses
+                the default pin-import wording.
+
+        Returns:
+            The rendered import wizard dialog template.
         """
         from urbanlens.dashboard.models.badges.model import Badge
 
         profile = Profile.objects.get(user=request.user)
         tags = Badge.objects.visible_to(profile).ordered()
+        variant = "memories" if request.GET.get("variant") == "memories" else "pins"
+        import_title = "Import Routes & History" if variant == "memories" else "Import Pins"
         return render(
             request,
             "dashboard/pages/location/import/csv.html",
@@ -508,6 +614,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "form": UploadDataFile(),
                 "tags": tags,
                 "profile": profile,
+                "import_variant": variant,
+                "import_title": import_title,
+                "import_review_title": "Review Import",
             },
         )
 
@@ -693,8 +802,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         htmx:afterOnLoad handler removes the loading placeholder on 204.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
-        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -712,45 +819,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikipedia_info: pin %s has no coordinates, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        address_components = {
-            "locality": location.locality or "",
-            "route": location.route or "",
-            "street_number": location.street_number or "",
-            "administrative_area_level_1": location.administrative_area_level_1 or "",
-        }
-        name = pin.meaningful_official_name or pin.meaningful_name or ""
-        address_bits = ", ".join(
-            filter(
-                None,
-                [
-                    " ".join(filter(None, [location.street_number, location.route])),
-                    location.locality,
-                    location.administrative_area_level_1,
-                ],
-            )
-        )
-        query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
         cached = LocationCache.get_fresh(location, "wikipedia")
         if cached is None:
-            # Bounded to a hard wall-clock deadline: WikipediaGateway can chain up to
-            # five sequential candidate lookups, and requests' own timeout= only bounds
-            # inactivity between reads, not total call duration -- without this, a slow
-            # upstream can hold the request open far longer than any single timeout implies.
-            article = call_with_deadline(
-                lambda: WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name),
-                timeout=20,
-                default=None,
-            )
-            LocationCache.set(location, "wikipedia", article or {}, query_key=query_key)
-            data = article
-        else:
-            data = cached.data or None
+            return self._pending_panel(request, pin, "wikipedia")
+        data = cached.data or None
 
         if not data:
             logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, lat, lng)
             return HttpResponse(status=204)
 
-        context = {"article": data, "debug": self._debug_entry(request, "wikipedia", query_key, from_cache=cached is not None, count=1)}
+        context = {"article": data, "debug": self._debug_entry(request, "wikipedia", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_wikipedia.html", context)
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
@@ -761,7 +839,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         when the search/scrape produces no results.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.real_estate.loopnet import LoopNetGateway
+        from urbanlens.dashboard.plugins.builtin.loopnet import LoopnetPanelSource
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -773,28 +851,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("loopnet_info: pin %s has no location, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        # Build the address string; skip if we don't have at least street + city
-        parts = [
-            " ".join(filter(None, [location.street_number, location.route])),
-            location.locality or "",
-            location.administrative_area_level_1 or "",
-        ]
-        address = ", ".join(p for p in parts if p).strip(", ")
-        if not address or not location.route:
+        # Requires at least street + city precision to search against.
+        address = LoopnetPanelSource.address(pin)
+        if not address:
             logger.debug("loopnet_info: pin %s has insufficient address data (route=%r), skipping", pin_slug, location.route)
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, "loopnet")
         if cached is None:
-            try:
-                result = LoopNetGateway().search(address)
-            except Exception:
-                logger.exception("LoopNet search failed for pin %s", pin_slug)
-                result = None
-            LocationCache.set(location, "loopnet", result or {}, query_key=address)
-            data = result
-        else:
-            data = cached.data or None
+            return self._pending_panel(request, pin, "loopnet")
+        data = cached.data or None
 
         if not data or not data.get("listings"):
             logger.debug("loopnet_info: no listings found for pin %s (address=%r)", pin_slug, address)
@@ -803,7 +869,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "result": data,
             "address": address,
-            "debug": self._debug_entry(request, "loopnet", address, from_cache=cached is not None, count=len(data.get("listings") or [])),
+            "debug": self._debug_entry(request, "loopnet", cached.query_key, from_cache=True, count=len(data.get("listings") or [])),
         }
         return render(request, "dashboard/partials/pins/pin_loopnet.html", context)
 
@@ -811,11 +877,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: National Park Service information for the pin's location.
 
-        Looks for a national park whose centre is within 50 km of the pin and
-        whose data was retrieved from the NPS API.  Requires an NPS API key.
+        Shows the NPS unit whose boundary *contains* the pin's coordinates, if
+        any -- the panel is about the pinned place being inside a national park,
+        not merely near one. Requires an NPS API key.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
         if not settings.nps_api_key:
             logger.debug("nps_info: NPS API key not configured, skipping pin %s", pin_slug)
@@ -833,36 +899,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
-        state_code = location.administrative_area_level_1 or ""
-        if not lat or not lng or not state_code:
-            logger.debug("nps_info: pin %s missing lat/lng or state_code, skipping", pin_slug)
+        if not lat or not lng:
+            logger.debug("nps_info: pin %s missing lat/lng, skipping", pin_slug)
             return HttpResponse(status=204)
-
-        location_name = pin.meaningful_official_name or pin.meaningful_name or ""
-        query_key = f"{location_name} ({state_code})" if location_name else state_code
 
         cached = LocationCache.get_fresh(location, "nps")
         if cached is None:
-            try:
-                park = NPSGateway().find_park_near_location(
-                    float(lat),
-                    float(lng),
-                    state_code=state_code,
-                    location_name=location_name,
-                )
-            except Exception:
-                logger.exception("NPS lookup failed for pin %s", pin_slug)
-                park = None
-            LocationCache.set(location, "nps", park or {}, query_key=query_key)
-            data = park
-        else:
-            data = cached.data or None
+            return self._pending_panel(request, pin, "nps")
+        data = cached.data or None
 
         if not data:
-            logger.debug("nps_info: no park found near pin %s (state=%r)", pin_slug, state_code)
+            logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        context = {"park": data, "debug": self._debug_entry(request, "nps", query_key, from_cache=cached is not None, count=1)}
+        context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
@@ -874,8 +924,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for coordinate-only results with no enrichment.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
-        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -893,25 +941,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nominatim_info: pin %s has no coordinates, skipping", pin_slug)
             return HttpResponse(status=204)
 
-        query_key = f"{lat},{lng}"
         cached = LocationCache.get_fresh(location, "nominatim")
         if cached is None:
-            place = call_with_deadline(
-                lambda: NominatimGateway().reverse_geocode(float(lat), float(lng)),
-                timeout=20,
-                default=None,
-            )
-            LocationCache.set(location, "nominatim", place or {}, query_key=query_key)
-            data = place
-        else:
-            data = cached.data or None
+            return self._pending_panel(request, pin, "nominatim")
+        data = cached.data or None
 
         useful_fields = ("website", "phone", "opening_hours", "operator", "wikipedia")
         if not data or not any(data.get(k) for k in useful_fields):
             logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
             return HttpResponse(status=204)
 
-        context = {"place": data, "debug": self._debug_entry(request, "nominatim", query_key, from_cache=cached is not None, count=1)}
+        context = {"place": data, "debug": self._debug_entry(request, "nominatim", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nominatim.html", context)
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
@@ -922,7 +962,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         204 for non-US locations or when no maps are found within the search area.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.timeout_utils import call_with_deadline
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -938,35 +977,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not lat or not lng:
             return HttpResponse(status=204)
 
-        query_key = f"{float(lat):.4f},{float(lng):.4f}"
         cached = LocationCache.get_fresh(location, "usgs_topo")
         if cached is None:
-            # Bounded to a hard wall-clock deadline: the TNM API's own response can
-            # trickle in slowly for large result sets, and requests' timeout= only
-            # bounds inactivity between reads, not the call's total duration.
-            result = call_with_deadline(
-                lambda: UsgsGateway().historical_topo_maps_for_coordinates(float(lat), float(lng), delta=0.01),
-                timeout=20,
-                default=None,
-            )
-            LocationCache.set(location, "usgs_topo", result or {}, query_key=query_key)
-            data = result
-        else:
-            data = cached.data or None
+            return self._pending_panel(request, pin, "usgs_topo")
 
-        maps_list = (data or {}).get("items") or []
+        maps_list = (cached.data or {}).get("items") or []
         if not maps_list:
             logger.debug("usgs_topo_info: no topo maps found for pin %s", pin_slug)
             return HttpResponse(status=204)
 
         context = {
             "maps": maps_list[:20],
-            "debug": self._debug_entry(request, "usgs_topo", query_key, from_cache=cached is not None, count=len(maps_list)),
+            "debug": self._debug_entry(request, "usgs_topo", cached.query_key, from_cache=True, count=len(maps_list)),
         }
         return render(request, "dashboard/partials/pins/pin_usgs_topo.html", context)
 
     # Sources rendered via LocationCache on the pin detail page (see the endpoints above).
-    _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress")
+    _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress", "web_search")
     # Gateway service_keys used by the satellite/street-view carousels (see satellite_view_carousell / street_view).
     _SATELLITE_DEBUG_SERVICES = ("google_maps", "esri", "nasa_gibs", "mapbox", "bing_maps", "open_aerial_map")
     _STREET_VIEW_DEBUG_SERVICES = ("google_maps", "mapillary", "kartaview")
@@ -998,8 +1025,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 location=pin.location,
                 source__in=self._LOCATION_CACHE_DEBUG_SOURCES,
             ).delete()
-
-        cache.delete(make_cache_key("web_search_pin", str(pin.pk)))
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
@@ -1045,13 +1070,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the weather forecast for a pin.
         """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.external_apis_enabled:
+            return HttpResponse("External weather lookups are turned off in your settings.", status=403)
+
         # Get the pin
         try:
             pin: Pin = Pin.objects.get(slug=pin_slug)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.latitude or not pin.longitude:
+        if not pin.location.latitude or not pin.location.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
         from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
@@ -1060,7 +1089,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         weather_forecast_gateway = OpenWeatherMapGateway()
 
         # Get the weather forecast from the OpenWeather API
-        weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.latitude, pin.longitude)
+        weather_forecast = weather_forecast_gateway.get_weather_forecast(pin.location.latitude, pin.location.longitude)
 
         logger.debug("forecast_data: %s", weather_forecast)
 

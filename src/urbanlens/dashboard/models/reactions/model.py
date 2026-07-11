@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 
 from urbanlens.dashboard.models import abstract
 
 
-class Reaction(abstract.Model):
+class Reaction(abstract.DashboardModel):
     """An emoji reaction from a user on a Comment or TripComment.
 
     Exactly one of ``comment`` or ``trip_comment`` must be set.
     A profile can react with the same emoji only once per comment.
     """
 
+    emoji = models.CharField(max_length=10)
+
     profile = models.ForeignKey(
         "dashboard.Profile",
         on_delete=models.CASCADE,
         related_name="reactions",
     )
-    emoji = models.CharField(max_length=10)
     comment = models.ForeignKey(
         "dashboard.Comment",
         on_delete=models.CASCADE,
@@ -35,7 +38,12 @@ class Reaction(abstract.Model):
         blank=True,
     )
 
-    class Meta(abstract.Model.Meta):
+    if TYPE_CHECKING:
+        profile_id: int
+        comment_id: int | None
+        trip_comment_id: int | None
+
+    class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_reactions"
         constraints = [
             models.UniqueConstraint(

@@ -1,0 +1,41 @@
+{% load map_components %}
+{% comment %}
+Shared read-only map viewer dialog: the expandable "attached map" dialog used
+by pin/wiki comments, trip comments, visit logs, safety attached maps, and
+Memories > Maps. Pairs with themes/base.html's _expandCommentMap(map_id),
+which initializes the Leaflet viewer inside and binds the layer strip
+(rendered here by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} component) through
+window.MapLayers - the same engine as every other map on the site.
+
+Context:
+  map_id     - unique id suffix (comment id, "visit-<id>", "mm-<uuid>", ...).
+  map_data   - snapshot dict for json_script (MarkupMap.to_snapshot format).
+  title      - optional dialog title (default "Map").
+  marker_lat / marker_lng - optional reference-marker coordinates shown on
+               the map (e.g. the pin a visit belongs to).
+
+Pair with _map_view_preview.html for the standard thumbnail + Expand trigger,
+or render a custom preview that calls _expandCommentMap('<map_id>').
+{% endcomment %}
+{% with map_id_str=map_id|stringformat:"s" %}
+{% with sid="comment-map-data-"|add:map_id_str %}{{ map_data|json_script:sid }}{% endwith %}
+<dialog id="comment-map-dialog-{{ map_id_str }}" class="comment-map-view-dialog ul-dialog">
+    <div class="dialog-header">
+        <span>{{ title|default:"Map" }}</span>
+        <button type="button" class="dialog-close" aria-label="Close"
+                onclick="this.closest('dialog').close()">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    <div id="comment-map-view-{{ map_id_str }}" class="comment-map-view-body"
+         {% if marker_lat or marker_lng %}data-marker-lat="{{ marker_lat }}" data-marker-lng="{{ marker_lng }}"{% endif %}></div>
+    <div class="comment-map-view-toolbar">
+        <span class="cmc-toolbar-label">Layer:</span>
+        {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="comment-map-layers-"|add:map_id_str %}
+        <button type="button" class="btn btn--ghost btn--sm comment-map-download-btn"
+                data-map-id="{{ map_id_str }}" title="Download this map as a JPEG">
+            <i class="material-symbols-outlined">download</i> Download
+        </button>
+    </div>
+</dialog>
+{% endwith %}

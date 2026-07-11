@@ -18,7 +18,7 @@ from model_bakery import baker
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
 from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
-from urbanlens.dashboard.models.social_link.queryset import QuerySet as SocialLinkQuerySet
+from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
@@ -32,16 +32,17 @@ class CommentQuerySetTopLevelTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.top = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.location,
+            wiki=self.wiki,
             parent=None,
         )
         self.reply = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.location,
+            wiki=self.wiki,
             parent=self.top,
         )
 
@@ -73,8 +74,9 @@ class CommentQuerySetForPinTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=41.0, longitude=-73.0)
+        self.other_location = baker.make("dashboard.Location", latitude=41.1, longitude=-73.1)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.other_location)
         self.comment = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
@@ -99,29 +101,29 @@ class CommentQuerySetForPinTests(TestCase):
         self.assertNotIn(self.other_comment, qs)
 
 
-class CommentQuerySetForLocationTests(TestCase):
-    """for_location() returns top-level comments for a specific location."""
+class CommentQuerySetForWikiTests(TestCase):
+    """for_wiki() returns top-level comments for a specific wiki."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
-        self.loc1 = baker.make("dashboard.Location", latitude=42.0, longitude=-72.0)
-        self.loc2 = baker.make("dashboard.Location", latitude=43.0, longitude=-71.0)
+        self.wiki1 = baker.make("dashboard.Wiki")
+        self.wiki2 = baker.make("dashboard.Wiki")
         self.c1 = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.loc1,
+            wiki=self.wiki1,
             parent=None,
         )
         self.c2 = baker.make(
             "dashboard.Comment",
             profile=self.user.profile,
-            location=self.loc2,
+            wiki=self.wiki2,
             parent=None,
         )
 
-    def test_for_location_returns_matching_comment(self) -> None:
+    def test_for_wiki_returns_matching_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
-        qs = Comment.objects.for_location(self.loc1)
+        qs = Comment.objects.for_wiki(self.wiki1)
         self.assertIn(self.c1, qs)
         self.assertNotIn(self.c2, qs)
 
@@ -165,7 +167,7 @@ class PinMarkupQuerySetTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=44.0, longitude=-70.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
         self.markup = baker.make(
             "dashboard.PinMarkup",
             parent_pin=self.pin,
@@ -205,7 +207,7 @@ class VisitQuerySetTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude=45.0, longitude=-69.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
-        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
+        self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
         ts = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
         self.manual_visit = baker.make(
             "dashboard.PinVisit",

@@ -23,6 +23,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def parse_address_components(address_components: list[dict[str, Any]]) -> dict[str, str]:
+    """Flatten a geocoding result's ``address_components`` into a type -> value map.
+
+    Most fields prefer ``short_name`` (e.g. state abbreviations like "CA"), but
+    ``country`` is stored under its own key using ``long_name`` (e.g. "Germany")
+    since the ISO short code (e.g. "DE") isn't a useful display value.
+
+    Args:
+        address_components: The ``address_components`` list from a single
+            Google Geocoding API result.
+
+    Returns:
+        Mapping of Google address component type (e.g. ``"locality"``,
+        ``"country"``) to its parsed value.
+    """
+    type_map: dict[str, str] = {}
+    country_name = ""
+    for comp in address_components:
+        types = comp.get("types", [])
+        for t in types:
+            type_map.setdefault(t, comp.get("short_name") or comp.get("long_name") or "")
+        if "country" in types and not country_name:
+            country_name = comp.get("long_name") or comp.get("short_name") or ""
+    if country_name:
+        type_map["country"] = country_name
+    return type_map
+
+
 @dataclass(slots=True, kw_only=True)
 class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"

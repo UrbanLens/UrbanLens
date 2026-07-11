@@ -15,7 +15,7 @@ Features planned for this release.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
 * Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc) [UL-265]
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
-* Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School") [UL-267]
+* ~~Allow users to specify "nickname only" aliases, which are used when they search for their pins, but not used in API requests to external resources. (e.g. "The 'Fuck the birds' School") [UL-267]~~
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
@@ -28,7 +28,7 @@ Features planned for this release.
 * During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
 * UI Bug: Multi-select toolbar in dark mode [UL-151]
 * Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
-* Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]
+* ~~Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]~~
 * Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
 * Starting map option: Remember doesn't appear to work. [UL-255]
 * Organize: Bulk edit button doesn't open dialog. [UL-269]
@@ -37,9 +37,23 @@ Features planned for this release.
 * When clearing a formula, it doesn't trigger a pin refresh. [UL-272]
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??) [UL-273]
 * After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?) [UL-274]
-* Pin details page: Plus buttons don't look good again. [UL-275]
-* On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]
+* ~~Pin details page: Plus buttons don't look good again. [UL-275]~~
+* ~~On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]~~
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
+* In import pins dialog, unchecking "Create category X" does not remove the sample badge.
+* ~~On the map list: Everything says "United States"~~
+* ~~Badge bulk edit does not update the custom icon. ~~
+* Organize page: Bulk edit bar shows up after selecting just one thing (good). But then clicking "edit" opens the bulk edit dialog, instead of the single edit dialog (not as good).
+* Bulk edit dialog: I'm not certain that shared properties are showing up (i.e. selecting 2 rows with the same icon, the icon should show up in the dialog)
+* Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.
+* Rate limit on google places causes an ugly error page.
+* Wikipedia not showing up for some HRSH buildings.
+* Map caching / loading seems to be less reliable at 8k+ pins.
+    [UL] Cache MISS - fetching all pins from server
+    VM96 map:1014 [UL] Fetching 1 tile(s) from server: *
+    VM96 map:1055 [UL] Server returned 8495 new pin(s) for tile(s): *
+    VM96 map:402 [UL] Cache write failed (QuotaExceededError) - pins will reload next visit
+    _writeCache	@	VM96 map:402
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
@@ -60,8 +74,8 @@ Features planned for this release.
 ## Features that need verification
 * password reset. [UL-41]
 * Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
-* Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]
-* Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]
+* ~~Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]~~
+* ~~Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]~~
 * Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
 * Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
 * Limit failed login attempts. [UL-28]
@@ -145,7 +159,7 @@ Features planned for future releases.
 * "Recently used emojis" to make selecting them easier. [UL-172]
 * Pre-populate example tags for new users (to help explain usage of site). "Notable", "Graffiti", "Photography", "Dangerous", "Popular" [UL-173]
 * dashboard/models/badges/model.py > Icons should probably be organized elsewhere. We probably want more elegant solution for defining all 3 traits for all of them (emoji, name, keywords). Many don't have keywords currently. [UL-174]
-* When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]
+* ~~When creating badges (or editing them), consider adding another section to choose badges as children as well as parents. This could make it easier for users to make a large number of changes more quickly. [UL-175]~~
 * When creating new badges during pin import, allow an AI to select an emoji and color for it. [UL-176]
 * More (or all?) vector emojis that can change color. [UL-177]
 * Limit username changes to prevent users from pretending to be someone else in comments, etc. (Perhaps track historical usernames and display them on the public profile? I'm not sure about this.) [UL-145]
@@ -211,7 +225,8 @@ Features planned for future releases.
 * Reorganize api services [UL-291]
 * Reorganize template partials [UL-292]
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]
-* Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them) [UL-294]
+* ~~Plugin system for APIs and Services (we're quickly amassing a lot, and individual installs may want to add and remove some of them)~~ Framework in `dashboard/plugins/` (see docs/plugins.md); pin-detail panels, media archives, and imagery providers converted. [UL-294]
+* Convert remaining external services to plugins (weather, geocoding, search providers, routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth, openhistoricalmap) [UL-294]
 * Automatically mark nearby PD, public parking, etc. [UL-295]
 * On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated") [UL-296]
 * Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/ [UL-297]
@@ -240,6 +255,28 @@ Features planned for future releases.
 * Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
 * Audit for XSS risks related to badge names, and all other fields, etc
+* Cleanup TODO file (This file). Remove completed, verify features, etc.
+* Jinja templates (or html partials??) for emails.
+* Extract javascript into TS files (this may already be a TODO item elsewhere in this file).
+* Investigate: smaller css file for mobile to reduce mobile data usage.
+* Better css minification broadly (will surely require more packaging/compiling steps)
+* More unit tests specifically aiming at security / injection / etc
+* Integration tests
+* Property-based hypothesis tests everywhere. In addition to: coverage report for non-hypothesis tests only. That way, unit tests can be separated out into buckets: AI-generated tests, hypothesis tests, human-written tests. Coverage reports for each can be generated. This ensures that all fn/methods are fully property tested, AI-generated tests can attempt to cover the entire codebase, but that bad AI-generated tests and/or property tests don't report coverage of features that a human has not actually reviewed to be sure they are properly covered.
+* Cleanup old/deprecated assets (old images, icons, etc)
+* Safety-checkins page after the checkin was missed: it's great (and necessary) that contacts can view the page without having an account. However, this creates a certain gap in controlling access to the site. Review how we're doing it, especially with respect to: 2 browsers open the page using the same token, user tries opening the page with the wrong token, or with a right token prior to emails going out (this shouldn't be possible), etc. Also, ensure we are fully communicating to the primary user who created the checkin exactly what information will be shown, and when (perhaps encourage them to view the page as their contacts will see it after they create the checkin?) In the exact opposite direction, consider how to provide more information to emergency contacts, perhaps on a time delay. For instance: X hours after the emails go out, update the page with more information about the user's last known location, other pins they have in the area, etc? We'd have to be very careful about handling all this appropriately and communicating it to the user, with privacy controls.
+* Investigate: import pin data into google my maps. (If not: then consider other services)
+* Email export data to the user feature, so that data can be persisted even without the server online. (Alternatively: dropbox, meta, etc)
+* Celery tasks for external APIs which are rate limited could be queued for later.
+* User settings page: AI Features section needs better explanations.
+* Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
+* More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.
+* Create unit tests for typescript.
+* Markup: Dotted lines.
+* Badge merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist.
+* On pin details page, allow dragging map vertically bigger, which saves between sessions.
+* Turning off the markup layer on a map should turn off showing boundaries.
+* Allow exporting data as other formats: KML, GPX, GeoJSON, CSV.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
@@ -253,12 +290,13 @@ Features planned for future releases.
 * Reduce reliance on javascript further by migrating more of it to HTMX. [UL-80]
 * "Demolition Alert" feature. I'm not sure if this is practically possible, since regularly searching for every pin is out of the question. Allow subscribed users to set alerts on specific pins. [UL-81]
 * Discord Bot (for known demolition updates? "note: the location you're discussing recently had security updates"? actions: "@bot plan trip")
+* API for CRIS
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]
 * "Who is here?" ping feature, allowing other users with the app to opt in to sharing their location. This solves the "I hear footsteps" problem. [UL-83]
 * Track trip progress via gps, device motion, etc. This allows the user to remember what route they took, and could help address mapping tunnels. [UL-84]
-* "I've been hurt" features, allowing users to keep their location secret unless they hit a button, or don't get back on the app after an explore, at which point their last known location and trip details are sent to emergency contacts. [UL-85]
+* ~~"I've been hurt" features, allowing users to keep their location secret unless they hit a button, or don't get back on the app after an explore, at which point their last known location and trip details are sent to emergency contacts. [UL-85]~~
 * "Emergency device lock" feature, similar to an app from the ACLU, which turns on recording, disables notifications on the homescreen, disables fingerprint and face unlock, etc. [UL-86]
 * "Location Warning" feature, allowing users to set a warning radius around their location, and other users in that radius can be notified (if they wish). [UL-87]
 * "People on site group chat". [UL-88]
@@ -285,6 +323,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 * Encrypting user data so the site admin doesn't have access to it. The only two solutions I can think of are (1) a peer-to-peer sharing system, or (2) separating the app into a "server" and "agent" app, wherein the client app has unencrypted data, but the server only has encrypted data. For (2), users would then be able to set up their own "agent" app on their own server, resulting in full ownership of their data. However, both solutions suffer from significant drawbacks. The latter is more attainable, but in order for the app to be usable for most users, we need a publicly hosted client app anyway, resulting in no privacy gains for most (or possibly for any) users. In order to consider the maximum benefit, it may be useful to calculate the time required to brute force gps coordinates, which it turns out is surprisingly small. In addition, both solutions suffer significant performance penalties, and technical complexity, for little to no gain. Finally, almost no users will understand the key differences between this problem being solved and not being solved, and will assume that data is unencrypted and visible to the site admin even if it is not. Therefore, I'm not certain that implementing it really improves user trust, while nonetheless encountering additional drawbacks. The main reason to do it seems to be to tell users we did it... which seems less beneficial than its cost. I'm undecided on this. [UL-102]
 * Considerations about avoiding storing identifying user data. Given SSO, and a need to email the user, I'm not certain that this is solvable. 1-way hashing combined with a "verify your email before..." dialog could help address it, but that would only allow us to hash the email, not avoid storing it altogether, which would still make it crackable via brute force. In addition, it would interfere with our ability to email notifications. Users can give themselves full anonymity already by registering a new email address and choosing not to provide SSO or personal details during account creation. Providing those kinds of instructions might be helpful somewhere, and we could possibly provide a button on the profile page to allow them to anonymize their existing account in that way if they originally created their account the "wrong" way and want full anonymity going forward. [UL-103]
 * Sync with google maps. Google maps does not allow labelling pins, or adding them to lists via a programmatic interface, and the only way to export data is through the google takeout system. The only way to mimic this would be through web scraping, which would be extremely fragile, and require users to grant way too many permissions to our app. Theoretically, this limitation could change in the future, depending entirely on google. [UL-104]
+* Consider: Share with partner feature. I'm undecided on this... it would allow 1 user (or X users?) to share a large number of their pins. This probably encourages the wrong kind of behavior, but alternatively: it's a thing most explorers do in practice, and this would make that technical painpoint a lot easier. I'm leaning towards feeling that this isn't achievable in a responsible way. A half-measure could be to allow more sharing with "close friends", but that may also suffer from the same consequences (maybe even moreso).
 
 ## Issues requiring architectural solutions
 * Allow users to interact with parts of the app (by invite?) without logging in. For instance, in the case of trip planning. [UL-105]

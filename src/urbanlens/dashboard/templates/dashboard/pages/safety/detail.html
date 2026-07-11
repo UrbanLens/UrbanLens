@@ -21,45 +21,107 @@
         </div>
         <div class="safety-header-right">
             {% if not checkin.is_resolved %}
-            <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline">
+            <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline"
+                  onsubmit="window._safetySkipLeaveWarning = true;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn--primary">I'm safe - check in now</button>
             </form>
             <form method="post" action="{% url 'safety.checkin.cancel' checkin.uuid %}" style="display:inline"
-                  onsubmit="return confirm('Cancel this check-in?')">
+                  onsubmit="if (!confirm('Cancel this check-in?')) return false; window._safetySkipLeaveWarning = true;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn--ghost">Cancel</button>
             </form>
             {% endif %}
+            <button type="button" class="btn btn--danger btn--sm" id="safety-delete-btn"
+                    data-delete-url="{% url 'safety.checkin.delete' checkin.slug|default:checkin.uuid %}"
+                    data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}">
+                <i class="material-symbols-outlined">delete</i> Delete
+            </button>
         </div>
     </div>
 
-    <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form">
+    <p class="safety-autosave-status safety-autosave-status--floating is-hidden" id="safety-autosave-status" aria-live="polite"></p>
+
+    <form method="post" action="{% url 'safety.checkin.detail' checkin.slug|default:checkin.uuid %}" class="safety-checkin-form" id="safety-checkin-form">
         {% csrf_token %}
-        <div class="form-row">
-            <label for="title">Title</label>
-            <input type="text" name="title" id="title" value="{{ checkin.title }}">
+
+        <div class="card safety-section-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">title</i>
+                <h3>Title</h3>
+            </div>
+            <div class="card__body">
+                <div class="form-row">
+                    <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked %}disabled{% endif %}>
+                    {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
+                </div>
+            </div>
         </div>
-        <div class="form-row">
-            <label for="plan_details">Trip plan</label>
-            <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
+
+        <div class="card safety-section-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">map</i>
+                <h3>Trip plan &amp; route</h3>
+            </div>
+            <div class="card__body">
+                <div class="form-row">
+                    <label for="plan_details">Plan</label>
+                    <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
+                    {% if checkin.contacts_locked %}<p class="form-hint">Editing this will notify your emergency contacts of the update.</p>{% endif %}
+                </div>
+                <div class="form-row form-row--map">
+                    <label>Destination &amp; route</label>
+                    {% url 'markup_map.json' checkin.markup_map.uuid as markup_json_url %}
+                    {% url 'markup_map.markup' checkin.markup_map.uuid as markup_create_url %}
+                    {% url 'markup_map.markup.edit' checkin.markup_map.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
+                    {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
+                    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.markup_map.center_latitude|default:checkin.destination_latitude map_center_lng=checkin.markup_map.center_longitude|default:checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_map_uuid=checkin.markup_map.uuid markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template %}
+                    {% if checkin.contacts_locked %}<p class="form-hint">Editing the destination or route will notify your emergency contacts of the update.</p>{% endif %}
+                </div>
+                <div class="form-row form-row--maps">
+                    <label>Additional reference maps</label>
+                    {% include "dashboard/partials/safety/_attached_maps.html" %}
+                </div>
+                {% if checkin.wiki_notified_at %}
+                <div class="form-row safety-wiki-notify">
+                    <p class="form-hint">
+                        <i class="material-symbols-outlined">groups</i>
+                        The community wiki for this destination was notified {{ checkin.wiki_notified_at|naturaltime }}.
+                        {% if destination_wiki %}<a href="{% url 'location.wiki' destination_wiki.location.slug|default:destination_wiki.location.uuid %}" target="_blank" rel="noopener">View the wiki</a>{% endif %}
+                    </p>
+                </div>
+                {% elif not checkin.notifications_locked %}
+                {# Filled in (only) when the destination is covered by a community wiki; re-checked when the pin moves. #}
+                <div id="safety-wiki-notify-option"
+                     hx-get="{% url 'safety.checkin.wiki_option' %}"
+                     hx-trigger="change from:#safety-destination-lat"
+                     hx-include="#safety-destination-lat, #safety-destination-lng, #notify_community_wiki"
+                     hx-swap="innerHTML">
+                    {% include "dashboard/partials/safety/_wiki_notify_toggle.html" with wiki=destination_wiki checked=checkin.notify_community_wiki last_wiki_edit=last_wiki_edit wiki_editor_count=wiki_editor_count %}
+                </div>
+                {% endif %}
+            </div>
         </div>
-        <div class="form-row">
-            <label>Destination &amp; route</label>
-            {% url 'safety.checkin.markup.json' checkin.uuid as markup_json_url %}
-            {% url 'safety.checkin.markup' checkin.uuid as markup_create_url %}
-            {% url 'safety.checkin.markup.edit' checkin.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template %}
+
+        <div class="card safety-section-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">sms</i>
+                <h3>Message to emergency contacts</h3>
+            </div>
+            <div class="card__body">
+                <div class="form-row">
+                    <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.notifications_locked %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
+                    {% if checkin.notifications_locked %}<p class="form-hint">Locked - emergency contacts have already been notified, or you've already checked in.</p>{% endif %}
+                </div>
+            </div>
         </div>
-        <div class="form-row">
-            <label for="contact_message">Message to emergency contacts</label>
-            <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ checkin.contact_message }}</textarea>
-        </div>
-        {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input %}
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary">Save</button>
+
+        <div id="safety-contact-picker-container">
+            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=checkin.notifications_locked collapsible=True %}
         </div>
     </form>
+
+    {% include "dashboard/partials/safety/_map_picker_dialog.html" %}
 
     {# -- Photos -------------------------------------------------------------- #}
     <div id="safety-gallery-panel"
@@ -74,26 +136,187 @@
         </div>
     </div>
 
-    {# -- Emergency contacts --------------------------------------------------- #}
-    <div class="card safety-contacts-status">
-        <div class="card-header">
-            <i class="material-symbols-outlined">contact_emergency</i>
-            <h3>Emergency contacts</h3>
-        </div>
-        <ul class="safety-contact-status-list">
-            {% for contact in contacts %}
-            <li>
-                <span class="safety-contact-status-name">{{ contact.display_name }}</span>
-                {% if contact.found_safe_at %}<span class="safety-badge safety-badge--success">Found you</span>
-                {% elif contact.notified_at %}<span class="safety-badge safety-badge--warning">Notified</span>
-                {% else %}<span class="safety-badge">Not yet notified</span>{% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-
     {% include "dashboard/partials/safety/_chat_panel.html" with contact=None %}
 
 </div>
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
+<script>
+(function () {
+    var form = document.getElementById('safety-checkin-form');
+    var status = document.getElementById('safety-autosave-status');
+    var pickerContainer = document.getElementById('safety-contact-picker-container');
+    if (!form) return;
+    var csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+    var saveTimer = null;
+    var hideTimer = null;
+    var lastTarget = null;
+
+    function positionStatusNear(el) {
+        if (!el || !status || !el.getBoundingClientRect) return;
+        var rect = el.getBoundingClientRect();
+        var top = Math.max(8, rect.top - status.offsetHeight - 8);
+        var left = Math.max(8, Math.min(window.innerWidth - status.offsetWidth - 8, rect.left));
+        status.style.top = top + 'px';
+        status.style.left = left + 'px';
+    }
+
+    function setStatus(text, isError) {
+        status.textContent = text;
+        status.classList.toggle('safety-autosave-status--error', !!isError);
+        status.classList.remove('is-hidden');
+        positionStatusNear(lastTarget);
+        window.clearTimeout(hideTimer);
+        if (!isError) {
+            hideTimer = window.setTimeout(function () { status.classList.add('is-hidden'); }, 1600);
+        }
+    }
+
+    // Setting .innerHTML does not execute embedded <script> tags (a long-standing DOM
+    // quirk) - _contact_picker.html ships its own init <script>, so re-create each script
+    // node via createElement/appendChild instead, which does run it, to rewire the chip
+    // add/remove listeners on the freshly swapped-in markup.
+    function replaceHtmlAndRunScripts(container, html) {
+        // Carry the collapsible picker's "Edit"/"Done" toggle state across the swap - the
+        // user is very likely still mid-edit (this only fires right after a contacts change
+        // or another autosave), so re-rendering shouldn't silently collapse it back on them.
+        var wasEditing = !!container.querySelector('.safety-contact-picker.is-editing');
+        container.innerHTML = html;
+        if (wasEditing) {
+            var picker = container.querySelector('.safety-contact-picker');
+            var toggleBtn = container.querySelector('[data-role="edit-toggle"]');
+            if (picker) picker.classList.add('is-editing');
+            if (toggleBtn && window.safetyContactPickerSetEditToggleState) window.safetyContactPickerSetEditToggleState(toggleBtn, true);
+        }
+        container.querySelectorAll('script').forEach(function (oldScript) {
+            var newScript = document.createElement('script');
+            Array.prototype.forEach.call(oldScript.attributes, function (attr) {
+                newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    function save() {
+        setStatus('Saving…', false);
+        fetch(form.action, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+            body: new FormData(form),
+        }).then(function (response) {
+            if (!response.ok) throw new Error('Save failed');
+            return response.json();
+        }).then(function (data) {
+            if (pickerContainer && data.contacts_html) replaceHtmlAndRunScripts(pickerContainer, data.contacts_html);
+            setStatus('Saved', false);
+            (data.warnings || []).forEach(function (warning) { if (window.toastr) toastr.error(warning); });
+        }).catch(function () {
+            setStatus('Could not save', true);
+            if (window.toastr) toastr.error('Could not save your changes. Please try again.');
+        });
+    }
+
+    function scheduleSave(immediate) {
+        window.clearTimeout(saveTimer);
+        if (immediate) { save(); return; }
+        saveTimer = window.setTimeout(save, 800);
+    }
+
+    form.addEventListener('input', function (evt) {
+        if (evt.target.type === 'range') return;
+        // The contact picker's friend-search box isn't itself submitted (no `name`
+        // attribute - only committed chips are) and re-renders the whole picker on
+        // every autosave, which would wipe out whatever the user is still mid-typing.
+        // Chip add/remove already triggers its own immediate save via 'contactschange'.
+        if (evt.target.closest('[data-role="contact-picker"]')) return;
+        lastTarget = evt.target;
+        scheduleSave(false);
+    });
+    form.addEventListener('change', function (evt) {
+        // Text inputs/textareas already autosave via the debounced 'input' listener above;
+        // 'change' only needs to force an immediate save for discrete-action fields - the
+        // hidden destination lat/lng (set via the map, see setDestination()) and any slider.
+        lastTarget = evt.target;
+        if (evt.target.type === 'hidden' || evt.target.type === 'range') scheduleSave(true);
+    });
+    form.addEventListener('contactschange', function () {
+        lastTarget = pickerContainer;
+        scheduleSave(true);
+    });
+}());
+</script>
+<script>
+(function () {
+    // -- Leave-page warning: nobody would be notified ------------------------
+    // Distinct from window.autosaveGuard (base.html), which only tracks whether a
+    // save is still in flight - this checks the check-in's *configuration*: if it
+    // has no contacts and community wiki notification is off, leaving means nobody
+    // would ever hear if something happened. Re-evaluated live since either can
+    // change via the autosave above.
+    var isResolved = {{ checkin.is_resolved|yesno:"true,false" }};
+    var message = "You haven't added any emergency contacts, and community wiki notification is off - if something happens, no one will be notified. Leave anyway, or stay to finish setting this up?";
+
+    function nobodyWouldBeNotified() {
+        if (isResolved || window._safetySkipLeaveWarning) return false;
+        var chips = document.querySelectorAll('#safety-contact-picker-container .safety-contact-chip');
+        if (chips.length > 0) return false;
+        var wikiCheckbox = document.getElementById('notify_community_wiki');
+        if (wikiCheckbox && wikiCheckbox.checked) return false;
+        return true;
+    }
+
+    window.addEventListener('beforeunload', function (e) {
+        if (!nobodyWouldBeNotified()) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!nobodyWouldBeNotified()) return;
+        var a = e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        var href = a.getAttribute('href');
+        var scheme = href ? href.trim().toLowerCase() : '';
+        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
+        e.preventDefault();
+        var proceed = window.confirmDialog ? window.confirmDialog({
+            title: 'Leave without a way to reach you?',
+            message: message,
+            confirmLabel: 'Leave anyway',
+            danger: true,
+        }) : Promise.resolve(window.confirm(message));
+        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
+    }, true);
+}());
+</script>
+<script>
+(function () {
+    // -- Delete check-in -------------------------------------------------------
+    var btn = document.getElementById('safety-delete-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        var notified = btn.dataset.contactsNotified === '1';
+        var proceed = window.confirmDialog ? window.confirmDialog({
+            title: 'Delete this check-in?',
+            message: notified
+                ? "Your emergency contacts were already notified about this trip - deleting won't un-notify them. This can't be undone."
+                : "This can't be undone.",
+            confirmLabel: 'Delete',
+            danger: true,
+        }) : Promise.resolve(window.confirm("Delete this check-in? This can't be undone."));
+        proceed.then(function (ok) {
+            if (!ok) return;
+            window._safetySkipLeaveWarning = true;
+            if (window.autosaveGuard) window.autosaveGuard.allowNavigation();
+            var csrfToken = document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value;
+            fetch(btn.dataset.deleteUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
+                .then(function (r) {
+                    if (!r.ok) throw new Error();
+                    window.location.href = "{% url 'safety.home' %}";
+                })
+                .catch(function () { if (window.toastr) toastr.error('Could not delete this check-in.'); });
+        });
+    });
+}());
+</script>
 {% endblock %}

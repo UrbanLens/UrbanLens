@@ -7,8 +7,10 @@ after the map's own card-header, alongside `<div id="map"></div>`.
 Relies on context already provided by both pages' own views: pin_type_choices,
 detail_pin_icon_choices, color_choices, markup_fill_color, markup_border_color.
 No page-specific (pin vs location) values are referenced here - see
-_map_annotations_script.html for the parameterized JS half.
+ts/entries/map-annotations.ts for the parameterized JS half (config read from
+a sibling #map-annotations-config element, not from this partial).
 {% endcomment %}
+{% load map_components %}
 
 {# -- Map sidebar panel (Details + Photos tabs) -- #}
 <div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
@@ -39,20 +41,43 @@ _map_annotations_script.html for the parameterized JS half.
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
-    <button id="edit-campus-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditCampus()">
-        <i class="material-symbols-outlined">pentagon</i> Edit Boundary
+    {# Shared layers panel - same component and engine as the main map. The  #}
+    {# details/photos buttons are page-registered toggles (see the `custom`  #}
+    {# option in ts/entries/map-annotations.ts).                             #}
+    {% map_layers_panel "street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
+    <button id="screenshot-map-button" type="button" class="btn btn--ghost map-overlay-btn" onclick="_openMapScreenshot()"
+            title="Take a screenshot of this map">
+        <i class="material-symbols-outlined">photo_camera</i> Screenshot
     </button>
-    <div id="campus-save-controls" class="map-overlay-btn-group" style="display:none">
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearCampus()">
-            <i class="material-symbols-outlined">delete_outline</i> Clear
+    <div id="edit-boundary-btns" class="map-overlay-btn-group">
+        <button id="edit-property-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditBoundary('property')"
+                title="Draw or reshape the property (grounds/parcel) boundary">
+            <i class="material-symbols-outlined">pentagon</i> Property
         </button>
-        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelCampusEdit()">
-            <i class="material-symbols-outlined">close</i> Cancel
+        <button id="edit-building-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--building" onclick="startEditBoundary('building')"
+                title="Draw or reshape the building footprint boundary">
+            <i class="material-symbols-outlined">home_work</i> Building
         </button>
     </div>
-    {# "Add Detail" dropdown + unified draw/edit panel - shared with the safety check-in map #}
+    <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
+            <i class="material-symbols-outlined">delete_outline</i> Clear
+        </button>
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--cancel" onclick="cancelBoundaryEdit()">
+            <i class="material-symbols-outlined">close</i> Cancel
+        </button>
+        <button class="btn btn--ghost map-overlay-btn map-overlay-btn--save" onclick="finishBoundaryEdit()">
+            <i class="material-symbols-outlined">check</i> Done
+        </button>
+    </div>
+    {# "Add Detail" dropdown - shared with the safety check-in map #}
     {% include "dashboard/partials/layout/_markup_toolbar_panel.html" with show_add_pin_item=True %}
 </div>
+
+{# Unified draw/edit panel this dropdown opens - must be a sibling of #}
+{# .map-bottom-controls, not nested inside it, so it positions relative to #}
+{# .map-wrapper instead of that small absolute-positioned button cluster. #}
+{% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
 
 {# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
 {# embedded picker map - placing/moving the pin happens on the main map. Must --- #}

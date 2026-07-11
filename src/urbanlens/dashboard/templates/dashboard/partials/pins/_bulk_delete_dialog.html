@@ -1,0 +1,18 @@
+{# Type-to-confirm bulk delete dialog. Compact by design so highlighted map markers stay visible around it. #}
+<dialog id="bulk-delete-dialog" class="ul-dialog bulk-delete-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete pins" title_id="bulk-delete-dialog-title" %}
+    <div class="ul-dialog-body bulk-delete-dialog-body">
+        <p id="bulk-delete-warning" class="bulk-delete-warning"></p>
+        <ul id="bulk-delete-pin-list" class="bulk-delete-pin-list"></ul>
+        <label class="form-field">
+            <span class="form-label" id="bulk-delete-confirm-label"></span>
+            <input type="text" id="bulk-delete-confirm-input" class="form-input" autocomplete="off" spellcheck="false">
+        </label>
+    </div>
+    <div class="ul-dialog-footer">
+        <button type="button" id="bulk-delete-confirm-btn" class="btn btn--danger-filled" disabled>
+            <i class="material-symbols-outlined">delete</i> Delete
+        </button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>

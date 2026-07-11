@@ -18,6 +18,26 @@
     {{ error }}
   </div>
   {% endif %}
+  <section class="site-admin-card ul-section card subscription-types-card">
+    <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types</span></div>
+    <ul class="subscription-types-list">
+      {% for role in roles %}
+      <li class="subscription-types-list__item">
+        <div class="subscription-types-list__heading">
+          <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+          {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
+        </div>
+        <div class="subscription-types-list__features">
+          {% for label in role.feature_labels %}
+          <span class="ul-chip"><i class="material-symbols-outlined">check</i> {{ label }}</span>
+          {% empty %}
+          <span class="subscription-types-list__no-features">No features included.</span>
+          {% endfor %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
   <div class="subscription-grid">
     <section class="site-admin-card ul-section card">
       <div class="card-header"><i class="material-symbols-outlined">add_moderator</i><span>Grant role</span></div>
@@ -28,6 +48,62 @@
         <div class="form-row"><label for="duration_months">Duration</label><select id="duration_months" name="duration_months"><option value="indefinite">Indefinite</option><option value="1">1 month</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></div>
         <div class="form-actions"><button class="btn btn--primary btn--lg" type="submit"><i class="material-symbols-outlined">verified_user</i> Grant access</button></div>
       </form>
+    </section>
+    <section class="site-admin-card ul-section card">
+      <div class="card-header"><i class="material-symbols-outlined">database</i><span>Role storage quotas</span></div>
+      <p class="form-help">
+        Storage quota (GB) granted to users holding each role - the largest applicable quota wins.
+        Leave blank to use the site default, or set <strong>0</strong> for unlimited.
+      </p>
+      <div class="subscription-list">
+        <ul class="subscription-list__items">
+          {% for role in roles %}
+          <li class="subscription-list__item">
+            <form method="post" class="inline-sub-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_quota">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              <label for="role-quota-{{ role.slug }}">Quota (GB)</label>
+              <input type="number" id="role-quota-{{ role.slug }}" name="storage_quota_gb"
+                     value="{{ role.storage_quota_gb|default_if_none:'' }}" min="0" step="1" placeholder="Site default">
+              <button class="btn btn--ghost" type="submit">Save</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    <section class="site-admin-card ul-section card">
+      <div class="card-header"><i class="material-symbols-outlined">outgoing_mail</i><span>Role email limits</span></div>
+      <p class="form-help">
+        Outbound email caps (invitations etc.) for users holding each role - the largest applicable
+        limit wins. Leave blank to use the site default, or set <strong>0</strong> for unlimited.
+      </p>
+      <div class="subscription-list">
+        <ul class="subscription-list__items">
+          {% for role in roles %}
+          <li class="subscription-list__item">
+            <form method="post" class="inline-sub-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_email_limits">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              <label for="role-email-hour-{{ role.slug }}">Hour</label>
+              <input type="number" id="role-email-hour-{{ role.slug }}" name="email_limit_per_hour"
+                     value="{{ role.email_limit_per_hour|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <label for="role-email-day-{{ role.slug }}">Day</label>
+              <input type="number" id="role-email-day-{{ role.slug }}" name="email_limit_per_day"
+                     value="{{ role.email_limit_per_day|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <label for="role-email-month-{{ role.slug }}">Month</label>
+              <input type="number" id="role-email-month-{{ role.slug }}" name="email_limit_per_month"
+                     value="{{ role.email_limit_per_month|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <button class="btn btn--ghost" type="submit">Save</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
     <section class="site-admin-card ul-section card">
       <div class="card-header">

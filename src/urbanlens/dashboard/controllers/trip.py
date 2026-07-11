@@ -9,9 +9,11 @@ import re
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import CharField, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.html import escape
 from django.views import View
 import requests
 
@@ -24,7 +26,14 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited
+from urbanlens.dashboard.services.text_limits import (
+    MAX_COMMENT_TEXT_LENGTH,
+    MAX_TRIP_ACTIVITY_NOTES_LENGTH,
+    MAX_TRIP_DESCRIPTION_LENGTH,
+    text_length_error,
+)
+from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -38,17 +47,65 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Valid `sort`/`dir` query params for the trips list page (see `TripListView`/`TripCreateView`).
+TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
+TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
-def _trips_for_list(profile: Profile) -> QuerySet[Trip]:
+
+def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip]:
     """Return annotated trips for the list page.
 
     Args:
         profile: The viewer's profile.
+        sort: Field to order by - ``"start_date"`` or ``"updated"``.
+        direction: ``"asc"`` or ``"desc"``.
 
     Returns:
         Queryset of trips the profile belongs to, with list stats prefetched.
     """
-    return Trip.objects.for_list_page(profile)
+    return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
+
+
+def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
+    """Read and validate the `sort`/`dir` query params for the trips list page.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        A ``(sort, direction)`` tuple, each guaranteed to be one of the valid choices.
+    """
+    sort = request.GET.get("sort", "updated")
+    if sort not in TRIP_LIST_SORT_CHOICES:
+        sort = "updated"
+    direction = request.GET.get("dir", "desc")
+    if direction not in TRIP_LIST_DIRECTION_CHOICES:
+        direction = "desc"
+    return sort, direction
+
+
+def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
+    """Serialize trips into the plain-dict shape the trips-list calendar view renders from.
+
+    Args:
+        trips: Trips to serialize, in the order they should appear within a day's chip list.
+
+    Returns:
+        One dict per trip with `uuid`, `name`, `start`/`end` (ISO dates or `None`), `status`, and `url`.
+    """
+    from django.urls import reverse
+
+    return [
+        {
+            "uuid": str(t.uuid),
+            "name": t.name,
+            "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
+            "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
+            "status": t.timeline_status,
+            "url": reverse("trips.detail", args=[t.uuid]),
+        }
+        for t in trips
+    ]
 
 
 def _apply_trip_visibility_filter(
@@ -74,9 +131,22 @@ def _apply_trip_visibility_filter(
     common_pin_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
     friends_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
     c_friend_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
-    # COMMON_TRIP: viewer is already in this trip - treat as visible.
+    # COMMON_TRIP and ANYTHING_IN_COMMON: the viewer shares this very trip with
+    # the adder, which satisfies both - treat as visible.
 
     hidden_out.update(act.id for act in no_one_acts)
+
+    # Friends of the viewer always qualify for every option except NO_ONE, so
+    # compute the viewer's accepted-friend ids once for all branches below.
+    viewer_friend_ids: set[int] = set()
+    if common_pin_acts or friends_acts or c_friend_acts:
+        friend_pairs = Friendship.objects.filter(
+            Q(from_profile=viewer) | Q(to_profile=viewer),
+            status=FriendshipStatus.ACCEPTED,
+        ).values_list("from_profile_id", "to_profile_id")
+        for pair in friend_pairs:
+            viewer_friend_ids.update(pair)
+        viewer_friend_ids.discard(viewer.id)
 
     if common_pin_acts:
         loc_ids = {a.location_id for a in common_pin_acts}
@@ -84,57 +154,31 @@ def _apply_trip_visibility_filter(
             Pin.objects.filter(profile=viewer, location_id__in=loc_ids).values_list("location_id", flat=True),
         )
         for act in common_pin_acts:
-            if act.location_id not in viewer_locs:
+            if act.added_by_id not in viewer_friend_ids and act.location_id not in viewer_locs:
                 hidden_out.add(act.id)
 
-    if friends_acts:
-        adder_ids = {a.added_by_id for a in friends_acts}
-        accepted_friend_adder_ids = set(
+    for act in friends_acts:
+        if act.added_by_id not in viewer_friend_ids:
+            hidden_out.add(act.id)
+
+    for act in c_friend_acts:
+        if act.added_by_id in viewer_friend_ids:
+            continue
+        # Adder's friends
+        adder_friends = set(
             Friendship.objects.filter(
-                Q(from_profile=viewer, to_profile_id__in=adder_ids) | Q(to_profile=viewer, from_profile_id__in=adder_ids),
+                Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
                 status=FriendshipStatus.ACCEPTED,
             ).values_list("from_profile_id", "to_profile_id"),
         )
-        # Flatten to a set of IDs that are friends with the viewer.
-        flat_friend_ids: set[int] = set()
-        for pair in accepted_friend_adder_ids:
-            flat_friend_ids.update(pair)
-        flat_friend_ids.discard(viewer.id)
+        adder_flat: set[int] = set()
+        for pair in adder_friends:
+            adder_flat.update(pair)
+        if act.added_by_id is not None:
+            adder_flat.discard(act.added_by_id)
 
-        for act in friends_acts:
-            if act.added_by_id not in flat_friend_ids:
-                hidden_out.add(act.id)
-
-    if c_friend_acts:
-        {a.added_by_id for a in c_friend_acts}
-        # Viewer's friends
-        viewer_friend_ids = set(
-            Friendship.objects.filter(
-                Q(from_profile=viewer) | Q(to_profile=viewer),
-                status=FriendshipStatus.ACCEPTED,
-            ).values_list("from_profile_id", "to_profile_id"),
-        )
-        viewer_flat: set[int] = set()
-        for pair in viewer_friend_ids:
-            viewer_flat.update(pair)
-        viewer_flat.discard(viewer.id)
-
-        for act in c_friend_acts:
-            # Adder's friends
-            adder_friends = set(
-                Friendship.objects.filter(
-                    Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
-                    status=FriendshipStatus.ACCEPTED,
-                ).values_list("from_profile_id", "to_profile_id"),
-            )
-            adder_flat: set[int] = set()
-            for pair in adder_friends:
-                adder_flat.update(pair)
-            if act.added_by_id is not None:
-                adder_flat.discard(act.added_by_id)
-
-            if not (viewer_flat & adder_flat):
-                hidden_out.add(act.id)
+        if not (viewer_friend_ids & adder_flat):
+            hidden_out.add(act.id)
 
 
 class _ReplyData(TypedDict):
@@ -229,10 +273,11 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         return
     lat, lng = coords
 
-    pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
-    PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
-    sync_last_visited(pin)
-    add_visited_status(pin)
+    if visit_logging_allowed(completer):
+        pin = get_or_create_pin_at(completer, location=activity.location, latitude=lat, longitude=lng)
+        PinVisit.objects.create(pin=pin, visited_at=activity.scheduled_at, source=VisitSource.TRIP)
+        sync_last_visited(pin)
+        add_visited_status(pin)
 
     if activity.scheduled_at is not None:
         other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
@@ -313,7 +358,15 @@ def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Loc
             if not (-90 <= lat <= 90 and -180 <= lng <= 180):
                 return None, None
             name = (body.get("geocoded_name") or body.get("title") or f"{lat:.6f}, {lng:.6f}").strip()
-            return Location.objects.create(name=name or "Activity Location", latitude=lat, longitude=lng), None
+
+            location, _ = Location.objects.get_or_create(
+                latitude=lat,
+                longitude=lng,
+                defaults={"official_name": name or "Activity Location"},
+            )
+            # Wikis are user-created only; a trip activity location gets one
+            # when someone explicitly creates it from a pin detail page.
+            return location, None
         except (ValueError, TypeError):
             pass
 
@@ -418,15 +471,27 @@ class TripListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
+        from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = _trips_for_list(profile)
+        sort, direction = _trip_list_sort_params(request)
+        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
         friends = get_connections(profile)
+        calendar_account = GoogleCalendarAccount.objects.filter(profile=profile).first()
         return render(
             request,
             "dashboard/pages/trips/index.html",
-            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends},
+            {
+                "trips": trips,
+                "trips_calendar_data": _trips_calendar_data(trips),
+                "profile": profile,
+                "page_name": "trips",
+                "friends": friends,
+                "calendar_account": calendar_account,
+                "sort": sort,
+                "dir": direction,
+            },
         )
 
 
@@ -452,9 +517,14 @@ class TripCreateView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Trip name is required.", status=400)
 
+        description = body.get("description") or None
+        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
         trip = Trip.objects.create(
             name=name,
-            description=body.get("description") or None,
+            description=description,
             start_date=body.get("start_date") or None,
             end_date=body.get("end_date") or None,
             creator=profile,
@@ -471,8 +541,19 @@ class TripCreateView(LoginRequiredMixin, View):
                 for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
                     TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
 
-        trips = _trips_for_list(profile)
-        return render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
+        sort, direction = _trip_list_sort_params(request)
+        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        return render(
+            request,
+            "dashboard/partials/trips/trip_list_partial.html",
+            {
+                "trips": trips,
+                "trips_calendar_data": _trips_calendar_data(trips),
+                "profile": profile,
+                "sort": sort,
+                "dir": direction,
+            },
+        )
 
 
 class TripDetailView(LoginRequiredMixin, View):
@@ -482,6 +563,8 @@ class TripDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request, trip_uuid):
+        from urbanlens.dashboard.controllers.calendar_sync import calendar_context
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_uuid, profile)
         if isinstance(result, HttpResponse):
@@ -495,6 +578,7 @@ class TripDetailView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "trip-detail",
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                **calendar_context(profile, trip),
                 **profile.get_map_center_template_context(),
             },
         )
@@ -521,10 +605,16 @@ class TripEditView(LoginRequiredMixin, View):
         name = (body.get("name") or "").strip()
         if name:
             trip.name = name
-        trip.description = body.get("description") or None
+        description = body.get("description") or None
+        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+        trip.description = description
         trip.start_date = body.get("start_date") or None
         trip.end_date = body.get("end_date") or None
         trip.save()
+
+        from urbanlens.dashboard.controllers.calendar_sync import calendar_context
 
         return render(
             request,
@@ -533,6 +623,7 @@ class TripEditView(LoginRequiredMixin, View):
                 "trip": trip,
                 "profile": profile,
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                **calendar_context(profile, trip),
             },
         )
 
@@ -548,8 +639,11 @@ class TripDeleteView(LoginRequiredMixin, View):
         trip = get_object_or_404(Trip, uuid=trip_uuid)
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can delete it.", status=403)
+        stash_for_undo("trip", [trip], profile)
         trip.delete()
-        return HttpResponse("", status=200)
+        response = HttpResponse("", status=200)
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Trip deleted. Undo within 7 days from Settings → Undo History."}})
+        return response
 
 
 class TripActivitiesView(LoginRequiredMixin, View):
@@ -583,6 +677,9 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
         title = (body.get("title") or "").strip() or None
         notes = (body.get("notes") or "").strip() or None
+        length_error = text_length_error(notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         location, pin = _resolve_activity_place(body, profile)
@@ -638,7 +735,11 @@ class TripActivityEditView(LoginRequiredMixin, View):
             body = request.POST.dict()
 
         activity.title = (body.get("title") or "").strip() or None
-        activity.notes = (body.get("notes") or "").strip() or None
+        notes = (body.get("notes") or "").strip() or None
+        length_error = text_length_error(notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+        activity.notes = notes
         activity.scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         activity.scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         activity.location, activity.pin = _resolve_activity_place(body, profile)
@@ -789,7 +890,13 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(profile)
-    top_comments = trip.comments.filter(parent__isnull=True).select_related("author__user").prefetch_related("reactions", "replies__reactions", "replies__author__user").order_by("created")
+    top_comments = (
+        trip.comments.filter(parent__isnull=True)
+        .select_related("author__user", "markup_map")
+        # comment.map_data derives its snapshot from the markup map's items.
+        .prefetch_related("reactions", "replies__reactions", "replies__author__user", "markup_map__items", "replies__markup_map__items")
+        .order_by("created")
+    )
 
     rendered: list[_CommentData] = []
     for c in top_comments:
@@ -861,17 +968,21 @@ class TripCommentsView(LoginRequiredMixin, View):
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
         from urbanlens.dashboard.controllers.comments import _parse_map_data
+        from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
 
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, map_data=map_data)
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -896,7 +1007,10 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
         if profile not in {comment.author, trip.creator}:
             return HttpResponse("You can only delete your own comments.", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return _render_trip_comments(request, trip, profile)
 
 
@@ -938,7 +1052,7 @@ class TripMembersView(LoginRequiredMixin, View):
         try:
             user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
-            return HttpResponse(f'No user found with username "{username}".', status=404)
+            return HttpResponse(f'No user found with username "{escape(username)}".', status=404)
 
         max_members = SiteSettings.get_current().max_trip_members
         current_count = trip.profiles.count()
@@ -1034,23 +1148,25 @@ class TripLocationSearchView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_rows = list(
-            Pin.objects.filter(profile=profile).filter(Q(name__icontains=q) | Q(location__name__icontains=q) | Q(description__icontains=q)).select_related("location")[:5],
+            Pin.objects.filter(profile=profile).filter(Q(name__icontains=q) | Q(location__official_name__icontains=q) | Q(location__wiki__name__icontains=q) | Q(description__icontains=q)).select_related("location")[:5],
         )
         pin_results = [
             {
                 "uuid": str(pin.uuid),
                 "name": pin.effective_name or "Untitled pin",
-                "locality": pin.locality,
-                "administrative_area_level_1": pin.administrative_area_level_1,
+                "locality": pin.effective_city,
+                "administrative_area_level_1": pin.effective_state,
                 "type": "pin",
             }
             for pin in pin_rows
         ]
 
         db_rows = list(
-            Location.objects.filter(name__icontains=q).values(
+            Location.objects.filter(Q(wiki__name__icontains=q) | Q(official_name__icontains=q))
+            .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
+            .values(
                 "uuid",
-                "name",
+                "display_name",
                 "locality",
                 "administrative_area_level_1",
             )[:5],
@@ -1058,7 +1174,8 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         db_results = [
             {
                 "uuid": str(row["uuid"]),
-                "name": row["name"],
+                "name": row["display_name"] or "Unnamed location",
+                "display_name": row["display_name"] or "Unnamed location",
                 "locality": row["locality"],
                 "administrative_area_level_1": row["administrative_area_level_1"],
                 "type": "db",
@@ -1067,23 +1184,25 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         ]
 
         geocoded_results: list[dict] = []
-        try:
-            from geopy.geocoders import Nominatim
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if profile.external_apis_enabled:
+            try:
+                from geopy.geocoders import Nominatim
 
-            geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
-            geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
-            if geo_hits:
-                for hit in geo_hits:
-                    geocoded_results.append(
-                        {
-                            "name": hit.address,
-                            "lat": hit.latitude,
-                            "lng": hit.longitude,
-                            "type": "geocoded",
-                        },
-                    )
-        except (ImportError, OSError, ValueError) as exc:
-            logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
+                geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
+                geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
+                if geo_hits:
+                    for hit in geo_hits:
+                        geocoded_results.append(
+                            {
+                                "name": hit.address,
+                                "lat": hit.latitude,
+                                "lng": hit.longitude,
+                                "type": "geocoded",
+                            },
+                        )
+            except (ImportError, OSError, ValueError) as exc:
+                logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
         return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
 
@@ -1528,7 +1647,9 @@ class TripWeatherView(LoginRequiredMixin, View):
         error: str = ""
         grouped: list[tuple] = []
 
-        if not app_settings.openweathermap_api_key:
+        if not profile.external_apis_enabled:
+            error = "External weather lookups are turned off in your settings."
+        elif not app_settings.openweathermap_api_key:
             error = "Weather API key not configured."
         else:
             today = datetime.date.today()

@@ -22,9 +22,17 @@ the full path to the venv executable:
 
 ```powershell
 .venv_windows\Scripts\python.exe  # Python interpreter
-.venv_windows\Scripts\ruff.exe --fix # Linter (works on Windows)
-.venv_windows\Scripts\mypy.exe    # Type checker (crashes on Windows - use Docker)
-.venv_windows\Scripts\pytest.exe  # Tests (crashes on Windows - use Docker)
+.venv_windows\Scripts\ruff.exe --fix # Linter
+```
+Type checking (mypy) and pytest work on Windows - GeoDjango's GDAL/GEOS
+dependency is satisfied via DLLs vendored by `geopandas`'s `pyogrio` dependency, resolved in
+`settings/_gdal_windows.py` and applied from `settings/local.py`/`settings/test.py` only when
+`UL_ENVIRONMENT` is `local` (the default) - never in Docker/CI/production.
+
+Sass compiles on Windows via `bun` (installed at `~\.bun\bin\bun.exe`):
+
+```powershell
+& "$env:USERPROFILE\.bun\bin\bun.exe" run sass
 ```
 
 ## Quick Start
@@ -37,18 +45,6 @@ docker-compose up --build
 Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
 Do not attempt to run docker. Instead, if docker needs to be run, ask the user to run docker manually. Claude's environment is not setup to run docker properly. 
-
-### Building & Compiling
-
-`bun`, `node`, and `npx` are **not installed on Windows** - these commands only work inside
-Docker (or a separately-configured WSL Ubuntu instance). Under normal development you do not
-need to run them manually; `docker-compose` handles compilation automatically.
-
-```bash
-# Inside Docker / WSL Ubuntu only:
-bun run sass    # SCSS → src/urbanlens/dashboard/frontend/static/dashboard/style.css
-bun run build   # TypeScript/JSX → src/urbanlens/dashboard/frontend/static/dashboard/js/
-```
 
 ### Linting & Type Checking
 
@@ -66,22 +62,14 @@ Always run it with --fix, so you don't waste time looking at minor issues that r
 .venv_windows\Scripts\python.exe -m py_compile path/to/file.py
 ```
 
-**mypy (type checking) - Docker only:**
-
-mypy crashes on Windows because GDAL/GeoDjango native libraries are unavailable outside Docker.
-```powershell
-# Run inside the running app container:
-docker exec <app_container_name> python -m mypy src/urbanlens
-```
-
-**pytest (tests) - Docker only:**
-
-Same GDAL limitation; tests require a live PostGIS database.
-```powershell
-docker exec <app_container_name> python -m pytest
-```
-
+**MyPy**
 When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
+
+**pre-commit:**
+```powershell
+& "$env:USERPROFILE\.bun\bin\bun.exe" run pre-commit
+```
+This script runs pre-commit twice (first pass silent) so formatting fixes are applied before real failures are output.
 
 > Common development commands should be consolidated into `pyproject.toml` scripts, `package.json`, and/or VSCode tasks - add new ones there rather than leaving them undocumented.
 
@@ -152,16 +140,15 @@ These two models are often confused. Keep their responsibilities strictly separa
 - Canonical name, description, address components, coordinates, Google Maps CID
 - Not user-specific - many users may pin the same Location
 - The authoritative source for address, place metadata, and geo coordinates
-- Inherits `AddressableMixin` for address fields and derived properties
+- Links to `Pin` and `Wiki` to provide geolocation details to them.
 
 **`Pin`** - a specific user's personal record for a location.
 - `location` FK pointing at the shared Location
-- User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and an optional coordinate override (so the user can nudge the marker on their own map)
+- User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and marker coordinates
 - `name` is nullable - `None` means "display the location's canonical name" (use `pin.effective_name`)
-- `latitude`/`longitude` are nullable - `None` means "use the location's coordinates" (use `pin.effective_latitude` / `pin.effective_longitude`)
 - Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin
 
-**Rule of thumb**: if the data describes the place itself, it belongs on `Location`. If it describes what a particular user thinks or knows about the place, it belongs on `Pin`.
+**`Wiki`** - Community wiki for a location that many users can see and edit.
 
 ### OOP and Inheritance
 
@@ -204,14 +191,16 @@ dashboard/
 
 **HTMX is the preferred approach for all interactivity.** New features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing hand-written JavaScript. Reach for JavaScript only when HTMX cannot accomplish the interaction (e.g., Leaflet map manipulation, drag-and-drop, real-time updates). Every existing JS-heavy interaction is a candidate for HTMX refactoring.
 
-- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile within Ubuntu with `bun run sass`
+- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass` (works directly on Windows)
 - Templates in `src/urbanlens/dashboard/templates/dashboard/`
 
 ### API Integrations
 
-The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions - add them as service classes following the existing pattern.
+The project connects to many external APIs (Google Maps/Places/Search, OpenWeatherMap, Smithsonian, NPS, OpenAI, etc.) via service classes in `dashboard/services/`. Each service wraps one API. New API integrations that provide useful data about locations are almost always welcome additions.
 
-When calling any paid API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
+External integrations are wired into the app through the **plugin system** (`dashboard/plugins/`, see `docs/plugins.md`): the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
+
+When calling any API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
 
 ## Code Quality Standards
 
@@ -239,7 +228,6 @@ Do not create unit tests for trivial code, such as __init__.py, or to test that 
 These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
 
 - **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
-- **UI modernization**: Current UI is functional but dated. Move toward a sleek, professional, modern aesthetic
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
 - **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
 - **Hypothesis unit tests**: Add property-based tests wherever possible.
@@ -256,3 +244,7 @@ These are planned features - treat any missing implementation as a gap to fill, 
 2. Always `prefetch_related` for M2M, `select_related` for FK to avoid N+1 queries
 3. PostGIS geo queries use django-gis operators (`__distance_lte`, `__contains`, etc.)
 4. Settings are split: Django config in `settings/base.py`, app-level env-driven config in `settings/app.py` (Pydantic)
+
+## Testing
+
+When the user points out incorrect behavior and bugs, and you plan to replicate the behavior, you should do that by creating a unit tests via TDD. That unit test will then be useful after fixing the problem to ensure the behavior does not return.

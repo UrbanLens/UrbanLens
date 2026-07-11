@@ -57,6 +57,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
 
     service_key: ClassVar[str | None] = None  # no HTTP endpoint of ours to rate-limit
     paid_service: ClassVar[bool] = False
+    boundary_kind: ClassVar[str] = "building"
 
     release: str | None = None
     connect_timeout: int | None = None

@@ -14,7 +14,7 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 1.5rem;
-        background: linear-gradient(135deg, $color-cyan-700 0%, $color-blue-700 100%);
+        background: linear-gradient(135deg, $color-blue-700 0%, $color-cyan-700 100%);
         border-radius: 18px;
         padding: clamp(1.15rem, 3vw, 2rem);
         box-shadow: 0 18px 45px rgba(8, 47, 73, .18);
@@ -63,16 +63,30 @@
     }
 
     .wiki-notice {
+        position: fixed;
+        top: 6rem;
+        right: calc(5vw + 2rem);
         display: flex;
         align-items: flex-start;
         gap: .5rem;
-        background: rgba(255, 255, 255, .15);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: linear-gradient(135deg, $color-purple-700 0%, $color-indigo-700 100%);
+        border: 1px solid var(--ul-grey-1a);
         border-radius: 10px;
         padding: .65rem 1rem;
         font-size: .83rem;
         max-width: 320px;
         line-height: 1.45;
+        z-index: 99;
+        transition: top .3s ease, right .3s ease;
+
+        // Once the header has scrolled out of view, the notice would otherwise
+        // float in the middle of the page since it's position: fixed - tuck it
+        // into the top-right corner instead.
+        &.wiki-notice--pinned {
+            top: 0.2rem;
+            right: 0.5rem;
+        }
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
@@ -89,7 +103,7 @@
         display: flex;
         align-items: center;
         gap: .6rem;
-        margin-top: .75rem;
+        margin-top: 4rem;
         flex-wrap: wrap;
     }
 
@@ -158,38 +172,45 @@
         }
 
         .location-map,
-        .wiki-tabs-card,
-        .aliases-panel,
-        .wiki-gallery,
-        .comment-panel,
-        #wiki-gallery-panel,
-        #comment-panel {
+        .wiki-body-secondary {
             grid-column: 1 / -1;
         }
 
-        @media (max-width: 767px) {
-            .wiki-meta,
-            .wiki-stats,
-            .location-map,
-            .wiki-tabs-card {
-                grid-column: 1;
+        // No About card to fill column 1 - let Community and Community
+        // Ratings split the row evenly instead of leaving a gap where
+        // About would have sat.
+        &:not(:has(.wiki-meta)) {
+            .wiki-stats {
+                @include up($breakpoint-sm) { grid-column: auto; }
+            }
+
+            @include up($breakpoint-lg) {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             }
         }
     }
 
-    // -- Card base ---------------------------------------------------------
-    .wiki-card {
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 14px;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, .07);
+    // -- Secondary cards: Aliases / Photos / Comments / Edit history -------
+    // Always full width on narrow screens; pair up two-per-row once there's
+    // room, independent of the (intentionally uneven) columns above.
+    .wiki-body-secondary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: clamp(.85rem, 2vw, 1.25rem);
+        align-items: start;
+
+        @include up($breakpoint-md) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
+    // -- Card base ---------------------------------------------------------
     .card-header {
         display: flex;
         align-items: center;
         gap: .6rem;
         padding: .85rem 1.1rem;
-        background: linear-gradient(180deg, rgba(8, 145, 178, .08), rgba(255, 255, 255, 0));
+        background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
         .material-symbols-outlined,
         .material-icons {
             font-size: 1.1rem;
@@ -269,6 +290,15 @@
         font-weight: 700;
         color: $color-cyan-600;
         line-height: 1;
+
+        // Approximated counts carry a privacy tooltip on hover.
+        &[data-tooltip] { cursor: help; }
+    }
+
+    // "fewer than 3" is prose, not a number - render it smaller.
+    .wiki-stat-value--low {
+        font-size: 1.05rem;
+        line-height: 1.2;
     }
 
     .wiki-stat-label {
@@ -276,10 +306,83 @@
         color: var(--ul-grey-5);
     }
 
+    // -- Community ratings (composite + your own vote per field) -----------
+    // The card gets extra room once About/the layout above frees up a
+    // column - queried against the card's own box (not the viewport) since
+    // its width depends on which grid track it lands in.
+    .wiki-ratings {
+        container-type: inline-size;
+        container-name: wiki-ratings;
+    }
+
+    .wiki-ratings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+
+        @container wiki-ratings (min-width: 420px) {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .85rem 1.25rem;
+        }
+    }
+
+    .wiki-stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+        padding-bottom: .85rem;
+        border-bottom: 1px solid var(--ul-grey-1a);
+
+        &:last-child {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        @container wiki-ratings (min-width: 420px) {
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+    }
+
+    .wiki-stat-rows {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+    }
+
+    .wiki-stat-row {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+
+    .wiki-stat-row-label {
+        font-size: .74rem;
+        font-weight: 600;
+        color: var(--ul-grey-5);
+        min-width: 5.5rem;
+    }
+
+    .wiki-stat-count {
+        font-size: .76rem;
+        color: var(--ul-grey-5);
+
+        &--empty {
+            font-style: italic;
+        }
+    }
+
     // -- Location map card -------------------------------------------------
     .location-map .map-wrapper {
         position: relative;
         width: 100%;
+        // Mirrors #map's own height below so this wrapper has a definite
+        // size for @include map-query-container to safely contain against
+        // (`contain: size` collapses an "auto" height to 0 otherwise).
+        height: clamp(320px, 52vw, 560px);
+        @include map-query-container;
     }
 
     #map {
@@ -303,41 +406,6 @@
                 background: $color-cyan-700;
                 border-color: $color-cyan-700;
             }
-        }
-    }
-
-    // -- Tabs --------------------------------------------------------------
-    .wiki-tabs {
-        display: flex;
-        gap: 0;
-        border-bottom: 2px solid var(--ul-grey-2);
-        padding: 0 1rem;
-        background: var(--ul-grey-0);
-    }
-
-    .wiki-tab {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .65rem .9rem;
-        border: none;
-        border-bottom: 2px solid transparent;
-        margin-bottom: -2px;
-        background: transparent;
-        font-size: .88rem;
-        font-weight: 500;
-        color: var(--ul-grey-5);
-        cursor: pointer;
-        transition: color .15s, border-color .15s;
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: 1rem;
-        }
-
-        &--active,
-        &:hover {
-            color: $color-cyan-600;
-            border-bottom-color: $color-cyan-600;
         }
     }
 
@@ -486,6 +554,11 @@
         @include truncate;
     }
 
+    .wiki-history-actions {
+        display: flex;
+        gap: .5rem;
+    }
+
     .wiki-revert-btn {
         @include btn-base;
         padding: .3rem .7rem;
@@ -498,6 +571,19 @@
 
         &:hover {
             border-color: $color-red-600;
+            opacity: 1;
+        }
+    }
+
+    .wiki-delete-btn {
+        background: $color-red-600;
+        border-color: $color-red-600;
+        color: #fff;
+        opacity: .85;
+
+        &:hover {
+            background: $color-red-700;
+            border-color: $color-red-700;
             opacity: 1;
         }
     }
@@ -563,15 +649,6 @@
             display: flex;
             gap: .5rem;
             padding-top: .25rem;
-        }
-    }
-}
-
-[data-theme="dark"] {
-    .wiki-page {
-        .wiki-notice {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(0, 0, 0, 0.1);
         }
     }
 }

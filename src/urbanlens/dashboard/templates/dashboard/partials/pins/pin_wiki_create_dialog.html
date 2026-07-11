@@ -1,0 +1,99 @@
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Create Community Wiki" %}
+<div class="ul-dialog-body wiki-create-body">
+  {% if existing_wiki %}
+    <p>A community wiki already exists for this place.</p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-create-dialog').close()">Close</button>
+      <a class="btn btn--primary" href="{% url 'location.wiki' location_slug=pin.location.slug %}">
+        <i class="material-symbols-outlined">open_in_new</i> Open wiki
+      </a>
+    </div>
+  {% else %}
+    <p class="wiki-create-intro">
+      Create a shared community page for <strong>{{ pin.location.display_name }}</strong>.
+      Anyone who pins this place can see and edit it.
+    </p>
+    <form hx-post="{% url 'pin.wiki.create' pin.slug %}"
+          hx-target="#pin-overview"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').close(); if(window.toastr){toastr.success('Community wiki created.')}}">
+      {% csrf_token %}
+      {% if seedable_fields or seedable_aliases or seedable_photos %}
+      <p class="wiki-create-hint">
+        <i class="material-symbols-outlined">visibility</i>
+        Choose what to share. Everything you include becomes visible to other users who have this location pinned.
+      </p>
+
+      {% if seedable_fields %}
+      <section class="wiki-create-section">
+        <h3 class="wiki-create-section-title"><i class="material-symbols-outlined">info</i> Details</h3>
+        <ul class="wiki-seed-list">
+          {% for field in seedable_fields %}
+          <li class="wiki-seed-item">
+            <label>
+              <input type="checkbox" name="seed_fields" value="{{ field.field }}">
+              <span class="wiki-seed-label">{{ field.label }}</span>
+              <span class="wiki-seed-value">{{ field.value }}</span>
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if seedable_aliases %}
+      <section class="wiki-create-section">
+        <h3 class="wiki-create-section-title"><i class="material-symbols-outlined">label_important</i> Aliases</h3>
+        <p class="wiki-create-section-hint">Official aliases are always included and can't be deselected.</p>
+        <ul class="wiki-seed-list wiki-seed-list--aliases">
+          {% for alias in seedable_aliases %}
+          <li class="wiki-seed-item{% if alias.kind == 'official' %} wiki-seed-item--locked{% endif %}">
+            <label>
+              {% if alias.kind == 'official' %}
+              <input type="checkbox" checked disabled title="Official aliases are always included">
+              {% else %}
+              <input type="checkbox" name="alias_ids" value="{{ alias.id }}">
+              {% endif %}
+              <span class="wiki-seed-label">{{ alias.name }}</span>
+              {% if alias.kind == 'official' %}
+              <span class="wiki-seed-badge">Official</span>
+              {% endif %}
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if seedable_photos %}
+      <section class="wiki-create-section">
+        <h3 class="wiki-create-section-title"><i class="material-symbols-outlined">photo_library</i> Photos</h3>
+        <p class="wiki-create-section-hint">Only the photos you select are shared - the rest stay private to your pin.</p>
+        <ul class="wiki-seed-photo-grid">
+          {% for image in seedable_photos %}
+          <li class="wiki-seed-photo">
+            <label>
+              <input type="checkbox" name="image_ids" value="{{ image.id }}">
+              <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy"
+                   onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'wiki-seed-photo-fallback')">
+              <span class="wiki-seed-photo-ribbon">Private</span>
+              <span class="wiki-seed-photo-check"><i class="material-symbols-outlined">check</i></span>
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% else %}
+      <p class="wiki-seed-hint">The wiki will start with just the place name - details can be added on the wiki page afterwards.</p>
+      {% endif %}
+      <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-create-dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary">
+          <i class="material-symbols-outlined">public</i> Create wiki
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>

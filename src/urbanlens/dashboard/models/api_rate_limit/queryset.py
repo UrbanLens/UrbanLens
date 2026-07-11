@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from urbanlens.dashboard.models.abstract.queryset import Manager, QuerySet
+from urbanlens.dashboard.models.abstract.queryset import DashboardManager, DashboardQuerySet
 
 
-class ApiRateLimitQuerySet(QuerySet):
+class ApiRateLimitQuerySet(DashboardQuerySet):
     """QuerySet for ApiRateLimit."""
 
     def enabled(self) -> ApiRateLimitQuerySet:
@@ -13,7 +13,7 @@ class ApiRateLimitQuerySet(QuerySet):
         return self.filter(enabled=True)
 
 
-class ApiRateLimitManager(Manager):
+class ApiRateLimitManager(DashboardManager):
     """Manager for ApiRateLimit."""
 
     def get_queryset(self) -> ApiRateLimitQuerySet:

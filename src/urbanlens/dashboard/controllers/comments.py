@@ -1,4 +1,4 @@
-"""Comment and Reaction controllers for Pin and Location (wiki) pages."""
+"""Comment and Reaction controllers for Pin and Wiki pages."""
 
 from __future__ import annotations
 
@@ -18,8 +18,19 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.map_snapshot import (
+    _sanitize_markup_color,
+    _sanitize_markup_shapes,
+    _sanitize_number,
+    materialize_markup_map,
+    parse_map_data as _parse_map_data,
+)
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+
+# Re-exported so existing imports (e.g. tests) keep resolving from this module.
+__all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +51,14 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     pinned = viewer_pinned_uuids(profile)
     top_level_qs = (
         comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user")
+        .select_related("profile__user", "markup_map")
         .prefetch_related(
             "reactions__profile",
             "replies__reactions__profile",
             "replies__profile__user",
+            # comment.map_data derives its snapshot from the markup map's items.
+            "markup_map__items",
+            "replies__markup_map__items",
         )
     )
     # Default to the last page so the most recent activity (comments are
@@ -118,11 +132,14 @@ class PinCommentsView(LoginRequiredMixin, View):
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, map_data=map_data)
+        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -143,36 +160,47 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         comment = get_object_or_404(Comment, id=comment_id, pin=pin)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return HttpResponse("", status=200)
 
 
-# -- Wiki (Location) comments --------------------------------------------------
+# -- Wiki comments -------------------------------------------------------------
+
+
+def _resolve_wiki(location_slug):
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    location = get_object_or_404(Location, slug=location_slug)
+    wiki = get_object_or_404(Wiki, location=location)
+    return location, wiki
 
 
 class WikiCommentsView(LoginRequiredMixin, View):
-    """GET/POST comment panel for a Location wiki."""
+    """GET/POST comment panel for a wiki."""
 
-    def _get_location_and_profile(self, request, location_slug):
-        from urbanlens.dashboard.models.location.model import Location
+    def _get_wiki_and_profile(self, request, location_slug):
         from urbanlens.dashboard.models.pin.model import Pin
 
-        location = get_object_or_404(Location, slug=location_slug)
+        location, wiki = _resolve_wiki(location_slug)
         profile = _profile(request)
-        # Must have this location pinned to comment on its wiki
+        # Must have this place pinned to comment on its wiki.
         if not Pin.objects.filter(profile=profile, location=location).exists():
-            return None, None, location
-        return profile, location, location
+            return None, None
+        return profile, wiki
 
     def get(self, request, location_slug):
-        profile, location, _loc = self._get_location_and_profile(request, location_slug)
+        profile, wiki = self._get_wiki_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
-        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
-        profile, location, _loc = self._get_location_and_profile(request, location_slug)
+        profile, wiki = self._get_wiki_and_profile(request, location_slug)
         if profile is None:
             return HttpResponse("You must have this location pinned to leave a comment.", status=403)
         text = request.POST.get("text", "").strip()
@@ -180,38 +208,42 @@ class WikiCommentsView(LoginRequiredMixin, View):
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, location=location)
+            parent = get_object_or_404(Comment, id=parent_id, wiki=wiki)
         comment = Comment.objects.create(
-            location=location,
+            wiki=wiki,
             profile=profile,
             text=text,
             parent=parent,
-            map_data=map_data,
+            markup_map=materialize_markup_map(profile, map_data),
         )
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(location.comments.all(), profile, request, location=location, context_type="wiki")
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
 
 class WikiCommentDeleteView(LoginRequiredMixin, View):
-    """DELETE /location/<uuid>/wiki/comments/<int>/delete/"""
+    """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
-        from urbanlens.dashboard.models.location.model import Location
-
-        location = get_object_or_404(Location, slug=location_slug)
+        _location, wiki = _resolve_wiki(location_slug)
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id, location=location)
+        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
+        markup_map = comment.markup_map
         comment.delete()
+        if markup_map is not None:
+            markup_map.delete()
         return HttpResponse("", status=200)
 
 
@@ -304,155 +336,6 @@ def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
     return result
 
 
-_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-_ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text"}
-
-
-def _is_valid_lat(v: object) -> bool:
-    return isinstance(v, int | float) and -90 <= v <= 90
-
-
-def _is_valid_lng(v: object) -> bool:
-    return isinstance(v, int | float) and -180 <= v <= 180
-
-
-def _sanitize_markup_color(v: object, fallback: str = "#e74c3c") -> str:
-    """Return v if it is a 6-digit hex color, otherwise return fallback."""
-    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
-        return v
-    return fallback
-
-
-def _sanitize_optional_color(v: object) -> str | None:
-    """Return v if hex color or the string 'none', otherwise None."""
-    if v == "none":
-        return "none"
-    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
-        return v
-    return None
-
-
-def _sanitize_number(v: object, lo: float, hi: float, default: float) -> float:
-    """Clamp v to [lo, hi] if numeric, else return default."""
-    try:
-        n = float(v)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
-    return max(lo, min(hi, n))
-
-
-def _sanitize_latlngs(raw: object) -> list[list[float]]:
-    """Return only valid [lat, lng] pairs from raw."""
-    if not isinstance(raw, list):
-        return []
-    result = []
-    for item in raw:
-        if isinstance(item, list | tuple) and len(item) >= 2:
-            lat, lng = item[0], item[1]
-            if _is_valid_lat(lat) and _is_valid_lng(lng):
-                result.append([float(lat), float(lng)])
-    return result
-
-
-def _sanitize_markup_shapes(shapes: object) -> list[dict]:
-    """Return cleaned shape dicts, dropping malformed or unknown-typed entries."""
-    if not isinstance(shapes, list):
-        return []
-    clean: list[dict] = []
-    for s in shapes:
-        if not isinstance(s, dict):
-            continue
-        shape_type = s.get("type")
-        if shape_type not in _ALLOWED_SHAPE_TYPES:
-            continue
-        latlngs = _sanitize_latlngs(s.get("latlngs"))
-        if not latlngs:
-            continue
-        entry: dict = {
-            "type": shape_type,
-            "latlngs": latlngs,
-            "color": _sanitize_markup_color(s.get("color")),
-            "stroke_width": _sanitize_number(s.get("stroke_width"), 1, 50, 3),
-            "fill_opacity": _sanitize_number(s.get("fill_opacity"), 0, 100, 87),
-            "border_opacity": _sanitize_number(s.get("border_opacity"), 0, 100, 100),
-        }
-        bc = _sanitize_optional_color(s.get("border_color"))
-        if bc is not None:
-            entry["border_color"] = bc
-        if shape_type == "text":
-            label = s.get("label", "")
-            entry["label"] = str(label)[:500] if isinstance(label, str) else ""
-        clean.append(entry)
-    return clean
-
-
-def _parse_map_data(request) -> dict | None:
-    """Extract, validate, and sanitize the map_data JSON blob from a comment POST.
-
-    Args:
-        request: The HTTP request.
-
-    Returns:
-        Sanitized dict if valid map_data was submitted, else None.
-    """
-    raw = request.POST.get("map_data", "").strip()
-    if not raw:
-        return None
-    try:
-        data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning("Ignoring malformed map_data in comment POST")
-        return None
-    if not isinstance(data, dict):
-        return None
-    center_lat = data.get("center_lat")
-    center_lng = data.get("center_lng")
-    if not (_is_valid_lat(center_lat) and _is_valid_lng(center_lng)):
-        return None
-    sanitized: dict = {
-        "center_lat": float(center_lat),  # type: ignore[arg-type]
-        "center_lng": float(center_lng),  # type: ignore[arg-type]
-        "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
-        "shapes": _sanitize_markup_shapes(data.get("shapes")),
-    }
-    return sanitized
-
-
-# -- Comment map pin autocomplete endpoint ------------------------------------
-
-
-class CommentMapPinsView(LoginRequiredMixin, View):
-    """GET /comments/map-pins/?q=... - return user's pins for the comment map center picker."""
-
-    def get(self, request):
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        profile = _profile(request)
-        q = request.GET.get("q", "").strip().lower()
-        qs = Pin.objects.filter(profile=profile).select_related("location")[:200]
-        results = []
-        for pin in qs:
-            lat = pin.effective_latitude
-            lng = pin.effective_longitude
-            if lat is None or lng is None:
-                continue
-            name = pin.effective_name or ""
-            if q and q not in name.lower():
-                continue
-            results.append(
-                {
-                    "uuid": str(pin.uuid),
-                    "slug": pin.slug or str(pin.uuid),
-                    "name": name,
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    "detail_pins_url": f"/map/pin/{pin.slug or pin.uuid}/detail-pins/json/",
-                    "markup_url": f"/map/pin/{pin.slug or pin.uuid}/markup/json/",
-                },
-            )
-        return JsonResponse({"pins": results})
-
-
 # -- Location autocomplete endpoint -------------------------------------------
 
 
@@ -460,16 +343,15 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
     """GET /comments/locations/  - return viewer's pinned locations for @mention autocomplete."""
 
     def get(self, request):
-        import json
 
         from urbanlens.dashboard.models.pin.model import Pin
 
         profile = _profile(request)
         q = request.GET.get("q", "").strip().lower()
-        pins = Pin.objects.filter(profile=profile).exclude(location__isnull=True).select_related("location")[:50]
+        pins = Pin.objects.filter(profile=profile).exclude(location__isnull=True).select_related("location__wiki")[:50]
         results = []
         for pin in pins:
-            name = pin.location.name or ""
+            name = pin.location.display_name or ""
             if not q or q in name.lower():
                 results.append({"uuid": str(pin.location.uuid), "name": name})
         return HttpResponse(json.dumps(results), content_type="application/json")
@@ -486,8 +368,8 @@ def _comment_url(comment) -> str:
             return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
         if hasattr(comment, "pin_id") and comment.pin_id:
             return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
-        if hasattr(comment, "location_id") and comment.location_id:
-            return reverse("location.wiki", kwargs={"location_slug": comment.location.slug or str(comment.location.uuid)}) + anchor
+        if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:
+            return reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug or str(comment.wiki.location.uuid)}) + anchor
     except NoReverseMatch:
         logger.warning("Could not build comment URL for comment %s", comment.id)
     return ""

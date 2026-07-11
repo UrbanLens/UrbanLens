@@ -3,31 +3,90 @@
 from __future__ import annotations
 
 import datetime
+import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import DateField, Min, Sum
+from django.db.models import DateField, Min
 from django.db.models.functions import Cast, Coalesce
-from django.http import JsonResponse
-from django.shortcuts import render
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
+from urbanlens.dashboard.controllers.visits import (
+    _parse_visited_at,
+    _resolve_participants,
+    _sync_visit_photos,
+    _visit_dialog_context,
+)
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.markup.model import MarkupMap
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
+from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
+from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
+from urbanlens.dashboard.services.units import km_to_display, unit_label
+from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
+from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
+
+    from urbanlens.dashboard.models.pin_share.model import PinShare
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
+
+
+class _ShareGroup(TypedDict):
+    """One pin's entry in the Sharing page's ``share_groups`` list."""
+
+    pin: Pin
+    shares: list[PinShare]
+    chain_total: int
+    reshare_count: int
+
+
+def _unlogged_band_context(profile: Profile) -> dict[str, object]:
+    """Build the context the unlogged-visits band needs, shared by every view that renders it.
+
+    Args:
+        profile: The viewing profile whose visited-but-unlogged pins to surface.
+
+    Returns:
+        Context dict with ``unlogged_visits`` (the pins) and ``today`` (an ISO
+        date string used to bound and prefill the quick-log date inputs).
+    """
+    return {
+        "unlogged_visits": unlogged_visited_pins(profile),
+        "today": timezone.now().date().isoformat(),
+    }
+
+
+def _toast(message: str, level: str = "success") -> HttpResponse:
+    """Return an empty HTMX response that removes the swapped card and fires a toast.
+
+    Args:
+        message: Text to display in the toast.
+        level: toastr level (``success``/``info``/``warning``/``error``).
+
+    Returns:
+        An empty-body response carrying an ``HX-Trigger`` header; swapping it with
+        ``outerHTML`` removes the card while the toast fires.
+    """
+    response = HttpResponse("")
+    response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": level}})
+    return response
 
 
 def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
@@ -50,6 +109,35 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
     except ValueError:
         return None
     return BBox(min_lat, min_lng, max_lat, max_lng)
+
+
+def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[int, str]:
+    """Describe how long a profile has been active in the largest sensible time unit.
+
+    Picks the coarsest unit (years, months, weeks, days) that still yields a
+    count of at least one, so a brand-new account whose only memory is a few
+    months old reads "3 months active" instead of a misleading "1 years active".
+
+    Args:
+        earliest: The earliest date across the profile's memories, or None if it has none.
+        today: The current date to measure against.
+
+    Returns:
+        A ``(count, unit)`` tuple, e.g. ``(3, "Months")``. The unit is singular
+        when ``count`` is 1 (e.g. ``(1, "Day")``).
+    """
+    if earliest is None:
+        return (0, "Days")
+    days = max((today - earliest).days, 0)
+    if days >= 365:
+        count, unit = days // 365, "Year"
+    elif days >= 60:
+        count, unit = days // 30, "Month"
+    elif days >= 14:
+        count, unit = days // 7, "Week"
+    else:
+        count, unit = max(days, 1), "Day"
+    return (count, unit if count == 1 else f"{unit}s")
 
 
 def _earliest_memory_date(profile: Profile) -> datetime.date | None:
@@ -102,9 +190,10 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        routes = Route.objects.for_profile(profile)
-        total_distance_m = routes.aggregate(total=Sum("distance_meters"))["total"] or 0.0
-        route_count = routes.count()
+        route_count = Route.objects.for_profile(profile).count()
+        # Distance traveled = recorded route length + travel between consecutive visits.
+        total_distance_km = total_travel_distance_km(profile)
+        units = profile.effective_distance_units
         places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
         photo_count = Image.objects.filter(profile=profile).count()
         trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
@@ -112,6 +201,7 @@ class MemoriesView(LoginRequiredMixin, View):
 
         today = timezone.now().date()
         earliest = _earliest_memory_date(profile)
+        active_count, active_unit = _active_span(earliest, today)
 
         return render(
             request,
@@ -121,14 +211,16 @@ class MemoriesView(LoginRequiredMixin, View):
                 "page_name": "memories",
                 "has_memory_data": has_memory_data,
                 "hero_stats": {
-                    "total_distance_km": round(total_distance_m / 1000, 1),
+                    "total_distance": round(km_to_display(total_distance_km, units), 1),
+                    "distance_unit": unit_label(units),
                     "places_visited": places_visited,
                     "photo_count": photo_count,
                     "trip_count": trip_count,
-                    "years_active": (today.year - earliest.year + 1) if earliest else 0,
+                    "active_count": active_count,
+                    "active_unit": active_unit,
                 },
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
-                "today": today.isoformat(),
+                **_unlogged_band_context(profile),
                 **profile.get_map_center_template_context(),
             },
         )
@@ -212,7 +304,7 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
             Route.objects.for_profile(profile).filter(started_at__month=today.month, started_at__day=today.day).exclude(started_at__year=today.year).order_by("-started_at")[:_ON_THIS_DAY_LIMIT],
         )
         photos = list(
-            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year).select_related("pin", "location").order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
+            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day).exclude(taken_at__year=today.year).select_related("pin", "wiki", "wiki__location").order_by("-taken_at")[:_ON_THIS_DAY_LIMIT],
         )
 
         return render(
@@ -220,3 +312,334 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
             "dashboard/partials/memories/_on_this_day.html",
             {"visits": visits, "routes": routes, "photos": photos, "today": today},
         )
+
+
+class MemoriesVisitView(LoginRequiredMixin, View):
+    """Log a dated visit for a marked-but-unlogged pin, or add details to an existing one.
+
+    GET  /memories/visit/<pin_slug>/                 → render the add-visit form (dialog body)
+    GET  /memories/visit/<pin_slug>/<visit_id>/      → render the edit-visit form for an existing visit
+    POST /memories/visit/<pin_slug>/                 → create a new dated PinVisit
+    POST /memories/visit/<pin_slug>/<visit_id>/      → update an existing PinVisit
+
+    Both POST variants reuse the pin-detail visit form's field handling (date,
+    notes, photos, map snapshot, participants) and return the refreshed
+    unlogged-visits band plus an ``HX-Trigger`` that toasts and reloads the
+    timeline feed.
+    """
+
+    def _get_pin(self, request: HttpRequest, pin_slug: str) -> tuple[Pin, Profile]:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile=profile)
+        return pin, profile
+
+    def get(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
+        """Render the visit form for the shared Memories dialog.
+
+        Args:
+            request: The HTTP request.
+            pin_slug: Slug of the pin the visit belongs to.
+            visit_id: PK of an existing visit to edit, or None to add a new one.
+
+        Returns:
+            The rendered ``_visit_form.html`` partial, wired to post back to this
+            view and swap the unlogged-visits band.
+        """
+        pin, _ = self._get_pin(request, pin_slug)
+        visit = get_object_or_404(PinVisit.objects.prefetch_related("participants", "images"), id=visit_id, pin=pin) if visit_id else None
+
+        context = _visit_dialog_context(pin)
+        context.update(
+            {
+                "visit": visit,
+                "dialog_id": "memories-visit-dialog",
+                "form_action": reverse("memories.visit.edit", args=[pin.slug, visit.id]) if visit else reverse("memories.visit", args=[pin.slug]),
+                "form_target": "#memories-unlogged-band",
+                "form_swap": "outerHTML",
+                # New visits default their date to when the pin was marked visited,
+                # falling back to today, so the common case is a single click.
+                "default_date": "" if visit else (pin.last_visited or timezone.now()).date().isoformat(),
+            },
+        )
+        return render(request, "dashboard/partials/pins/_visit_form.html", context)
+
+    def post(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
+        """Create or update a dated PinVisit and return the refreshed band.
+
+        Args:
+            request: The HTTP request. The body carries ``visited_date`` (required)
+                and optional ``visited_time``, ``notes``, ``map_data``, ``photos``,
+                ``existing_photo_ids``, and ``participant_ids``.
+            pin_slug: Slug of the pin the visit belongs to.
+            visit_id: PK of the visit to update, or None to create a new one.
+
+        Returns:
+            The re-rendered unlogged-visits band, or a 400 on a missing/invalid date.
+        """
+        pin, profile = self._get_pin(request, pin_slug)
+
+        visited_at = _parse_visited_at(request)
+        if visited_at is None:
+            return HttpResponse("A valid date is required.", status=400)
+
+        notes = request.POST.get("notes", "").strip() or None
+        map_data = parse_map_data(request)
+
+        if visit_id:
+            visit = get_object_or_404(PinVisit, id=visit_id, pin=pin)
+            visit.visited_at = visited_at
+            visit.notes = notes
+            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map)
+            visit.save()
+            created = False
+        else:
+            if not visit_logging_allowed(profile):
+                return HttpResponse("Visit logging is turned off - enable it in Settings to log a visit.", status=403)
+            visit = PinVisit.objects.create(
+                pin=pin,
+                visited_at=visited_at,
+                notes=notes,
+                source=VisitSource.MANUAL,
+                markup_map=materialize_markup_map(profile, map_data),
+            )
+            add_visited_status(pin)
+            created = True
+
+        sync_last_visited(pin)
+        _sync_visit_photos(request, pin, visit)
+
+        participants = _resolve_participants(request, pin)
+        visit.participants.set(participants)
+
+        # On a brand-new visit, offer the tagged connections their own suggestion,
+        # mirroring the pin-detail "log a visit" flow. Each participant has an
+        # individual "send them a suggestion" toggle in the form.
+        suggest_ids = resolve_suggest_participant_ids(request)
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if created and participants and lat is not None and lng is not None:
+            for participant in participants:
+                if participant.pk not in suggest_ids:
+                    continue
+                others = [p for p in participants if p.pk != participant.pk]
+                create_visit_suggestion(
+                    suggested_to=participant,
+                    suggested_by=profile,
+                    visited_at=visited_at,
+                    location=pin.location,
+                    latitude=lat,
+                    longitude=lng,
+                    candidate_profiles=others,
+                    origin_visit=visit,
+                    origin_pin=pin,
+                )
+
+        sync_external_participants(request, visit)
+
+        response = render(
+            request,
+            "dashboard/partials/memories/_unlogged_visits.html",
+            _unlogged_band_context(profile),
+        )
+        response["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {"message": "Visit logged." if created else "Details saved.", "level": "success"},
+                "memoriesFeedRefresh": True,
+            },
+        )
+        return response
+
+
+class MemoriesVisitsView(LoginRequiredMixin, View):
+    """The "log your visits" subpage of Memories - pins marked visited with no dated record.
+
+    GET /memories/visits/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the unlogged-visits page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Visits page listing every visited-but-unlogged pin.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(
+            request,
+            "dashboard/pages/memories/visits.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                **_unlogged_band_context(profile),
+            },
+        )
+
+
+class MemoriesSharingView(LoginRequiredMixin, View):
+    """The "Sharing" subpage of Memories - every pin the user has shared.
+
+    Groups the profile's sent :class:`PinShare` rows by pin, listing who each
+    pin was shared with, and how far the share travelled: the chain count
+    follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
+    shares for A's pin).
+
+    GET /memories/sharing/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the sharing history page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Sharing page listing every shared pin with its
+            recipients and chain-wide reshare counts.
+        """
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "to_profile__user").order_by("-created")
+
+        shares_by_pin: dict[int, list[PinShare]] = {}
+        for share in shares:
+            shares_by_pin.setdefault(share.pin_id, []).append(share)
+
+        share_groups: list[_ShareGroup] = []
+        for pin_shares in shares_by_pin.values():
+            own_ids = [share.pk for share in pin_shares]
+            chain_total = PinShare.chain_share_count(own_ids)
+            share_groups.append(
+                {
+                    "pin": pin_shares[0].pin,
+                    "shares": pin_shares,
+                    "chain_total": chain_total,
+                    # Shares made further down the chain by other users.
+                    "reshare_count": chain_total - len(own_ids),
+                },
+            )
+
+        return render(
+            request,
+            "dashboard/pages/memories/sharing.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "share_groups": share_groups,
+                **_unlogged_band_context(profile),
+            },
+        )
+
+
+class MemoriesMapsView(LoginRequiredMixin, View):
+    """The "Maps" subpage of Memories - every markup map the user has drawn.
+
+    Lists the profile's :class:`MarkupMap` rows (check-in routes, comment and
+    visit maps, plus unattached drafts) with thumbnails, a link to whatever
+    each map is attached to, and a delete action.
+
+    GET /memories/maps/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the markup maps page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Maps page listing every markup map the user created.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        maps = MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-updated")
+        return render(
+            request,
+            "dashboard/pages/memories/maps.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "map_cards": [self._card(markup_map) for markup_map in maps],
+            },
+        )
+
+    def _card(self, markup_map: MarkupMap) -> dict[str, object]:
+        """Build the template context for one map card.
+
+        Args:
+            markup_map: The map to describe.
+
+        Returns:
+            Dict with the map, its snapshot (for the Leaflet thumbnail), item
+            count, and - when attached - a human label + link for the host.
+        """
+        kind, label, url = None, None, None
+        attachment = markup_map.attachment
+        if attachment is not None:
+            kind, host = attachment
+            if kind == "safety_checkin":
+                label = f"Safety check-in: {host.title}"
+                url = reverse("safety.checkin.detail", args=[host.slug or host.uuid])
+            elif kind == "comment" and host.pin_id:
+                label = f"Comment on {host.pin.effective_name}"
+                url = reverse("pin.details", args=[host.pin.slug])
+            elif kind == "comment":
+                label = f"Comment on {host.wiki.name}"
+                url = reverse("location.wiki", args=[host.wiki.location.slug])
+            elif kind == "trip_comment":
+                label = f"Comment on trip: {host.trip.name}"
+                url = reverse("trips.detail", args=[host.trip.uuid])
+            elif kind == "visit":
+                label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
+                url = reverse("pin.details", args=[host.pin.slug])
+        return {
+            "map": markup_map,
+            "snapshot": markup_map.to_snapshot(),
+            "item_count": len(markup_map.items.all()),
+            "attachment_kind": kind,
+            "attachment_label": label,
+            "attachment_url": url,
+        }
+
+
+class MemoriesUnloggedActionView(LoginRequiredMixin, View):
+    """Dismiss or un-mark a card in the "log your visits" queue.
+
+    POST /memories/unlogged/<pin_slug>/<action>/
+    where action is "dismiss" (hide the suggestion without changing the pin's
+    visited status) or "unmark" (clear the pin's visited status entirely, e.g.
+    a stray "Visited" badge or import glitch the user never actually visited).
+    """
+
+    def _get_pin(self, request: HttpRequest, pin_slug: str) -> Pin:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return get_object_or_404(Pin, slug=pin_slug, profile=profile)
+
+    def dismiss(self, request: HttpRequest, pin: Pin) -> HttpResponse:
+        """Hide the pin from the unlogged-visits queue without touching its visited status."""
+        Pin.objects.filter(pk=pin.pk).update(unlogged_visit_dismissed=True)
+        return _toast("Removed from your list.", "info")
+
+    def unmark(self, request: HttpRequest, pin: Pin) -> HttpResponse:
+        """Clear the pin's "Visited" status/badge so it drops out of the queue entirely."""
+        remove_visited_status(pin)
+        return _toast('"Visited" status removed.', "info")
+
+    _ACTIONS = {"dismiss": dismiss, "unmark": unmark}
+
+    def post(self, request: HttpRequest, pin_slug: str, action: str) -> HttpResponse:
+        """Dispatch to the handler named by ``action``.
+
+        Args:
+            request: The HTTP request.
+            pin_slug: Slug of the pin being acted on.
+            action: The queue action to perform.
+
+        Returns:
+            An HTMX card-removing response, or 404 for an unknown action.
+        """
+        handler = self._ACTIONS.get(action)
+        if handler is None:
+            raise Http404
+        pin = self._get_pin(request, pin_slug)
+        return handler(self, request, pin)

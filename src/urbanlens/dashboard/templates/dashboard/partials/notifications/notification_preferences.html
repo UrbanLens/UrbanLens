@@ -7,11 +7,12 @@
     </p>
     {% endif %}
     <form hx-post="{% url 'notifications.preferences' %}"
+          hx-trigger="change delay:150ms"
           hx-target="#notif-prefs"
           hx-swap="outerHTML"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-        <p class="settings-label notif-prefs__heading">Event notifications</p>
-        <p class="settings-help notif-prefs__intro">Choose how you want to be notified for each event type.</p>
+        <p class="settings-label notif-prefs__heading">Notifications</p>
+        <p class="settings-help notif-prefs__intro">Choose how you want to be notified.</p>
 
         <div class="notif-prefs__grid" role="group" aria-label="Notification delivery preferences">
             <div class="notif-prefs__header">
@@ -63,12 +64,52 @@
             {% endfor %}
         </div>
 
-        <div class="notif-prefs__footer">
-            <button type="submit" class="settings-save-btn">Save</button>
-        </div>
     </form>
+
+    {# -- Browser (desktop) notifications. The permission lives in the browser,   #}
+    {# not the database, so there's nothing to submit - just request permission.  #}
+    {# Hidden entirely when the browser doesn't support the Notification API.     #}
+    <div class="notif-prefs__browser" id="notif-browser-prefs" hidden>
+        <p class="settings-label notif-prefs__heading">Browser notifications</p>
+        <p class="settings-help notif-prefs__intro">Show a desktop notification when something happens while UrbanLens is open in a background tab.</p>
+        <p class="notif-prefs__browser-status" id="notif-browser-status"></p>
+        <button type="button" class="btn btn--primary" id="notif-browser-enable" onclick="notifBrowserEnable()">
+            Enable browser notifications
+        </button>
+    </div>
 </div>
 <script>
+function notifBrowserRender() {
+    var wrap = document.getElementById('notif-browser-prefs');
+    if (!wrap || !('Notification' in window)) return;
+    wrap.hidden = false;
+    var status = document.getElementById('notif-browser-status');
+    var btn = document.getElementById('notif-browser-enable');
+    if (Notification.permission === 'granted') {
+        status.textContent = "Enabled - you'll get desktop notifications while UrbanLens is open in a background tab.";
+        btn.hidden = true;
+        btn.style.display = 'none';
+    } else if (Notification.permission === 'denied') {
+        status.textContent = 'Blocked - allow notifications for this site in your browser settings to turn them on.';
+        btn.hidden = true;
+        btn.style.display = 'none';
+    } else {
+        status.textContent = '';
+        btn.hidden = false;
+        btn.style.display = 'block';
+    }
+}
+function notifBrowserEnable() {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then(function () {
+        notifBrowserRender();
+        if (Notification.permission === 'granted' && window.toastr) {
+            toastr.success('Browser notifications enabled.');
+        }
+    });
+}
+notifBrowserRender();
+
 function notifNone(noneBox) {
     if (!noneBox.checked) return;
     var field = noneBox.dataset.field;
