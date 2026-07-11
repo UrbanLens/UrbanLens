@@ -2,13 +2,19 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class VisibilityChoice(TextChoices):
-    """Who can see a particular piece of profile data, or who can perform an action."""
+    """Who can see a particular piece of profile data, or who can perform an action.
+
+    Members are declared least → most restrictive; the settings page renders
+    them in this order. Accepted friends qualify for every option except
+    NO_ONE (enforced by each evaluator, e.g. ``Profile.visibility_permits``).
+    """
 
     ANYONE = "anyone", "Anyone (Logged In)"
-    FRIENDS = "friends", "Friends Only"
+    ANYTHING_IN_COMMON = "anything_in_common", "Users with anything in common"
     COMMON_PIN = "common_pin", "Users with a pin in common"
     COMMON_FRIEND = "common_friend", "Users with a friend in common"
     COMMON_TRIP = "common_trip", "Users with a trip in common"
+    FRIENDS = "friends", "Friends Only"
     NO_ONE = "no_one", "No one"
 
 

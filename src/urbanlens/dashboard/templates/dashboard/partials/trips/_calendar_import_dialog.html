@@ -13,55 +13,56 @@
     {% endif %}
 </div>
 {% else %}
-<p class="calendar-import-account">
-    Connected as <strong>{{ account.google_email|default:"your Google account" }}</strong>.
-    Select upcoming events to import as trips.
-</p>
+<div class="ul-dialog-body">
+    <p class="calendar-import-account">
+        Connected as <strong>{{ account.google_email|default:"your Google account" }}</strong>.
+        Select upcoming events to import as trips. You'll review the details before anything is created.
+    </p>
 
-<form hx-post="{% url 'trips.calendar.import' %}"
-      hx-target="#trip-list"
-      hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
-      class="calendar-import-form">
-    {% csrf_token %}
-    {% if entries %}
-    <ul class="calendar-import-list">
-        {% for entry in entries %}
-        <li class="calendar-import-item">
-            <label class="calendar-import-label">
-                <input type="checkbox" name="event_ids" value="{{ entry.event.id }}"
-                       {% if entry.already_linked or entry.from_urbanlens or not entry.trip_kwargs %}disabled{% endif %}>
-                <span class="calendar-import-summary">{{ entry.event.summary|default:"(untitled event)" }}</span>
-                {% if entry.trip_kwargs %}
-                <span class="calendar-import-dates">
-                    {{ entry.trip_kwargs.start_date|date:"M j, Y" }}{% if entry.trip_kwargs.end_date and entry.trip_kwargs.end_date != entry.trip_kwargs.start_date %} - {{ entry.trip_kwargs.end_date|date:"M j, Y" }}{% endif %}
-                </span>
-                {% endif %}
-                {% if entry.already_linked %}
-                <span class="calendar-import-note">Already imported</span>
-                {% elif entry.from_urbanlens %}
-                <span class="calendar-import-note">Exported from UrbanLens</span>
-                {% elif not entry.trip_kwargs %}
-                <span class="calendar-import-note">No usable dates</span>
-                {% endif %}
-            </label>
-        </li>
-        {% endfor %}
-    </ul>
-    <div class="form-actions">
-        <button type="submit" class="btn btn--primary btn--submit">
-            <i class="material-symbols-outlined">download</i>
-            Import selected
-        </button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-    </div>
-    {% else %}
-    <p class="calendar-import-empty">No upcoming events found on your calendar.</p>
-    {% endif %}
-</form>
+    <form hx-post="{% url 'trips.calendar.import.preview' %}"
+        hx-target="#calendar-import-dialog"
+        hx-swap="innerHTML"
+        class="calendar-import-form">
+        {% csrf_token %}
+        {% if entries %}
+        <ul class="calendar-import-list">
+            {% for entry in entries %}
+            <li class="calendar-import-item">
+                <label class="calendar-import-label">
+                    <input type="checkbox" name="event_ids" value="{{ entry.event.id }}"
+                        {% if entry.already_linked or entry.from_urbanlens or not entry.trip_kwargs %}disabled{% endif %}>
+                    <span class="calendar-import-summary">{{ entry.event.summary|default:"(untitled event)" }}</span>
+                    {% if entry.trip_kwargs %}
+                    <span class="calendar-import-dates">
+                        {{ entry.trip_kwargs.start_date|date:"M j, Y" }}{% if entry.trip_kwargs.end_date and entry.trip_kwargs.end_date != entry.trip_kwargs.start_date %} - {{ entry.trip_kwargs.end_date|date:"M j, Y" }}{% endif %}
+                    </span>
+                    {% endif %}
+                    {% if entry.already_linked %}
+                    <span class="calendar-import-note">Already imported</span>
+                    {% elif entry.from_urbanlens %}
+                    <span class="calendar-import-note">Exported from UrbanLens</span>
+                    {% elif not entry.trip_kwargs %}
+                    <span class="calendar-import-note">No usable dates</span>
+                    {% endif %}
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit">
+                <i class="material-symbols-outlined">arrow_forward</i>
+                Next: Review details
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+        {% else %}
+        <p class="calendar-import-empty">No upcoming events found on your calendar.</p>
+        {% endif %}
+    </form>
+</div>
 
 <div class="calendar-import-footer">
-    <button type="button" class="btn btn--ghost btn--danger-text"
+    <button type="button" class="btn btn--danger"
             hx-post="{% url 'trips.calendar.disconnect' %}"
             hx-confirm="Disconnect your Google Calendar? Existing trips are kept, but import/export stops working until you reconnect.">
         <i class="material-symbols-outlined">link_off</i>

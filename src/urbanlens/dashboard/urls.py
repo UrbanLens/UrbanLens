@@ -749,6 +749,7 @@ urlpatterns = [
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
                 path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),
                 path("calendar/import/", calendar_sync.CalendarImportView.as_view(), name="trips.calendar.import"),
+                path("calendar/import/preview/", calendar_sync.CalendarImportPreviewView.as_view(), name="trips.calendar.import.preview"),
                 path("<uuid:trip_uuid>/calendar/export/", calendar_sync.TripCalendarExportView.as_view(), name="trips.calendar.export"),
                 path("<uuid:trip_uuid>/", trip.TripDetailView.as_view(), name="trips.detail"),
                 path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),

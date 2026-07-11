@@ -15,7 +15,7 @@
 {% block title %}Memories{% endblock %}
 
 {% block content %}
-<div id="memories-page"
+<div id="memories-page" class="memories-tab-page"
      data-feed-url="{% url 'memories.data' %}"
      data-visit-url-base="{% url 'memories.view' %}visit/"
      data-earliest-date="{{ earliest_date }}"

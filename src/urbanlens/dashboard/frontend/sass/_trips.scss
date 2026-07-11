@@ -38,6 +38,7 @@
 .trips-header-right {
     display: flex;
     align-items: center;
+    gap: 0.5rem;
 }
 
 .trips-empty {
@@ -2384,6 +2385,23 @@
     cursor: pointer;
     font-weight: normal;
 
+    input[type="checkbox"] {
+        // Undo Materialize's global checkbox reset (position:absolute;
+        // opacity:0) so the box is actually visible.
+        position: static;
+        opacity: 1;
+        pointer-events: auto;
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+        flex-shrink: 0;
+
+        &:disabled {
+            cursor: default;
+        }
+    }
+
     &:has(input:disabled) {
         cursor: default;
         opacity: .55;
@@ -2417,4 +2435,112 @@
     border-top: 1px solid var(--ul-grey-1a);
     display: flex;
     justify-content: flex-end;
+}
+
+// -- Import dialog page 2: review step ---------------------------------------
+
+.calendar-import-preview-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    max-height: 24rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.calendar-import-preview {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    padding: .6rem .75rem;
+
+    &--skipped {
+        opacity: .55;
+    }
+}
+
+.calendar-import-preview-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.calendar-import-preview-title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-import-preview-desc {
+    margin: .35rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
+.calendar-import-preview-option {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    margin-top: .5rem;
+    cursor: pointer;
+    font-weight: normal;
+    font-size: .88rem;
+
+    input[type="checkbox"] {
+        accent-color: var(--primary-color);
+        width: 15px;
+        height: 15px;
+        margin-top: .15rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        // Undo Materialize's global checkbox reset inside the dialog.
+        opacity: 1;
+        position: static;
+        pointer-events: auto;
+    }
+}
+
+.calendar-import-preview-option-text {
+    min-width: 0;
+}
+
+.calendar-import-preview-participants {
+    margin-top: .6rem;
+    padding-top: .5rem;
+    border-top: 1px dashed var(--ul-grey-1a);
+}
+
+.calendar-import-preview-subhead {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.calendar-import-preview-others {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: .5rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
 }

@@ -2005,13 +2005,45 @@ body.page-location-details {
         height: 100%;
         object-fit: cover;
         display: block;
-        transition: opacity .12s;
+        // Unselected photos read as "not shared": greyed out under a Private
+        // ribbon until the user opts them in.
+        filter: grayscale(1);
+        opacity: .55;
+        transition: opacity .12s, filter .12s;
     }
 
     input[type="checkbox"] {
         position: absolute;
         opacity: 0;
         pointer-events: none;
+    }
+
+    // Diagonal "Private" ribbon across the top-left corner of unselected photos.
+    .wiki-seed-photo-ribbon {
+        position: absolute;
+        top: .55rem;
+        left: -1.6rem;
+        width: 5.5rem;
+        transform: rotate(-45deg);
+        background: rgba(0, 0, 0, .62);
+        color: #fff;
+        font-size: .58rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        text-align: center;
+        padding: .14rem 0;
+        pointer-events: none;
+        transition: opacity .12s;
+    }
+
+    input[type="checkbox"]:checked ~ img {
+        filter: none;
+        opacity: 1;
+    }
+
+    input[type="checkbox"]:checked ~ .wiki-seed-photo-ribbon {
+        opacity: 0;
     }
 
     .wiki-seed-photo-check {

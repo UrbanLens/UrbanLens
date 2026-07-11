@@ -1508,7 +1508,7 @@ window.tripSetTab = function (tab) {
 };
 
 // -- Mark-as-completed dialog ---------------------------------------------
-window.tripOpenCompleteDialog = function (url) {
+window.tripOpenCompleteDialog = function (url, activityDate) {
     var form = document.getElementById('trip-complete-form');
     if (form) {
         form.setAttribute('hx-post', url);
@@ -1517,7 +1517,9 @@ window.tripOpenCompleteDialog = function (url) {
     var today = new Date().toISOString().slice(0, 10);
     var dateInput = document.getElementById('trip-complete-date');
     if (dateInput) {
-        dateInput.value = today;
+        // Default to the activity's scheduled date when it has one, clamped to
+        // today (completed dates can't be in the future); otherwise today.
+        dateInput.value = (activityDate && activityDate <= today) ? activityDate : today;
         dateInput.max = today;
     }
     var dlg = document.getElementById('trip-complete-dialog');

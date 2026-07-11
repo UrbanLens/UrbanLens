@@ -165,7 +165,7 @@
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}')">
+                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
                         <i class="material-symbols-outlined">check</i>
                     </button>
                     <button type="button"

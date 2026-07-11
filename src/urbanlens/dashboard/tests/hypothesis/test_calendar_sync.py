@@ -158,7 +158,7 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "end": {"date": "2026-09-07"},
         }
 
-        created, skipped = import_events_as_trips(self.account, ["evt1"])
+        created, skipped, _invited = import_events_as_trips(self.account, ["evt1"])
 
         self.assertEqual(len(created), 1)
         self.assertEqual(skipped, [])
@@ -182,7 +182,7 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             direction=CalendarSyncDirection.IMPORTED,
         )
 
-        created, skipped = import_events_as_trips(self.account, ["evt1"])
+        created, skipped, _invited = import_events_as_trips(self.account, ["evt1"])
 
         self.assertEqual(created, [])
         self.assertEqual(len(skipped), 1)
@@ -198,7 +198,7 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
         }
 
-        created, skipped = import_events_as_trips(self.account, ["evt2"])
+        created, skipped, _invited = import_events_as_trips(self.account, ["evt2"])
 
         self.assertEqual(created, [])
         self.assertEqual(len(skipped), 1)
@@ -208,10 +208,178 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         gateway = self._patch_gateway()
         gateway.get_event.side_effect = CalendarEventNotFoundError("gone")
 
-        created, skipped = import_events_as_trips(self.account, ["evt3"])
+        created, skipped, _invited = import_events_as_trips(self.account, ["evt3"])
 
         self.assertEqual(created, [])
         self.assertEqual(len(skipped), 1)
+
+    def test_import_creates_activity_from_event_location(self):
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-loc",
+            "summary": "Mill scouting",
+            "location": "123 Factory Rd, Utica, NY",
+            "start": {"dateTime": "2026-09-04T10:00:00-04:00"},
+            "end": {"dateTime": "2026-09-04T12:00:00-04:00"},
+        }
+
+        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-loc", "create_activity": True}])
+
+        activity = created[0].activities.get()
+        self.assertEqual(activity.title, "123 Factory Rd, Utica, NY")
+        self.assertEqual(activity.added_by, self.profile)
+        self.assertIsNotNone(activity.scheduled_at)
+        self.assertIsNotNone(activity.scheduled_end)
+
+    def test_import_can_decline_activity_creation(self):
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-loc2",
+            "summary": "Mill scouting",
+            "location": "123 Factory Rd, Utica, NY",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+        }
+
+        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-loc2", "create_activity": False}])
+
+        self.assertEqual(created[0].activities.count(), 0)
+
+    def test_import_without_location_creates_no_activity(self):
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-noloc",
+            "summary": "Planning call",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+        }
+
+        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-noloc", "create_activity": True}])
+
+        self.assertEqual(created[0].activities.count(), 0)
+
+    def test_import_invites_confirmed_friends_only(self):
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.notifications.meta import NotificationType
+        from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+        friend = User.objects.create_user(username="cal-friend", email="friend@example.com").profile
+        stranger = User.objects.create_user(username="cal-stranger", email="stranger@example.com").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-inv",
+            "summary": "Group trip",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+        }
+
+        created, skipped, invited = import_events_as_trips(
+            self.account,
+            [{"event_id": "evt-inv", "invite_profile_ids": [friend.pk, stranger.pk]}],
+        )
+
+        trip = created[0]
+        self.assertEqual(invited, 1)
+        self.assertTrue(TripMembership.objects.filter(trip=trip, profile=friend).exists())
+        self.assertFalse(TripMembership.objects.filter(trip=trip, profile=stranger).exists())
+        self.assertTrue(any("not friends" in reason for reason in skipped))
+        self.assertTrue(
+            NotificationLog.objects.filter(profile=friend, notification_type=NotificationType.ADDED_TO_TRIP).exists(),
+        )
+
+
+class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
+    """match_event_attendees splits attendees into invitable friends and labels."""
+
+    def test_friend_attendee_is_invitable(self):
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+
+        friend = User.objects.create_user(username="att-friend", email="att-friend@example.com").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+
+        event = {
+            "attendees": [
+                {"email": "att-friend@example.com", "displayName": "Att Friend"},
+                {"email": "nobody@example.com", "displayName": "No Account"},
+                {"email": self.user.email or "me@example.com", "self": True},
+            ],
+        }
+        friends, others = match_event_attendees(self.profile, event)
+
+        self.assertEqual([p.pk for p in friends], [friend.pk])
+        self.assertEqual(others, ["No Account"])
+
+    def test_non_friend_account_is_not_invitable(self):
+        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+
+        User.objects.create_user(username="att-stranger", email="att-stranger@example.com")
+
+        event = {"attendees": [{"email": "att-stranger@example.com", "displayName": "Stranger"}]}
+        friends, others = match_event_attendees(self.profile, event)
+
+        self.assertEqual(friends, [])
+        self.assertEqual(others, ["Stranger"])
+
+
+class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
+    """The review step renders trip, activity, and participant details."""
+
+    def setUp(self):
+        super().setUp()
+        self.user.set_password("pw")  # noqa: S106
+        self.user.save()
+        self.client.force_login(self.user)
+
+    def test_preview_renders_activity_and_friend_options(self):
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        friend = User.objects.create_user(username="preview-friend", email="preview-friend@example.com").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-prev",
+            "summary": "Foundry day",
+            "location": "1 Iron Works Ln",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+            "attendees": [
+                {"email": "preview-friend@example.com", "displayName": "Preview Friend"},
+                {"email": "outsider@example.com", "displayName": "Outsider"},
+            ],
+        }
+
+        response = self.client.post(reverse("trips.calendar.import.preview"), {"event_ids": ["evt-prev"]})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("Foundry day", content)
+        self.assertIn("1 Iron Works Ln", content)
+        self.assertIn('name="create_activity_evt-prev"', content)
+        self.assertIn(f'name="invite_evt-prev" value="{friend.pk}"', content)
+        self.assertIn("Outsider", content)
+
+    def test_preview_requires_selection(self):
+        response = self.client.post(reverse("trips.calendar.import.preview"), {})
+        self.assertEqual(response.status_code, 400)
+
+    def test_preview_marks_already_linked_events(self):
+        trip = Trip.objects.create(name="Linked", creator=self.profile)
+        TripCalendarLink.objects.create(
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-linked",
+            direction=CalendarSyncDirection.IMPORTED,
+        )
+        self._patch_gateway()
+
+        response = self.client.post(reverse("trips.calendar.import.preview"), {"event_ids": ["evt-linked"]})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Already linked to a trip.", response.content.decode())
 
 
 class ExportTripTests(_CalendarSyncDBTestCase):

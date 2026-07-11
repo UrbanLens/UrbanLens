@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     revoke_token,
 )
 from urbanlens.dashboard.services.calendar_sync import (
+    build_import_preview,
     export_trip_to_calendar,
     import_events_as_trips,
     list_importable_events,
@@ -203,8 +204,17 @@ class CalendarImportView(LoginRequiredMixin, View):
         if not event_ids:
             return HttpResponse("Select at least one event to import.", status=400)
 
+        selections = [
+            {
+                "event_id": event_id,
+                "create_activity": request.POST.get(f"create_activity_{event_id}") == "1",
+                "invite_profile_ids": [int(value) for value in request.POST.getlist(f"invite_{event_id}") if value.isdigit()],
+            }
+            for event_id in event_ids
+        ]
+
         try:
-            created, skipped = import_events_as_trips(account, event_ids)
+            created, skipped, invited = import_events_as_trips(account, selections)
         except GatewayRequestError as exc:
             return HttpResponse(str(exc), status=502)
 
@@ -213,13 +223,51 @@ class CalendarImportView(LoginRequiredMixin, View):
         if created:
             message = f"Imported {len(created)} event{'s' if len(created) != 1 else ''} as trips."
             level = "success"
+            if invited:
+                message += f" Invited {invited} participant{'s' if invited != 1 else ''}."
         else:
             message = "No events were imported."
             level = "warning"
         if skipped:
-            message += f" {skipped[0]}" if len(skipped) == 1 else f" {len(skipped)} events were skipped."
+            message += f" {skipped[0]}" if len(skipped) == 1 else f" {len(skipped)} items were skipped."
         response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
         return response
+
+
+class CalendarImportPreviewView(LoginRequiredMixin, View):
+    """Second page of the import dialog: review trips, activities, and invitations.
+
+    POST /trips/calendar/import/preview/  → render the review step for the
+    events selected on page one. Nothing is created here - the user can still
+    uncheck activities and participants before confirming.
+    """
+
+    def post(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        if account is None:
+            return HttpResponse("Connect your Google Calendar first.", status=400)
+
+        event_ids = [eid for eid in request.POST.getlist("event_ids") if eid.strip()]
+        if not event_ids:
+            return HttpResponse("Select at least one event to import.", status=400)
+
+        try:
+            previews = build_import_preview(account, event_ids)
+        except GatewayRequestError as exc:
+            return HttpResponse(str(exc), status=502)
+
+        importable = [entry for entry in previews if not entry["skip_reason"]]
+        return render(
+            request,
+            "dashboard/partials/trips/_calendar_import_preview.html",
+            {
+                "account": account,
+                "previews": previews,
+                "importable_count": len(importable),
+                "profile": profile,
+            },
+        )
 
 
 class TripCalendarExportView(LoginRequiredMixin, View):

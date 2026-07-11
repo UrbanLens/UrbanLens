@@ -190,59 +190,20 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         requesting = request.user.profile
         visibility = to_profile.friend_request_visibility
 
-        if visibility in {VisibilityChoice.NO_ONE, VisibilityChoice.FRIENDS}:
+        if visibility == VisibilityChoice.NO_ONE:
             return HttpResponse("This user is not accepting friend requests.", status=403)
 
-        if visibility == VisibilityChoice.COMMON_PIN:
-            from urbanlens.dashboard.models.pin.model import Pin
-
-            req_locs = set(
-                Pin.objects.filter(profile=requesting).exclude(location__isnull=True).values_list("location_id", flat=True),
-            )
-            their_locs = set(
-                Pin.objects.filter(profile=to_profile).exclude(location__isnull=True).values_list("location_id", flat=True),
-            )
-            if not req_locs & their_locs:
-                return HttpResponse(
-                    "This user only accepts requests from people who share a pinned location.",
-                    status=403,
-                )
-
-        elif visibility == VisibilityChoice.COMMON_FRIEND:
-            req_friends = set(
-                Friendship.objects.filter(from_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            )
-            req_friends |= set(
-                Friendship.objects.filter(to_profile=requesting, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends = set(
-                Friendship.objects.filter(from_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends |= set(
-                Friendship.objects.filter(to_profile=to_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            if not req_friends & their_friends:
-                return HttpResponse("This user only accepts requests from friends of friends.", status=403)
-
-        elif visibility == VisibilityChoice.COMMON_TRIP:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
-            req_trips = set(TripMembership.objects.filter(profile=requesting).values_list("trip_id", flat=True))
-            their_trips = set(TripMembership.objects.filter(profile=to_profile).values_list("trip_id", flat=True))
-            if not req_trips & their_trips:
-                return HttpResponse("This user only accepts requests from people on a shared trip.", status=403)
+        # Shared evaluator: friends always qualify, ANYTHING_IN_COMMON accepts
+        # any of pin/friend/trip overlap.
+        if not Profile.visibility_permits(visibility, to_profile, requesting):
+            rejection_messages = {
+                VisibilityChoice.FRIENDS: "This user is not accepting friend requests.",
+                VisibilityChoice.COMMON_PIN: "This user only accepts requests from people who share a pinned location.",
+                VisibilityChoice.COMMON_FRIEND: "This user only accepts requests from friends of friends.",
+                VisibilityChoice.COMMON_TRIP: "This user only accepts requests from people on a shared trip.",
+                VisibilityChoice.ANYTHING_IN_COMMON: "This user only accepts requests from people with a pin, friend, or trip in common.",
+            }
+            return HttpResponse(rejection_messages.get(visibility, "This user is not accepting friend requests."), status=403)
 
         friendship = request_or_accept_friendship(requesting, to_profile)
         if not friendship:

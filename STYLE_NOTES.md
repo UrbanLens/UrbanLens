@@ -1,3 +1,1 @@
-* Navigation active
-* Jump to input:active
-* 
+* Jump to input:active 

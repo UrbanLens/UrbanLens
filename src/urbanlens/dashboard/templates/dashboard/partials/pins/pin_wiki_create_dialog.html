@@ -68,6 +68,7 @@
       {% if seedable_photos %}
       <section class="wiki-create-section">
         <h3 class="wiki-create-section-title"><i class="material-symbols-outlined">photo_library</i> Photos</h3>
+        <p class="wiki-create-section-hint">Only the photos you select are shared - the rest stay private to your pin.</p>
         <ul class="wiki-seed-photo-grid">
           {% for image in seedable_photos %}
           <li class="wiki-seed-photo">
@@ -75,6 +76,7 @@
               <input type="checkbox" name="image_ids" value="{{ image.id }}">
               <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy"
                    onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'wiki-seed-photo-fallback')">
+              <span class="wiki-seed-photo-ribbon">Private</span>
               <span class="wiki-seed-photo-check"><i class="material-symbols-outlined">check</i></span>
             </label>
           </li>

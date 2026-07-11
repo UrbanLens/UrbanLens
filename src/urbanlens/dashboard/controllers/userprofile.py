@@ -91,77 +91,19 @@ class ViewProfileView(LoginRequiredMixin, View):
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
-        """Return True if the requesting user is allowed to view this profile."""
+        """Return True if the requesting user is allowed to view this profile.
+
+        Delegates to :meth:`Profile.can_view_profile` so all relationship
+        checks (friends, common pin/friend/trip, anything-in-common) live in
+        one place.
+        """
         if request.user == profile.user:
             return True
 
-        visibility = profile.profile_visibility
-
-        if visibility == VisibilityChoice.ANYONE:
-            return True
-
-        if not request.user.is_authenticated:
-            return False
-
-        if visibility == VisibilityChoice.NO_ONE:
-            return False
-
-        try:
-            my_profile = Profile.objects.get(user=request.user)
-        except Profile.DoesNotExist:
-            return False
-
-        if visibility == VisibilityChoice.FRIENDS:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-            # between() returns None (not DoesNotExist) when no row exists.
-            friendship = Friendship.objects.between(my_profile, profile)
-            return friendship is not None and FriendshipStatus.is_friend(friendship.status)
-
-        if visibility == VisibilityChoice.COMMON_PIN:
-            my_loc_ids = set(
-                Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
-            )
-            their_loc_ids = set(
-                Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
-            )
-            return bool(my_loc_ids & their_loc_ids)
-
-        if visibility == VisibilityChoice.COMMON_FRIEND:
-            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-
-            my_friends = set(
-                Friendship.objects.filter(from_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            ) | set(
-                Friendship.objects.filter(to_profile=my_profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            their_friends = set(
-                Friendship.objects.filter(from_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "to_profile_id",
-                    flat=True,
-                ),
-            ) | set(
-                Friendship.objects.filter(to_profile=profile, status=FriendshipStatus.ACCEPTED).values_list(
-                    "from_profile_id",
-                    flat=True,
-                ),
-            )
-            return bool(my_friends & their_friends)
-
-        if visibility == VisibilityChoice.COMMON_TRIP:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
-            my_trips = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
-            their_trips = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
-            return bool(my_trips & their_trips)
-
-        return False
+        viewer = None
+        if request.user.is_authenticated:
+            viewer = Profile.objects.filter(user=request.user).first()
+        return profile.can_view_profile(viewer)
 
     def _add_common_context(self, request: HttpRequest, profile: Profile, context: dict) -> None:
         """Populate cross-user stats and friendship context when viewing another user's profile."""

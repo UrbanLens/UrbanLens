@@ -399,9 +399,12 @@
 
     </div>
     <div class="apdlg-footer">
-        <button type="button" class="btn btn--danger" id="apdlg-delete" style="margin-right:auto;" onclick="_apdlgDeletePin()" hidden>
+        <button type="button" class="btn btn--danger" id="apdlg-delete" onclick="_apdlgDeletePin()" hidden>
             <i class="material-symbols-outlined">delete</i>Delete
         </button>
+        <a class="btn btn--ghost" id="apdlg-view-details" href="#" style="margin-right:auto;" title="Open this pin's details page" hidden>
+            <i class="material-symbols-outlined">open_in_new</i>View details
+        </a>
         <button type="button" class="btn btn--ghost" onclick="closeAddPinDialog()">Cancel</button>
         <button type="button" class="btn btn--primary" id="apdlg-submit">Add Pin</button>
     </div>
@@ -4080,6 +4083,9 @@
 
         const deleteBtn = document.getElementById('apdlg-delete');
         if (deleteBtn) deleteBtn.hidden = true;
+
+        const detailsLink = document.getElementById('apdlg-view-details');
+        if (detailsLink) { detailsLink.hidden = true; detailsLink.href = '#'; }
     }
 
     async function _apdlgDeletePin() {
@@ -4189,6 +4195,12 @@
 
         const deleteBtn = document.getElementById('apdlg-delete');
         if (deleteBtn) deleteBtn.hidden = false;
+
+        const detailsLink = document.getElementById('apdlg-view-details');
+        if (detailsLink && pin.viewLocationUrl) {
+            detailsLink.href = pin.viewLocationUrl;
+            detailsLink.hidden = false;
+        }
 
         document.getElementById('add-pin-dialog').showModal();
     }

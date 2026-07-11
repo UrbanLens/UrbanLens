@@ -14,9 +14,6 @@
     <div class="organize-page-header">
         <div>
             <h1 class="organize-page-title">{% if standalone_mode %}{{ standalone_title }}{% else %}Organize{% endif %}
-                {% if not standalone_mode %}
-                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Tags label pins, categories group them by type, statuses track visit progress, and priority controls which icon wins when a pin has several." wide=True %}
-                {% endif %}
             </h1>
             {% if standalone_mode and standalone_subtitle %}
             <p class="tag-subtitle organize-page-subtitle">{{ standalone_subtitle }}</p>

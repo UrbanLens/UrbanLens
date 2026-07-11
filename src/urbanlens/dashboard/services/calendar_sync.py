@@ -212,6 +212,221 @@ def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | None:
+    """Parse the timestamp from one side of a *timed* event's start/end structure.
+
+    All-day events (``{"date": ...}``) yield None - only ``dateTime`` values
+    carry a usable time of day.
+
+    Args:
+        part: The event's ``start`` or ``end`` dict.
+
+    Returns:
+        The parsed datetime, or None for all-day/missing/unparsable values.
+    """
+    raw = (part or {}).get("dateTime")
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list[Profile], list[str]]:
+    """Split an event's attendees into invitable friends and everyone else.
+
+    An attendee is invitable when their email resolves to an UrbanLens account
+    that is an accepted friend of ``profile``. The importer themselves is
+    excluded. Non-friends and unknown addresses are returned only as display
+    labels - no account information is revealed beyond what the importer's own
+    calendar already shows.
+
+    Args:
+        profile: The importing user's profile.
+        event: Event resource dict from the Calendar API.
+
+    Returns:
+        Tuple of (friend profiles that can be invited, display labels for the
+        remaining attendees).
+    """
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+    from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
+
+    own_email = normalize_email(profile.user.email or "")
+    friends: list[Profile] = []
+    others: list[str] = []
+    seen_profile_ids: set[int] = set()
+
+    for attendee in event.get("attendees") or []:
+        email = (attendee.get("email") or "").strip()
+        label = attendee.get("displayName") or email
+        if not email or attendee.get("self") or normalize_email(email) == own_email:
+            continue
+        if attendee.get("resource"):
+            # Meeting rooms and other calendar resources are never people.
+            continue
+        user = find_user_by_email(email)
+        if user is not None:
+            attendee_profile = ProfileModel.objects.filter(user=user).first()
+            if attendee_profile is not None:
+                if attendee_profile.pk == profile.pk or attendee_profile.pk in seen_profile_ids:
+                    continue
+                if ProfileModel.are_friends(profile, attendee_profile):
+                    seen_profile_ids.add(attendee_profile.pk)
+                    friends.append(attendee_profile)
+                    continue
+        if label:
+            others.append(label)
+
+    return friends, others
+
+
+def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -> list[dict[str, Any]]:
+    """Build the review-page data for the events selected on the import dialog's first page.
+
+    Each event is re-fetched so only data Google actually returns is trusted.
+    Entries that cannot be imported carry a ``skip_reason`` instead of import
+    details.
+
+    Args:
+        account: The user's connected calendar account.
+        event_ids: Google event ids selected on page one.
+
+    Returns:
+        List of preview dicts with ``event_id``, ``summary``, ``trip_kwargs``,
+        ``location``, ``scheduled_at``/``scheduled_end`` (for timed events),
+        ``friends``, ``other_attendees``, and ``skip_reason`` keys.
+
+    Raises:
+        GatewayRequestError: When the calendar cannot be read.
+    """
+    gateway = GoogleCalendarGateway(account=account)
+    profile = account.profile
+    previews: list[dict[str, Any]] = []
+
+    for event_id in event_ids:
+        entry: dict[str, Any] = {
+            "event_id": event_id,
+            "summary": "",
+            "trip_kwargs": None,
+            "location": "",
+            "scheduled_at": None,
+            "scheduled_end": None,
+            "friends": [],
+            "other_attendees": [],
+            "skip_reason": "",
+        }
+        previews.append(entry)
+
+        if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
+            entry["skip_reason"] = "Already linked to a trip."
+            continue
+        try:
+            event = gateway.get_event(event_id)
+        except CalendarEventNotFoundError:
+            entry["skip_reason"] = "This event no longer exists on your calendar."
+            continue
+
+        entry["summary"] = (event.get("summary") or "").strip() or "(untitled event)"
+        if event_originated_from_urbanlens(event):
+            entry["skip_reason"] = "Exported from an UrbanLens trip."
+            continue
+
+        kwargs = event_to_trip_kwargs(event)
+        if kwargs is None:
+            entry["skip_reason"] = "No usable dates."
+            continue
+
+        entry["trip_kwargs"] = kwargs
+        entry["location"] = (event.get("location") or "").strip()
+        entry["scheduled_at"] = _parse_event_datetime(event.get("start"))
+        entry["scheduled_end"] = _parse_event_datetime(event.get("end"))
+        entry["friends"], entry["other_attendees"] = match_event_attendees(profile, event)
+
+    return previews
+
+
+def _create_activity_from_event(trip: Trip, event: dict[str, Any], profile: Profile) -> TripActivity | None:
+    """Create a trip activity carrying the calendar event's location.
+
+    The raw location string becomes the activity title (it is free-form text
+    on Google's side - no geocoding is attempted). Timed events also carry
+    their start/end over to the activity schedule.
+
+    Args:
+        trip: The freshly imported trip.
+        event: Event resource dict the trip was created from.
+        profile: The importing user's profile.
+
+    Returns:
+        The created activity, or None when the event has no location.
+    """
+    location_text = (event.get("location") or "").strip()
+    if not location_text:
+        return None
+    return TripActivity.objects.create(
+        trip=trip,
+        added_by=profile,
+        title=location_text[:255],
+        notes="Location from the imported Google Calendar event.",
+        scheduled_at=_parse_event_datetime(event.get("start")),
+        scheduled_end=_parse_event_datetime(event.get("end")),
+    )
+
+
+def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], skipped: list[str]) -> int:
+    """Add confirmed friends as trip members and notify them.
+
+    Every id is re-validated server side: only accepted friends of the
+    importer are ever added, regardless of what the client submitted.
+
+    Args:
+        trip: The freshly imported trip.
+        importer: The importing user's profile.
+        profile_ids: Profile ids the importer confirmed on the review page.
+        skipped: Mutable list human-readable skip reasons are appended to.
+
+    Returns:
+        The number of members actually added.
+    """
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    if not profile_ids:
+        return 0
+
+    from django.urls import reverse
+
+    max_members = SiteSettings.get_current().max_trip_members
+    invited = 0
+    for profile_id in profile_ids:
+        invitee = ProfileModel.objects.filter(pk=profile_id).select_related("user").first()
+        if invitee is None or invitee.pk == importer.pk:
+            continue
+        if not ProfileModel.are_friends(importer, invitee):
+            skipped.append(f"{invitee.username} was not invited because you are not friends on UrbanLens.")
+            continue
+        if trip.profiles.count() >= max_members:
+            skipped.append(f'"{trip.name}" is full ({max_members} members maximum); some invitations were not sent.')
+            break
+        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee)
+        if created:
+            NotificationLog.objects.create(
+                profile=invitee,
+                status=Status.UNREAD,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.ADDED_TO_TRIP,
+                title="Added to a trip",
+                message=f'{importer.username} added you to the trip "{trip.name}".',
+                url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+            )
+            invited += 1
+    return invited
+
+
 def event_originated_from_urbanlens(event: dict[str, Any]) -> bool:
     """Whether an event was created by an UrbanLens trip export.
 
@@ -270,7 +485,7 @@ def list_importable_events(account: GoogleCalendarAccount) -> list[dict[str, Any
     return results
 
 
-def import_events_as_trips(account: GoogleCalendarAccount, event_ids: list[str]) -> tuple[list[Trip], list[str]]:
+def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str | dict[str, Any]]) -> tuple[list[Trip], list[str], int]:
     """Create trips from the given calendar events on the user's calendar.
 
     Events are re-fetched individually so only data Google actually returns
@@ -278,19 +493,33 @@ def import_events_as_trips(account: GoogleCalendarAccount, event_ids: list[str])
     linked to a trip for this profile, events exported from UrbanLens, and
     unparsable events are skipped with a reason.
 
+    Each selection may carry per-event options confirmed on the review page:
+    whether to create an activity from the event's location, and which friend
+    profiles to invite as trip members. Invitees are re-validated - only
+    accepted friends of the importer are ever added.
+
     Args:
         account: The user's connected calendar account.
-        event_ids: Google event ids selected in the import dialog.
+        selections: Either bare Google event ids, or dicts with ``event_id``,
+            ``create_activity`` (bool, default True), and ``invite_profile_ids``
+            (list of ints, default empty) keys.
 
     Returns:
-        Tuple of (created trips, human-readable skip reasons).
+        Tuple of (created trips, human-readable skip reasons, number of
+        participants invited).
     """
     gateway = GoogleCalendarGateway(account=account)
     profile = account.profile
     created: list[Trip] = []
     skipped: list[str] = []
+    invited_total = 0
 
-    for event_id in event_ids:
+    for raw_selection in selections:
+        selection: dict[str, Any] = {"event_id": raw_selection} if isinstance(raw_selection, str) else raw_selection
+        event_id = selection.get("event_id") or ""
+        if not event_id:
+            continue
+
         if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
             skipped.append("An event was skipped because it is already linked to a trip.")
             continue
@@ -320,9 +549,12 @@ def import_events_as_trips(account: GoogleCalendarAccount, event_ids: list[str])
             direction=CalendarSyncDirection.IMPORTED,
             last_synced=timezone.now(),
         )
+        if selection.get("create_activity", True):
+            _create_activity_from_event(trip, event, profile)
+        invited_total += _invite_participants(trip, profile, list(selection.get("invite_profile_ids") or []), skipped)
         created.append(trip)
 
-    return created, skipped
+    return created, skipped, invited_total
 
 
 def _upsert_event_link(

@@ -59,10 +59,21 @@
         <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
         <label class="alias-nickname-check" title="Nickname-only aliases help you find your own pins, but are never sent to external APIs (Google, Wikipedia, etc).">
             <input type="checkbox" name="is_nickname" value="1">
-            Nickname only
+            <span class="alias-nickname-check-text">Nickname only</span>
         </label>
         <button type="submit" class="alias-add-btn">
             <i class="material-symbols-outlined">add</i>
         </button>
     </form>
+
+    <details class="alias-help">
+        <summary class="alias-help-summary">
+            <i class="material-symbols-outlined">help</i>
+            What are aliases and "Nickname only"?
+        </summary>
+        <div class="alias-help-body">
+            <p>Aliases are the other names a place goes by - former names, local nicknames, or codenames. They help you find this pin in search, and they improve the results pulled from external sources.</p>
+            <p><strong>Nickname only</strong> keeps an alias private to UrbanLens: it still works in your own searches, but it is never included in queries sent to external services (Google, Wikipedia, etc). Use it for names the wider internet shouldn't see. The <i class="material-symbols-outlined alias-help-inline-icon">person</i> button on each alias toggles this.</p>
+        </div>
+    </details>
 </div>

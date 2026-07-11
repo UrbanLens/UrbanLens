@@ -29,6 +29,7 @@ SESSION_KEY = "profile_preview"
 
 _MODE_LABEL_OVERRIDES = {
     VisibilityChoice.ANYONE.value: "Any logged-in user",
+    VisibilityChoice.ANYTHING_IN_COMMON.value: "Someone with anything in common",
     VisibilityChoice.FRIENDS.value: "A friend",
     VisibilityChoice.COMMON_PIN.value: "Someone with a pin in common",
     VisibilityChoice.COMMON_FRIEND.value: "Someone with a friend in common",
@@ -97,6 +98,9 @@ def create_ghost_viewer(owner: Profile, mode: str) -> User:
         _share_a_friend(ghost, owner)
     elif mode == VisibilityChoice.COMMON_TRIP:
         _share_a_trip(ghost, owner)
+    elif mode == VisibilityChoice.ANYTHING_IN_COMMON:
+        # Any single overlap qualifies; a shared pin is the lightest to fake.
+        _share_a_pin(ghost, owner)
 
     return ghost_user
 

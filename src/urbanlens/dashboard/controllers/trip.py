@@ -77,9 +77,22 @@ def _apply_trip_visibility_filter(
     common_pin_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
     friends_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
     c_friend_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
-    # COMMON_TRIP: viewer is already in this trip - treat as visible.
+    # COMMON_TRIP and ANYTHING_IN_COMMON: the viewer shares this very trip with
+    # the adder, which satisfies both - treat as visible.
 
     hidden_out.update(act.id for act in no_one_acts)
+
+    # Friends of the viewer always qualify for every option except NO_ONE, so
+    # compute the viewer's accepted-friend ids once for all branches below.
+    viewer_friend_ids: set[int] = set()
+    if common_pin_acts or friends_acts or c_friend_acts:
+        friend_pairs = Friendship.objects.filter(
+            Q(from_profile=viewer) | Q(to_profile=viewer),
+            status=FriendshipStatus.ACCEPTED,
+        ).values_list("from_profile_id", "to_profile_id")
+        for pair in friend_pairs:
+            viewer_friend_ids.update(pair)
+        viewer_friend_ids.discard(viewer.id)
 
     if common_pin_acts:
         loc_ids = {a.location_id for a in common_pin_acts}
@@ -87,57 +100,31 @@ def _apply_trip_visibility_filter(
             Pin.objects.filter(profile=viewer, location_id__in=loc_ids).values_list("location_id", flat=True),
         )
         for act in common_pin_acts:
-            if act.location_id not in viewer_locs:
+            if act.added_by_id not in viewer_friend_ids and act.location_id not in viewer_locs:
                 hidden_out.add(act.id)
 
-    if friends_acts:
-        adder_ids = {a.added_by_id for a in friends_acts}
-        accepted_friend_adder_ids = set(
+    for act in friends_acts:
+        if act.added_by_id not in viewer_friend_ids:
+            hidden_out.add(act.id)
+
+    for act in c_friend_acts:
+        if act.added_by_id in viewer_friend_ids:
+            continue
+        # Adder's friends
+        adder_friends = set(
             Friendship.objects.filter(
-                Q(from_profile=viewer, to_profile_id__in=adder_ids) | Q(to_profile=viewer, from_profile_id__in=adder_ids),
+                Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
                 status=FriendshipStatus.ACCEPTED,
             ).values_list("from_profile_id", "to_profile_id"),
         )
-        # Flatten to a set of IDs that are friends with the viewer.
-        flat_friend_ids: set[int] = set()
-        for pair in accepted_friend_adder_ids:
-            flat_friend_ids.update(pair)
-        flat_friend_ids.discard(viewer.id)
+        adder_flat: set[int] = set()
+        for pair in adder_friends:
+            adder_flat.update(pair)
+        if act.added_by_id is not None:
+            adder_flat.discard(act.added_by_id)
 
-        for act in friends_acts:
-            if act.added_by_id not in flat_friend_ids:
-                hidden_out.add(act.id)
-
-    if c_friend_acts:
-        {a.added_by_id for a in c_friend_acts}
-        # Viewer's friends
-        viewer_friend_ids = set(
-            Friendship.objects.filter(
-                Q(from_profile=viewer) | Q(to_profile=viewer),
-                status=FriendshipStatus.ACCEPTED,
-            ).values_list("from_profile_id", "to_profile_id"),
-        )
-        viewer_flat: set[int] = set()
-        for pair in viewer_friend_ids:
-            viewer_flat.update(pair)
-        viewer_flat.discard(viewer.id)
-
-        for act in c_friend_acts:
-            # Adder's friends
-            adder_friends = set(
-                Friendship.objects.filter(
-                    Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
-                    status=FriendshipStatus.ACCEPTED,
-                ).values_list("from_profile_id", "to_profile_id"),
-            )
-            adder_flat: set[int] = set()
-            for pair in adder_friends:
-                adder_flat.update(pair)
-            if act.added_by_id is not None:
-                adder_flat.discard(act.added_by_id)
-
-            if not (viewer_flat & adder_flat):
-                hidden_out.add(act.id)
+        if not (viewer_friend_ids & adder_flat):
+            hidden_out.add(act.id)
 
 
 class _ReplyData(TypedDict):
