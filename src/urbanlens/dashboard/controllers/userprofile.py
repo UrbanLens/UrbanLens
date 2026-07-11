@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import chain
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from django.core.validators import validate_email
 from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.forms.profile_form import (
@@ -79,8 +81,84 @@ class ViewProfileView(LoginRequiredMixin, View):
             from urbanlens.dashboard.services.profile_preview import preview_modes
 
             context["preview_modes"] = preview_modes()
+            context.update(self._own_profile_activity_context(profile))
         self._add_common_context(request, profile, context)
         return render(request, "dashboard/pages/profile/index.html", context)
+
+    def _own_profile_activity_context(self, profile: Profile) -> dict[str, object]:
+        """Build dashboard strips for the signed-in user's own profile page."""
+        from urbanlens.dashboard.models.comments.model import Comment
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+        from urbanlens.dashboard.models.reviews.model import Review
+        from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
+        from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
+        from urbanlens.dashboard.models.undo.model import UndoAction
+        from urbanlens.dashboard.models.wiki_edit import WikiEdit
+
+        today = timezone.localdate()
+        recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
+        recent_trip_comments = TripComment.objects.filter(author=profile).select_related("trip").order_by("-created")[:5]
+        recent_comments = sorted(
+            chain(recent_pin_comments, recent_trip_comments),
+            key=lambda comment: comment.created,
+            reverse=True,
+        )[:5]
+
+        active_checkin_statuses = (
+            SafetyCheckinStatus.SCHEDULED,
+            SafetyCheckinStatus.AWAITING_CHECKIN,
+            SafetyCheckinStatus.OVERDUE,
+        )
+
+        maps_count = MarkupMap.objects.for_profile(profile).count()
+        photos_count = Image.objects.filter(profile=profile).count()
+        comments_count = Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
+        safety_checkins_count = (
+            SafetyCheckin.objects.filter(profile=profile).count()
+            + UndoAction.objects.filter(profile=profile, model_label="safety_checkin").count()
+        )
+        trips_created_count = Trip.objects.filter(creator=profile).count()
+        trips_joined_count = TripMembership.objects.filter(profile=profile).exclude(trip__creator=profile).count()
+
+        return {
+            "profile_private_stats": [
+                {"label": "Maps created", "value": maps_count, "icon": "gesture"},
+                {"label": "Wiki edits", "value": WikiEdit.objects.filter(editor=profile).count(), "icon": "edit_note"},
+                {"label": "Safety check-ins", "value": safety_checkins_count, "icon": "emergency_home"},
+                {"label": "Trips created", "value": trips_created_count, "icon": "add_road"},
+                {"label": "Trips joined", "value": trips_joined_count, "icon": "group_add"},
+                {"label": "Photos uploaded", "value": photos_count, "icon": "photo_camera"},
+                {"label": "Comments posted", "value": comments_count, "icon": "forum"},
+                {"label": "Pins rated", "value": Review.objects.filter(profile=profile).count(), "icon": "star"},
+            ],
+            "profile_recent_photos": Image.objects.uploaded_by(profile)[:8],
+            "profile_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
+            "profile_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
+            "profile_priority_unvisited_pins": (
+                Pin.objects.filter(profile=profile, priority__gt=0, last_visited__isnull=True)
+                .select_related("location")
+                .order_by("-priority", "-updated")[:6]
+            ),
+            "profile_recent_comments": recent_comments,
+            "profile_recent_trips": (
+                Trip.objects.filter(profiles=profile)
+                .prefetch_related("memberships")
+                .order_by("-updated")[:6]
+            ),
+            "profile_upcoming_trips": (
+                Trip.objects.filter(profiles=profile)
+                .filter(Q(start_date__gte=today) | Q(start_date__isnull=True, activities__scheduled_at__date__gte=today))
+                .distinct()
+                .order_by("start_date", "name")[:6]
+            ),
+            "profile_active_checkin": (
+                SafetyCheckin.objects.filter(profile=profile, status__in=active_checkin_statuses)
+                .select_related("destination_location")
+                .order_by("checkin_by")
+                .first()
+            ),
+        }
 
     def post(self, request: HttpRequest, **kwargs) -> HttpResponse:
         """Handle avatar upload from the profile hero card."""
