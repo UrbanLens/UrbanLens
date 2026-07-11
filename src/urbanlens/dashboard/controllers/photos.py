@@ -296,8 +296,13 @@ class PhotoActionView(LoginRequiredMixin, View):
             lng = float(image.effective_longitude) if image.effective_longitude is not None else None
         if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
-        # TODO: We must sanitize the name to prevent XSS attacks.
-        _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
+        # Pin names are stored raw and escaped at render time (templates
+        # auto-escape; the map JS sinks build DOM nodes with textContent -
+        # see the XSS audit). Clamp to the model's max_length so an oversized
+        # submission can't 500 with a database DataError.
+        # TODO: We should not count on render-time escaping to prevent attacks. We should sanitize all data before storage, always, in addition to render-time escaping.
+        name = (request.POST.get("name") or "").strip()[:255] or None
+        _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=name)
         if visit is None:
             return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)
         return _toast("Pin created and visit logged.", refresh_queue=True)

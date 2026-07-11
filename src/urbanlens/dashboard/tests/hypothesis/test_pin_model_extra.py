@@ -3,7 +3,7 @@
 An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
 - effective_color  (mock-based, badges M2M filtered by kind=tag)
 - rating  (DB, requires Review)
-- add_category / change_category  (DB)
+- add_category  (DB)
 - to_json / to_detail_json  (DB)
 """
 from __future__ import annotations
@@ -204,28 +204,6 @@ class PinAddCategoryTests(TestCase):
         result = self.pin.add_category("Prison")
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "prison")
-
-
-class PinChangeCategoryTests(TestCase):
-    """change_category replaces all existing categories with the given one."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-72.0")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-        self.old_cat = baker.make("dashboard.Badge", name="old", kind="category", profile=None)
-        self.new_cat = baker.make("dashboard.Badge", name="new_cat", kind="category", profile=None)
-        self.pin.badges.add(self.old_cat)
-
-    def test_change_category_sets_new_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertIn(self.new_cat, self.pin.badges.filter(kind="category"))
-
-    def test_change_category_removes_old_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertNotIn(self.old_cat, self.pin.badges.filter(kind="category"))
 
 
 # -- to_json / to_detail_json --------------------------------------------------

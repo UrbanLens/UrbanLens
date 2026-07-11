@@ -1,0 +1,162 @@
+{
+    // Common development tasks for UrbanLens (Windows host).
+    // Python tools run through the Windows venv (.venv_windows); frontend
+    // tooling runs through bun (installed at ~\.bun\bin\bun.exe).
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceFolder}"
+    },
+    "tasks": [
+        {
+            "label": "Lint: ruff (fix)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\ruff.exe",
+            "args": ["check", "--fix", "src/urbanlens"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Typecheck: mypy",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\mypy.exe",
+            "args": ["src/urbanlens"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: pytest (all)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["-m", "pytest", "src/urbanlens", "-q"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: pytest (current file)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["-m", "pytest", "${relativeFile}", "-q"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Django: check",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["src/urbanlens/manage.py", "check"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Django: makemigrations (dry run)",
+            "type": "shell",
+            "command": "${workspaceFolder}\\.venv_windows\\Scripts\\python.exe",
+            "args": ["src/urbanlens/manage.py", "makemigrations", "--dry-run", "--verbosity", "2"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Sass: compile",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "sass"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Sass: watch",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "sass:watch"],
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "TypeScript: build",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "build"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "TypeScript: typecheck",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "typecheck"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Frontend: build all (sass + ts)",
+            "dependsOn": ["Sass: compile", "TypeScript: build"],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        },
+        {
+            "label": "Pre-commit: run all",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "pre-commit"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}

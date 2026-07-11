@@ -14,6 +14,8 @@ import logging
 import time
 from typing import Any
 
+from django.db import DatabaseError
+
 from urbanlens.dashboard.exceptions import DashboardError
 
 logger = logging.getLogger(__name__)
@@ -206,8 +208,8 @@ def service_is_enabled(service: str) -> bool:
     """
     try:
         config = get_limit_config(service)
-    except Exception:
-        # TODO: Catch specific exceptions
+    except DatabaseError:
+        # Fail-open guard: a broken DB read must not crash the caller.
         logger.exception("Failed to read rate limit config for %s - allowing call", service)
         return False
     return config.enabled
@@ -231,8 +233,8 @@ def check_rate_limit(service: str) -> bool:
 
     try:
         config = get_limit_config(service)
-    except Exception:
-        # TODO: Catch specific exceptions
+    except DatabaseError:
+        # Fail-open guard: a broken DB read must not crash the caller.
         logger.exception("Failed to read rate limit config for %s - allowing call", service)
         return True
 
@@ -258,8 +260,8 @@ def check_rate_limit(service: str) -> bool:
                     config.calls_per_day,
                 )
                 return False
-    except Exception:
-        # TODO: Catch specific exceptions
+    except DatabaseError:
+        # Fail-open guard: a broken DB read must not crash the caller.
         logger.exception("Failed to check rate limit counts for %s - allowing call", service)
         return True
 

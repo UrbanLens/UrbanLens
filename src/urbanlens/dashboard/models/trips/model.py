@@ -36,6 +36,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class TripPermission(abstract.TextChoices):
+    """Who may perform a trip action (add members, add/edit activities, comment)."""
+
+    NONE = "none", "No one (creator only)"
+    ORGANIZERS = "organizers", "Organizers"
+    EVERYONE = "everyone", "Everyone"
+
+
+class TripActivityVoteChoice(abstract.TextChoices):
+    """A member's thumbs-up or thumbs-down on a proposed activity."""
+
+    UP = "up", "Up"
+    DOWN = "down", "Down"
+
+
 class Trip(abstract.FrontendDashboardModel):
     """A planned trip shared among one or more users.
 
@@ -48,15 +63,13 @@ class Trip(abstract.FrontendDashboardModel):
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
 
-    # TODO: Convert to TextChoices
-    PERM_NONE = "none"
-    PERM_ORGANIZERS = "organizers"
-    PERM_EVERYONE = "everyone"
-    PERMISSION_CHOICES = [
-        ("none", "No one (creator only)"),
-        ("organizers", "Organizers"),
-        ("everyone", "Everyone"),
-    ]
+    # Kept as class attributes for the many existing call sites; the values
+    # are the TripPermission TextChoices members (str subclasses, so every
+    # string comparison behaves as before).
+    PERM_NONE = TripPermission.NONE
+    PERM_ORGANIZERS = TripPermission.ORGANIZERS
+    PERM_EVERYONE = TripPermission.EVERYONE
+    PERMISSION_CHOICES = TripPermission.choices
 
     allow_add_members = CharField(
         max_length=20,
@@ -384,13 +397,11 @@ class TripActivityVote(abstract.DashboardModel):
     meaningful while the activity is in the 'proposed' status.
     """
 
-    # TODO: Convert to TextChoices
-    VOTE_UP = "up"
-    VOTE_DOWN = "down"
-    VOTE_CHOICES = [
-        ("up", "Up"),
-        ("down", "Down"),
-    ]
+    # Kept as class attributes for the existing call sites; the values are
+    # the TripActivityVoteChoice TextChoices members.
+    VOTE_UP = TripActivityVoteChoice.UP
+    VOTE_DOWN = TripActivityVoteChoice.DOWN
+    VOTE_CHOICES = TripActivityVoteChoice.choices
     vote = CharField(max_length=4, choices=VOTE_CHOICES)
 
     activity = ForeignKey(

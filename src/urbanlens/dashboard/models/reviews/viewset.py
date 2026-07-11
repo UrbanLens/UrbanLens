@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from urbanlens.dashboard.models.reviews.model import Review
@@ -12,89 +11,60 @@ from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
 logger = logging.getLogger(__name__)
 
 
-class ReviewViewSet(viewsets.ModelViewSet):
+class ReviewViewSet(viewsets.GenericViewSet):
+    """Upsert-only REST access to the requesting user's pin ratings.
+
+    Reviews back the personal 0-5 star rating widgets (map popup and pin
+    detail page). The only route is the explicit ``create_or_update`` path in
+    ``urls.py`` - the app never lists, retrieves, or deletes reviews over
+    REST, so no other operations are exposed. A user has at most one review
+    per pin; the write path upserts on (profile, pin).
+    """
+
     serializer_class = ReviewSerializer
-    basename = "reviews"
 
     def get_queryset(self):
-        if not self.request:
+        """Return the requesting user's reviews.
+
+        Returns:
+            QuerySet of reviews owned by ``request.user``, or an empty
+            queryset when there is no request (e.g. schema generation).
+        """
+        if not self.request or not self.request.user.is_authenticated:
             return Review.objects.none()
-        return Review.objects.all().filter(profile__user=self.request.user)
+        return Review.objects.filter(profile__user=self.request.user)
 
-    def create(self, request, pin_id, *args, **kwargs):
-        logger.info("Create request initiated by user %s", request.user.id)
-        data = request.data
-        data["profile"] = request.user.profile
-        data["pin"] = pin_id
-        # Check if the review already exists for the given pin and profile
-        review, created = Review.objects.get_or_create(
-            profile=request.user.profile,
-            pin_id=pin_id,
-            defaults=data,
-        )
-        if not created:
-            for key, value in data.items():
-                setattr(review, key, value)
-            review.save()
-            serializer = self.get_serializer(review)
-        else:
-            serializer = self.get_serializer(data=data)
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-        logger.info("Review created with id %s", serializer.data["id"])
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["patch"], url_path="create_or_update", url_name="create_or_update")
     def create_or_update(self, request, pk=None):
-        pin_id = pk
-        data = request.data.copy()
-        data["pin_id"] = pin_id
+        """Upsert the requesting user's review for pin ``pk``.
 
-        review, created = Review.objects.get_or_create(
-            profile=request.user.profile,
-            pin_id=pin_id,
-            defaults=data,
-        )
+        ``pk`` is the *pin* id, not a review id - the route exists so the
+        frontend can rate a pin without knowing whether a review row already
+        exists.
 
-        if created:
-            serializer = self.get_serializer(review)
-        else:
-            serializer = self.get_serializer(review, data=data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            review = serializer.save()
+        Returns:
+            201 with the serialized review when newly created, 200 when
+            updated, or 400 when ``rating`` is missing or the pin does not
+            exist or belongs to another user (identical responses, so pin ids
+            cannot be enumerated).
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
 
-        return Response(serializer.data, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
+        pin = Pin.objects.filter(pk=pk, profile__user=request.user).first()
+        if pin is None:
+            return Response({"detail": "Unknown pin."}, status=status.HTTP_400_BAD_REQUEST)
 
-    def perform_create(self, serializer):
-        serializer.save(profile=self.request.user.profile)
-
-    def update(self, request, *args, **kwargs):
-        logger.info("Update request initiated by user %s", request.user.id)
-        instance = self.get_object()
-        if instance.profile.user != request.user:
-            logger.error(
-                "User %s attempted to update review %s, but does not have permission",
-                request.user.id,
-                instance.id,
-            )
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        data = request.data
-        data["profile"] = request.user.profile.id
-        serializer = self.get_serializer(instance, data=data, partial=True)
+        serializer = self.get_serializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        logger.info("Review with id %s updated", instance.id)
-        return Response(serializer.data)
-
-    def destroy(self, request, *args, **kwargs):
-        logger.info("Delete request initiated by user %s", request.user.id)
-        instance = self.get_object()
-        if instance.profile.user != request.user:
-            logger.error(
-                "User %s attempted to delete review %s, but does not have permission",
-                request.user.id,
-                instance.id,
-            )
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        logger.info("Review with id %s deleted", instance.id)
-        return super().destroy(request, *args, **kwargs)
+        fields = {key: value for key, value in serializer.validated_data.items() if key != "pin"}
+        if "rating" not in fields:
+            return Response({"detail": "'rating' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        review, created = Review.objects.update_or_create(
+            profile=request.user.profile,
+            pin=pin,
+            defaults=fields,
+        )
+        logger.info("Review %s %s by user %s", review.id, "created" if created else "updated", request.user.id)
+        return Response(
+            self.get_serializer(review).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

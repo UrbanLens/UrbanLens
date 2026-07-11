@@ -122,6 +122,8 @@ class LocationAliasUseViewTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make(Pin, profile=self.user.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_use_alias_renames_wiki_and_records_edit(self) -> None:
@@ -149,6 +151,8 @@ class LocationAliasNicknameTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make(Pin, profile=self.user.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_create_alias_with_nickname_checkbox_sets_nickname_kind(self) -> None:

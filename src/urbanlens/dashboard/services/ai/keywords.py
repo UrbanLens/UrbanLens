@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 import re
 
@@ -245,16 +246,15 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     ],
 }
 
-# Cache compiled patterns at module level to avoid recompilation on every call.
-_COMPILED: dict[str, list[re.Pattern[str]]] | None = None
 
-
+@functools.lru_cache(maxsize=1)
 def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
-    """Return the lazily-compiled pattern dict, building it on first access."""
-    global _COMPILED  # noqa: PLW0603 # TODO Temporarily allow this approach.
-    if _COMPILED is None:
-        _COMPILED = {category: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns] for category, patterns in CATEGORY_PATTERNS.items()}
-    return _COMPILED
+    """Return the lazily-compiled pattern dict, building it on first access.
+
+    ``lru_cache`` gives the same compile-once behaviour as a module-level
+    global without mutable module state.
+    """
+    return {category: [re.compile(p, re.IGNORECASE | re.UNICODE) for p in patterns] for category, patterns in CATEGORY_PATTERNS.items()}
 
 
 def categorize_by_keywords(text: str) -> str | None:

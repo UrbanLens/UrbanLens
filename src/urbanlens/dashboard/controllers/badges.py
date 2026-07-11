@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
-from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.html import escape
 from django.views import View
@@ -33,6 +33,7 @@ from urbanlens.dashboard.models.badges.model import (
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.wiki_access import location_visible_to
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -478,7 +479,10 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
 
         parent_ids = request.POST.getlist("parent_ids")
-        order = int(request.POST.get("order", 0))
+        try:
+            order = int(request.POST.get("order", 0))
+        except (TypeError, ValueError):
+            order = 0
         parent_order = Badge.initial_order_for_parents(profile, parent_ids)
         if parent_order is not None:
             order = parent_order
@@ -579,7 +583,9 @@ class BadgeEditView(_BadgeKindMixin, LoginRequiredMixin, View):
         badge.description = request.POST.get("description", "").strip() or None
         badge.icon = request.POST.get("icon") or None
         badge.color = request.POST.get("color") or None
-        badge.order = int(request.POST.get("order", badge.order))
+        # Malformed input keeps the existing order.
+        with contextlib.suppress(TypeError, ValueError):
+            badge.order = int(request.POST.get("order", badge.order))
 
         # allow_auto_tag can only be changed when the user has AI features; and never
         # on the protected "Visited" badge.
@@ -1023,7 +1029,9 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
-        badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
+        # visible_to keeps forged ids from attaching (and thereby exposing)
+        # another user's private badges.
+        badge = get_object_or_404(Badge.objects.visible_to(profile), id=badge_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             pin.badges.add(badge)
         elif action == "remove":
@@ -1045,19 +1053,28 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
 
 
 class BadgeLocationMembershipView(LoginRequiredMixin, View):
-    """Add or remove badges on a community wiki (HTMX panel on wiki page)."""
+    """Add or remove badges on a community wiki (HTMX panel on wiki page).
 
-    def _resolve_wiki(self, location_slug: str):
+    Wikis are only visible to profiles with a pin at that location - a
+    location_slug the requester hasn't pinned 404s the same as a nonexistent
+    one, so it can't be used to detect wikis at locations they haven't
+    pinned themselves.
+    """
+
+    def _resolve_wiki(self, location_slug: str, profile: Profile):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         location = get_object_or_404(Location, slug=location_slug)
-        return get_object_or_404(Wiki, location=location)
+        wiki = get_object_or_404(Wiki, location=location)
+        if not location_visible_to(location, profile):
+            raise Http404
+        return wiki
 
     def get(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        wiki = self._resolve_wiki(location_slug)
         profile = _request_profile(request)
+        wiki = self._resolve_wiki(location_slug, profile)
         return render(
             request,
             _MEMBERSHIP_PANEL,
@@ -1077,11 +1094,13 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        wiki = self._resolve_wiki(location_slug)
         profile = _request_profile(request)
+        wiki = self._resolve_wiki(location_slug, profile)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
-        badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
+        # visible_to keeps forged ids from attaching (and thereby exposing)
+        # another user's private badges on a community wiki.
+        badge = get_object_or_404(Badge.objects.visible_to(profile), id=badge_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             wiki.badges.add(badge)
         elif action == "remove":

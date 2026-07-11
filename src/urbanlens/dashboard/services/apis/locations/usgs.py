@@ -7,6 +7,7 @@ import logging
 from typing import Any, ClassVar
 
 from django.core.cache import cache
+import requests
 
 from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
 from urbanlens.dashboard.services.gateway import Gateway
@@ -73,8 +74,9 @@ class UsgsGateway(Gateway):
             if token:
                 cache.set(_M2M_SESSION_CACHE_KEY, token, _M2M_SESSION_TTL)
             return token
-        except Exception:
-            # TODO: Catch specific exception
+        except (requests.RequestException, ValueError):
+            # RequestException covers transport/HTTP failures; ValueError
+            # covers malformed JSON (requests' JSONDecodeError subclasses it).
             logger.exception("USGS M2M login-token exchange failed")
             return None
 

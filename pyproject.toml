@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.4.0b0"
+version = "0.4.0b1"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]

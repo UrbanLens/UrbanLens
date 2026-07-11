@@ -7,25 +7,6 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 logger = logging.getLogger(__name__)
 
 
-class RequestStatusConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.room_name = "request_status"
-        self.room_group_name = f"updates_{self.room_name}"
-
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    async def receive(self, text_data):
-        pass
-
-    async def send_status(self, event):
-        message = event["message"]
-        await self.send(text_data=json.dumps({"message": message}))
-
-
 class UserNotificationConsumer(AsyncWebsocketConsumer):
     """Pushes on-site notifications to a logged-in user's open tabs as they are created.
 

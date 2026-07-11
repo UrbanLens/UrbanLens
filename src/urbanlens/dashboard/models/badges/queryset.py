@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Self
 from django.db.models import Count, Prefetch, Q
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -37,28 +38,23 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
 
     def tags(self) -> Self:
         """Return only items with kind='tag'."""
-        # Don't hardcode strings
-        return self.filter(kind="tag")
+        return self.filter(kind=KIND_TAG)
 
     def categories(self) -> Self:
         """Return only items with kind='category'."""
-        # Don't hardcode strings
-        return self.filter(kind="category")
+        return self.filter(kind=KIND_CATEGORY)
 
     def statuses(self) -> Self:
         """Return only items with kind='status'."""
-        # Don't hardcode strings
-        return self.filter(kind="status")
+        return self.filter(kind=KIND_STATUS)
 
     def user_badges(self) -> Self:
         """Return only items with kind='user' (for annotating profiles privately)."""
-        # TODO: Don't hardcode 'user' string
-        return self.filter(kind="user")
+        return self.filter(kind=KIND_USER)
 
     def location_badges(self) -> Self:
         """Return only items without kind='user'."""
-        # TODO: Don't hardcode 'user' string
-        return self.exclude(kind="user")
+        return self.exclude(kind=KIND_USER)
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's BadgeCustomizations into _user_customizations attr."""

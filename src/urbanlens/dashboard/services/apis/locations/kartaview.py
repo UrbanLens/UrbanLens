@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import requests
+
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.rate_limiter import ServiceDisabledError
 from urbanlens.dashboard.services.redact import redact_coordinate
@@ -99,8 +101,8 @@ class KartaViewGateway(StreetViewProvider):
         except ServiceDisabledError:
             logger.debug("KartaView service is disabled")
             return
-        except Exception as exc:
-            # TODO: Catch specific exception
+        except (requests.RequestException, OSError, ValueError, KeyError) as exc:
+            # Transport/HTTP failures plus malformed-response parsing.
             logger.warning("KartaView search failed for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 

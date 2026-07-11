@@ -29,6 +29,8 @@ class WikiEditDeleteViewTests(TestCase):
         self.client.force_login(self.user)
         self.profile = self.user.profile
         self.location, self.wiki = _location_with_wiki()
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 
     def _delete(self, edit_id: int):
         return self.client.post(reverse("location.wiki.history.delete", args=[self.location.slug, edit_id]))

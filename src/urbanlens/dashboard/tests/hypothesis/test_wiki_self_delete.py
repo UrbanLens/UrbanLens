@@ -17,6 +17,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 def _location_with_wiki(creator, name: str = "Old Mill"):
     location = baker.make("dashboard.Location")
     wiki = baker.make("dashboard.Wiki", location=location, name=name, created_by=creator, viewed_by_other=False)
+    # Wikis are only visible to profiles with a pin at that location, which
+    # matches how they're created for real (from the pin detail page).
+    baker.make("dashboard.Pin", profile=creator, location=location)
     return location, wiki
 
 
@@ -66,6 +69,8 @@ class ViewTrackingTests(TestCase):
         creator = baker.make("auth.User").profile
         viewer_user = baker.make("auth.User")
         location, wiki = _location_with_wiki(creator)
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make("dashboard.Pin", profile=viewer_user.profile, location=location)
 
         self.client.force_login(viewer_user)
         response = self.client.get(reverse("location.wiki", args=[location.slug]))
@@ -107,6 +112,8 @@ class LocationWikiDeleteViewTests(TestCase):
     def test_non_creator_cannot_delete(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
         other_user = baker.make("auth.User")
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make("dashboard.Pin", profile=other_user.profile, location=location)
         self.client.force_login(other_user)
 
         response = self._delete(location.slug)
@@ -117,6 +124,8 @@ class LocationWikiDeleteViewTests(TestCase):
     def test_creator_cannot_delete_after_someone_else_viewed(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
         other_user = baker.make("auth.User")
+        # Wikis are only visible to profiles with a pin at that location.
+        baker.make("dashboard.Pin", profile=other_user.profile, location=location)
         self.client.force_login(other_user)
         self.client.get(reverse("location.wiki", args=[location.slug]))
 

@@ -117,7 +117,9 @@ class MediaProvider(Gateway, ABC):
                     if limit > 0 and len(items) >= limit:
                         break
             except Exception:
-                # TODO: Catch specific exceptions
+                # Deliberately broad: _generate_media is subclass/gateway code
+                # hitting external APIs; one failing search term must never
+                # abort the media collection for the rest.
                 logger.exception("%s media lookup failed for %r", self.service_key, search_term)
 
         LocationCache.set(

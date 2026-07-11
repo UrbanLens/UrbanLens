@@ -16,7 +16,7 @@ import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki_access import location_visible_to
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -131,10 +132,11 @@ def _resolve_owner(
     personal markup under a pin's own map, shared/community markup on a wiki
     map, or a standalone MarkupMap (safety check-in routes, comment/visit
     maps). Pin-scoped and map-scoped markup both require the caller to own
-    the parent; Wiki-scoped markup is shared data any signed-in user may
-    edit, matching the existing community detail-pin permission model. The
-    community route is keyed by the Location slug and resolves
-    (get-or-creates) that Location's Wiki.
+    the parent; Wiki-scoped markup is shared data any profile with a pin at
+    that location may edit, matching the existing community detail-pin
+    permission model - a location_slug the caller hasn't pinned 404s the
+    same as a nonexistent one. The community route is keyed by the Location
+    slug and resolves (get-or-creates) that Location's Wiki.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -153,6 +155,9 @@ def _resolve_owner(
         return markup_map, PinMarkup.objects.for_map(markup_map)
     location = get_object_or_404(Location, slug=location_slug)
     wiki = get_object_or_404(Wiki, location=location)
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    if not location_visible_to(location, profile):
+        raise Http404
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 

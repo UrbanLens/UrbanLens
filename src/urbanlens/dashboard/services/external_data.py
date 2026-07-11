@@ -331,7 +331,9 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
         except RequestCancelledError as rce:
             logger.debug("Satellite view provider %s request cancelled -> %s", service, rce)
         except Exception as e:
-            # TODO: Catch specific exceptions
+            # Deliberately broad: providers are plugins running arbitrary
+            # gateway code, and one failing provider must never take down
+            # the whole panel (a provider hang/crash once froze the site).
             logger.warning("Satellite view provider %s failed -> %s", service, e)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
     return slides, results
@@ -359,7 +361,9 @@ def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewS
         except RequestCancelledError as rce:
             logger.debug("Street view provider %s request cancelled -> %s", service, rce)
         except Exception:
-            # TODO: Catch specific exceptions
+            # Deliberately broad: providers are plugins running arbitrary
+            # gateway code, and one failing provider must never take down
+            # the whole panel (a provider hang/crash once froze the site).
             logger.warning("Street view provider %s failed", service, exc_info=True)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
     return slides, results

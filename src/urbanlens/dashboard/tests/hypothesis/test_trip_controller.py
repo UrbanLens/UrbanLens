@@ -709,3 +709,87 @@ class TripActivityPositionViewTests(TestCase):
         body = json.loads(resp.content)
         self.assertAlmostEqual(body["lat"], 48.85)
         self.assertAlmostEqual(body["lng"], 2.35)
+
+
+class TripLocationScopingTests(TestCase):
+    """Trips must never expose Location rows the requester cannot already see.
+
+    Visible means: locations the requester has pinned themselves. A wiki
+    existing at a location does NOT make it visible to non-pinners - wikis
+    are only ever visible to profiles who already have a pin there (see
+    services.wiki_access) - so a community wiki must be exactly as
+    unreachable as a stranger's private pin until the requester pins it
+    themselves. Anything else, matched by name search or attached by
+    uuid/slug reference, would leak other users' private locations.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from urbanlens.dashboard.models.location.model import Location
+
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.profile.external_apis_enabled = False
+        self.profile.save(update_fields=["external_apis_enabled"])
+        self.client.force_login(self.user)
+        self.trip = _make_trip(self.profile)
+
+        other_profile = baker.make("auth.User").profile
+        self.private_location, _ = Location.objects.get_nearby_or_create(41.10, -73.10, defaults={"official_name": "Zorbulon Asylum"})
+        baker.make("dashboard.Pin", profile=other_profile, location=self.private_location)
+
+        # A location with a community wiki, but the test profile has not
+        # pinned it - must be exactly as invisible as private_location.
+        self.wiki_location, _ = Location.objects.get_nearby_or_create(42.20, -74.20, defaults={"official_name": "Zorbulon Mill"})
+        baker.make("dashboard.Wiki", location=self.wiki_location, name="Zorbulon Mill")
+        baker.make("dashboard.Pin", profile=other_profile, location=self.wiki_location)
+
+    def _search(self, q):
+        resp = self.client.get(reverse("trips.location_search"), {"q": q})
+        self.assertEqual(resp.status_code, 200)
+        return json.loads(resp.content)["results"]
+
+    def _add_activity(self, **fields):
+        url = reverse("trips.activities", kwargs={"trip_uuid": str(self.trip.uuid)})
+        resp = self.client.post(url, data=json.dumps({"title": "Scoping probe", **fields}), content_type="application/json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return TripActivity.objects.filter(trip=self.trip, title="Scoping probe").latest("created")
+
+    def test_search_does_not_match_other_users_private_locations(self):
+        names = [r["name"] for r in self._search("Zorbulon")]
+        self.assertNotIn("Zorbulon Asylum", names)
+
+    def test_search_does_not_match_unpinned_community_wiki_locations(self):
+        names = [r["name"] for r in self._search("Zorbulon")]
+        self.assertNotIn("Zorbulon Mill", names)
+
+    def test_search_matches_own_pinned_locations_via_pin_results(self):
+        baker.make("dashboard.Pin", profile=self.profile, location=self.private_location)
+        results = self._search("Zorbulon")
+        pin_names = [r["name"] for r in results if r["type"] == "pin"]
+        self.assertIn("Zorbulon Asylum", pin_names)
+
+    def test_cannot_attach_other_users_private_location_by_uuid(self):
+        activity = self._add_activity(location_uuid=str(self.private_location.uuid))
+        self.assertIsNone(activity.location)
+
+    def test_cannot_attach_other_users_private_location_by_slug(self):
+        if not self.private_location.slug:
+            self.skipTest("Location has no slug to probe with")
+        activity = self._add_activity(location_slug=self.private_location.slug)
+        self.assertIsNone(activity.location)
+
+    def test_cannot_attach_unpinned_community_wiki_location_by_uuid(self):
+        activity = self._add_activity(location_uuid=str(self.wiki_location.uuid))
+        self.assertIsNone(activity.location)
+
+    def test_can_attach_own_pinned_location_by_uuid(self):
+        baker.make("dashboard.Pin", profile=self.profile, location=self.private_location)
+        activity = self._add_activity(location_uuid=str(self.private_location.uuid))
+        self.assertEqual(activity.location, self.private_location)
+
+    def test_can_attach_location_once_it_also_has_a_community_wiki(self):
+        """Pinning a location makes its (pre-existing) wiki visible too - not the other way around."""
+        baker.make("dashboard.Pin", profile=self.profile, location=self.wiki_location)
+        activity = self._add_activity(location_uuid=str(self.wiki_location.uuid))
+        self.assertEqual(activity.location, self.wiki_location)

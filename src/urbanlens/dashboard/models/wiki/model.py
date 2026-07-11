@@ -91,6 +91,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         related_name="wikis",
     )
 
+    """
+    TODO: We need the wiki->location relationship to be a FK, not a O2O... because a wiki applies
+    to any coordinates in a boundary, and multiple locations will have coordinates in that boundary.
+    This is slightly tricky, because we currently attach boundaries to Locations, which means two
+    coordinates that are nearly identical could theoretically have substantially different boundaries,
+    resulting in slightly unexpected behavior when matching wikis to coordinates.
+    """
     # The shared address/coordinate row this page describes.
     location = OneToOneField(
         "dashboard.Location",
