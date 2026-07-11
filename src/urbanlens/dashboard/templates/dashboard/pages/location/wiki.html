@@ -35,6 +35,15 @@
                 <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
             </div>
             <div class="wiki-banner-actions">
+                {# Lists collapsed sections for this wiki and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
+                <div class="collapse-restore" data-collapse-restore-scope="wiki" hidden>
+                    <button type="button" class="btn btn--ghost btn--sm collapse-restore-toggle" aria-haspopup="true">
+                        <i class="material-symbols-outlined">visibility</i>
+                        Hidden sections
+                        <span class="badge collapse-restore-count">0</span>
+                    </button>
+                    <div class="collapse-restore-menu"></div>
+                </div>
                 <button type="button" class="wiki-edit-btn btn btn--primary"
                         onclick="document.getElementById('wiki-edit-dialog').showModal()">
                     <i class="material-symbols-outlined">edit_note</i>
@@ -197,10 +206,11 @@
 
             {# -- Aliases ----------------------------------------------------- #}
             <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
-                 hx-trigger="load"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','aliases')], ul:unhide"
                  hx-swap="outerHTML"
                  id="location-aliases-panel"
-                 class="card wiki-card aliases-panel">
+                 class="card wiki-card aliases-panel"
+                 data-collapse-scope="wiki" data-collapse-section="aliases">
                 <div class="card-header">
                     <i class="material-symbols-outlined">label_important</i>
                     <span>Aliases</span>
@@ -209,25 +219,25 @@
             </div>
 
             {# -- Photo gallery ------------------------------------------------ #}
-            <div id="wiki-gallery-panel"
+            <div id="wiki-gallery-panel" class="card"
                  hx-get="{% url 'location.wiki.gallery' location.slug %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="material-symbols-outlined">photo_library</i>
-                        <span>Photos</span>
-                    </div>
-                    <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','gallery')], ul:unhide"
+                 hx-swap="outerHTML"
+                 data-collapse-scope="wiki" data-collapse-section="gallery">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">photo_library</i>
+                    <span>Photos</span>
                 </div>
+                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
             {# -- Comments ------------------------------------------------------ #}
             <div id="comment-panel"
                  hx-get="{% url 'location.wiki.comments' location.slug %}"
-                 hx-trigger="load"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','comments')], ul:unhide"
                  hx-swap="outerHTML"
-                 class="card wiki-card">
+                 class="card wiki-card"
+                 data-collapse-scope="wiki" data-collapse-section="comments">
                 <div class="card-header">
                     <i class="material-symbols-outlined">chat</i>
                     <h2>Discussion</h2>
@@ -244,7 +254,7 @@
                 <div id="wiki-tab-content"
                      class="card__body wiki-tab-content"
                      hx-get="{% url 'location.wiki.history' location.slug %}"
-                     hx-trigger="load"
+                     hx-trigger="load[!window.ulSectionCollapsed('wiki','history')], ul:unhide"
                      hx-swap="innerHTML">
                     <div class="wiki-loading">
                         <i class="material-icons spin">autorenew</i> Loading...

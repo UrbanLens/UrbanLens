@@ -127,8 +127,9 @@
     <div class="pin-media-row">
         <div id="satellite-view-section" class="satellite-view card card--primary"
             hx-get="{% url 'pin.satellite_view' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-trigger="load[!window.ulSectionCollapsed('pin','satellite')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="satellite">
             <div class="card-header">
                 <i class="material-symbols-outlined">globe</i>
                 <h3>Satellite View</h3>
@@ -141,8 +142,9 @@
 
         <div id="street-view-section" class="street-view card card--primary"
             hx-get="{% url 'pin.street_view' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-trigger="load[!window.ulSectionCollapsed('pin','street-view')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="street-view">
             <div class="card-header">
                 <i class="material-symbols-outlined">streetview</i>
                 <h3>Street View</h3>
@@ -153,26 +155,26 @@
             </div>
         </div>
 
-        <div id="pin-gallery-panel"
+        <div id="pin-gallery-panel" class="card card--secondary"
          hx-get="{% url 'pin.gallery' pin.slug %}"
-         hx-trigger="load"
-         hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">photo_library</i>
-                    <span>Photos</span>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+         hx-trigger="load[!window.ulSectionCollapsed('pin','gallery')], ul:unhide"
+         hx-swap="outerHTML"
+         data-collapse-scope="pin" data-collapse-section="gallery">
+            <div class="card-header">
+                <i class="material-symbols-outlined">photo_library</i>
+                <span>Photos</span>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
     </div>{# end .pin-media-row #}
 
     {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
     <div class="pin-lists-row">
         <div hx-get="{% url 'pin.visits' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','visits')], ul:unhide"
             hx-swap="outerHTML"
-            class="visit-history card card--secondary">
+            class="visit-history card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="visits">
             <div class="card-header">
                 <i class="material-symbols-outlined">history</i>
                 <span>Visit History</span>
@@ -181,9 +183,10 @@
         </div>
 
         <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
             hx-swap="outerHTML"
-            class="tag-panel card card--secondary">
+            class="tag-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="categories">
             <div class="tag-panel-header">
                 <i class="material-symbols-outlined">category</i>
                 <span>Badges</span>
@@ -192,10 +195,11 @@
         </div>
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
             hx-swap="outerHTML"
             id="pin-aliases-panel"
-            class="aliases-panel card card--secondary">
+            class="aliases-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="aliases">
             <div class="card-header">
                 <i class="material-symbols-outlined">label_important</i>
                 <span>Aliases</span>
@@ -252,8 +256,9 @@
         {% if pin.meaningful_name and can_use_web_search %}
         <div id="web-search-section" class="web-search card card--secondary"
             hx-get="{% url 'pin.web_search' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
+            hx-trigger="load[!window.ulSectionCollapsed('pin','web-search')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="web-search">
             <div class="card-header">
                 <i class="material-symbols-outlined">search</i>
                 <h3>Web Results</h3>
@@ -265,58 +270,54 @@
         </div>
         {% endif %}
 
-        <div id="wikipedia-section"
+        <div id="wikipedia-section" class="card card--secondary"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
             hx-swap="outerHTML"
-            hx-timeout="25000">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">menu_book</i>
-                    <h3>Wikipedia</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="wikipedia">
+            <div class="card-header">
+                <i class="material-symbols-outlined">menu_book</i>
+                <h3>Wikipedia</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nominatim-section"
+        <div id="nominatim-section" class="card card--secondary"
             hx-get="{% url 'pin.nominatim' pin.slug %}"
-            hx-trigger="load"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','nominatim')], ul:unhide"
             hx-swap="outerHTML"
-            hx-timeout="25000">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">map</i>
-                    <h3>OpenStreetMap</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="nominatim">
+            <div class="card-header">
+                <i class="material-symbols-outlined">map</i>
+                <h3>OpenStreetMap</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nps-section"
+        <div id="nps-section" class="card card--secondary"
             hx-get="{% url 'pin.nps' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">park</i>
-                    <h3>National Park Service</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-trigger="load[!window.ulSectionCollapsed('pin','nps')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="nps">
+            <div class="card-header">
+                <i class="material-symbols-outlined">park</i>
+                <h3>National Park Service</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="loopnet-section"
+        <div id="loopnet-section" class="card card--secondary"
             hx-get="{% url 'pin.loopnet' pin.slug %}"
-            hx-trigger="load"
-            hx-swap="outerHTML">
-            <div class="card card--secondary">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">business_center</i>
-                    <h3>LoopNet Listings</h3>
-                </div>
-                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            hx-trigger="load[!window.ulSectionCollapsed('pin','loopnet')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="loopnet">
+            <div class="card-header">
+                <i class="material-symbols-outlined">business_center</i>
+                <h3>LoopNet Listings</h3>
             </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div id="usgs-topo-section"
@@ -335,17 +336,16 @@
     </div>{# end .pin-aux-grid #}
 
     {# -- Comments: always present ----------------------------------------- #}
-    <div id="comment-panel"
+    <div id="comment-panel" class="card card--secondary"
      hx-get="{% url 'pin.comments' pin.slug %}"
-     hx-trigger="load"
-     hx-swap="outerHTML">
-        <div class="card card--secondary">
-            <div class="card-header">
-                <i class="material-symbols-outlined">chat</i>
-                <span>Comments</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+     hx-trigger="load[!window.ulSectionCollapsed('pin','comments')], ul:unhide"
+     hx-swap="outerHTML"
+     data-collapse-scope="pin" data-collapse-section="comments">
+        <div class="card-header">
+            <i class="material-symbols-outlined">chat</i>
+            <span>Comments</span>
         </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
     </div>
 </div>{# end .pin-detail-grid #}
 

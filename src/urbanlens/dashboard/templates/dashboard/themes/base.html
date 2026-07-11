@@ -1225,6 +1225,11 @@
             catch (_) { return false; }
         }
 
+        // Exposed so hx-trigger conditions on lazy-loaded sections can skip
+        // firing their request entirely when the section is already hidden
+        // (see the hx-trigger="load[...]" attributes on pin/wiki pages).
+        window.ulSectionCollapsed = _isCollapsed;
+
         function _setCollapsed(scope, section, collapsed) {
             try {
                 if (collapsed) localStorage.setItem(_key(scope, section), '1');
@@ -1326,6 +1331,16 @@
                         var toggleBtn = section.querySelector('.section-collapse-btn');
                         if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
                         _setCollapsed(scope, section.dataset.collapseSection, false);
+                        // Section was hidden before its hx-get ever fired (see the
+                        // hx-trigger="load[...]" skip condition) - its content was
+                        // never loaded, so kick off that request now.
+                        if (section.getAttribute('hx-get') && window.htmx) {
+                            htmx.trigger(section, 'ul:unhide');
+                        }
+                        var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
+                        if (innerLoader && window.htmx) {
+                            htmx.trigger(innerLoader, 'ul:unhide');
+                        }
                         _updateRestoreControls();
                     });
                     menu.appendChild(item);

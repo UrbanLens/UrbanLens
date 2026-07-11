@@ -42,21 +42,23 @@
                 <div class="faq-item-body">
                     <p>
                         Google maps is great, but it has missing features and a bunch of bugs. I made this after getting increasingly frustrated with google maps for urbex.
-
-                        * On Google Maps, you don't own your data, and it's clunky to export any of it. Google sometimes changes the services they offer or the data they let you export, which makes me uncomfortable.
-                        * If you pin a lot of things, your google map gets really cluttered, and it's hard to unclutter it.
-                        * You can't reliably choose an icon for a pin. You can choose an icon for a saved list, but if it's in multiple lists, google just picks which icon to show for you.
-                        * You can't search or filter pins by metadata, like whether you've visited it or not. You can try to get past this by making more saved lists, but things get really tedious really fast.
-                        * If you save a pin to an existing google place, and that google place disappears, your pin breaks. It no longer shows details when you click on it, and you can never delete it. It's just on your map forever. So you have to make another pin next to it, and just live with 2 pins for the same place, one of which can't ever be clicked on.
-                        * Sometimes searching for pins doesn't work reliably. It works reliably enough that you rely on it... and then it suddenly doesn't work when you're relying on it and it makes you scream.
-                        * Sometimes saving a pin to a list doesn't actually save it. This works differently on mobile and desktop, and I've occasionally discovered that a pin just didn't save.
-                        * When saving a bunch of pins to a list, one after another, there's some kind of memory leak that causes the map to get more and more sluggish the more pins you open and save, until you need to reload the page.
-                        * When saving a bunch of pins, sometimes you click on a brand new pin, click the save to list button, and it shows that new pin already in the lists you put the last pin in... even though it's not. To get it to save, you need to remove it from those lists, and then add it back to them again. Sometimes this doesn't work. If you just close the dialog, it doesn't save at all.
-                        * There's no way to make smaller maps of just a few pins in any meaningful way.
-                        * You can't upload photos, documents, etc, to a pin without making them public to everyone.
-                        * ...and I could go on.
-
-                        Google maps works just well enough for me to keep using it for years, but eventually, I had to make my own thing that did the things I wanted, the way I wanted them.
+                    </p>
+                    <ul>
+                        <li>On Google Maps, you don't own your data, and it's clunky to export any of it. Google sometimes changes the services they offer or the data they let you export, which makes me uncomfortable.</li>
+                        <li>If you pin a lot of things, your google map gets really cluttered, and it's hard to unclutter it.</li>
+                        <li>You can't reliably choose an icon for a pin. You can choose an icon for a saved list, but if it's in multiple lists, google just picks which icon to show for you.</li>
+                        <li>You can't search or filter pins by metadata, like whether you've visited it or not. You can try to get past this by making more saved lists, but things get really tedious really fast.</li>
+                        <li>If you save a pin to an existing google place, and that google place disappears, your pin breaks. It no longer shows details when you click on it, and you can never delete it. It's just on your map forever. So you have to make another pin next to it, and just live with 2 pins for the same place, one of which can't ever be clicked on.</li>
+                        <li>Sometimes searching for pins doesn't work reliably. It works reliably enough that you rely on it... and then it suddenly doesn't work when you're relying on it and it makes you scream.</li>
+                        <li>Sometimes saving a pin to a list doesn't actually save it. This works differently on mobile and desktop, and I've occasionally discovered that a pin just didn't save.</li>
+                        <li>When saving a bunch of pins to a list, one after another, there's some kind of memory leak that causes the map to get more and more sluggish the more pins you open and save, until you need to reload the page.</li>
+                        <li>When saving a bunch of pins, sometimes you click on a brand new pin, click the save to list button, and it shows that new pin already in the lists you put the last pin in... even though it's not. To get it to save, you need to remove it from those lists, and then add it back to them again. Sometimes this doesn't work. If you just close the dialog, it doesn't save at all.</li>
+                        <li>There's no way to make smaller maps of just a few pins in any meaningful way.</li>
+                        <li>You can't upload photos, documents, etc, to a pin without making them public to everyone.</li>
+                        <li>...and I could go on.</li>
+                    </ul>
+                    <p>
+                        Google maps worked just well enough for me to keep using it for years. But eventually, I had to make something that did the things I wanted, the way I wanted them.
                     </p>
                 </div>
             </details>
@@ -68,7 +70,7 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes. UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can
+                        Yes, as in coffee and speech; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can
                         check out the source code on our
                         <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
                     </p>
@@ -77,15 +79,32 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Do I need an account to use the map?</span>
+                    <span>How can I be fully anonymous?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        You can browse public content without one, but you'll need a free account to drop pins,
-                        write wiki entries, plan trips, or use safety check-ins.
-                        <a href="{% url 'signup' %}">Create an account</a> or
-                        <a href="{% url 'login' %}">sign in</a> to get started.
+                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to opt in to being more public. But if you want even more anonymity, you have three options:
+                    </p>
+                    <p>
+                        1 - You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.
+                    </p>
+                    <p>
+                        2 - You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. We go out of our way not to store information about you. You can verify that yourself by asking your favorite AI to assess <a href="https://github.com/UrbanLens/UrbanLens">our code</a>.
+                    </p>
+                    <p>
+                        3 - You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. That will prevent you from accidentally opting in to sharing your stuff.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span></span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
                     </p>
                 </div>
             </details>
