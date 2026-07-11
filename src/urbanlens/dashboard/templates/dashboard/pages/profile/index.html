@@ -596,7 +596,7 @@
         if (!items.length) return;
         target.innerHTML = '';
         items.forEach(function (item) {
-            var href = item.url || (item.slug ? ('/pin/' + encodeURIComponent(item.slug) + '/') : '#');
+            var href = item.url || (item.slug ? ('/dashboard/map/pin/' + encodeURIComponent(item.slug) + '/') : '#');
             var title = item.title || item.name || 'Untitled';
             var subtitle = item.subtitle || fallbackSubtitle;
             var card = document.createElement('a');

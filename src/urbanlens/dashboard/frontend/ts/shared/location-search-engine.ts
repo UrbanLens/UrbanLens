@@ -35,6 +35,7 @@ interface RecentPin {
     name?: string;
     lat: number;
     lng: number;
+    url?: string;
 }
 
 interface SourceConfig {
