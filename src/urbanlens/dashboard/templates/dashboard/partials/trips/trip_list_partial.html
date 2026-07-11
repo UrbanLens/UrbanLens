@@ -1,4 +1,5 @@
 {% if trips %}
+<div class="trips-view trips-view--list" data-trips-view="list">
 <ul class="trip-card-list">
     {% for t in trips %}
     <li class="trip-card trip-card--{{ t.timeline_status }}" id="trip-card-{{ t.uuid }}">
@@ -93,6 +94,21 @@
     </li>
     {% endfor %}
 </ul>
+</div>
+
+<div class="trips-view trips-view--calendar" data-trips-view="calendar" hidden>
+    <div class="cal-header">
+        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(-1)" aria-label="Show previous month">
+            <i class="material-icons">chevron_left</i>
+        </button>
+        <span class="cal-month-label" id="trips-cal-month-label"></span>
+        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(1)" aria-label="Show next month">
+            <i class="material-icons">chevron_right</i>
+        </button>
+    </div>
+    <div class="cal-grid" id="trips-cal-grid"></div>
+</div>
+{{ trips_calendar_data|json_script:"trips-cal-data" }}
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">

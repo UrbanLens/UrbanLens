@@ -36,30 +36,27 @@
         <div class="faq-list">
             <details class="faq-item" open>
                 <summary class="faq-item-summary">
-                    <span>What is UrbanLens?</span>
+                    <span>Why does this exist? Why not just use google maps?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        UrbanLens is a private, purpose-built mapping platform for urban explorers, historians,
-                        and photographers who want to document forgotten places responsibly. Drop pins, keep
-                        notes, share selectively, and coordinate trips - all without broadcasting sensitive
-                        locations to the world. Read more on our <a href="{% url 'about' %}">About</a> page.
-                    </p>
-                </div>
-            </details>
+                        Google maps is great, but it has missing features and a bunch of bugs. I made this after getting increasingly frustrated with google maps for urbex.
 
-            <details class="faq-item">
-                <summary class="faq-item-summary">
-                    <span>What's the difference between a Pin and a Location?</span>
-                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
-                </summary>
-                <div class="faq-item-body">
-                    <p>
-                        A <strong>Location</strong> is the shared, canonical record of a physical place - its
-                        coordinates, address, and name. A <strong>Pin</strong> is your personal record of that
-                        place: your own notes, custom name, priority, status, and visit history. Many users can
-                        pin the same Location without seeing each other's notes, since Pins are private by default.
+                        * On Google Maps, you don't own your data, and it's clunky to export any of it. Google sometimes changes the services they offer or the data they let you export, which makes me uncomfortable.
+                        * If you pin a lot of things, your google map gets really cluttered, and it's hard to unclutter it.
+                        * You can't reliably choose an icon for a pin. You can choose an icon for a saved list, but if it's in multiple lists, google just picks which icon to show for you.
+                        * You can't search or filter pins by metadata, like whether you've visited it or not. You can try to get past this by making more saved lists, but things get really tedious really fast.
+                        * If you save a pin to an existing google place, and that google place disappears, your pin breaks. It no longer shows details when you click on it, and you can never delete it. It's just on your map forever. So you have to make another pin next to it, and just live with 2 pins for the same place, one of which can't ever be clicked on.
+                        * Sometimes searching for pins doesn't work reliably. It works reliably enough that you rely on it... and then it suddenly doesn't work when you're relying on it and it makes you scream.
+                        * Sometimes saving a pin to a list doesn't actually save it. This works differently on mobile and desktop, and I've occasionally discovered that a pin just didn't save.
+                        * When saving a bunch of pins to a list, one after another, there's some kind of memory leak that causes the map to get more and more sluggish the more pins you open and save, until you need to reload the page.
+                        * When saving a bunch of pins, sometimes you click on a brand new pin, click the save to list button, and it shows that new pin already in the lists you put the last pin in... even though it's not. To get it to save, you need to remove it from those lists, and then add it back to them again. Sometimes this doesn't work. If you just close the dialog, it doesn't save at all.
+                        * There's no way to make smaller maps of just a few pins in any meaningful way.
+                        * You can't upload photos, documents, etc, to a pin without making them public to everyone.
+                        * ...and I could go on.
+
+                        Google maps works just well enough for me to keep using it for years, but eventually, I had to make my own thing that did the things I wanted, the way I wanted them.
                     </p>
                 </div>
             </details>
@@ -71,7 +68,7 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes. UrbanLens is free, open source, and not funded by ads or data sales. You can
+                        Yes. UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can
                         check out the source code on our
                         <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
                     </p>

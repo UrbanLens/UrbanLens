@@ -41,6 +41,57 @@
     gap: 0.5rem;
 }
 
+.trips-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+
+.trips-view-toggle .view-toggle-btn {
+    width: auto;
+    height: 34px;
+    padding: 0 .8rem;
+    gap: .35rem;
+    font-size: .85rem;
+    font-weight: 600;
+
+    .material-symbols-outlined { font-size: 1.15rem; }
+}
+
+.trip-sort-control {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.trip-sort-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.trip-sort-select {
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .4rem .6rem;
+    font-size: .85rem;
+    cursor: pointer;
+
+    &:hover { border-color: var(--ul-grey-2); }
+    &:focus-visible { outline: 2px solid $color-blue-500; outline-offset: 1px; }
+}
+
 .trips-empty {
     text-align: center;
     padding: 4rem 2rem;
@@ -704,11 +755,23 @@
     padding: 1px 4px;
     cursor: pointer;
     overflow: hidden;
+    text-decoration: none;
     transition: background .1s;
 
     &:hover {
         background: $color-blue-600;
     }
+
+    &--upcoming { background: $color-blue-500; &:hover { background: $color-blue-600; } }
+    &--active { background: #2e9e5b; &:hover { background: #268049; } }
+    &--past { background: var(--ul-grey-6); &:hover { background: var(--ul-grey-7); } }
+    &--planning { background: #a06ad1; &:hover { background: #8f52c7; } }
+}
+
+.cal-event-more {
+    font-size: .65rem;
+    color: var(--ul-grey-6);
+    padding: 0 2px;
 }
 
 .cal-event-num {

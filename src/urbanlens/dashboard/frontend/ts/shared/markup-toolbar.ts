@@ -381,7 +381,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             if (!interactive.on) return;
             interactive.on!("click", () => openMarkupEditDialog(item));
             if (item.label && interactive.bindTooltip) {
-                interactive.bindTooltip!(item.label, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+                interactive.bindTooltip!(escapeMarkupLabel(item.label), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });
     }

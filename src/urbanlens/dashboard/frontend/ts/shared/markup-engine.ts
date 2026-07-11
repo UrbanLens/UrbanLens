@@ -79,7 +79,7 @@ function textLabelHtml(s: ShapeSpec): string {
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;
     const bgVal = !bg || bg === "none" ? "rgba(255,255,255,0.92)" : safeColor(bg, "rgba(255,255,255,0.92)" as never);
-    const lbl = (s.label ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const lbl = String(s.label ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
     return (
         `<span class="markup-text-label" style="color:${color}`
         + `;font-size:${sz}px;background:${bgVal}`

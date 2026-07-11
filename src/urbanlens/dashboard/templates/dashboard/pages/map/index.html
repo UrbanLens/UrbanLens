@@ -52,7 +52,7 @@
                     data-tooltip="Take a screenshot of the map" data-tooltip-float="true"
                     data-tooltip-pos="below"
                     aria-label="Take a screenshot"
-                    onclick="_openCommentMapComposer({})">
+                    onclick="_openCommentMapComposer({ initialView: window.map ? { lat: window.map.getCenter().lat, lng: window.map.getCenter().lng, zoom: window.map.getZoom() } : null })">
                 <i class="material-symbols-outlined">photo_camera</i>
             </button>
         </div>
@@ -1223,12 +1223,12 @@
             let icon = '';
             if (t.icon) {
                 if (/^https?:\/\/|^\//.test(t.icon)) {
-                    icon = `<img src="${t.icon}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
+                    icon = `<img src="${_escHtml(t.icon)}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
                 } else {
-                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${t.icon}</span>`;
+                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${_escHtml(t.icon)}</span>`;
                 }
             }
-            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${t.name}</span>`;
+            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${_escHtml(t.name)}</span>`;
         }).join('');
 
         const rating = parseInt(pin.rating) || 0;
@@ -1242,11 +1242,11 @@
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
-                <div class="popup-title">${pin.name || ''}</div>
-                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${pin.address}</div>` : ''}
-                ${pin.description ? `<div class="popup-desc">${pin.description}</div>` : ''}
+                <div class="popup-title">${_escHtml(pin.name || '')}</div>
+                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
+                ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 <div class="popup-meta">
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${pin.last_visited || 'Not Visited'}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(pin.last_visited || 'Not Visited')}</span>
                 </div>
                 <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
                     ${starDisplay}
@@ -1254,7 +1254,7 @@
                 </div>
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
-                    <a href="${pin.viewLocationUrl}" class="view-full-pin">View Details</a>
+                    <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>

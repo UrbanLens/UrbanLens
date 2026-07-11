@@ -41,17 +41,65 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Valid `sort`/`dir` query params for the trips list page (see `TripListView`/`TripCreateView`).
+TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
+TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
-def _trips_for_list(profile: Profile) -> QuerySet[Trip]:
+
+def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip]:
     """Return annotated trips for the list page.
 
     Args:
         profile: The viewer's profile.
+        sort: Field to order by - ``"start_date"`` or ``"updated"``.
+        direction: ``"asc"`` or ``"desc"``.
 
     Returns:
         Queryset of trips the profile belongs to, with list stats prefetched.
     """
-    return Trip.objects.for_list_page(profile)
+    return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
+
+
+def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
+    """Read and validate the `sort`/`dir` query params for the trips list page.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        A ``(sort, direction)`` tuple, each guaranteed to be one of the valid choices.
+    """
+    sort = request.GET.get("sort", "updated")
+    if sort not in TRIP_LIST_SORT_CHOICES:
+        sort = "updated"
+    direction = request.GET.get("dir", "desc")
+    if direction not in TRIP_LIST_DIRECTION_CHOICES:
+        direction = "desc"
+    return sort, direction
+
+
+def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
+    """Serialize trips into the plain-dict shape the trips-list calendar view renders from.
+
+    Args:
+        trips: Trips to serialize, in the order they should appear within a day's chip list.
+
+    Returns:
+        One dict per trip with `uuid`, `name`, `start`/`end` (ISO dates or `None`), `status`, and `url`.
+    """
+    from django.urls import reverse
+
+    return [
+        {
+            "uuid": str(t.uuid),
+            "name": t.name,
+            "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
+            "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
+            "status": t.timeline_status,
+            "url": reverse("trips.detail", args=[t.uuid]),
+        }
+        for t in trips
+    ]
 
 
 def _apply_trip_visibility_filter(
@@ -421,13 +469,23 @@ class TripListView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = _trips_for_list(profile)
+        sort, direction = _trip_list_sort_params(request)
+        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
         friends = get_connections(profile)
         calendar_account = GoogleCalendarAccount.objects.filter(profile=profile).first()
         return render(
             request,
             "dashboard/pages/trips/index.html",
-            {"trips": trips, "profile": profile, "page_name": "trips", "friends": friends, "calendar_account": calendar_account},
+            {
+                "trips": trips,
+                "trips_calendar_data": _trips_calendar_data(trips),
+                "profile": profile,
+                "page_name": "trips",
+                "friends": friends,
+                "calendar_account": calendar_account,
+                "sort": sort,
+                "dir": direction,
+            },
         )
 
 
@@ -472,8 +530,19 @@ class TripCreateView(LoginRequiredMixin, View):
                 for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
                     TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
 
-        trips = _trips_for_list(profile)
-        return render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
+        sort, direction = _trip_list_sort_params(request)
+        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        return render(
+            request,
+            "dashboard/partials/trips/trip_list_partial.html",
+            {
+                "trips": trips,
+                "trips_calendar_data": _trips_calendar_data(trips),
+                "profile": profile,
+                "sort": sort,
+                "dir": direction,
+            },
+        )
 
 
 class TripDetailView(LoginRequiredMixin, View):

@@ -48,6 +48,10 @@ interface PhotoPanelItem {
     mine: boolean;
 }
 
+function escHtml(s: string): string {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
 function readConfig(el: HTMLElement) {
     const d = el.dataset;
     return {
@@ -94,7 +98,8 @@ function init(): void {
     // composer (base.html) scoped to whichever of pin/wiki this page is.
     window._openMapScreenshot = function () {
         const context = cfg.pinSlug ? { pinSlug: cfg.pinSlug } : cfg.locationSlug ? { locationSlug: cfg.locationSlug } : null;
-        window._openCommentMapComposer({ context });
+        const center = map.getCenter();
+        window._openCommentMapComposer({ context, initialView: { lat: center.lat, lng: center.lng, zoom: map.getZoom() } });
     };
 
     const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
@@ -294,9 +299,9 @@ function init(): void {
             li.dataset.uuid = dp.uuid;
             li.dataset.kind = "pin";
             li.innerHTML = `
-                <span class="material-icons detail-pin-list-item-icon" style="color:${color}">${icon}</span>
-                <span class="detail-pin-list-item-name">${dp.name}</span>
-                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : dp.added_by}</span>` : ""}
+                <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(color)}">${escHtml(icon)}</span>
+                <span class="detail-pin-list-item-name">${escHtml(dp.name)}</span>
+                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : ""}
                 <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
                     <i class="material-symbols-outlined">close</i>
                 </button>`;
@@ -330,8 +335,8 @@ function init(): void {
             li.dataset.kind = "markup";
             const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
             li.innerHTML = `
-                <span class="material-icons detail-pin-list-item-icon" style="color:${item.color}">${markupIcon[item.markup_type] || "edit"}</span>
-                <span class="detail-pin-list-item-name">${displayName}</span>
+                <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
+                <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
                 <button type="button" class="detail-pin-list-item-delete" title="Delete">
                     <i class="material-symbols-outlined">close</i>
                 </button>`;

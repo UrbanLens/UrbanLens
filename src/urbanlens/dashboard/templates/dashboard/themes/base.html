@@ -845,6 +845,10 @@
                 _composerShapes = existing.markup || [];
                 _composerLayers.setBase(existing.layer_mode || 'street');
                 _composerLayers.setOverlay('borders', !!existing.show_borders);
+            } else if (opts.initialView) {
+                _composerMap.setView([opts.initialView.lat, opts.initialView.lng], opts.initialView.zoom || 14);
+                _composerShapes = [];
+                _composerLayers.setOverlay('borders', false);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;

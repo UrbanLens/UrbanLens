@@ -1244,7 +1244,7 @@
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;
     const bgVal = !bg || bg === "none" ? "rgba(255,255,255,0.92)" : safeColor(bg, "rgba(255,255,255,0.92)");
-    const lbl = (s.label ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const lbl = String(s.label ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     return `<span class="markup-text-label" style="color:${color}` + `;font-size:${sz}px;background:${bgVal}` + ";display:inline-block;padding:.15em .45em;border-radius:3px" + ";white-space:nowrap;line-height:1.3;font-weight:600" + `;box-shadow:0 1px 3px rgba(0,0,0,.2)">${lbl || "&nbsp;"}</span>`;
   }
   function renderShape(s, group, zoom) {
@@ -2106,7 +2106,7 @@
           return;
         interactive.on("click", () => openMarkupEditDialog(item));
         if (item.label && interactive.bindTooltip) {
-          interactive.bindTooltip(item.label, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+          interactive.bindTooltip(escapeMarkupLabel(item.label), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         }
       });
     }
