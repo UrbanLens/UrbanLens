@@ -12,7 +12,7 @@
 {% block title %}Maps{% endblock %}
 
 {% block content %}
-<div id="memories-maps-page">
+<div id="memories-maps-page" class="memories-tab-page">
     <div class="memories-header">
         <div>
             <h1 class="memories-title"><i class="material-symbols-outlined">map</i> Your maps</h1>
@@ -68,7 +68,7 @@
             </div>
             <p class="visits-empty-kicker">Nothing here yet</p>
             <h2 id="maps-empty-title">You haven't drawn any maps.</h2>
-            <p>Draw a route on a safety check-in, or attach a map to a comment or visit, and it will show up here.</p>
+            <p>Once you create a map with markup anywhere on the site, including comments, visit journals, and safety check-ins, it will show up here.</p>
             <div class="visits-empty-actions">
                 <a class="btn btn--primary" href="{% url 'safety.home' %}">
                     <i class="material-symbols-outlined">emergency</i> Safety check-ins
