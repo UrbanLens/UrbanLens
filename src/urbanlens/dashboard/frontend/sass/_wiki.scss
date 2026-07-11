@@ -65,6 +65,7 @@
     .wiki-notice {
         position: fixed;
         top: 6rem;
+        right: calc(5vw + 2rem);
         display: flex;
         align-items: flex-start;
         gap: .5rem;

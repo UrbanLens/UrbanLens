@@ -1,3 +1,5 @@
+from typing import overload
+
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
@@ -26,6 +28,10 @@ LEGACY_LAYER_MODE_ALIASES: dict[str, str] = {
 }
 
 
+@overload
+def normalize_layer_mode(value: object, default: str = ...) -> str: ...
+@overload
+def normalize_layer_mode(value: object, default: None) -> str | None: ...
 def normalize_layer_mode(value: object, default: str | None = MapLayerMode.STREET.value) -> str | None:
     """Normalize a layer-mode identifier to a canonical MapLayerMode value.
 

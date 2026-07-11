@@ -61,6 +61,14 @@
     .material-symbols-outlined { font-size: 1.15rem; }
 }
 
+.trips-view {
+    &--calendar {
+        background-color: var(--ul-grey-1b);
+        border: 1px solid var(--ul-grey-1a);
+        padding: 1.5rem 0.5rem 0;
+    }
+}
+
 .trip-sort-control {
     display: flex;
     align-items: center;
@@ -715,7 +723,7 @@
 
         .cal-day-num {
             background: $color-blue-500;
-            color: var(--ul-grey-5);
+            color: var(--ul-black);
         }
     }
 }

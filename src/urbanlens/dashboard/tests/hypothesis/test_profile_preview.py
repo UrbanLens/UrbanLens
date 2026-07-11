@@ -194,18 +194,53 @@ class ProfilePreviewFlowTests(TestCase):
 class PreviewVisibilityPropertyTests(TestCase):
     """A simulated audience must see exactly what the privacy setting permits."""
 
+    # What relationship create_ghost_viewer() actually establishes for each mode.
+    # ANYTHING_IN_COMMON only fabricates a shared pin (the lightest relation to
+    # fake - see profile_preview._share_a_pin), so it carries the same "pin" tag
+    # as COMMON_PIN rather than a tag of its own.
+    _MODE_RELATIONS: dict[str, frozenset[str]] = {
+        VisibilityChoice.ANYONE: frozenset(),
+        VisibilityChoice.NO_ONE: frozenset(),
+        VisibilityChoice.FRIENDS: frozenset({"friends"}),
+        VisibilityChoice.COMMON_PIN: frozenset({"pin"}),
+        VisibilityChoice.COMMON_FRIEND: frozenset({"friend"}),
+        VisibilityChoice.COMMON_TRIP: frozenset({"trip"}),
+        VisibilityChoice.ANYTHING_IN_COMMON: frozenset({"pin"}),
+    }
+
     def setUp(self) -> None:
         super().setUp()
         self.owner = _owner()
         self.client.force_login(self.owner.user)
         self.profile_path = reverse("profile.view_user", kwargs={"profile_slug": self.owner.slug})
 
+    def _expected_visible(self, mode: str, visibility: str) -> bool:
+        """Mirror Profile.visibility_permits() given the relation create_ghost_viewer() sets up."""
+        if visibility == VisibilityChoice.ANYONE:
+            return True
+        if visibility == VisibilityChoice.NO_ONE:
+            return False
+        relations = self._MODE_RELATIONS[mode]
+        if "friends" in relations:
+            return True
+        if visibility == VisibilityChoice.FRIENDS:
+            return False
+        if visibility == VisibilityChoice.COMMON_PIN:
+            return "pin" in relations
+        if visibility == VisibilityChoice.COMMON_FRIEND:
+            return "friend" in relations
+        if visibility == VisibilityChoice.COMMON_TRIP:
+            return "trip" in relations
+        if visibility == VisibilityChoice.ANYTHING_IN_COMMON:
+            return bool(relations & {"pin", "friend", "trip"})
+        return False
+
     def test_preview_matches_profile_visibility(self) -> None:
         """The previewed page is visible iff the real audience would pass the check.
 
         Exhaustive over every (simulated audience, profile_visibility) pair: a
         ghost sees the profile when it is visible to any logged-in user, or
-        when the ghost's relationship matches the required one.
+        when the ghost's relationship satisfies Profile.visibility_permits().
         """
         for mode, _label in preview_modes():
             for visibility in VisibilityChoice.values:
@@ -214,6 +249,6 @@ class PreviewVisibilityPropertyTests(TestCase):
                     self.client.post(reverse("profile.preview", args=[mode]))
                     response = self.client.get(self.profile_path)
 
-                    expected_visible = visibility == VisibilityChoice.ANYONE or (mode == visibility and visibility != VisibilityChoice.NO_ONE)
+                    expected_visible = self._expected_visible(mode, visibility)
                     self.assertEqual(response.status_code, 200 if expected_visible else 404)
                     self.assertFalse(User.objects.filter(username__startswith="preview_").exists())

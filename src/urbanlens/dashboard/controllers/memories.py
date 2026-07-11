@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import DateField, Min
@@ -40,10 +40,21 @@ from urbanlens.dashboard.services.visits import add_visited_status, create_visit
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+    from urbanlens.dashboard.models.pin_share.model import PinShare
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
+
+
+class _ShareGroup(TypedDict):
+    """One pin's entry in the Sharing page's ``share_groups`` list."""
+
+    pin: Pin
+    shares: list[PinShare]
+    chain_total: int
+    reshare_count: int
 
 
 def _unlogged_band_context(profile: Profile) -> dict[str, object]:
@@ -486,21 +497,28 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             Rendered Sharing page listing every shared pin with its
             recipients and chain-wide reshare counts.
         """
-        from urbanlens.dashboard.models.pin_share import PinShare
+        from urbanlens.dashboard.models.pin_share.model import PinShare
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "to_profile__user").order_by("-created")
 
-        groups: dict[int, dict[str, object]] = {}
+        shares_by_pin: dict[int, list[PinShare]] = {}
         for share in shares:
-            group = groups.setdefault(share.pin_id, {"pin": share.pin, "shares": []})
-            group["shares"].append(share)  # type: ignore[union-attr]
-        for group in groups.values():
-            own_ids = [share.pk for share in group["shares"]]  # type: ignore[union-attr]
+            shares_by_pin.setdefault(share.pin_id, []).append(share)
+
+        share_groups: list[_ShareGroup] = []
+        for pin_shares in shares_by_pin.values():
+            own_ids = [share.pk for share in pin_shares]
             chain_total = PinShare.chain_share_count(own_ids)
-            group["chain_total"] = chain_total
-            # Shares made further down the chain by other users.
-            group["reshare_count"] = chain_total - len(own_ids)
+            share_groups.append(
+                {
+                    "pin": pin_shares[0].pin,
+                    "shares": pin_shares,
+                    "chain_total": chain_total,
+                    # Shares made further down the chain by other users.
+                    "reshare_count": chain_total - len(own_ids),
+                },
+            )
 
         return render(
             request,
@@ -508,7 +526,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "memories",
-                "share_groups": list(groups.values()),
+                "share_groups": share_groups,
                 **_unlogged_band_context(profile),
             },
         )
