@@ -37,15 +37,49 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
 # -- Pin gallery --------------------------------------------------------------
 
 
+def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
+    """Images for a pin's gallery, optionally including child-pin photos.
+
+    With ``?children=1`` (the pin page's "show sub pin details" toggle) photos
+    uploaded to any descendant child pin are included too, so the parent's
+    gallery shows the whole place.
+
+    Args:
+        request: Current request (read for the ``children`` flag).
+        pin: The pin whose gallery is being rendered.
+        profile: The requesting profile (visibility filtering).
+
+    Returns:
+        Tuple of (queryset, include_children flag).
+    """
+    # Child expansion is owner-only: the "show sub pin details" toggle exists
+    # on the owner's own pin page, and another user's child pins are theirs.
+    include_children = request.GET.get("children") == "1" and pin.profile_id == profile.pk
+    if include_children:
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        images = Image.objects.filter(pin__in=subtree).select_related("profile", "pin", "pin__location", "pin__location__wiki")
+    else:
+        images = Image.objects.filter(pin=pin).select_related("profile")
+    return images.visible_to(profile), include_children
+
+
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
 
     def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).order_by("-created")
-        page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
-        return {"pin": pin, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "pin"}
+        images, include_children = _pin_gallery_images(request, pin, profile)
+        page_obj = get_page(request, images.order_by("-created"), _GALLERY_PAGE_SIZE)
+        return {
+            "pin": pin,
+            "images": page_obj.object_list,
+            "page_obj": page_obj,
+            "profile": profile,
+            "context_type": "pin",
+            "include_children": include_children,
+            "extra_query": "children=1" if include_children else "",
+        }
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         ctx = self._get_context(request, pin_slug)
@@ -89,8 +123,15 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
-        data = [image_to_gallery_json(img, request, profile) for img in images]
+        images, include_children = _pin_gallery_images(request, pin, profile)
+        data = []
+        for img in images.with_coords():
+            entry = image_to_gallery_json(img, request, profile)
+            if include_children and img.pin_id is not None and img.pin_id != pin.pk and img.pin is not None:
+                # Child-pin photos render read-only on the parent's map layer;
+                # they are repositioned from their own pin's page.
+                entry["child_pin_name"] = img.pin.effective_name
+            data.append(entry)
         return JsonResponse({"images": data})
 
 

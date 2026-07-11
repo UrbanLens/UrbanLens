@@ -49,16 +49,6 @@ a sibling #map-annotations-config element, not from this partial).
             title="Take a screenshot of this map">
         <i class="material-symbols-outlined">photo_camera</i> Screenshot
     </button>
-    <div id="edit-boundary-btns" class="map-overlay-btn-group">
-        <button id="edit-property-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditBoundary('property')"
-                title="Draw or reshape the property (grounds/parcel) boundary">
-            <i class="material-symbols-outlined">pentagon</i> Property
-        </button>
-        <button id="edit-building-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--building" onclick="startEditBoundary('building')"
-                title="Draw or reshape the building footprint boundary">
-            <i class="material-symbols-outlined">home_work</i> Building
-        </button>
-    </div>
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear
@@ -70,8 +60,10 @@ a sibling #map-annotations-config element, not from this partial).
             <i class="material-symbols-outlined">check</i> Done
         </button>
     </div>
-    {# "Add Detail" dropdown - shared with the safety check-in map #}
-    {% include "dashboard/partials/layout/_markup_toolbar_panel.html" with show_add_pin_item=True %}
+    {# "Add Detail" dropdown - shared with the safety check-in map. The       #}
+    {# boundary tools live in this menu too (they're rarely used, so they no   #}
+    {# longer take up permanent toolbar space).                                #}
+    {% include "dashboard/partials/layout/_markup_toolbar_panel.html" with show_add_pin_item=True show_boundary_items=True %}
 </div>
 
 {# Unified draw/edit panel this dropdown opens - must be a sibling of #}

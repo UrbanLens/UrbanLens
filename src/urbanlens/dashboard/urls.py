@@ -132,6 +132,7 @@ urlpatterns = [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
+                path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
@@ -336,6 +337,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/notes/<int:note_id>/delete/",
                                 pin_edit.PinNoteDeleteView.as_view(),
                                 name="pin.note.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/detach-parent/",
+                                pin_edit.PinDetachChildView.as_view(),
+                                name="pin.detach_parent",
                             ),
                             path(
                                 "<slug:pin_slug>/link/",

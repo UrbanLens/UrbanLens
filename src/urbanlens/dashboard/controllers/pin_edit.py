@@ -487,6 +487,34 @@ class PinDeleteView(LoginRequiredMixin, View):
         return response
 
 
+class PinDetachChildView(LoginRequiredMixin, View):
+    """Promote a child (sub) pin back to a top-level pin of its own.
+
+    POST /map/pin/<pin_slug>/detach-parent/
+
+    Returns 200 with an ``HX-Refresh`` header so the page re-renders as a
+    root pin, or 400 with a plain-text reason when detaching is impossible
+    (two top-level pins can't share one Location per profile).
+    """
+
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        if pin.parent_pin_id is None:
+            return HttpResponse("This pin is already a top-level pin.", status=400)
+        conflict = Pin.objects.filter(profile=pin.profile, location_id=pin.location_id, parent_pin__isnull=True).exclude(pk=pin.pk).exists()
+        if conflict:
+            return HttpResponse("You already have a top-level pin at this exact location. Move this sub pin slightly before detaching it.", status=400)
+        logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
+        pin.parent_pin = None
+        pin.save(update_fields=["parent_pin"])
+        response = HttpResponse("", status=200)
+        response["HX-Refresh"] = "true"
+        return response
+
+
 class PinRelinkView(LoginRequiredMixin, View):
     """Link a pin to a different Location, or detach it to its own bare Location.
 

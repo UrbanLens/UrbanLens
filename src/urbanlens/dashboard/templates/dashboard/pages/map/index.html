@@ -62,9 +62,9 @@
     {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
     {# window.MapLayers - the same code every other map on the site uses.       #}
     {% if show_places_layer %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders,places" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,places" %}
     {% else %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,dark,borders" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders" %}
     {% endif %}
 
     {# -- Place info panel (shown when user clicks "More information" on a Places marker) #}
@@ -1623,6 +1623,7 @@
         }
         if (layers.length) clusterGroup.addLayers(layers);
         updatePinCounter();
+        if (_childPinsActive) _loadChildPins();
     }
     window._exitFilterMode = _exitFilterMode;
 
@@ -1693,6 +1694,94 @@
         setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();
 
+    // -- Sub pins (child pins) layer ---------------------------------------------
+    // Pins nested inside another pin (merged pins, detail pins) are hidden from
+    // the main map by default; this layer renders them as smaller markers with
+    // a link back to their parent. Loaded lazily the first time it's turned on,
+    // and re-fetched with the active filter criteria whenever filters change.
+    const _childPinsLayerGroup = L.layerGroup();
+    const _childPinStore  = new Map();   // uuid → child pin data
+    const _childMarkerMap = new Map();   // uuid → L.Marker
+    let _childPinsActive = false;
+    let _childPinsFetchPromise = null;
+
+    function _buildChildMarker(pin) {
+        if (!pin.latitude || !pin.longitude) return null;
+        const color = pin.color || '#7c3aed';
+        const iconName = pin.icon || 'place';
+        let inner;
+        if (/^[a-z_]+$/.test(iconName)) {
+            inner = `<i class="material-icons child-pin-icon" style="color:${_escHtml(color)}">${_escHtml(iconName)}</i>`;
+        } else if (/^(https?:\/\/|\/)/.test(iconName)) {
+            inner = `<img src="${_escHtml(iconName)}" class="child-pin-img" alt="">`;
+        } else {
+            inner = `<span class="child-pin-emoji">${_escHtml(iconName)}</span>`;
+        }
+        const marker = L.marker([parseFloat(pin.latitude), parseFloat(pin.longitude)], {
+            icon: L.divIcon({ className: 'child-pin-marker-wrap', html: `<span class="child-pin-marker">${inner}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] }),
+        });
+        const parentLink = pin.parent_url
+            ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Sub pin of <a href="${_escHtml(pin.parent_url)}">${_escHtml(pin.parent_name || 'parent pin')}</a></div>`
+            : '';
+        marker.bindPopup(`
+            <div class="pin-popup child-pin-popup" data-uuid="${pin.uuid}">
+                <div class="popup-title">${_escHtml(pin.name || 'Sub pin')}</div>
+                ${parentLink}
+                ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
+                <div class="popup-actions">
+                    <a href="${_escHtml(pin.url || '#')}" class="view-full-pin">View Details</a>
+                </div>
+            </div>`);
+        return marker;
+    }
+
+    function _activeFilterQueryString() {
+        if (!_hasActiveFilters()) return '';
+        const form = document.getElementById('filter-form');
+        const params = new URLSearchParams(new FormData(form));
+        params.delete('csrfmiddlewaretoken');
+        return params.toString();
+    }
+
+    function _loadChildPins() {
+        const qs = _activeFilterQueryString();
+        const url = '{% url "map.pins.children" %}' + (qs ? `?${qs}` : '');
+        _setFetching(true, 'Loading sub pins...');
+        _childPinsFetchPromise = _fetchJson(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }, 30000)
+            .then(function (data) {
+                _childPinsLayerGroup.clearLayers();
+                _childPinStore.clear();
+                _childMarkerMap.clear();
+                (data.pins || []).forEach(function (pin) {
+                    _childPinStore.set(pin.uuid, pin);
+                    const m = _buildChildMarker(pin);
+                    if (m) { _childMarkerMap.set(pin.uuid, m); _childPinsLayerGroup.addLayer(m); }
+                });
+            })
+            .catch(function (err) { console.warn('[UL] Could not load sub pins:', err); })
+            .finally(function () { _setFetching(false); });
+        return _childPinsFetchPromise;
+    }
+
+    function setChildPinsActive(on) {
+        if (on === _childPinsActive) return _childPinsFetchPromise || Promise.resolve();
+        _childPinsActive = on;
+        if (on) {
+            _childPinsLayerGroup.addTo(map);
+            return _loadChildPins();
+        }
+        map.removeLayer(_childPinsLayerGroup);
+        return Promise.resolve();
+    }
+
+    function toggleChildPins() { setChildPinsActive(!_childPinsActive); }
+
+    // Keep the layer in sync with the filter panel: any filter change (or reset)
+    // re-fetches the sub pins with the same criteria the root pins use.
+    document.getElementById('filter-form').addEventListener('htmx:afterRequest', function (e) {
+        if (_childPinsActive && e.detail && e.detail.successful) _loadChildPins();
+    });
+
     // Places layer group (landmarks from external APIs, including Google Places)
     const _placesLayerGroup = L.layerGroup();
     const _placesMarkerMap = new Map();  // place_id → L.Marker
@@ -1728,8 +1817,9 @@
         },
         custom: {
             // The pins button highlights when pins are HIDDEN (activeWhenOff).
-            pins:   { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
-            places: { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
+            pins:      { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
+            childpins: { isActive: () => _childPinsActive, toggle: toggleChildPins },
+            places:    { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
         },
     });
 
@@ -2450,13 +2540,27 @@
         const marker = _markerMap.get(uuid);
         marker?.getElement()?.classList.toggle('is-selected', _selectedPinUuids.has(uuid));
         _renderBulkSelectToolbar();
+        _refreshBulkMergeDialogIfOpen();
     }
 
     function _clearSelection() {
         _selectedPinUuids.forEach(function (uuid) { _markerMap.get(uuid)?.getElement()?.classList.remove('is-selected'); });
         _selectedPinUuids.clear();
         _renderBulkSelectToolbar();
+        _refreshBulkMergeDialogIfOpen();
     }
+
+    // Marker DOM elements are recreated whenever the cluster layer regroups
+    // (zoom, spiderfy), dropping the .is-selected class - re-stamp it so the
+    // selection highlight survives any map interaction.
+    function _syncSelectionClasses() {
+        if (!_selectedPinUuids.size) return;
+        _selectedPinUuids.forEach(function (uuid) {
+            _markerMap.get(uuid)?.getElement()?.classList.add('is-selected');
+        });
+    }
+    clusterGroup.on('animationend spiderfied unspiderfied layeradd', _syncSelectionClasses);
+    map.on('zoomend moveend', function () { requestAnimationFrame(_syncSelectionClasses); });
 
     function _renderBulkSelectToolbar() {
         const n = _selectedPinUuids.size;
@@ -2587,36 +2691,91 @@
         const pin = _pinStore.get(uuid) || {};
         const style = pin.color ? `color:${pin.color}` : '';
         const swapBtn = isTarget ? '' : `<button type="button" class="cat-merge-swap-btn" data-swap-uuid="${uuid}" title="Make this the top-level pin"><i class="material-symbols-outlined">swap_vert</i></button>`;
+        const removeBtn = `<button type="button" class="cat-merge-remove-btn" data-remove-uuid="${uuid}" title="Remove from this merge (also deselects it on the map)"><i class="material-symbols-outlined">close</i></button>`;
         return `<div class="cat-merge-mini-card${isTarget ? ' cat-merge-mini-card--target' : ''}" data-merge-uuid="${uuid}">`
             + `<div class="tag-card-icon cat-merge-mini-icon" style="${style}">${_pinCardIconHtml(pin)}</div>`
             + `<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">${_escHtml(_selectedPinName(uuid))}</div></div>`
-            + swapBtn + `</div>`;
+            + swapBtn + removeBtn + `</div>`;
     }
 
     function _renderBulkMergeDialog() {
         const uuids = Array.from(_selectedPinUuids);
         if (!_bulkMergeTargetUuid || !_selectedPinUuids.has(_bulkMergeTargetUuid)) _bulkMergeTargetUuid = uuids[0];
         const sources = uuids.filter(function (u) { return u !== _bulkMergeTargetUuid; });
-        document.getElementById('bulk-merge-dialog-title').textContent = `Merge ${uuids.length} pins`;
-        document.getElementById('bulk-merge-target-card').innerHTML = _pinMiniCardHtml(_bulkMergeTargetUuid, true);
-        document.getElementById('bulk-merge-sources-list').innerHTML = sources.map(function (u) { return _pinMiniCardHtml(u, false); }).join('');
+        document.getElementById('bulk-merge-dialog-title').textContent = `Merge ${uuids.length} pin${uuids.length === 1 ? '' : 's'}`;
+        document.getElementById('bulk-merge-target-card').innerHTML = _bulkMergeTargetUuid ? _pinMiniCardHtml(_bulkMergeTargetUuid, true) : '';
+        document.getElementById('bulk-merge-sources-list').innerHTML = sources.length
+            ? sources.map(function (u) { return _pinMiniCardHtml(u, false); }).join('')
+            : '<p class="cat-merge-empty-hint">Select more pins on the map to add them to this merge.</p>';
         const confirmBtn = document.getElementById('bulk-merge-confirm-btn');
-        confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${_escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
-        confirmBtn.disabled = false;
+        if (uuids.length >= 2) {
+            confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${_escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
+            confirmBtn.disabled = false;
+        } else {
+            confirmBtn.innerHTML = '<i class="material-symbols-outlined">merge</i> Merge';
+            confirmBtn.disabled = true;
+        }
+    }
+
+    // Keep the open merge dialog mirrored to the map selection - in docked
+    // (side) mode the map stays interactive, so users can keep clicking pins
+    // to grow or shrink the merge list while the dialog is open.
+    function _refreshBulkMergeDialogIfOpen() {
+        const dlg = document.getElementById('bulk-merge-dialog');
+        if (!dlg || !dlg.open) return;
+        if (!_selectedPinUuids.size) { dlg.close(); return; }
+        _renderBulkMergeDialog();
+    }
+
+    // Pan/zoom so every selected pin stays visible next to the docked dialog.
+    function _fitMapToSelection(dlg) {
+        const latLngs = [];
+        _selectedPinUuids.forEach(function (uuid) {
+            const m = _markerMap.get(uuid);
+            if (m) latLngs.push(m.getLatLng());
+        });
+        if (!latLngs.length) return;
+        _programmaticMove = true;
+        const dialogWidth = ((dlg && dlg.getBoundingClientRect().width) || 380) + 48;
+        map.fitBounds(L.latLngBounds(latLngs), {
+            paddingTopLeft: [60, 60],
+            // Right padding clears the docked dialog; bottom clears the select toolbar.
+            paddingBottomRight: [dialogWidth, 110],
+            maxZoom: 17,
+        });
     }
 
     function openBulkMergeDialog() {
         if (_selectedPinUuids.size < 2) return;
         _bulkMergeTargetUuid = null;
         _renderBulkMergeDialog();
-        document.getElementById('bulk-merge-dialog').showModal();
+        const dlg = document.getElementById('bulk-merge-dialog');
+        // Wide screens: dock the dialog to the side (non-modal) and keep every
+        // selected pin in view; small screens: centered modal as before.
+        const docked = window.innerWidth >= 1100;
+        dlg.classList.toggle('bulk-merge-dialog--docked', docked);
+        if (docked) {
+            dlg.show();
+            requestAnimationFrame(function () { _fitMapToSelection(dlg); });
+        } else {
+            dlg.showModal();
+        }
     }
 
-    document.getElementById('bulk-merge-sources-list').addEventListener('click', function (e) {
-        const btn = e.target.closest('.cat-merge-swap-btn');
-        if (!btn) return;
-        _bulkMergeTargetUuid = btn.dataset.swapUuid;
-        _renderBulkMergeDialog();
+    document.getElementById('bulk-merge-dialog').addEventListener('click', function (e) {
+        const removeBtn = e.target.closest('.cat-merge-remove-btn');
+        if (removeBtn) {
+            const uuid = removeBtn.dataset.removeUuid;
+            // Removing from the merge list deselects the pin on the map too -
+            // the merge list *is* the selection.
+            if (_selectedPinUuids.has(uuid)) _togglePinSelection(uuid);
+            return;
+        }
+        const swapBtn = e.target.closest('.cat-merge-swap-btn');
+        if (swapBtn) {
+            _bulkMergeTargetUuid = swapBtn.dataset.swapUuid;
+            _renderBulkMergeDialog();
+        }
     });
 
     document.getElementById('bulk-merge-confirm-btn').addEventListener('click', function () {
@@ -2637,6 +2796,8 @@
             exitSelectMode();
             toastr.success('Pins merged.');
             _refreshAllPins();
+            // The merged sources are child pins now - refresh the Sub Pins layer too.
+            if (_childPinsActive) _loadChildPins();
         })
         .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
     });
@@ -3216,11 +3377,30 @@
         map.setView([result.lat, result.lng], result.zoom || _defaultZoom);
         if (result.type === 'mylocation') return;
         if (result.type === 'pin' && result.pinSlug) {
+            let found = false;
             for (const [uuid, pin] of _pinStore) {
                 if (pin.slug === result.pinSlug || uuid === result.pinSlug) {
                     setTimeout(() => { const m = _markerMap.get(uuid); if (m) m.openPopup(); }, 350);
+                    found = true;
                     break;
                 }
+            }
+            if (!found) {
+                // Not a root pin - it's a child (sub) pin. Turn the Sub Pins
+                // layer on when it isn't already, so the jumped-to pin is
+                // actually visible, then open its popup.
+                const openChild = function () {
+                    for (const [uuid, pin] of _childPinStore) {
+                        if (pin.slug === result.pinSlug || uuid === result.pinSlug) {
+                            setTimeout(() => { const m = _childMarkerMap.get(uuid); if (m) m.openPopup(); }, 350);
+                            return;
+                        }
+                    }
+                };
+                Promise.resolve(setChildPinsActive(true)).then(function () {
+                    _mapLayers.syncButtons();
+                    openChild();
+                });
             }
         } else {
             _showSearchMarker(result.lat, result.lng, result.title);

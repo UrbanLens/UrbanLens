@@ -3532,3 +3532,237 @@ body.page-location-details .pin-detail-grid {
     opacity: 0.7;
     font-family: var(--ul-font-family, sans-serif);
 }
+
+// -- Pin hierarchy: breadcrumb, floating actions menu, sub-pin content labels --
+
+// "Sub pin of {parent}" breadcrumb at the top of a child pin's detail page.
+.pin-parent-breadcrumb {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    align-self: flex-start;
+    padding: .35rem .8rem .35rem .6rem;
+    border-radius: 999px;
+    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
+    border: 1px solid var(--ul-grey-1a);
+    color: var(--ul-grey-8);
+    font-size: .85rem;
+    text-decoration: none;
+    transition: border-color .12s, background .12s;
+
+    i {
+        font-size: 1.05rem;
+        color: var(--primary-color);
+    }
+
+    &:hover {
+        border-color: var(--primary-color);
+        background: var(--ul-color-accent-bg, rgba(30, 136, 229, .16));
+    }
+}
+
+// Floating actions menu: bottom-right, follows the user as they scroll.
+.pin-actions-fab {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1400;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: .5rem;
+}
+
+.pin-actions-fab-btn {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .6rem 1rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--primary-color, #1e88e5);
+    color: #fff;
+    font-size: .88rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+    position: relative;
+    transition: transform .12s, box-shadow .12s;
+
+    i {
+        font-size: 1.2rem;
+    }
+
+    &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, .4);
+    }
+}
+
+// Small indicator dot on the FAB while "sub pin details" is on.
+.pin-actions-fab-dot {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #4ade80;
+    border: 2px solid #fff;
+}
+
+.pin-actions-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 230px;
+    background: var(--ul-grey-0, #fff);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 12px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .3);
+    overflow: hidden;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.pin-actions-item {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .65rem .9rem;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    color: var(--ul-grey-9);
+    font-size: .87rem;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .12s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    i {
+        font-size: 1.15rem;
+        color: var(--ul-grey-6);
+    }
+
+    &:hover {
+        background: var(--ul-color-accent-bg, rgba(30, 136, 229, .08));
+    }
+
+    &.is-active i {
+        color: var(--primary-color);
+    }
+
+    &.pin-actions-item--danger:hover {
+        background: var(--ul-color-danger-bg, rgba(239, 68, 68, .1));
+
+        i {
+            color: var(--ul-color-danger-text, #ef4444);
+        }
+    }
+}
+
+.pin-actions-state {
+    margin-left: auto;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: $text-muted;
+
+    .is-active & {
+        color: var(--primary-color);
+    }
+}
+
+// Gallery: name ribbon across photos that belong to a sub pin.
+.gallery-child-ribbon {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: .2rem .45rem;
+    background: rgba(17, 24, 39, .72);
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+// Visit history: chip linking a visit row to the sub pin it was logged on.
+.visit-child-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
+    border: 1px solid var(--ul-grey-1a);
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    text-decoration: none;
+
+    i {
+        font-size: .85rem;
+    }
+
+    &:hover {
+        border-color: var(--primary-color);
+    }
+}
+
+// Share dialog: "also share sub pins" row.
+.pin-share-children-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .88rem;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        // Materialize hides bare checkboxes; opt this one back in.
+        opacity: 1;
+        position: static;
+        pointer-events: auto;
+        width: 16px;
+        height: 16px;
+    }
+}
+
+// Share detail page: bundled sub pin list.
+.pin-share-bundle {
+    margin: .75rem 0;
+}
+
+.pin-share-bundle-list {
+    list-style: none;
+    margin: .4rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.pin-share-bundle-item {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+    color: var(--ul-grey-8);
+
+    i {
+        font-size: 1rem;
+        color: $text-muted;
+    }
+}

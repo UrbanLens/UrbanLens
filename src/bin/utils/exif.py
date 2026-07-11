@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Print all discoverable metadata for an image file.
 

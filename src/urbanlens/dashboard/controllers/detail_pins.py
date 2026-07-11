@@ -172,12 +172,29 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
-    """Return personal detail pins as JSON for Leaflet rendering on the pin details page."""
+    """Return personal detail pins as JSON for Leaflet rendering on the pin details page.
+
+    By default only the pin's direct children are returned. With ``?children=1``
+    (the page-wide "show sub pin details" toggle) the full descendant subtree is
+    returned instead, each nested pin annotated with the name of the child pin
+    it belongs to so the map can label it.
+    """
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        detail_pins = pin.detail_pins.order_by("pin_type", "name")
-        return JsonResponse({"detail_pins": [dp.to_detail_json() for dp in detail_pins]})
+        include_children = request.GET.get("children") == "1"
+        if include_children:
+            detail_pins = pin.descendants().select_related("location", "parent_pin", "parent_pin__location").order_by("pin_type", "name")
+        else:
+            detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
+
+        payload = []
+        for dp in detail_pins:
+            entry = dp.to_detail_json()
+            if include_children and dp.parent_pin_id != pin.pk and dp.parent_pin is not None:
+                entry["owner_name"] = dp.parent_pin.effective_name
+            payload.append(entry)
+        return JsonResponse({"detail_pins": payload})
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):

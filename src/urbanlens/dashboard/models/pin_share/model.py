@@ -37,6 +37,18 @@ class PinShare(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # The root share of a "pin + its sub pins" bundle. When a sharer opts to
+    # include a pin's child pins, each child pin gets its own PinShare row
+    # (it counts as a share of that pin) pointing here; the recipient accepts
+    # or rejects the whole bundle through the root share, and accepting
+    # recreates the parent/child hierarchy on their side.
+    bundled_with = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="bundled_shares",
+        null=True,
+        blank=True,
+    )
     notification = models.OneToOneField(
         "dashboard.NotificationLog",
         on_delete=models.SET_NULL,
@@ -66,6 +78,7 @@ class PinShare(abstract.DashboardModel):
         from_profile_id: int
         to_profile_id: int
         parent_share_id: int | None
+        bundled_with_id: int | None
         notification_id: int | None
 
     @property

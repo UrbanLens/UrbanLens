@@ -27,6 +27,17 @@
                   placeholder="Let them know why you're sharing this place..."></textarea>
       </div>
 
+      {% if child_pin_count %}
+      <section class="pin-share-section">
+        <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Sub pins</h3>
+        <label class="pin-share-children-row">
+          <input type="checkbox" name="include_children" value="1">
+          <span>Also share this pin's {{ child_pin_count }} sub pin{{ child_pin_count|pluralize }}</span>
+        </label>
+        <p class="pin-share-section-hint">Each sub pin is shared too - your friend gets the whole pin hierarchy when they accept.</p>
+      </section>
+      {% endif %}
+
       <section class="pin-share-section">
         <h3 class="pin-share-section-title"><i class="material-symbols-outlined">label_important</i> Name</h3>
         <div class="form-row">

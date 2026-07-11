@@ -627,18 +627,18 @@ function init() {
       li.className = "detail-pin-list-item";
       li.dataset.uuid = dp.uuid;
       li.dataset.kind = "pin";
+      const meta = dp.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(dp.owner_name)}</span>` : dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : "";
       li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(color)}">${escHtml(icon)}</span>
                 <span class="detail-pin-list-item-name">${escHtml(dp.name)}</span>
-                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : ""}
-                <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${meta}
+                ${dp.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete pin"><i class="material-symbols-outlined">close</i></button>`}`;
       li.addEventListener("click", (e) => {
         if (e.target.closest(".detail-pin-list-item-delete"))
           return;
         highlightDetailPin(dp.uuid);
-        openDetailPinEditDialog(dp);
+        if (!dp.owner_name)
+          openDetailPinEditDialog(dp);
       });
       li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -661,14 +661,16 @@ function init() {
       li.dataset.uuid = item.uuid;
       li.dataset.kind = "markup";
       const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
+      const ownerMeta = item.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(item.owner_name)}</span>` : "";
       li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
                 <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
-                <button type="button" class="detail-pin-list-item-delete" title="Delete">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${ownerMeta}
+                ${item.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete"><i class="material-symbols-outlined">close</i></button>`}`;
       li.addEventListener("click", (e) => {
         if (e.target.closest(".detail-pin-list-item-delete"))
+          return;
+        if (item.owner_name)
           return;
         toolbar.openMarkupEditDialog(item);
       });
@@ -703,6 +705,31 @@ function init() {
     drawer.style.display = open ? "none" : "";
     chevron?.classList.toggle("open", !open);
   });
+  function detailPinPopupContent(entry) {
+    const el = document.createElement("div");
+    el.className = "pin-popup child-pin-popup";
+    const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
+    el.innerHTML = `
+            <div class="popup-title">${escHtml(entry.name || "Sub pin")}</div>
+            ${owner}
+            ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
+            <div class="popup-actions">
+                ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
+            </div>`;
+    if (!entry.owner_name) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "edit-pin-button";
+      editBtn.title = "Edit sub pin";
+      editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i>';
+      editBtn.addEventListener("click", () => {
+        map.closePopup();
+        openDetailPinEditDialog(entry);
+      });
+      el.querySelector(".popup-actions").appendChild(editBtn);
+    }
+    return el;
+  }
   function loadDetailPins() {
     fetch(cfg.detailPinsJsonUrl).then((r) => r.json()).then((data) => {
       detailPinLayer.clearLayers();
@@ -713,6 +740,9 @@ function init() {
           return;
         const entry = {
           uuid: dp.uuid,
+          slug: dp.slug,
+          url: dp.url,
+          owner_name: dp.owner_name,
           name: dp.name,
           pin_type: dp.pin_type,
           icon: dp.icon,
@@ -728,10 +758,15 @@ function init() {
           longitude: dp.longitude,
           marker: null
         };
-        const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: true });
-        if (dp.name)
-          marker.bindTooltip(dp.name, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
-        marker.on("click", () => openDetailPinEditDialog(entry));
+        const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
+        const tooltip = entry.owner_name && dp.name ? `${dp.name} — inside ${entry.owner_name}` : dp.name;
+        if (tooltip)
+          marker.bindTooltip(tooltip, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        if (entry.url) {
+          marker.bindPopup(detailPinPopupContent(entry));
+        } else {
+          marker.on("click", () => openDetailPinEditDialog(entry));
+        }
         marker.on("dragend", () => {
           const pos = marker.getLatLng();
           fetch(`${dpEditBase}${dp.uuid}/`, {
@@ -788,10 +823,12 @@ function init() {
       iconAnchor: [size / 2, size / 2]
     });
   }
-  function addPhotoMarker(imgId, url, lat, lng) {
+  function addPhotoMarker(imgId, url, lat, lng, ownerName) {
     if (photoMarkers[imgId])
       photoLayer.removeLayer(photoMarkers[imgId].marker);
-    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: true });
+    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: !ownerName });
+    if (ownerName)
+      marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
     marker.on("dragend", () => {
       const pos = marker.getLatLng();
       const prevLat = photoMarkers[imgId].lat;
@@ -964,7 +1001,7 @@ function init() {
     (data.images || []).forEach((img) => {
       photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
       if (img.latitude != null && img.longitude != null)
-        addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        addPhotoMarker(img.id, img.url, img.latitude, img.longitude, img.child_pin_name);
     });
     buildPhotoPanel();
     refreshPanelHeader();
@@ -1006,14 +1043,19 @@ function init() {
       map.removeLayer(mainMarker);
     }
   }
-  function addGeoJSONPolygons(group, geojson, style) {
+  function addGeoJSONPolygons(group, geojson, style, label) {
     const rings = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
+    const bindLabel = (layer) => {
+      if (label)
+        layer.bindTooltip(label, { sticky: true, direction: "top", className: "boundary-tooltip" });
+      return layer;
+    };
     if (rings) {
       rings.forEach((ringSet) => {
-        group.addLayer(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]])), style));
+        group.addLayer(bindLabel(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]])), style)));
       });
     } else {
-      L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(l));
+      L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(bindLabel(l)));
     }
   }
   function loadBoundary(type, geojson, source) {
@@ -1023,8 +1065,10 @@ function init() {
     boundarySources[type] = geojson ? source || null : null;
     if (!geojson)
       return;
-    const style = type === "property" && source === "circle" ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
-    addGeoJSONPolygons(group, geojson, style);
+    const isCircle = type === "property" && source === "circle";
+    const style = isCircle ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
+    const label = type === "property" ? isCircle ? "Approximate property area" : "Property boundary" : "Building boundary";
+    addGeoJSONPolygons(group, geojson, style, label);
   }
   function boundaryHasRealPolygon(type) {
     return Boolean(savedBoundaries[type]) && boundarySources[type] !== "circle";
@@ -1038,7 +1082,7 @@ function init() {
     detailBuildingItems.clearLayers();
     (data.detail_buildings || []).forEach((entry) => {
       if (entry.polygon)
-        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE);
+        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a sub pin)");
     });
     setMainMarkerVisible(!boundaryHasRealPolygon("property"));
     if (!boundaryBoundsFitted) {
@@ -1079,10 +1123,10 @@ function init() {
     }, 100);
   }
   function setBoundaryEditButtonsVisible(visible) {
-    const btns = document.getElementById("edit-boundary-btns");
+    const addDetail = document.getElementById("add-detail-wrap");
     const controls = document.getElementById("boundary-save-controls");
-    if (btns)
-      btns.style.display = visible ? "" : "none";
+    if (addDetail)
+      addDetail.style.display = visible ? "" : "none";
     if (controls)
       controls.style.display = visible ? "none" : "";
   }
@@ -1090,6 +1134,7 @@ function init() {
     if (boundaryDrawControl || !boundaryGroups[type])
       return;
     editingBoundaryType = type;
+    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     closeDetailPinPanel();
     map.getPane("boundaryPane").style.zIndex = "560";

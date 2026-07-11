@@ -14,6 +14,10 @@ Context:
                        that calls openAddPinDialog() (pin detail/wiki only -
                        the safety check-in map has no such dialog, so it
                        omits this flag and only shows markup tools).
+  show_boundary_items - if truthy, adds "Property boundary" and "Building
+                       boundary" entries that call startEditBoundary()
+                       (pin detail/wiki only - the safety check-in map has
+                       no boundary editor).
 {% endcomment %}
 <div class="map-add-detail-wrap" id="add-detail-wrap">
     <div id="add-detail-menu" class="add-detail-menu" style="display:none">
@@ -40,6 +44,17 @@ Context:
         <button type="button" class="add-detail-item" onclick="startShapeDraw('polygon')">
             <i class="material-symbols-outlined">format_shapes</i> Polygon
         </button>
+        {% if show_boundary_items %}
+        <div class="add-detail-menu-sep" role="separator"></div>
+        <button type="button" id="edit-property-boundary-btn" class="add-detail-item" onclick="startEditBoundary('property')"
+                title="Draw or reshape the property (grounds/parcel) boundary">
+            <i class="material-symbols-outlined">pentagon</i> Property boundary
+        </button>
+        <button type="button" id="edit-building-boundary-btn" class="add-detail-item" onclick="startEditBoundary('building')"
+                title="Draw or reshape the building footprint boundary">
+            <i class="material-symbols-outlined">home_work</i> Building boundary
+        </button>
+        {% endif %}
     </div>
     <button type="button" class="btn btn--ghost map-overlay-btn map-overlay-btn--add-detail"
             id="add-detail-btn" onclick="toggleAddDetailMenu()">

@@ -32,11 +32,23 @@ def _recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     ).first()
 
 
-def _create_pin_from_share(share: PinShare) -> Pin:
+def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
+    """Materialise a recipient-side Pin from an accepted share.
+
+    Args:
+        share: The accepted share to copy the pin from.
+        parent_pin: When the share is part of a "pin + sub pins" bundle, the
+            recipient-side pin the new pin should nest under.
+
+    Returns:
+        The newly created Pin, carrying over every user-visible property
+        (name, icon, badges, notes, scores, security indicators, photos).
+    """
     source = share.pin
     new_pin = Pin.objects.create(
         profile=share.to_profile,
         source_share=share,
+        parent_pin=parent_pin,
         location=source.location,
         name=share.shared_name or source.name,
         name_is_user_provided=bool(share.shared_name) or source.name_is_user_provided,
@@ -47,6 +59,10 @@ def _create_pin_from_share(share: PinShare) -> Pin:
         danger=source.danger,
         pin_type=source.pin_type,
         color=source.color,
+        detail_bg_color=source.detail_bg_color,
+        detail_bg_opacity=source.detail_bg_opacity,
+        detail_border_color=source.detail_border_color,
+        detail_border_opacity=source.detail_border_opacity,
         date_abandoned=source.date_abandoned,
         date_last_active=source.date_last_active,
         fences=source.fences,
@@ -90,6 +106,7 @@ class PinShareDialogView(LoginRequiredMixin, View):
                 "friends": get_connections(request.user.profile),
                 "aliases": pin.aliases.all(),
                 "photos": pin.images.all(),
+                "child_pin_count": pin.descendants().count(),
             },
         )
 
@@ -143,6 +160,34 @@ class PinShareCreateView(LoginRequiredMixin, View):
             shared_name=shared_name,
         )
         share.images.set(selected_images)
+
+        # Bundle the pin's sub pins: each child pin gets its own share row
+        # (counting as a share of that pin), tied to the root share. Children
+        # that already have a pending share to this recipient are skipped so
+        # the one-pending-share-per-pin-and-recipient constraint holds.
+        bundled_count = 0
+        if request.POST.get("include_children"):
+            already_pending = set(
+                PinShare.objects.filter(to_profile=recipient, status=PinShareStatus.PENDING, pin__in=pin.descendants()).values_list("pin_id", flat=True),
+            )
+            for child in pin.descendants().select_related("location"):
+                if child.pk in already_pending:
+                    continue
+                PinShare.objects.create(
+                    pin=child,
+                    from_profile=sender,
+                    to_profile=recipient,
+                    parent_share_id=child.source_share_id,
+                    bundled_with=share,
+                    status=PinShareStatus.PENDING,
+                )
+                bundled_count += 1
+
+        base_message = f"{sender.username} shared {pin.display_label} with you."
+        if bundled_count:
+            base_message += f" It comes with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}."
+        if already_pinned:
+            base_message += " You already have this location pinned."
         notification = NotificationLog.objects.create(
             profile=recipient,
             source_profile=sender,
@@ -150,7 +195,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
             importance=Importance.MEDIUM,
             notification_type=NotificationType.PIN_SHARED,
             title="Pin shared with you",
-            message=(f"{sender.username} shared {pin.display_label} with you. You already have this location pinned." if already_pinned else f"{sender.username} shared {pin.display_label} with you."),
+            message=base_message,
             url=reverse("pin.share.detail", kwargs={"share_id": share.id}),
         )
         share.notification = notification
@@ -158,14 +203,64 @@ class PinShareCreateView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": get_connections(sender), "shared_to": recipient})
 
 
+def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
+    """Materialise every pending bundled child share under the accepted root.
+
+    Recreates the sharer's parent/child hierarchy on the recipient's side:
+    each bundled share's new pin nests under the recipient pin created for its
+    source parent (or directly under the accepted root when the parent was the
+    shared pin itself, or wasn't part of the bundle).
+
+    Args:
+        root_share: The accepted root share of the bundle.
+        target_root: The recipient-side pin the root share produced.
+
+    Returns:
+        Number of child pins created.
+    """
+    bundled = list(root_share.bundled_shares.filter(status=PinShareStatus.PENDING).select_related("pin", "pin__location"))
+    if not bundled:
+        return 0
+    by_source_pin_id = {child_share.pin_id: child_share for child_share in bundled}
+    created: dict[int, Pin] = {}
+    visiting: set[int] = set()
+
+    def materialise(child_share: PinShare) -> Pin:
+        source = child_share.pin
+        if source.pk in created:
+            return created[source.pk]
+        parent = target_root
+        parent_source_id = source.parent_pin_id
+        # Attach under the recipient pin built for the source's own parent when
+        # that parent is also in the bundle; the visiting guard degrades a
+        # corrupted parent cycle to root attachment instead of recursing forever.
+        if parent_source_id in by_source_pin_id and parent_source_id not in visiting and parent_source_id != root_share.pin_id:
+            visiting.add(source.pk)
+            parent = materialise(by_source_pin_id[parent_source_id])
+            visiting.discard(source.pk)
+        new_pin = _create_pin_from_share(child_share, parent_pin=parent)
+        created[source.pk] = new_pin
+        child_share.status = PinShareStatus.ACCEPTED
+        child_share.save(update_fields=["status", "updated"])
+        return new_pin
+
+    for child_share in bundled:
+        materialise(child_share)
+    return len(created)
+
+
 class PinShareDetailView(LoginRequiredMixin, View):
     def get(self, request, share_id):
         share = get_object_or_404(
-            PinShare.objects.select_related("pin__location", "from_profile__user", "to_profile").prefetch_related("images"),
+            PinShare.objects.select_related("pin__location", "from_profile__user", "to_profile").prefetch_related("images", "bundled_shares__pin__location"),
             pk=share_id,
             to_profile=request.user.profile,
         )
-        return render(request, "dashboard/pages/pin_share/detail.html", {"share": share, "pin": share.pin})
+        return render(
+            request,
+            "dashboard/pages/pin_share/detail.html",
+            {"share": share, "pin": share.pin, "bundled_shares": share.bundled_shares.all()},
+        )
 
 
 class PinShareRespondView(LoginRequiredMixin, View):
@@ -181,12 +276,17 @@ class PinShareRespondView(LoginRequiredMixin, View):
                 target_pin = _recipient_existing_pin(share.to_profile, share.pin)
                 if target_pin is None:
                     target_pin = _create_pin_from_share(share)
+                bundled_count = _accept_bundled_shares(share, target_pin)
                 share.status = PinShareStatus.ACCEPTED
                 share.save(update_fields=["status", "updated"])
-            messages.success(request, "Pin added to your map.")
+            if bundled_count:
+                messages.success(request, f"Pin added to your map with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}.")
+            else:
+                messages.success(request, "Pin added to your map.")
         elif action == "reject":
             share.status = PinShareStatus.REJECTED
             share.save(update_fields=["status", "updated"])
+            share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED)
             messages.info(request, "Shared pin rejected.")
         if share.notification_id:
             NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)

@@ -58,10 +58,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
-            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
+            pin = Pin.objects.select_related("location", "parent_pin", "parent_pin__location").get(slug=kwargs["pin_slug"], profile__user=request.user)
         except Pin.DoesNotExist:
             try:
-                pin = Pin.objects.select_related("location").get(uuid=kwargs["pin_slug"], profile__user=request.user)
+                pin = Pin.objects.select_related("location", "parent_pin", "parent_pin__location").get(uuid=kwargs["pin_slug"], profile__user=request.user)
             except (Pin.DoesNotExist, ValueError):
                 return render(
                     request,
@@ -100,11 +100,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
 
+        # Page-wide "show sub pin details" toggle: when on (?children=1), the
+        # map, photo gallery, and visit history all include content from this
+        # pin's child pins (any depth). Off by default so the page stays
+        # simple for the majority of users who never nest pins.
+        include_children = request.GET.get("children") == "1"
+
         return render(
             request,
             "dashboard/pages/location/index.html",
             {
                 "pin": pin,
+                "parent_pin": pin.parent_pin,
+                "has_child_pins": pin.detail_pins.exists(),
+                "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,

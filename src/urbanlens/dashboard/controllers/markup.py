@@ -175,10 +175,24 @@ class MarkupJsonView(LoginRequiredMixin, View):
 
         Returns:
             JsonResponse with ``markup_items`` list, plus ``view`` (centre,
-            zoom, layer_mode, show_borders, title) on the map route.
+            zoom, layer_mode, show_borders, title) on the map route. On the
+            pin route, ``?children=1`` additionally includes markup belonging
+            to every descendant child pin, each item annotated with the owning
+            child pin's name (``owner_name``).
         """
         owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
-        payload: dict = {"markup_items": [m.to_json() for m in items.order_by("created")]}
+        include_children = pin_slug is not None and request.GET.get("children") == "1"
+        if include_children and isinstance(owner, Pin):
+            subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
+            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki")
+
+        markup_items = []
+        for m in items.order_by("created"):
+            entry = m.to_json()
+            if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
+                entry["owner_name"] = m.parent_pin.effective_name
+            markup_items.append(entry)
+        payload: dict = {"markup_items": markup_items}
         if isinstance(owner, MarkupMap):
             payload["view"] = {
                 "center_lat": owner.center_latitude,

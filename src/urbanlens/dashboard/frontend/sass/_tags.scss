@@ -1505,6 +1505,29 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+.cat-merge-remove-btn {
+    background: none;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--ul-grey-6);
+    display: flex;
+    align-items: center;
+    transition: background .12s, border-color .12s, color .12s;
+    flex-shrink: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-color-danger-bg, rgba(239, 68, 68, .12));
+        border-color: var(--ul-color-danger-border, rgba(239, 68, 68, .5));
+        color: var(--ul-color-danger-text, #ef4444);
+    }
+}
+
 .cat-merge-warning {
     display: flex;
     align-items: flex-start;

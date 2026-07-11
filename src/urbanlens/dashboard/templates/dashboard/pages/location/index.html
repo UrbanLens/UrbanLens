@@ -97,6 +97,15 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
+    {% if parent_pin %}
+    {# -- Child pin: obvious way back up to the parent -------------------- #}
+    <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
+       title="This is a sub pin - open its parent pin">
+        <i class="material-symbols-outlined">arrow_back</i>
+        <span>Sub pin of <strong>{{ parent_pin.effective_name }}</strong></span>
+    </a>
+    {% endif %}
+
     {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
@@ -156,7 +165,7 @@
         </div>
 
         <div id="pin-gallery-panel" class="card card--secondary"
-         hx-get="{% url 'pin.gallery' pin.slug %}"
+         hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
          hx-trigger="load[!window.ulSectionCollapsed('pin','gallery')], ul:unhide"
          hx-swap="outerHTML"
          data-collapse-scope="pin" data-collapse-section="gallery">
@@ -170,7 +179,7 @@
 
     {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
     <div class="pin-lists-row">
-        <div hx-get="{% url 'pin.visits' pin.slug %}"
+        <div hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','visits')], ul:unhide"
             hx-swap="outerHTML"
             class="visit-history card card--secondary"
@@ -349,6 +358,66 @@
     </div>
 </div>{# end .pin-detail-grid #}
 
+{% if has_child_pins or parent_pin %}
+{# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
+{# Holds the uncommon pin-hierarchy actions so they never clutter the page:  #}
+{# the page-wide "sub pin details" toggle, jump-to-parent, and detach.       #}
+<div class="pin-actions-fab" id="pin-actions-fab">
+    <div class="pin-actions-menu" id="pin-actions-menu" hidden>
+        {% if has_child_pins %}
+        <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
+           href="{% url 'pin.details' pin.slug %}{% if not include_children %}?children=1{% endif %}"
+           title="Show everything from this pin's sub pins on this page - map details, photos, and visit history">
+            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
+            <span>Sub pin details</span>
+            <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
+        </a>
+        {% endif %}
+        {% if parent_pin %}
+        <a class="pin-actions-item" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}">
+            <i class="material-symbols-outlined">arrow_upward</i>
+            <span>Open parent pin</span>
+        </a>
+        <button type="button" class="pin-actions-item pin-actions-item--danger"
+                hx-post="{% url 'pin.detach_parent' pin.slug %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="Detach this pin from {{ parent_pin.effective_name }}? It becomes a top-level pin on your main map again."
+                hx-swap="none">
+            <i class="material-symbols-outlined">link_off</i>
+            <span>Detach from parent</span>
+        </button>
+        {% endif %}
+    </div>
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn"
+            aria-haspopup="true" aria-expanded="false" title="Pin actions">
+        <i class="material-symbols-outlined">account_tree</i>
+        <span class="pin-actions-fab-label">Actions</span>
+        {% if include_children %}<span class="pin-actions-fab-dot" title="Sub pin details are on"></span>{% endif %}
+    </button>
+</div>
+<script>
+(function () {
+    var fab = document.getElementById('pin-actions-fab');
+    var btn = document.getElementById('pin-actions-fab-btn');
+    var menu = document.getElementById('pin-actions-menu');
+    if (!fab || !btn || !menu) return;
+    btn.addEventListener('click', function () {
+        var open = menu.hidden;
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        fab.classList.toggle('is-open', open);
+    });
+    document.addEventListener('click', function (e) {
+        if (!fab.contains(e.target) && !menu.hidden) {
+            menu.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+            fab.classList.remove('is-open');
+        }
+    });
+}());
+</script>
+{% endif %}
+
 {# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
 <dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
     <div id="pin-wiki-create-dialog-body"></div>
@@ -482,14 +551,14 @@
      data-pin-slug="{{ pin.slug }}"
      data-default-map-view="{{ default_map_view }}"
      data-openweathermap-api-key="{{ openweathermap_api_key }}"
-     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-create-url="{{ markup_create_url }}"
      data-markup-edit-url-template="{{ markup_edit_url_template }}"
-     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
      data-boundary-url="{{ boundary_url }}"
-     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>

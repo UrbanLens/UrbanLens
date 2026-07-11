@@ -59,15 +59,26 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
+    With ``?children=1`` (the pin page's "show sub pin details" toggle) the
+    panel also lists visits logged on the pin's child pins (any depth), each
+    labelled with the child pin it belongs to.
+
     Args:
-        request: Incoming HTTP request (read for an optional ``page`` param).
+        request: Incoming HTTP request (read for optional ``page`` and
+            ``children`` params).
         pin: Pin whose visit history should be rendered.
 
     Returns:
         Rendered HTML partial.
     """
+    include_children = request.GET.get("children") == "1"
+    if include_children:
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        visits_qs = PinVisit.objects.filter(pin__in=subtree).select_related("pin", "pin__location", "pin__location__wiki").order_by("-visited_at")
+    else:
+        visits_qs = pin.visit_history.all()
     # markup_map__items backs visit.map_data (the embedded map snapshot).
-    page_obj = get_page(request, pin.visit_history.all().select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, visits_qs.select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
@@ -84,6 +95,8 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "page_obj": page_obj,
             "visits": page_obj.object_list,
             "pending_suggestions": pending_suggestions,
+            "include_children": include_children,
+            "extra_query": "children=1" if include_children else "",
             # The embedded "Log a Visit" dialog's add form prefills its date field
             # with this - see _visit_form.html.
             "default_date": timezone.now().date().isoformat(),

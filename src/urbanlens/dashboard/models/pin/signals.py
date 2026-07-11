@@ -78,6 +78,28 @@ def refresh_map_pin_cache_for_badges(sender, instance: Pin, action: str, **kwarg
         _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
+@receiver(m2m_changed, sender=Pin.badges.through, dispatch_uid="pin_badges_propagate_visited")
+def propagate_visited_badge_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
+    """Mark a child pin's ancestors Visited when the child gains the Visited badge.
+
+    Visiting a sub pin (an entrance, a building on a campus) means the parent
+    place was visited too, so the profile's "Visited" status badge cascades up
+    the ``parent_pin`` chain. The whole chain is stamped in one pass with a
+    cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs
+    re-fire this handler for each ancestor, but their ``pk_set`` only contains
+    newly-added rows, so the cascade terminates once the chain is stamped.
+    """
+    if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
+        return
+    from urbanlens.dashboard.models.badges.model import Badge
+
+    visited_badge = Badge.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
+    if visited_badge is None:
+        return
+    for ancestor in instance.ancestor_chain():
+        ancestor.badges.add(visited_badge)
+
+
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_review(sender, instance: Review, **kwargs) -> None:
     if instance.pin_id:

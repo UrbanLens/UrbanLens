@@ -153,6 +153,17 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="childpins",
+        kind="custom",
+        label="Sub Pins",
+        aria_label="Show or hide sub pins",
+        tooltip="Show pins nested inside other pins",
+        icon="subdirectory_arrow_right",
+        button_id="child-pins-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="dark",
         kind="action",
         label="Dark",

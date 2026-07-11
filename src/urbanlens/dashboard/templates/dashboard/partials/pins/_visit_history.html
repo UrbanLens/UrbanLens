@@ -75,6 +75,12 @@
                     <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
                     {% endif %}
                     <span class="visit-source-label">{{ visit.get_source_display }}</span>
+                    {% if include_children and visit.pin_id != pin.id %}
+                    <a class="visit-child-chip" href="{% url 'pin.details' visit.pin.slug|default:visit.pin.uuid %}"
+                       title="Logged on the sub pin {{ visit.pin.effective_name }}">
+                        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ visit.pin.effective_name }}
+                    </a>
+                    {% endif %}
                 </div>
                 {% if visit.notes %}
                 <div class="visit-notes">{{ visit.notes }}</div>
@@ -149,6 +155,13 @@
             </div>
 
             <div class="visit-item-actions">
+                {% if include_children and visit.pin_id != pin.id %}
+                {# Child-pin visits are edited from their own pin's page - deep-link there. #}
+                <a href="{% url 'pin.details' visit.pin.slug|default:visit.pin.uuid %}" class="icon-btn visit-open-child-btn"
+                   title="Open {{ visit.pin.effective_name }} to edit this visit">
+                    <i class="material-symbols-outlined">open_in_new</i>
+                </a>
+                {% else %}
                 <button type="button"
                         hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
                         hx-target="#visit-edit-body-{{ pin.slug }}"
@@ -167,6 +180,7 @@
                         title="Delete visit">
                     <i class="material-symbols-outlined">delete_outline</i>
                 </button>
+                {% endif %}
             </div>
         </li>
         {% endfor %}

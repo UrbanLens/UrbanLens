@@ -24,6 +24,14 @@ import type {} from "leaflet-draw";
 
 interface DetailPinEntry {
     uuid: string;
+    /** Slug of the child pin's own detail page (Pin-backed detail pins only). */
+    slug?: string;
+    /** URL of the child pin's own detail page (Pin-backed detail pins only). */
+    url?: string;
+    /** Name of the child pin this entry belongs to, when it came from a
+     * descendant (the page-wide "show sub pin details" toggle). Entries with
+     * an owner are display-only here - they're edited from their own page. */
+    owner_name?: string;
     name: string;
     pin_type: string;
     icon: string | null;
@@ -298,17 +306,18 @@ function init(): void {
             li.className = "detail-pin-list-item";
             li.dataset.uuid = dp.uuid;
             li.dataset.kind = "pin";
+            // Nested entries (from a child pin) are display-only: no delete,
+            // clicking highlights on the map instead of opening the editor.
+            const meta = dp.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(dp.owner_name)}</span>` : dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : "";
             li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(color)}">${escHtml(icon)}</span>
                 <span class="detail-pin-list-item-name">${escHtml(dp.name)}</span>
-                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : ""}
-                <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${meta}
+                ${dp.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete pin"><i class="material-symbols-outlined">close</i></button>`}`;
             li.addEventListener("click", (e) => {
                 if ((e.target as HTMLElement).closest(".detail-pin-list-item-delete")) return;
                 highlightDetailPin(dp.uuid);
-                openDetailPinEditDialog(dp);
+                if (!dp.owner_name) openDetailPinEditDialog(dp);
             });
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
@@ -334,14 +343,15 @@ function init(): void {
             li.dataset.uuid = item.uuid;
             li.dataset.kind = "markup";
             const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
+            const ownerMeta = item.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(item.owner_name)}</span>` : "";
             li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
                 <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
-                <button type="button" class="detail-pin-list-item-delete" title="Delete">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${ownerMeta}
+                ${item.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete"><i class="material-symbols-outlined">close</i></button>`}`;
             li.addEventListener("click", (e) => {
                 if ((e.target as HTMLElement).closest(".detail-pin-list-item-delete")) return;
+                if (item.owner_name) return; // child-pin markup is edited from its own page
                 toolbar.openMarkupEditDialog(item);
             });
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
@@ -382,6 +392,35 @@ function init(): void {
         chevron?.classList.toggle("open", !open);
     });
 
+    // Popup shown when a child pin's marker is clicked: name, which sub pin it
+    // belongs to (for nested entries), and a link to that pin's own detail
+    // page - plus an Edit shortcut for this pin's own direct children.
+    function detailPinPopupContent(entry: DetailPinEntry): HTMLElement {
+        const el = document.createElement("div");
+        el.className = "pin-popup child-pin-popup";
+        const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
+        el.innerHTML = `
+            <div class="popup-title">${escHtml(entry.name || "Sub pin")}</div>
+            ${owner}
+            ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
+            <div class="popup-actions">
+                ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
+            </div>`;
+        if (!entry.owner_name) {
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "edit-pin-button";
+            editBtn.title = "Edit sub pin";
+            editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i>';
+            editBtn.addEventListener("click", () => {
+                map.closePopup();
+                openDetailPinEditDialog(entry);
+            });
+            el.querySelector(".popup-actions")!.appendChild(editBtn);
+        }
+        return el;
+    }
+
     function loadDetailPins(): void {
         fetch(cfg.detailPinsJsonUrl)
             .then((r) => r.json())
@@ -393,6 +432,9 @@ function init(): void {
                     if (!dp.latitude || !dp.longitude) return;
                     const entry: DetailPinEntry = {
                         uuid: dp.uuid,
+                        slug: dp.slug,
+                        url: dp.url,
+                        owner_name: dp.owner_name,
                         name: dp.name,
                         pin_type: dp.pin_type,
                         icon: dp.icon,
@@ -408,9 +450,18 @@ function init(): void {
                         longitude: dp.longitude,
                         marker: null,
                     };
-                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: true });
-                    if (dp.name) marker.bindTooltip(dp.name, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
-                    marker.on("click", () => openDetailPinEditDialog(entry));
+                    // Nested entries (owner_name set) belong to a child pin and are
+                    // display-only here - not draggable, edited on their own page.
+                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
+                    const tooltip = entry.owner_name && dp.name ? `${dp.name} — inside ${entry.owner_name}` : dp.name;
+                    if (tooltip) marker.bindTooltip(tooltip, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+                    if (entry.url) {
+                        marker.bindPopup(detailPinPopupContent(entry));
+                    } else {
+                        // Wiki child markers have no personal detail page - keep the
+                        // direct click-to-edit behavior there.
+                        marker.on("click", () => openDetailPinEditDialog(entry));
+                    }
                     marker.on("dragend", () => {
                         const pos = marker.getLatLng();
                         fetch(`${dpEditBase}${dp.uuid}/`, {
@@ -477,9 +528,12 @@ function init(): void {
         });
     }
 
-    function addPhotoMarker(imgId: number, url: string, lat: number, lng: number): void {
+    function addPhotoMarker(imgId: number, url: string, lat: number, lng: number, ownerName?: string): void {
         if (photoMarkers[imgId]) photoLayer.removeLayer(photoMarkers[imgId]!.marker);
-        const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: true });
+        // Photos belonging to a child pin (ownerName) are display-only on this
+        // map - they're repositioned from their own pin's page.
+        const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: !ownerName });
+        if (ownerName) marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         marker.on("dragend", () => {
             const pos = marker.getLatLng();
             const prevLat = photoMarkers[imgId]!.lat;
@@ -661,7 +715,7 @@ function init(): void {
             photoPanelItems = [];
             (data.images || []).forEach((img: any) => {
                 photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
-                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude, img.child_pin_name);
             });
             buildPhotoPanel();
             refreshPanelHeader();
@@ -720,18 +774,22 @@ function init(): void {
         }
     }
 
-    function addGeoJSONPolygons(group: L.FeatureGroup, geojson: any, style: L.PathOptions): void {
+    function addGeoJSONPolygons(group: L.FeatureGroup, geojson: any, style: L.PathOptions, label?: string): void {
         // Split MultiPolygon into individual L.Polygon layers so Leaflet.Draw
         // can edit each sub-polygon independently.
         const rings: [number, number][][][] | null = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
+        const bindLabel = (layer: L.Layer) => {
+            if (label) layer.bindTooltip(label, { sticky: true, direction: "top", className: "boundary-tooltip" });
+            return layer;
+        };
         if (rings) {
             rings.forEach((ringSet) => {
                 // GeoJSON coords are [lng, lat]; Leaflet wants [lat, lng].
-                group.addLayer(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]] as [number, number])), style));
+                group.addLayer(bindLabel(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]] as [number, number])), style)));
             });
         } else {
             // FeatureCollection fallback.
-            L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(l));
+            L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(bindLabel(l)));
         }
     }
 
@@ -741,8 +799,10 @@ function init(): void {
         savedBoundaries[type] = geojson || null;
         boundarySources[type] = geojson ? source || null : null;
         if (!geojson) return;
-        const style = type === "property" && source === "circle" ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
-        addGeoJSONPolygons(group, geojson, style);
+        const isCircle = type === "property" && source === "circle";
+        const style = isCircle ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
+        const label = type === "property" ? (isCircle ? "Approximate property area" : "Property boundary") : "Building boundary";
+        addGeoJSONPolygons(group, geojson, style, label);
     }
 
     function boundaryHasRealPolygon(type: BoundaryType): boolean {
@@ -760,7 +820,7 @@ function init(): void {
         // exists, no building layer is shown at all ("no known building here").
         detailBuildingItems.clearLayers();
         (data.detail_buildings || []).forEach((entry: any) => {
-            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE);
+            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a sub pin)");
         });
         // The center marker stays visible unless a real (non-circle) property
         // polygon marks the place's extent.
@@ -812,9 +872,12 @@ function init(): void {
     }
 
     function setBoundaryEditButtonsVisible(visible: boolean): void {
-        const btns = document.getElementById("edit-boundary-btns");
+        // The boundary tools live inside the "Add Detail" dropdown; while a
+        // boundary edit session is active, swap that button cluster out for
+        // the Clear/Cancel/Done save controls.
+        const addDetail = document.getElementById("add-detail-wrap");
         const controls = document.getElementById("boundary-save-controls");
-        if (btns) btns.style.display = visible ? "" : "none";
+        if (addDetail) addDetail.style.display = visible ? "" : "none";
         if (controls) controls.style.display = visible ? "none" : "";
     }
 
@@ -822,7 +885,9 @@ function init(): void {
         if (boundaryDrawControl || !boundaryGroups[type]) return;
         editingBoundaryType = type;
         // Editing a boundary is its own exclusive map-interaction mode - close
-        // whichever side panel happens to be open first (autosave makes this safe).
+        // the Add Detail dropdown this was launched from and whichever side
+        // panel happens to be open (autosave makes this safe).
+        closeAddDetailMenuIfOpen();
         toolbar.closeMarkupPanel();
         closeDetailPinPanel();
         // While actively editing, boundary polygons need to catch clicks/drags

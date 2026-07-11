@@ -11,7 +11,7 @@ Context:
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
-     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
+     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
@@ -39,6 +39,9 @@ Context:
         onmouseleave="galleryHover({{ img.pk }}, false)">
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
+        {% if include_children and img.pin_id != pin.id %}
+        <span class="gallery-child-ribbon" title="Photo from the sub pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
+        {% endif %}
         {% if img.latitude and img.longitude %}
         <span class="gallery-has-coords" title="Has GPS coordinates">
           <i class="material-symbols-outlined">place</i>
@@ -46,10 +49,18 @@ Context:
         {% endif %}
       </button>
       {% if img.profile == profile %}
+      {% if include_children and img.pin_id != pin.id %}
+      {# Child-pin photos are managed from their own pin's page. #}
+      <a class="gallery-delete-btn gallery-open-child-btn" title="Open {{ img.pin.effective_name }}"
+         href="{% url 'pin.details' img.pin.slug|default:img.pin.uuid %}">
+        <i class="material-symbols-outlined">open_in_new</i>
+      </a>
+      {% else %}
       <button type="button" class="gallery-delete-btn" title="Delete photo"
               onclick="galleryDelete({{ img.pk }})">
         <i class="material-symbols-outlined">delete</i>
       </button>
+      {% endif %}
       {% endif %}
       {% if img.caption %}
       <p class="gallery-caption">{{ img.caption }}</p>

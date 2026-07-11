@@ -2108,9 +2108,11 @@
         const interactive = l;
         if (!interactive.on)
           return;
-        interactive.on("click", () => openMarkupEditDialog(item));
-        if (item.label && interactive.bindTooltip) {
-          interactive.bindTooltip(escapeMarkupLabel(item.label), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        if (!item.owner_name)
+          interactive.on("click", () => openMarkupEditDialog(item));
+        const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
+        if (tooltip && interactive.bindTooltip) {
+          interactive.bindTooltip(escapeMarkupLabel(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         }
       });
     }

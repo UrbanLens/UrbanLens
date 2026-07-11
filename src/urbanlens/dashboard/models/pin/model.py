@@ -234,6 +234,33 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             current = current.parent_pin
         return False
 
+    def ancestor_chain(self) -> list[Pin]:
+        """Return this pin's ancestors, nearest parent first.
+
+        Walks ``parent_pin`` with a visited guard so a pre-existing corrupted
+        cycle terminates instead of looping (mirrors ``would_create_cycle``).
+
+        Returns:
+            The ancestor pins in order (parent, grandparent, ...); empty for a
+            root pin.
+        """
+        chain: list[Pin] = []
+        seen: set[int] = {self.pk} if self.pk is not None else set()
+        current = self.parent_pin
+        while current is not None and current.pk not in seen:
+            seen.add(current.pk)
+            chain.append(current)
+            current = current.parent_pin
+        return chain
+
+    def descendants(self):
+        """Return every pin nested below this one (children, grandchildren, ...).
+
+        Returns:
+            A ``PinQuerySet`` over the full subtree, excluding this pin itself.
+        """
+        return Pin.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
+
     # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
@@ -510,8 +537,11 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     def to_detail_json(self) -> dict:
         """Compact serialisation for detail-pin map markers."""
+        slug = self.slug or str(self.uuid)
         return {
             "uuid": str(self.uuid),
+            "slug": slug,
+            "url": f"/dashboard/map/pin/{slug}/",
             "name": self.effective_name,
             "description": self.description or "",
             "pin_type": self.pin_type,

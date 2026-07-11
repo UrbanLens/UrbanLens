@@ -277,6 +277,10 @@ Features planned for future releases.
 * On pin details page, allow dragging map vertically bigger, which saves between sessions.
 * Turning off the markup layer on a map should turn off showing boundaries.
 * Allow exporting data as other formats: KML, GPX, GeoJSON, CSV.
+* "Promote child pin to parent pin" feature.
+* Pin Details page > Edit dialog - The Pin type dropdown should probably go away.
+* One time: I'm not seeing the community wiki section appear on a particular pin details page. (4143533n-7355362w)
+* Import pins is a little clunky.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

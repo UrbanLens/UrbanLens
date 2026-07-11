@@ -33,6 +33,9 @@ export interface MarkupItem {
         box_corner?: [number, number];
     };
     label?: string;
+    /** Name of the child pin this markup belongs to, when it was loaded via
+     * the pin page's "show sub pin details" toggle. Display-only here. */
+    owner_name?: string;
     color: string;
     border_color?: string | null;
     stroke_width?: number;
@@ -375,13 +378,16 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         item._layers = layers;
 
         // Clicking any interactive layer opens the edit dialog; also bind a
-        // tooltip showing the label (if any) on hover.
+        // tooltip showing the label (if any) on hover. Markup belonging to a
+        // child pin (owner_name) is display-only here - no edit on click, and
+        // the tooltip says which sub pin it comes from.
         layers.forEach((l) => {
             const interactive = l as L.Layer & { on?: L.Evented["on"]; bindTooltip?: L.Layer["bindTooltip"] };
             if (!interactive.on) return;
-            interactive.on!("click", () => openMarkupEditDialog(item));
-            if (item.label && interactive.bindTooltip) {
-                interactive.bindTooltip!(escapeMarkupLabel(item.label), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+            if (!item.owner_name) interactive.on!("click", () => openMarkupEditDialog(item));
+            const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
+            if (tooltip && interactive.bindTooltip) {
+                interactive.bindTooltip!(escapeMarkupLabel(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });
     }

@@ -579,6 +579,44 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             payload["total"] = cached_page.page.total
         return JsonResponse(payload)
 
+    def map_child_pins_json(self, request, *args, **kwargs):
+        """Return the profile's child pins (all nesting depths) for the Sub Pins layer.
+
+        Child pins are pins nested under another pin via ``parent_pin`` (created
+        by merging pins or by adding detail pins on a pin's page). The main map
+        hides them by default; the "Sub Pins" layer renders this payload.
+
+        The same ``SearchForm`` criteria the filter panel posts are honoured
+        when present in the query string, so an active map filter narrows the
+        layer to matching child pins too.
+
+        Returns:
+            JsonResponse: ``{"pins": [{...to_detail_json(), parent_slug,
+            parent_name, parent_url}, ...]}``
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = Pin.objects.filter(profile=profile).detail_pins().select_related("location", "parent_pin", "parent_pin__location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+
+        search_form = SearchForm(request.GET)
+        if search_form.is_valid():
+            criteria = dict(search_form.cleaned_data)
+            parsed_groups = search_form.parse_badge_groups()
+            if parsed_groups is not None:
+                criteria["badge_groups"] = parsed_groups
+            query = query.filter_by_criteria(criteria)
+
+        pins = []
+        for child in query:
+            entry = child.to_detail_json()
+            parent = child.parent_pin
+            if parent is not None:
+                parent_slug = parent.slug or str(parent.uuid)
+                entry["parent_slug"] = parent_slug
+                entry["parent_name"] = parent.effective_name
+                entry["parent_url"] = f"/dashboard/map/pin/{parent_slug}/"
+            pins.append(entry)
+        return JsonResponse({"pins": pins})
+
     def map_pins_meta(self, request, *args, **kwargs):
         """Return the latest pin update timestamp and app UUID for client-side cache invalidation.
 

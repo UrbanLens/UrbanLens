@@ -85,13 +85,41 @@
     cursor: crosshair;
 }
 
-.map-pin-icon-wrap.is-selected {
-    .map-pin-icon,
-    .map-pin-custom-img,
-    .map-pin-emoji,
-    .map-pin-with-circle {
-        filter: drop-shadow(0 0 0 3px $color-blue-500) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+// Selected markers get an unmissable halo ring + check badge, on both custom
+// divIcon markers (.map-pin-icon-wrap) and default Leaflet image markers.
+.map-pin-icon-wrap.is-selected,
+.leaflet-marker-icon.is-selected {
+    border-radius: 50% !important;
+    background: rgba(30, 136, 229, .22) !important;
+    box-shadow:
+        0 0 0 3px $color-blue-500,
+        0 0 0 7px rgba(30, 136, 229, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+
+    &::after {
+        content: "✓";
+        position: absolute;
+        top: -9px;
+        right: -9px;
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: $color-blue-500;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 17px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+        pointer-events: none;
+        z-index: 2;
     }
+}
+
+// Default Leaflet markers are <img> elements which can't host ::after - wrap
+// the halo on the img itself; the badge is dropped there (halo alone is clear).
+img.leaflet-marker-icon.is-selected {
+    border-radius: 40% !important;
 }
 
 .map-pin-custom-img {
@@ -541,6 +569,13 @@
     min-width: 130px;
     overflow: hidden;
     z-index: 1100;
+}
+
+// Separator between the markup tools and the boundary tools in the menu.
+.add-detail-menu-sep {
+    height: 1px;
+    margin: 2px 0;
+    background: var(--ul-grey-2, rgba(0, 0, 0, .12));
 }
 
 .add-detail-item {
@@ -2680,6 +2715,90 @@ div.container .addr-search-bar {
     .bulk-select-close {
         margin-left: $space-sm;
     }
+}
+
+// -- Sub pins (child pins) layer on the main map -----------------------------
+// Smaller, softer markers so child pins read as subordinate to root pins.
+.child-pin-marker-wrap {
+    background: none !important;
+    border: none !important;
+}
+
+.child-pin-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .92);
+    border: 2px dashed rgba(124, 58, 237, .65);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+
+    .child-pin-icon {
+        font-size: 16px !important;
+        line-height: 1 !important;
+    }
+
+    .child-pin-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .child-pin-img {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+        border-radius: 50%;
+    }
+}
+
+// "Sub pin of {parent}" line inside child-pin popups (main map + pin detail).
+.popup-child-parent {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: $text-muted;
+    margin: .2rem 0 .35rem;
+
+    i {
+        font-size: .95rem;
+    }
+
+    a {
+        font-weight: 600;
+    }
+}
+
+// Merge dialog docked to the side on wide screens: the map stays interactive
+// and is panned/zoomed so every selected pin remains visible beside it.
+.bulk-merge-dialog--docked {
+    position: fixed;
+    top: 50%;
+    right: 18px;
+    left: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    margin: 0;
+    width: min(380px, 40vw);
+    max-height: min(80vh, 640px);
+    overflow-y: auto;
+    z-index: 1300;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+}
+
+.cat-merge-empty-hint {
+    font-size: .82rem;
+    color: $text-muted;
+    margin: .25rem 0;
+}
+
+// Hover tooltip labelling the property/building boundary polygons.
+.boundary-tooltip {
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 2px 8px;
 }
 
 // Undo action embedded inside the bulk-delete toastr message.
