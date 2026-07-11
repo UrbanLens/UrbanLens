@@ -26,6 +26,12 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.text_limits import (
+    MAX_COMMENT_TEXT_LENGTH,
+    MAX_TRIP_ACTIVITY_NOTES_LENGTH,
+    MAX_TRIP_DESCRIPTION_LENGTH,
+    text_length_error,
+)
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
@@ -511,9 +517,14 @@ class TripCreateView(LoginRequiredMixin, View):
         if not name:
             return HttpResponse("Trip name is required.", status=400)
 
+        description = body.get("description") or None
+        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
         trip = Trip.objects.create(
             name=name,
-            description=body.get("description") or None,
+            description=description,
             start_date=body.get("start_date") or None,
             end_date=body.get("end_date") or None,
             creator=profile,
@@ -594,7 +605,11 @@ class TripEditView(LoginRequiredMixin, View):
         name = (body.get("name") or "").strip()
         if name:
             trip.name = name
-        trip.description = body.get("description") or None
+        description = body.get("description") or None
+        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+        trip.description = description
         trip.start_date = body.get("start_date") or None
         trip.end_date = body.get("end_date") or None
         trip.save()
@@ -662,6 +677,9 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
         title = (body.get("title") or "").strip() or None
         notes = (body.get("notes") or "").strip() or None
+        length_error = text_length_error(notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         location, pin = _resolve_activity_place(body, profile)
@@ -717,7 +735,11 @@ class TripActivityEditView(LoginRequiredMixin, View):
             body = request.POST.dict()
 
         activity.title = (body.get("title") or "").strip() or None
-        activity.notes = (body.get("notes") or "").strip() or None
+        notes = (body.get("notes") or "").strip() or None
+        length_error = text_length_error(notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+        activity.notes = notes
         activity.scheduled_at = _parse_scheduled_at(body.get("scheduled_date"), body.get("scheduled_time"))
         activity.scheduled_end = _parse_scheduled_at(body.get("scheduled_end_date"), body.get("scheduled_end_time"))
         activity.location, activity.pin = _resolve_activity_place(body, profile)
@@ -951,6 +973,9 @@ class TripCommentsView(LoginRequiredMixin, View):
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
 
         parent_id = request.POST.get("parent_id")
         parent = None

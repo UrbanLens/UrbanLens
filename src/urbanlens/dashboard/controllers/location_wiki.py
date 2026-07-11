@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -306,6 +307,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
                         new_val = datetime.strptime(raw, "%Y-%m-%d").date()
                     except ValueError:
                         continue
+            elif field == "description":
+                length_error = text_length_error(raw, MAX_WIKI_DESCRIPTION_LENGTH, "Description")
+                if length_error:
+                    return JsonResponse({"error": length_error}, status=400)
+                new_val = raw
             else:
                 new_val = raw
             new_vals[field] = new_val

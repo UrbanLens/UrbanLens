@@ -31,6 +31,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
+from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -434,6 +435,9 @@ class MarkupView(LoginRequiredMixin, View):
             _sanitize_text_box_corner(geometry)
 
         label = (body.get("label") or "").strip()
+        length_error = text_length_error(label, MAX_MARKUP_LABEL_LENGTH, "Label")
+        if length_error:
+            return JsonResponse({"ok": False, "error": length_error}, status=400)
         security_indicator = body.get("security_indicator") or ""
         if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
             security_indicator = ""
@@ -509,7 +513,11 @@ class MarkupEditView(LoginRequiredMixin, View):
                 _sanitize_text_box_corner(geometry)
             item.geometry = geometry
         if "label" in body:
-            item.label = (body["label"] or "").strip()
+            label = (body["label"] or "").strip()
+            length_error = text_length_error(label, MAX_MARKUP_LABEL_LENGTH, "Label")
+            if length_error:
+                return JsonResponse({"ok": False, "error": length_error}, status=400)
+            item.label = label
         if "color" in body:
             item.color = body["color"] or item.color
         if "stroke_width" in body:

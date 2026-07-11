@@ -5,6 +5,7 @@ import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.db.models import (
     CASCADE,
@@ -26,6 +27,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
+from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -108,7 +110,7 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
-    bio = TextField(null=True, blank=True)
+    bio = TextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)

@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -21,6 +22,11 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.trips.queryset import TripManager
+from urbanlens.dashboard.services.text_limits import (
+    MAX_COMMENT_TEXT_LENGTH,
+    MAX_TRIP_ACTIVITY_NOTES_LENGTH,
+    MAX_TRIP_DESCRIPTION_LENGTH,
+)
 
 if TYPE_CHECKING:
     from datetime import date
@@ -38,7 +44,7 @@ class Trip(abstract.FrontendDashboardModel):
     """
 
     name = CharField(max_length=255)
-    description = TextField(null=True, blank=True)
+    description = TextField(null=True, blank=True, max_length=MAX_TRIP_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_DESCRIPTION_LENGTH)])
     start_date = DateField(null=True, blank=True)
     end_date = DateField(null=True, blank=True)
 
@@ -171,7 +177,7 @@ class TripActivity(abstract.DashboardModel):
     ]
 
     title = CharField(max_length=255, null=True, blank=True)
-    notes = TextField(null=True, blank=True)
+    notes = TextField(null=True, blank=True, max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_ACTIVITY_NOTES_LENGTH)])
     scheduled_at = DateTimeField(null=True, blank=True)
     scheduled_end = DateTimeField(null=True, blank=True)
     order = IntegerField(default=0)
@@ -310,7 +316,7 @@ class TripMembership(abstract.DashboardModel):
 class TripComment(abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
 
-    text = TextField()
+    text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
     # Standalone map (viewport + markup items) attached to this comment.
     markup_map = ForeignKey(

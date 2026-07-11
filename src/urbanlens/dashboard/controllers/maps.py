@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.redact import redact_secret
@@ -37,25 +38,6 @@ from urbanlens.UrbanLens.settings.app import settings
 logger = logging.getLogger(__name__)
 
 _PIN_LIST_PAGE_SIZE = 25
-
-# Same escapes Django's {% json_script %} applies: neutralizes `</script>` and HTML
-# entity injection when a JSON payload (e.g. user-owned badge names) is embedded
-# directly inside an already-open <script> block via `{{ ... |safe }}`, rather than
-# through json_script's own <script type="application/json"> wrapper.
-_JSON_SCRIPT_ESCAPES = {ord(">"): "\\u003E", ord("<"): "\\u003C", ord("&"): "\\u0026"}
-
-
-def _safe_json_for_script(value: Any) -> str:
-    """Serialize a value to JSON that is safe to embed inline inside a `<script>` block.
-
-    Args:
-        value: The JSON-serializable value (e.g. a list of dicts of badge data).
-
-    Returns:
-        A JSON string with `<`, `>`, and `&` escaped so it cannot break out of the
-        enclosing `<script>` tag or inject HTML, even when rendered with `|safe`.
-    """
-    return json.dumps(value).translate(_JSON_SCRIPT_ESCAPES)
 
 _US_STATE_CODES: dict[str, str] = {
     "AL": "Alabama",
@@ -154,7 +136,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
         filter_badges_list = list(filter_badges)
-        filter_badges_json = _safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
+        filter_badges_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -968,7 +950,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             else:
                 pin["tags_data"] = []
                 pin["tags"] = ""
-            pin["tags_data_json"] = _safe_json_for_script(pin["tags_data"])
+            pin["tags_data_json"] = safe_json_for_script(pin["tags_data"])
             if pin.get("categories"):
                 pin["categories"] = ", ".join(pin["categories"])
             else:

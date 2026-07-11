@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.validators import MaxLengthValidator
 from django.db import models
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.comments.queryset import CommentManager
+from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH
 
 
 class Comment(abstract.FrontendDashboardModel):
@@ -17,7 +19,7 @@ class Comment(abstract.FrontendDashboardModel):
     ``parent`` is set only for replies (depth-1 threading).
     """
 
-    text = models.TextField()
+    text = models.TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
 
     pin = models.ForeignKey(

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.validators import MaxLengthValidator
 from django.db import DatabaseError
 from django.db.models import (
     CASCADE,
@@ -26,6 +27,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -72,7 +74,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     name = CharField(max_length=255, null=True, blank=True)
     icon = CharField(max_length=255, null=True, blank=True)
     # User's personal notes. Unrelated to Location.description (place-level info).
-    description = TextField(null=True, blank=True)
+    description = TextField(null=True, blank=True, max_length=MAX_PIN_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_PIN_DESCRIPTION_LENGTH)])
     priority = IntegerField(default=0)
     vulnerability = IntegerField(default=0)
     danger = IntegerField(default=0)

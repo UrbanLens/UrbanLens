@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, K
 from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.undo import UndoAction
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
 if TYPE_CHECKING:
@@ -164,6 +165,9 @@ class PinBulkEditView(LoginRequiredMixin, View):
 
         description = data.get("description")
         if description is not None and str(description).strip():
+            length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
+            if length_error:
+                return HttpResponse(length_error, status=400)
             for pin in pins:
                 pin.description = description
                 pin.save(update_fields=["description"])

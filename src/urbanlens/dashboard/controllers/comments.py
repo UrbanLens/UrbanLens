@@ -27,6 +27,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 )
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
@@ -131,6 +132,9 @@ class PinCommentsView(LoginRequiredMixin, View):
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
@@ -204,6 +208,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         map_data = _parse_map_data(request)
         if not text and not image and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
+        length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:

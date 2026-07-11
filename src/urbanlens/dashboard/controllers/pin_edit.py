@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
@@ -228,6 +229,9 @@ class PinEditView(LoginRequiredMixin, View):
         # fall back to the pin's current value - never silently clear it.
         name = (body.get("name") or "").strip() or None if "name" in body else pin.name
         description = (body.get("description") or "").strip() or None if "description" in body else pin.description
+        length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            return HttpResponse(length_error, status=400)
         pin_type = body.get("pin_type") or pin.pin_type
         priority_raw = body.get("priority")
         rating_raw = body.get("rating")

@@ -19,6 +19,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.core.validators import MaxLengthValidator
 from django.db import DatabaseError
 from django.db.models import CASCADE, RESTRICT, SET_NULL, ForeignKey, Index, ManyToManyField, OneToOneField
 from django.db.models.fields import BooleanField, CharField, DateField, IntegerField, SlugField, TextField
@@ -26,6 +27,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, IntegerF
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.wiki.queryset import WikiManager
+from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -63,7 +65,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
     # Canonical community name of the place (was Location.name).
     name = CharField(max_length=255)
-    description = TextField(null=True, blank=True)
+    description = TextField(null=True, blank=True, max_length=MAX_WIKI_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_WIKI_DESCRIPTION_LENGTH)])
 
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)

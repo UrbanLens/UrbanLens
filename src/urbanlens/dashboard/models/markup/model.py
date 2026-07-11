@@ -6,6 +6,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
+from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -21,6 +22,7 @@ from django.db.models import (
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.markup.meta import MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
 from urbanlens.dashboard.models.markup.queryset import MarkupMapManager, PinMarkupManager
+from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -249,7 +251,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     markup_type = CharField(max_length=20, choices=MarkupType.choices)
     geometry = JSONField()
-    label = TextField(blank=True, default="")
+    label = TextField(blank=True, default="", max_length=MAX_MARKUP_LABEL_LENGTH, validators=[MaxLengthValidator(MAX_MARKUP_LABEL_LENGTH)])
     color = CharField(max_length=20, blank=True, default="#e53e3e")
     stroke_width = IntegerField(default=3)
     border_color = CharField(max_length=20, blank=True, default="")

@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.site_settings import (
     SiteSettings,
 )
 from urbanlens.dashboard.services.infrastructure_stats import _format_duration
+from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -404,10 +405,10 @@ class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
             {
                 "page_name": "site-admin-stats",
                 "server_time": now,
-                "chart_user_labels": json.dumps(user_labels),
-                "chart_user_counts": json.dumps(user_counts),
-                "chart_location_labels": json.dumps(location_labels),
-                "chart_location_counts": json.dumps(location_counts),
+                "chart_user_labels": safe_json_for_script(user_labels),
+                "chart_user_counts": safe_json_for_script(user_counts),
+                "chart_location_labels": safe_json_for_script(location_labels),
+                "chart_location_counts": safe_json_for_script(location_counts),
             },
         )
 
