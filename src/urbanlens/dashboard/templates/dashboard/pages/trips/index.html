@@ -84,7 +84,7 @@
     <form hx-post="{% url 'trips.create' %}?sort={{ sort }}&dir={{ dir }}"
           hx-target="#trip-list"
           hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();_tripHideDates('trip-create')}"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
@@ -97,7 +97,15 @@
             <textarea name="description" id="trip-description" rows="3"
                       placeholder="What's the plan?"></textarea>
         </div>
-        <div class="form-row form-row--two-col">
+        <div class="form-row trip-dates-toggle-row">
+            <button type="button" class="btn btn--ghost trip-add-dates-btn" id="trip-create-dates-toggle"
+                    data-tooltip="Dates are set automatically once you add confirmed activities to the trip. Click here to set them yourself instead."
+                    data-tooltip-pos="right" data-tooltip-wide
+                    onclick="_tripRevealDates('trip-create')">
+                <i class="material-symbols-outlined">event</i> Add dates
+            </button>
+        </div>
+        <div class="form-row form-row--two-col trip-dates-row" id="trip-create-dates-row" hidden>
             <div>
                 <label for="trip-start">Start date</label>
                 <input type="date" name="start_date" id="trip-start">
@@ -163,6 +171,22 @@
             if (sortControl) { sortControl.hidden = (view !== 'list'); }
             if (view === 'calendar') { window.tripsCalRender(); }
         }
+
+        // -- Trip dates: hidden until "Add dates" is clicked -------------------
+        window._tripRevealDates = function (prefix) {
+            var row = document.getElementById(prefix + '-dates-row');
+            var toggle = document.getElementById(prefix + '-dates-toggle');
+            if (row) { row.hidden = false; }
+            if (toggle) { toggle.hidden = true; }
+            var startInput = document.getElementById(prefix === 'trip-create' ? 'trip-start' : 'edit-trip-start');
+            if (startInput) { startInput.focus(); }
+        };
+        window._tripHideDates = function (prefix) {
+            var row = document.getElementById(prefix + '-dates-row');
+            var toggle = document.getElementById(prefix + '-dates-toggle');
+            if (row) { row.hidden = true; }
+            if (toggle) { toggle.hidden = false; }
+        };
 
         window.tripsSetView = function (view) {
             localStorage.setItem(VIEW_STORAGE_KEY, view);

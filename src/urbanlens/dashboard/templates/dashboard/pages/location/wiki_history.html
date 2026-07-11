@@ -44,8 +44,8 @@
                     hx-post="{% url 'location.wiki.history.delete' location.slug edit.id %}"
                     hx-target="#wiki-tab-content"
                     hx-swap="innerHTML"
-                    hx-confirm="Permanently delete this edit? This restores the location to the values shown on the left (if not already reverted) and erases this edit from the history forever - use this if you accidentally posted private information. This cannot be undone.">
-                <i class="material-symbols-outlined">delete_forever</i> Delete permanently
+                    hx-confirm="Permanently delete this edit? This reverts your edit and erases it from the history forever - use this if you accidentally posted private information. This cannot be undone.">
+                <i class="material-symbols-outlined">delete_forever</i> Expunge
             </button>
             {% endif %}
         </div>

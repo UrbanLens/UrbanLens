@@ -1192,21 +1192,6 @@
             }
         }
 
-        .wiki-tabs {
-            background: var(--ul-grey-1);
-            border-bottom-color: var(--ul-grey-1a);
-        }
-
-        .wiki-tab {
-            color: var(--ul-grey-7);
-
-            &--active,
-            &:hover {
-                color: $color-cyan-400;
-                border-bottom-color: $color-cyan-400;
-            }
-        }
-
         .wiki-loading {
             color: var(--ul-grey-6);
         }

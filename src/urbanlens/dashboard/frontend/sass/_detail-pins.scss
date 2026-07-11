@@ -424,24 +424,9 @@
         user-select: none;
         transition: border-color .15s, background .15s, color .15s;
 
-        input[type="checkbox"] {
-            // Undo Materialize's global checkbox reset (position:absolute;
-            // opacity:0) so the box is actually visible.
-            position: static;
-            opacity: 1;
-            pointer-events: auto;
-            accent-color: $color-indigo-500;
-            width: 14px;
-            height: 14px;
-            margin: 0;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
         &:has(input:checked) {
             border-color: $color-indigo-500;
             background: rgba(99, 102, 241, .1);
-            color: $color-indigo-500;
         }
     }
 

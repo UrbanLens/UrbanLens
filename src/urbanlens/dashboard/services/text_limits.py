@@ -17,6 +17,7 @@ MAX_TRIP_DESCRIPTION_LENGTH = 10_000
 MAX_TRIP_ACTIVITY_NOTES_LENGTH = 10_000
 MAX_MARKUP_LABEL_LENGTH = 500
 MAX_PROFILE_BIO_LENGTH = 2_000
+MAX_PIN_SHARE_MESSAGE_LENGTH = 2_000
 
 
 def text_length_error(value: str | None, max_length: int, field_label: str) -> str | None:

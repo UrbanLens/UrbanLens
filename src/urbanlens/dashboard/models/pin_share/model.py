@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.core.validators import MaxLengthValidator
 from django.db import models
-from django.db.models import Index, Q, UniqueConstraint
+from django.db.models import Index, ManyToManyField, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
+from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
 
 class PinShare(abstract.DashboardModel):
@@ -42,6 +44,22 @@ class PinShare(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # Optional note from the sharer explaining why they're sharing this place.
+    message = models.TextField(
+        null=True,
+        blank=True,
+        max_length=MAX_PIN_SHARE_MESSAGE_LENGTH,
+        validators=[MaxLengthValidator(MAX_PIN_SHARE_MESSAGE_LENGTH)],
+    )
+    # Name to present for the shared pin, chosen by the sharer at share time -
+    # one of the pin's existing aliases, or a brand-new name (which also gets
+    # added to the sharer's own PinAlias list). Blank means "use the pin's
+    # current effective name" at both share and accept time.
+    shared_name = models.CharField(max_length=255, null=True, blank=True)
+    # Photos the sharer opted to include - a subset of pin.images. Kept as a
+    # reference to the sharer's own Image rows; accepting the share copies
+    # these onto the recipient's new pin (see _create_pin_from_share).
+    images = ManyToManyField("dashboard.Image", blank=True, related_name="pin_shares")
 
     if TYPE_CHECKING:
         pin_id: int

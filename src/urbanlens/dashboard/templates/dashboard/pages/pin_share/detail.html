@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load map_components %}
 
 {% block title %}Shared Pin{% endblock %}
 
@@ -8,26 +9,74 @@
 {% endblock %}
 
 {% block content %}
+{% with shared_name=share.shared_name|default:pin.display_label %}
 <div class="pin-detail-grid">
-  <div class="pin-details location-details card">
+  <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
+
+    <div class="pin-share-from-row">
+      {% if share.from_profile.avatar %}
+      <img class="pin-share-from-avatar" src="{{ share.from_profile.avatar.url }}" alt="">
+      {% else %}
+      <span class="pin-share-from-avatar pin-share-from-avatar--placeholder">{{ share.from_profile.username|first|upper }}</span>
+      {% endif %}
+      <div class="pin-share-from-text">
+        <p class="pin-share-from-name"><strong>{{ share.from_profile.username }}</strong> shared a place with you</p>
+        <p class="pin-share-from-title">{{ shared_name }}</p>
+      </div>
+    </div>
+
+    {% if share.message %}
+    <blockquote class="pin-share-message">
+      <i class="material-symbols-outlined">format_quote</i>
+      <p>{{ share.message|linebreaksbr }}</p>
+    </blockquote>
+    {% endif %}
+
     <div class="details-grid">
-      <div class="detail-row full-width"><span class="field-label">From</span><span class="field-value">{{ share.from_profile.username }}</span></div>
-      <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ pin.display_label }}</span></div>
+      <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ shared_name }}</span></div>
       {% if pin.description %}<div class="detail-row full-width"><span class="field-label">Description</span><span class="field-value">{{ pin.description }}</span></div>{% endif %}
       {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
     </div>
+
+    {% if share.images.all %}
+    <div class="pin-share-photos">
+      <h3 class="pin-share-section-title"><i class="material-symbols-outlined">photo_library</i> Photos</h3>
+      <ul class="gallery-grid pin-share-photos-grid">
+        {% for photo in share.images.all %}
+        <li class="gallery-item">
+          <a class="gallery-thumb-btn" href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer">
+            <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     {% if share.is_actionable %}
-    <form method="post" action="{% url 'pin.share.respond' share.id %}" class="dialog-actions">
+    <form method="post" action="{% url 'pin.share.respond' share.id %}" class="dialog-actions pin-share-respond-actions">
       {% csrf_token %}
       <button name="action" value="reject" class="btn btn--ghost" type="submit"><i class="material-symbols-outlined">close</i> Reject</button>
       <button name="action" value="accept" class="btn btn--primary" type="submit"><i class="material-symbols-outlined">check</i> Accept and add to my map</button>
     </form>
     {% else %}
-    <p>This share is {{ share.get_status_display|lower }}.</p>
+    <p class="pin-share-status pin-share-status--{{ share.status }}">
+      <i class="material-symbols-outlined">
+        {% if share.status == 'accepted' %}check_circle{% elif share.status == 'rejected' %}cancel{% else %}info{% endif %}
+      </i>
+      This share is {{ share.get_status_display|lower }}.
+    </p>
     {% endif %}
   </div>
-  <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div><div id="shared-pin-map" style="height:420px"></div></div>
+  <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
+    <div id="shared-pin-map-wrap" style="position:relative;height:420px">
+      <div id="shared-pin-map" style="height:100%"></div>
+      <div class="map-bottom-controls">
+        {% map_layers_panel "street,satellite" panel_id="shared-pin-map-layers" extra_class="map-layers-panel--inline" %}
+      </div>
+    </div>
+  </div>
 </div>
 <script>
 (function(){
@@ -35,8 +84,10 @@
   const lng = {{ pin.effective_longitude|default:'null' }};
   if (lat === null || lng === null) return;
   const map = L.map('shared-pin-map').setView([lat, lng], 16);
-  window.MapLayers.tileLayer('street').addTo(map);
-  L.marker([lat, lng]).addTo(map).bindPopup('{{ pin.display_label|escapejs }}').openPopup();
+  // Shared layers engine + panel - the exact same component as the main map.
+  window.MapLayers.create(map, { root: document.getElementById('shared-pin-map-layers') });
+  L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
 })();
 </script>
+{% endwith %}
 {% endblock %}

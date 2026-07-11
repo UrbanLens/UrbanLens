@@ -1214,6 +1214,35 @@
     }
 }
 
+.trip-dates-toggle-row {
+    margin-top: -.35rem;
+}
+
+.trip-add-dates-btn {
+    align-self: flex-start;
+    font-size: .82rem;
+    padding: .3rem .65rem;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.trip-dates-row {
+    animation: ul-fade-in-down .15s ease;
+}
+
+@keyframes ul-fade-in-down {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .trip-invite-friend-list {
     list-style: none;
     margin: 0;
@@ -1362,13 +1391,14 @@
 
 .trip-map-overlay {
     position: absolute;
-    bottom: 30px;
-    left: 10px;
+    top: 0.5em;
+    right: 0.5em;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     gap: 4px;
     pointer-events: none;
+    justify-self: right;
 
     >* {
         pointer-events: auto;

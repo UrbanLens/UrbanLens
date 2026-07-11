@@ -150,7 +150,7 @@
             <div class="card__body wiki-stats-grid">
                 <div class="wiki-stat">
                     {% if pin_count_display.is_low %}
-                    <span class="wiki-stat-value wiki-stat-value--low">fewer than 3</span>
+                    <span class="wiki-stat-value wiki-stat-value--low">Fewer than 3</span>
                     <span class="wiki-stat-label">users have this pinned</span>
                     {% else %}
                     <span class="wiki-stat-value" data-tooltip="This number is approximate, to protect user privacy.">about {{ pin_count_display.value }}</span>
@@ -192,63 +192,67 @@
 
         {# Badges/categories hidden: global categories no longer exist #}
 
-        {# -- Aliases ------------------------------------------------------- #}
-        <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             id="location-aliases-panel"
-             class="card wiki-card aliases-panel">
-            <div class="card-header">
-                <i class="material-symbols-outlined">label_important</i>
-                <span>Aliases</span>
-            </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
+        {# -- Aliases / Photos / Comments / Edit history: half-width on wide screens #}
+        <div class="wiki-body-secondary">
 
-        {# -- Photo gallery -------------------------------------------------- #}
-        <div id="wiki-gallery-panel"
-             hx-get="{% url 'location.wiki.gallery' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML">
-            <div class="card">
+            {# -- Aliases ----------------------------------------------------- #}
+            <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 id="location-aliases-panel"
+                 class="card wiki-card aliases-panel">
                 <div class="card-header">
-                    <i class="material-symbols-outlined">photo_library</i>
-                    <span>Photos</span>
+                    <i class="material-symbols-outlined">label_important</i>
+                    <span>Aliases</span>
                 </div>
-                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
-        </div>
 
-        {# -- Comments ------------------------------------------------------- #}
-        <div id="comment-panel"
-             hx-get="{% url 'location.wiki.comments' location.slug %}"
-             hx-trigger="load"
-             hx-swap="outerHTML"
-             class="card wiki-card">
-            <div class="card-header">
-                <i class="material-symbols-outlined">chat</i>
-                <h2>Discussion</h2>
-            </div>
-            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        {# -- Tabs: Details / Edit history ---------------------------------- #}
-        <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
-            <div class="wiki-tabs">
-                <button class="wiki-tab wiki-tab--active" data-tab="history"
-                        hx-get="{% url 'location.wiki.history' location.slug %}"
-                        hx-target="#wiki-tab-content"
-                        hx-swap="innerHTML"
-                        hx-trigger="click, load">
-                    <i class="material-symbols-outlined">history</i> Edit History
-                </button>
-            </div>
-            <div id="wiki-tab-content" class="card__body wiki-tab-content">
-                <div class="wiki-loading">
-                    <i class="material-icons spin">autorenew</i> Loading...
+            {# -- Photo gallery ------------------------------------------------ #}
+            <div id="wiki-gallery-panel"
+                 hx-get="{% url 'location.wiki.gallery' location.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="material-symbols-outlined">photo_library</i>
+                        <span>Photos</span>
+                    </div>
+                    <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
                 </div>
             </div>
-        </div>
+
+            {# -- Comments ------------------------------------------------------ #}
+            <div id="comment-panel"
+                 hx-get="{% url 'location.wiki.comments' location.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="card wiki-card">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">chat</i>
+                    <h2>Discussion</h2>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
+            {# -- Edit history -------------------------------------------------- #}
+            <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">history</i>
+                    <h2>Edit History</h2>
+                </div>
+                <div id="wiki-tab-content"
+                     class="card__body wiki-tab-content"
+                     hx-get="{% url 'location.wiki.history' location.slug %}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="wiki-loading">
+                        <i class="material-icons spin">autorenew</i> Loading...
+                    </div>
+                </div>
+            </div>
+
+        </div>{# end wiki-body-secondary #}
 
     </div>{# end wiki-body #}
 
@@ -268,16 +272,6 @@
             <div class="form-row">
                 <label for="wiki-description">Description</label>
                 <textarea id="wiki-description" name="description" rows="4">{{ wiki.description|default:"" }}</textarea>
-            </div>
-            <div class="form-row">
-                <label for="wiki-latitude">Latitude</label>
-                <input type="number" id="wiki-latitude" name="latitude" step="0.000001"
-                       value="{{ location.latitude }}" required>
-            </div>
-            <div class="form-row">
-                <label for="wiki-longitude">Longitude</label>
-                <input type="number" id="wiki-longitude" name="longitude" step="0.000001"
-                       value="{{ location.longitude }}" required>
             </div>
             <div class="form-row form-row--two-col">
                 <div>
@@ -307,8 +301,8 @@
                 </div>
             </details>
             <div class="form-actions">
-                <button type="submit" class="wiki-action-btn wiki-action-btn btn--primary">Save changes</button>
-                <button type="button" class="wiki-action-btn" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="submit" class="btn btn--primary">Save changes</button>
+                <button type="button" class="btn btn--secondary" onclick="this.closest('dialog').close()">Cancel</button>
             </div>
         </form>
     </dialog>
@@ -365,7 +359,7 @@
                     if (dd) dd.textContent = data.description;
                 }
                 // Refresh the history tab.
-                htmx.trigger('[data-tab="history"]', 'click');
+                htmx.trigger('#wiki-tab-content', 'load');
             } else {
                 toastr.error(resp.error || 'Failed to save changes.');
             }
@@ -387,7 +381,7 @@
         const nameInput = document.getElementById('wiki-name');
         if (nameInput) nameInput.value = name;
         // Refresh the history tab so the rename edit shows up.
-        htmx.trigger('[data-tab="history"]', 'click');
+        htmx.trigger('#wiki-tab-content', 'load');
     });
 
 
@@ -400,7 +394,7 @@
             {
                 id: 'shared-edits', icon: 'edit_note', target: '.wiki-edit-btn',
                 eyebrow: 'Community page', title: 'Suggest improvements that everyone can use',
-                body: 'Names, descriptions, dates, coordinates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
+                body: 'Names, descriptions, dates, and security indicators here are shared with other users who pinned this location - your edits help everyone.',
                 button: 'Suggest an edit', watchSelector: '.wiki-edit-btn',
                 action: function () { document.querySelector('.wiki-edit-btn')?.click(); },
                 ready: function () { return !!document.querySelector('.wiki-edit-btn'); },

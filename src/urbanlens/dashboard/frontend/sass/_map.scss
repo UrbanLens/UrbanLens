@@ -3529,8 +3529,8 @@ div.container .addr-search-bar {
     // @include map-query-container on the map wrapper), so the toggle keeps
     // shrinking when the MAP - not the browser viewport - is squeezed into
     // a short OR narrow container.
-    max-width: clamp(40px, 20cqmin, 90px);
-    max-height: clamp(34px, 20cqmin, 74px);
+    max-width: clamp(40px, 22cqmin, 90px);
+    max-height: clamp(34px, 22cqmin, 74px);
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 

@@ -8,13 +8,11 @@ when the place has no wiki yet.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
-from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -35,10 +33,10 @@ logger = logging.getLogger(__name__)
 
 _WIKI_SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
-# Fields a community member may edit via "Suggest edits". name/description/
-# security/dates live on the Wiki; latitude/longitude repoint the Wiki to a
-# different (find-or-created) Location rather than mutating a shared row.
-_WIKI_EDITABLE_FIELDS = ("name", "description", "latitude", "longitude", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
+# Fields a community member may edit via "Suggest edits". Coordinates are not
+# editable here: a Wiki's Location is fixed at creation and is not something
+# a community edit may repoint.
+_WIKI_EDITABLE_FIELDS = ("name", "description", *_WIKI_SECURITY_FIELDS, "date_abandoned", "date_last_active")
 
 # Metadata for the four community stat votes (danger / vulnerability / priority /
 # rating) shown on the wiki page - the shared-place equivalent of a pin's own
@@ -98,36 +96,6 @@ def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
     location = get_object_or_404(Location, slug=location_slug)
     wiki = get_object_or_404(Wiki, location=location)
     return location, wiki
-
-
-def _apply_coordinate_change(wiki: Wiki, coord_vals: dict[str, float]) -> str | None:
-    """Repoint the wiki to a find-or-created Location for the new coordinates.
-
-    Returns an error message string when the change can't be applied (e.g. the
-    target Location already hosts a different wiki), else None.
-    """
-    current = wiki.location
-    latitude = coord_vals.get("latitude", float(current.latitude) if current else None)
-    longitude = coord_vals.get("longitude", float(current.longitude) if current else None)
-    if latitude is None or longitude is None:
-        return "Both latitude and longitude are required."
-
-    target, _created = Location.objects.get_nearby_or_create(
-        latitude,
-        longitude,
-        defaults={"official_name": current.official_name if current else None},
-    )
-    if target.pk == (current.pk if current else None):
-        return None
-    # OneToOne: a Location can host only one wiki.
-    try:
-        existing = target.wiki
-    except ObjectDoesNotExist:
-        existing = None
-    if existing is not None and existing.pk != wiki.pk:
-        return "Another community page already exists at those coordinates."
-    wiki.location = target
-    return None
 
 
 class LocationWikiView(LoginRequiredMixin, View):
@@ -259,8 +227,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 
     POST /location/<slug>/wiki/edit/
     Body (JSON or form): field=value pairs for any subset of _WIKI_EDITABLE_FIELDS.
-    Records a WikiEdit and applies changes to the Wiki. A coordinate edit
-    find-or-creates a Location for the new point and repoints ``wiki.location``.
+    Records a WikiEdit and applies changes to the Wiki.
     """
 
     def post(self, request, location_slug):
@@ -276,10 +243,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 
         valid_security = {v for v, _ in SecurityLevel.choices}
         # new_vals holds the actual Python values to set on the wiki.
-        # coord_vals holds a pending latitude/longitude change (repoints Location).
         # changes holds JSON-safe strings for the WikiEdit audit record.
         new_vals: dict[str, object] = {}
-        coord_vals: dict[str, float] = {}
         changes: dict[str, dict] = {}
         for field in _WIKI_EDITABLE_FIELDS:
             if field not in body:
@@ -287,13 +252,6 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             raw = body[field]
             old_val = getattr(wiki, field, None)
             if str(raw) == str(old_val):
-                continue
-            if field in {"latitude", "longitude"}:
-                try:
-                    coord_vals[field] = float(raw)
-                except (TypeError, ValueError):
-                    continue
-                changes[field] = {"from": str(old_val), "to": str(coord_vals[field])}
                 continue
             if field in _WIKI_SECURITY_FIELDS:
                 if raw not in valid_security:
@@ -316,12 +274,6 @@ class LocationWikiEditView(LoginRequiredMixin, View):
                 new_val = raw
             new_vals[field] = new_val
             changes[field] = {"from": str(old_val), "to": str(new_val)}
-
-        # Apply a coordinate change by repointing to a find-or-created Location.
-        if coord_vals:
-            error = _apply_coordinate_change(wiki, coord_vals)
-            if error is not None:
-                return JsonResponse({"error": error}, status=400)
 
         if not changes:
             return JsonResponse({"ok": True, "message": "No changes detected."})
@@ -390,12 +342,10 @@ def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -
             elif row is not None:
                 row.delete()
         elif field in {"latitude", "longitude"}:
-            # Coordinate reverts repoint the Location; skip silently if the
-            # target place is unavailable. Handled together below.
-            current_val = getattr(wiki, field, None)
-            revert_changes[field] = {"from": str(current_val), "to": old_val}
-            with contextlib.suppress(TypeError, ValueError):
-                _apply_coordinate_change(wiki, {field: float(old_val)})
+            # Coordinates are no longer editable - a Wiki's Location is fixed
+            # at creation. Skip so legacy WikiEdit rows recorded before this
+            # rule don't error out on revert.
+            continue
         else:
             current_val = getattr(wiki, field, None)
             revert_changes[field] = {"from": current_val, "to": old_val}

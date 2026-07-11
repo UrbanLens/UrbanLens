@@ -23,10 +23,9 @@ class WikiEdit(abstract.DashboardModel):
     that carry the inverted diff, with ``reverted_by`` pointing at the edit being
     undone.
 
-    Editable fields: name, description, security levels, dates. A coordinate/
-    address change is recorded here too (as latitude/longitude) even though it
-    repoints the Wiki to a different Location rather than mutating one.
-    Bounding-box changes are stored as WKT strings under the key "bounding_box".
+    Editable fields: name, description, security levels, dates. Coordinates
+    are not editable - a Wiki's Location is fixed at creation. Bounding-box
+    changes are stored as WKT strings under the key "bounding_box".
     """
 
     # {"field": {"from": old_val, "to": new_val}, ...}

@@ -32,6 +32,9 @@ Context:
     <div class="photo-pin-confirm-map-wrap">
         {% map_search_bar prefix="photo-pin-place" placeholder="Search for a place or one of your pins…" show_history=False %}
         <div id="photo-pin-confirm-map" class="photo-pin-confirm-map"></div>
+        <div class="map-bottom-controls">
+            {% map_layers_panel "street,satellite" panel_id="photo-pin-confirm-layers" extra_class="map-layers-panel--inline" %}
+        </div>
     </div>
 
     <form class="photo-pin-confirm-form"

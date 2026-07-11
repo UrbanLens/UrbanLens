@@ -213,15 +213,20 @@ $memories-type-colors: (
 
 .memories-map-wrap {
     position: relative;
-    border-radius: .75rem;
-    overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
     margin-bottom: 1.5rem;
+    // Definite height so container queries (the layers panel's toggle button,
+    // see @include map-query-container) can size against this box - `contain:
+    // size` otherwise collapses an "auto" height to 0.
+    height: 420px;
+    @include map-query-container;
 }
 
 #memories-map {
     height: 420px;
     width: 100%;
+    border-radius: .75rem;
+    overflow: hidden;
+    border: 1px solid var(--ul-grey-1a);
 }
 
 .memories-marker-icon {

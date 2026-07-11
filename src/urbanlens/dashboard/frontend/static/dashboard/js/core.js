@@ -1646,14 +1646,18 @@
     });
   }
   async function drawTileLayerGrid(ctx, map, tileLayer2, zoom) {
+    const maxNative = tileLayer2.options.maxNativeZoom;
+    const fetchZoom = typeof maxNative === "number" ? Math.min(zoom, maxNative) : zoom;
+    const drawSize = TILE_SIZE * 2 ** (zoom - fetchZoom);
+    tileLayer2._tileZoom = fetchZoom;
     const bounds = map.getBounds();
-    const nw = map.project(bounds.getNorthWest(), zoom).divideBy(TILE_SIZE).floor();
-    const se = map.project(bounds.getSouthEast(), zoom).divideBy(TILE_SIZE).ceil();
+    const nw = map.project(bounds.getNorthWest(), fetchZoom).divideBy(TILE_SIZE).floor();
+    const se = map.project(bounds.getSouthEast(), fetchZoom).divideBy(TILE_SIZE).ceil();
     const jobs = [];
     for (let x = nw.x;x < se.x; x++) {
       for (let y = nw.y;y < se.y; y++) {
         const worldPoint = L.point(x, y).multiplyBy(TILE_SIZE);
-        const point = map.latLngToContainerPoint(map.unproject(worldPoint, zoom));
+        const point = map.latLngToContainerPoint(map.unproject(worldPoint, fetchZoom));
         jobs.push({ x, y, point });
       }
     }
@@ -1661,14 +1665,14 @@
       return;
     const images = await Promise.allSettled(jobs.map((job) => {
       const coords = L.point(job.x, job.y);
-      coords.z = zoom;
+      coords.z = fetchZoom;
       return loadTileImage(tileLayer2.getTileUrl(coords));
     }));
     jobs.forEach((job, i) => {
       const result = images[i];
       const img = result && result.status === "fulfilled" ? result.value : null;
       if (img)
-        ctx.drawImage(img, job.point.x, job.point.y, TILE_SIZE, TILE_SIZE);
+        ctx.drawImage(img, job.point.x, job.point.y, drawSize, drawSize);
     });
   }
   function toContainerPoint(map, ll) {

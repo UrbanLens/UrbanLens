@@ -4,8 +4,6 @@ Covers the core invariants of the community-wiki extraction:
 - Wiki holds the community name; Location keeps only address/official_name.
 - ``Location.display_name`` / ``Pin.effective_name`` resolve through the wiki.
 - ``Wiki.objects.get_or_create_for_location`` is lazy and idempotent.
-- A wiki coordinate edit find-or-creates a *different* Location (Location is
-  immutable) rather than mutating the shared row.
 - Comments are pin-XOR-wiki; community aliases/edits/detail-pins live on Wiki.
 """
 
@@ -73,27 +71,6 @@ class DisplayNameResolutionTests(TestCase):
         profile = baker.make("auth.User").profile
         pin = baker.make(Pin, profile=profile, location=loc, name="My Label")
         self.assertEqual(pin.effective_name, "My Label")
-
-
-class WikiCoordinateEditTests(TestCase):
-    """Editing a wiki's coordinates repoints it to a different Location."""
-
-    def test_coordinate_change_finds_or_creates_new_location(self) -> None:
-        from urbanlens.dashboard.controllers.location_wiki import _apply_coordinate_change
-
-        loc = baker.make(Location, official_name="Start", latitude="40.0", longitude="-74.0")
-        wiki = baker.make(Wiki, location=loc, name="Moving Place")
-
-        error = _apply_coordinate_change(wiki, {"latitude": 45.0, "longitude": -80.0})
-        wiki.save()
-
-        self.assertIsNone(error)
-        # The original Location is untouched (immutable) ...
-        loc.refresh_from_db()
-        self.assertEqual(float(loc.latitude), 40.0)
-        # ... and the wiki now points at a different Location at the new point.
-        self.assertNotEqual(wiki.location_id, loc.pk)
-        self.assertEqual(float(wiki.location.latitude), 45.0)
 
 
 class WikiCommentConstraintTests(TestCase):

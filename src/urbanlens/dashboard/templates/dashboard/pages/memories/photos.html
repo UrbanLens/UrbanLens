@@ -135,7 +135,9 @@
 
         if (confirmMap) { confirmMap.remove(); confirmMap = null; }
         confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
-        window.MapLayers.tileLayer('street').addTo(confirmMap);
+        // Shared layers engine + panel - the exact same component as the main map
+        // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in _photo_pin_confirm.html).
+        window.MapLayers.create(confirmMap, { root: document.getElementById('photo-pin-confirm-layers') });
         var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
         nearbyPinsLayer = L.layerGroup().addTo(confirmMap);
 

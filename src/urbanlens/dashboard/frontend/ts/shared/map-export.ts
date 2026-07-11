@@ -59,15 +59,28 @@ function loadTileImage(url: string): Promise<HTMLImageElement | null> {
 
 /** Draws every tile of `tileLayer` covering the map's current visible bounds at `zoom` onto `ctx`. */
 async function drawTileLayerGrid(ctx: CanvasRenderingContext2D, map: L.Map, tileLayer: L.TileLayer, zoom: number): Promise<void> {
+    // Clamp to the provider's real tile depth (mirrors Leaflet's own
+    // maxNativeZoom upscaling) and fetch coarser tiles, drawn larger, past it.
+    const maxNative = tileLayer.options.maxNativeZoom;
+    const fetchZoom = typeof maxNative === "number" ? Math.min(zoom, maxNative) : zoom;
+    const drawSize = TILE_SIZE * 2 ** (zoom - fetchZoom);
+
+    // TileLayer.getTileUrl() ignores the .z on the coords it's passed and
+    // instead reads its own private _tileZoom, which Leaflet only sets when a
+    // layer is added to a map (onAdd -> _setView). This layer is a disposable
+    // instance created solely for export and never attached, so _tileZoom
+    // would otherwise be undefined, producing a broken URL for every tile.
+    (tileLayer as unknown as { _tileZoom: number })._tileZoom = fetchZoom;
+
     const bounds = map.getBounds();
-    const nw = map.project(bounds.getNorthWest(), zoom).divideBy(TILE_SIZE).floor();
-    const se = map.project(bounds.getSouthEast(), zoom).divideBy(TILE_SIZE).ceil();
+    const nw = map.project(bounds.getNorthWest(), fetchZoom).divideBy(TILE_SIZE).floor();
+    const se = map.project(bounds.getSouthEast(), fetchZoom).divideBy(TILE_SIZE).ceil();
 
     const jobs: { x: number; y: number; point: L.Point }[] = [];
     for (let x = nw.x; x < se.x; x++) {
         for (let y = nw.y; y < se.y; y++) {
             const worldPoint = L.point(x, y).multiplyBy(TILE_SIZE);
-            const point = map.latLngToContainerPoint(map.unproject(worldPoint, zoom));
+            const point = map.latLngToContainerPoint(map.unproject(worldPoint, fetchZoom));
             jobs.push({ x, y, point });
         }
     }
@@ -78,7 +91,7 @@ async function drawTileLayerGrid(ctx: CanvasRenderingContext2D, map: L.Map, tile
     const images = await Promise.allSettled(
         jobs.map((job) => {
             const coords = L.point(job.x, job.y) as L.Coords;
-            coords.z = zoom;
+            coords.z = fetchZoom;
             return loadTileImage(tileLayer.getTileUrl(coords));
         }),
     );
@@ -86,7 +99,7 @@ async function drawTileLayerGrid(ctx: CanvasRenderingContext2D, map: L.Map, tile
     jobs.forEach((job, i) => {
         const result = images[i];
         const img = result && result.status === "fulfilled" ? result.value : null;
-        if (img) ctx.drawImage(img, job.point.x, job.point.y, TILE_SIZE, TILE_SIZE);
+        if (img) ctx.drawImage(img, job.point.x, job.point.y, drawSize, drawSize);
     });
 }
 
