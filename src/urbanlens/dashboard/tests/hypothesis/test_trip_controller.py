@@ -26,7 +26,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
 
 
@@ -326,6 +326,47 @@ class TripActivitiesViewTests(TestCase):
         self.assertContains(resp, "Baker Street")
         self.assertNotContains(resp, "Unnamed activity")
 
+    def test_hidden_activity_redacts_location_metadata_for_member(self):
+        from urbanlens.dashboard.models.location.model import Location
+
+        location = Location.objects.create(
+            latitude=51.5,
+            longitude=-0.12,
+            official_name="DO-NOT-LEAK-LOCATION",
+        )
+        TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.creator,
+            location=location,
+            title="DO-NOT-LEAK-TITLE",
+            location_hidden=True,
+        )
+
+        client = Client()
+        client.force_login(self.member_user)
+        resp = client.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Secret Location")
+        self.assertNotContains(resp, "DO-NOT-LEAK-LOCATION")
+        self.assertNotContains(resp, "DO-NOT-LEAK-TITLE")
+
+    def test_post_ignores_child_trip_uuid_user_cannot_access(self):
+        other_user = baker.make("auth.User")
+        private_child = _make_trip(other_user.profile)
+
+        client = Client()
+        client.force_login(self.creator_user)
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"title": "Nested private trip", "child_trip_uuid": str(private_child.uuid)}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        activity = TripActivity.objects.get(trip=self.trip, title="Nested private trip")
+        self.assertIsNone(activity.child_trip_id)
+
 
 class TripActivityEffectiveTitleTests(TestCase):
     """TripActivity.effective_title resolves pin name/address when title is unset."""
@@ -410,6 +451,94 @@ class TripActivityCompleteViewTests(TestCase):
         self.client.post(self._url(), data={})
         self.activity.refresh_from_db()
         self.assertEqual(self.activity.status, TripActivity.STATUS_COMPLETED)
+
+    def test_member_cannot_complete_hidden_activity(self):
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        member_user = baker.make("auth.User")
+        member = member_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=member)
+        location = Location.objects.create(latitude=10.0, longitude=20.0, official_name="Secret Site")
+        self.activity.location = location
+        self.activity.location_hidden = True
+        self.activity.save(update_fields=["location", "location_hidden"])
+
+        client = Client()
+        client.force_login(member_user)
+        resp = client.post(self._url(), data={})
+
+        self.assertEqual(resp.status_code, 403)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.status, TripActivity.STATUS_PROPOSED)
+        self.assertFalse(Pin.objects.filter(profile=member, location=location).exists())
+
+    def test_member_cannot_complete_activity_hidden_by_adder_privacy(self):
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        member_user = baker.make("auth.User")
+        member = member_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=member)
+        self.profile.trip_pin_location_visibility = VisibilityChoice.NO_ONE
+        self.profile.save(update_fields=["trip_pin_location_visibility"])
+        location = Location.objects.create(latitude=10.0, longitude=20.0, official_name="Private Site")
+        self.activity.location = location
+        self.activity.save(update_fields=["location"])
+
+        client = Client()
+        client.force_login(member_user)
+        resp = client.post(self._url(), data={})
+
+        self.assertEqual(resp.status_code, 403)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.status, TripActivity.STATUS_PROPOSED)
+        self.assertFalse(Pin.objects.filter(profile=member, location=location).exists())
+
+
+class TripMapDataViewPrivacyTests(TestCase):
+    """GET /trips/<uuid>/map-data/ redacts inaccessible child trips."""
+
+    def setUp(self):
+        super().setUp()
+        self.creator_user = baker.make("auth.User")
+        self.creator = self.creator_user.profile
+        self.parent_trip = _make_trip(self.creator)
+
+        self.member_user = baker.make("auth.User")
+        self.member = self.member_user.profile
+        TripMembership.objects.create(trip=self.parent_trip, profile=self.member)
+
+        self.other_user = baker.make("auth.User")
+        self.private_child = _make_trip(self.other_user.profile)
+        self.client = Client()
+        self.client.force_login(self.member_user)
+
+    def _url(self):
+        return reverse("trips.map_data", kwargs={"trip_uuid": str(self.parent_trip.uuid)})
+
+    def test_map_data_skips_child_trip_viewer_cannot_access(self):
+        from urbanlens.dashboard.models.location.model import Location
+
+        child_location = Location.objects.create(latitude=40.0, longitude=-74.0, official_name="Hidden Child Site")
+        TripActivity.objects.create(
+            trip=self.private_child,
+            added_by=self.other_user.profile,
+            location=child_location,
+            title="Hidden child marker",
+        )
+        TripActivity.objects.create(
+            trip=self.parent_trip,
+            added_by=self.creator,
+            title="Parent child link",
+            child_trip=self.private_child,
+        )
+
+        resp = self.client.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        body = json.loads(resp.content)
+        self.assertEqual(body["points"], [])
 
 
 class TripActivityVoteViewTests(TestCase):

@@ -52,16 +52,16 @@
             <li class="trip-activity-item{% if act.status == 'completed' %} trip-activity--completed{% endif %}"
                 id="trip-activity-{{ act.id }}"
                 data-act-id="{{ act.id }}"
-                data-act-title="{{ act.title|default:'' }}"
+                data-act-title="{% if not item.effective_location_hidden %}{{ act.title|default:'' }}{% endif %}"
                 data-act-notes="{{ act.notes|default:'' }}"
                 data-act-date="{% if act.scheduled_at %}{{ act.scheduled_at|date:'Y-m-d' }}{% endif %}"
                 data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
                 data-act-end-date="{% if act.scheduled_end %}{{ act.scheduled_end|date:'Y-m-d' }}{% endif %}"
                 data-act-end-time="{% if act.scheduled_end %}{% with t=act.scheduled_end|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
-                data-act-location-uuid="{{ act.location.slug|default:'' }}"
-                data-act-location-name="{{ act.location.display_name|default:'' }}"
-                data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
-                data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
+                data-act-location-uuid="{% if not item.effective_location_hidden %}{{ act.location.slug|default:'' }}{% endif %}"
+                data-act-location-name="{% if not item.effective_location_hidden %}{{ act.location.display_name|default:'' }}{% endif %}"
+                data-act-child-trip-uuid="{% if item.child_trip_visible and not item.effective_location_hidden %}{{ act.child_trip.uuid|default:'' }}{% endif %}"
+                data-act-child-trip-name="{% if item.child_trip_visible and not item.effective_location_hidden %}{{ act.child_trip.name|default:'' }}{% endif %}"
                 data-act-status="{{ act.status }}"
                 data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
@@ -110,7 +110,7 @@
                         {% endif %}
                     </span>
                     {% endif %}
-                    {% if act.child_trip %}
+                    {% if act.child_trip and item.child_trip_visible and not item.effective_location_hidden %}
                     <span class="trip-activity-child-trip">
                         <i class="material-symbols-outlined">link</i> {{ act.child_trip.name }}
                     </span>
@@ -161,7 +161,7 @@
                 </div>
 
                 <div class="trip-activity-actions">
-                    {% if act.status != 'completed' %}
+                    {% if act.status != 'completed' and item.can_complete %}
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
