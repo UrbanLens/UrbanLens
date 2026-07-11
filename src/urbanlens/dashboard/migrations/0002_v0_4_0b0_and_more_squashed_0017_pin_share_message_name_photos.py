@@ -678,8 +678,6 @@ def backfill_pin_wiki(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
-    replaces = [('dashboard', '0002_v0_4_0b0_and_more'), ('dashboard', '0003_image_convert_webp_default_true'), ('dashboard', '0004_undo_action'), ('dashboard', '0005_wiki_stat_vote'), ('dashboard', '0006_remove_review_text'), ('dashboard', '0007_markupmap_canonical_layer_mode'), ('dashboard', '0008_profile_tos_accepted_at'), ('dashboard', '0009_wiki_created_by_and_viewed'), ('dashboard', '0010_image_attribution_fields'), ('dashboard', '0011_google_calendar_sync'), ('dashboard', '0012_emailsendlog_externalvisitparticipant_and_more'), ('dashboard', '0013_visibility_anything_in_common'), ('dashboard', '0014_alter_comment_text_alter_pin_description_and_more'), ('dashboard', '0015_alter_profile_community_enabled_and_more'), ('dashboard', '0016_alter_comment_text_alter_pin_description_and_more'), ('dashboard', '0017_pin_share_message_name_photos')]
-
     dependencies = [
         ('dashboard', '0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
