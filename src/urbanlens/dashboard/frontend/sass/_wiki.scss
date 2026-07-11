@@ -77,6 +77,15 @@
         max-width: 320px;
         line-height: 1.45;
         z-index: 99;
+        transition: top .3s ease, right .3s ease;
+
+        // Once the header has scrolled out of view, the notice would otherwise
+        // float in the middle of the page since it's position: fixed - tuck it
+        // into the top-right corner instead.
+        &.wiki-notice--pinned {
+            top: 0.2rem;
+            right: 0.5rem;
+        }
 
         .material-symbols-outlined,
         .material-icons {
@@ -201,7 +210,7 @@
         align-items: center;
         gap: .6rem;
         padding: .85rem 1.1rem;
-        background: linear-gradient(180deg, rgba(8, 145, 178, .08), rgba(255, 255, 255, 0));
+        background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
         .material-symbols-outlined,
         .material-icons {
             font-size: 1.1rem;
@@ -640,15 +649,6 @@
             display: flex;
             gap: .5rem;
             padding-top: .25rem;
-        }
-    }
-}
-
-[data-theme="dark"] {
-    .wiki-page {
-        .wiki-notice {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(0, 0, 0, 0.1);
         }
     }
 }

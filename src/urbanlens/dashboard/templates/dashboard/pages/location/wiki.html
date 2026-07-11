@@ -32,7 +32,7 @@
         <div class="wiki-banner-right">
             <div class="wiki-notice">
                 <i class="material-symbols-outlined">public</i>
-                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned. Your private notes and photos live on your pin page.</span>
+                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
             </div>
             <div class="wiki-banner-actions">
                 {# Lists collapsed sections for this wiki and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
@@ -60,7 +60,7 @@
                 </button>
                 {% endif %}
                 {% if user_pin %}
-                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--ghost">
+                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary">
                     <i class="material-symbols-outlined">arrow_back</i> Back to my pin
                 </a>
                 {% endif %}
@@ -380,6 +380,24 @@
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = csrftoken;
     });
+
+    // -- Pin the community-wiki notice to the corner once the header scrolls away --
+    (function initWikiNoticeScroll() {
+        const notice = document.querySelector('.wiki-notice');
+        const header = document.querySelector('.app-nav');
+        if (!notice || !header) return;
+        let ticking = false;
+        function update() {
+            ticking = false;
+            notice.classList.toggle('wiki-notice--pinned', header.getBoundingClientRect().bottom <= 0);
+        }
+        window.addEventListener('scroll', function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+        }, { passive: true });
+        update();
+    }());
 
     // -- "Use this name" from the aliases panel -------------------------------
     document.body.addEventListener('wikiRenamed', (event) => {
