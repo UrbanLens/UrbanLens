@@ -3525,10 +3525,12 @@ div.container .addr-search-bar {
     opacity: 0.85;
     box-sizing: border-box;
     overflow: hidden;
-    // Caps to whichever of vw/vh is smaller, so the toggle keeps shrinking
-    // when the map is squeezed into a short OR narrow container.
-    max-width: clamp(40px, 20vmin, 90px);
-    max-height: clamp(34px, 20vmin, 74px);
+    // Caps to whichever of the map's own width/height is smaller (via
+    // @include map-query-container on the map wrapper), so the toggle keeps
+    // shrinking when the MAP - not the browser viewport - is squeezed into
+    // a short OR narrow container.
+    max-width: clamp(40px, 20cqmin, 90px);
+    max-height: clamp(34px, 20cqmin, 74px);
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
@@ -3537,7 +3539,7 @@ div.container .addr-search-bar {
     }
 
     .map-layers-toggle-icon {
-        font-size: clamp(.85rem, 6vmin, 1.1rem);
+        font-size: clamp(.85rem, 6cqmin, 1.1rem);
         color: var(--ul-grey-6);
         transition: color .2s ease;
     }
@@ -3547,7 +3549,7 @@ div.container .addr-search-bar {
         gap: 5px;
         padding: 6px 4px 5px;
         min-width: 0;
-        font-size: clamp(.55rem, 3vmin, .67rem);
+        font-size: clamp(.55rem, 3cqmin, .67rem);
 
         .map-layers-toggle-thumb {
             display: block;
@@ -3578,7 +3580,7 @@ div.container .addr-search-bar {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 3px;
-    max-width: calc(100vw - 20px);
+    max-width: calc(100cqw - 20px);
     opacity: 0;
     transform: translateY(10px) scale(0.96);
     pointer-events: none;
@@ -3643,17 +3645,17 @@ div.container .addr-search-bar {
     min-width: 0;
     box-sizing: border-box;
     overflow: hidden;
-    // Same vmin-based cap as the toggle button, so the whole menu shrinks
-    // in step with the toggle when either the width or the height is tight.
-    max-width: clamp(36px, 18vmin, 80px);
-    max-height: clamp(40px, 20vmin, 90px);
+    // Same cqmin-based cap as the toggle button, so the whole menu shrinks
+    // in step with the toggle when either the map's width or height is tight.
+    max-width: clamp(36px, 18cqmin, 80px);
+    max-height: clamp(40px, 20cqmin, 90px);
 
     @include up($breakpoint-xs) {
         gap: 5px;
         padding: 6px 4px 5px;
-        font-size: clamp(.55rem, 3vmin, .67rem);
+        font-size: clamp(.55rem, 3cqmin, .67rem);
         min-width: 0;
-        max-width: clamp(44px, 18vmin, 62px);
+        max-width: clamp(44px, 18cqmin, 62px);
     }
 
     &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
@@ -3671,23 +3673,23 @@ div.container .addr-search-bar {
 .map-layer-thumb {
     display: block;
     position: relative;
-    width: clamp(22px, 14vmin, 30px);
-    height: clamp(22px, 14vmin, 30px);
+    width: clamp(22px, 14cqmin, 30px);
+    height: clamp(22px, 14cqmin, 30px);
     border-radius: 5px;
     overflow: hidden;
     flex-shrink: 0;
     background: var(--ul-grey-2);
 
     @include up($breakpoint-xs) {
-        width: clamp(30px, 14vmin, 54px);
-        height: clamp(30px, 14vmin, 54px);
+        width: clamp(30px, 14cqmin, 54px);
+        height: clamp(30px, 14cqmin, 54px);
         border-radius: 7px;
     }
 
 
     @include up($breakpoint-md) {
-        width: clamp(40px, 16vmin, 5rem);
-        height: clamp(40px, 16vmin, 5rem);
+        width: clamp(40px, 16cqmin, 5rem);
+        height: clamp(40px, 16cqmin, 5rem);
         border-radius: 7px;
     }
 
@@ -3707,11 +3709,11 @@ div.container .addr-search-bar {
         justify-content: center;
         .material-symbols-outlined,
         .material-icons {
-            font-size: clamp(.75rem, 7vmin, 1rem);
+            font-size: clamp(.75rem, 7cqmin, 1rem);
             color: var(--ul-grey-7);
 
             @include up($breakpoint-xs) {
-                font-size: clamp(1rem, 8vmin, 1.6rem);
+                font-size: clamp(1rem, 8cqmin, 1.6rem);
             }
         }
     }
@@ -3736,14 +3738,14 @@ div.container .addr-search-bar {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: clamp(.75rem, 7vmin, 1rem);
+            font-size: clamp(.75rem, 7cqmin, 1rem);
             color: #fff;
             text-shadow: 0 2px 10px rgba(0, 0, 0, .95);
             pointer-events: none;
             z-index: 2;
 
             @include up($breakpoint-xs) {
-                font-size: clamp(1.1rem, 9vmin, 2rem);
+                font-size: clamp(1.1rem, 9cqmin, 2rem);
             }
         }
     }

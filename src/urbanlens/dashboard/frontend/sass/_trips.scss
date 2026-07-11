@@ -1329,8 +1329,12 @@
     margin: 0 0 1.5rem;
     border-radius: 10px;
     border: 1px solid var(--ul-grey-1a);
-    ;
     position: relative;
+    // Mirrors #trip-map's own height below so this wrapper has a definite
+    // size for @include map-query-container to safely contain against
+    // (`contain: size` collapses an "auto" height to 0 otherwise).
+    height: 340px;
+    @include map-query-container;
 
     #trip-map {
         height: 340px;

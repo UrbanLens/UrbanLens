@@ -117,6 +117,17 @@ $inputs: (
 	border-radius: $radius;
 }
 
+// -- Map query container --------------------------------------------------------
+// Marks an element as a CSS container query context sized to itself rather than
+// the viewport. Apply to a map's wrapper element (must have a definite, non-auto
+// height - `contain: size` otherwise collapses "auto" height to 0) so descendant
+// overlay controls (e.g. the layers menu) can clamp their size with cq* units
+// against the map's own box instead of vw/vh/vmin against the browser viewport.
+@mixin map-query-container {
+	container-type: size;
+	container-name: map-box;
+}
+
 @mixin surface-elevated {
 	@include surface;
 	box-shadow: var(--ul-shadow-lg);

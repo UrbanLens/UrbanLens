@@ -2687,6 +2687,12 @@ body.page-location-details .pin-detail-grid {
         .map-wrapper {
             position: relative;
             width: 100%;
+            // Mirrors #map's own height below so this wrapper has a definite
+            // size for @include map-query-container to safely contain against
+            // (`contain: size` collapses an "auto" height to 0 otherwise).
+            height: min(52vh, 540px);
+            min-height: 320px;
+            @include map-query-container;
         }
 
         #map {

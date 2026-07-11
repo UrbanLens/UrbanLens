@@ -330,6 +330,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
     flex-grow: 1;
     /* Allow the map to grow to fill available space */
     width: 100%;
+    @include map-query-container;
 }
 
 nav {
