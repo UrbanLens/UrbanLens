@@ -635,6 +635,26 @@
 
     {# -- AI Features --------------------------------------------------------- #}
     {% if can_use_ai_features %}
+    {# -- Customize (custom fields) ------------------------------------------- #}
+    <section class="settings-section ul-section" id="customize-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">tune</i>
+            <div>
+                <h2 class="settings-section-title">Customize</h2>
+                <p class="settings-section-desc">Define your own fields for pins, photos, people, and maps. Only you can see them.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div id="custom-fields-settings"
+                 hx-get="{% url 'custom_fields.settings' %}"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+                <p class="settings-help">Loading...</p>
+            </div>
+        </div>
+    </section>
+
     <section class="settings-section ul-section" id="ai-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">auto_awesome</i>

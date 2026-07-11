@@ -1,0 +1,14 @@
+{# One custom-field value input. Saves on change via HTMX. #}
+{# Context: field (CustomField), value (CustomFieldValue|None), post_url, hx_target, #}
+{# and optional hx_swap (defaults to outerHTML of the target). #}
+<input class="cf-input cf-value-input cf-value-input--{{ field.field_type }}"
+       type="{{ field.input_type }}"
+       {% if field.field_type == 'number' %}step="any"{% endif %}
+       name="value"
+       value="{{ value.input_value|default:'' }}"
+       placeholder="{% if field.field_type == 'date' %}{% else %}Not set{% endif %}"
+       aria-label="{{ field.name }}"
+       hx-post="{{ post_url }}"
+       hx-trigger="change"
+       hx-target="{{ hx_target }}"
+       hx-swap="{{ hx_swap|default:'outerHTML' }}">

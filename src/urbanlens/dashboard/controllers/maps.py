@@ -138,6 +138,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         filter_badges_list = list(filter_badges)
         filter_badges_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
 
+        from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
+
+        custom_filter_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
+
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
         show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
@@ -152,6 +156,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "categories": categories,
                 "filter_badges": filter_badges_list,
                 "filter_badges_json": filter_badges_json,
+                "custom_filter_fields": custom_filter_fields,
                 "icon_categories": ICON_CATEGORIES,
                 "color_choices": COLOR_CHOICES,
                 "profile_uuid": profile.uuid,
@@ -428,14 +433,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def search_map_post(self, request, *args, **kwargs):
         logger.info("Searching map...")
-        search_form = SearchForm(request.POST)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        search_form = SearchForm(request.POST, profile=profile)
         if search_form.is_valid():
-            profile, _ = Profile.objects.get_or_create(user=request.user)
             criteria = dict(search_form.cleaned_data)
             # Prefer structured badge_groups (from formula bar) over legacy tag lists
             parsed_groups = search_form.parse_badge_groups()
             if parsed_groups is not None:
                 criteria["badge_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
             query = Pin.objects.filter(profile=profile).filter_by_criteria(criteria)
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
@@ -464,12 +471,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
 
-        search_form = SearchForm(request.GET)
+        search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
             parsed_groups = search_form.parse_badge_groups()
             if parsed_groups is not None:
                 criteria["badge_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
             query = query.filter_by_criteria(criteria)
 
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
@@ -597,12 +606,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).detail_pins().select_related("location", "parent_pin", "parent_pin__location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
 
-        search_form = SearchForm(request.GET)
+        search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
             parsed_groups = search_form.parse_badge_groups()
             if parsed_groups is not None:
                 criteria["badge_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
             query = query.filter_by_criteria(criteria)
 
         pins = []

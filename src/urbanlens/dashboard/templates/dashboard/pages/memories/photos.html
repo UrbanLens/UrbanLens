@@ -86,6 +86,9 @@
             <p id="photos-lightbox-copyright" class="lightbox-meta-line" hidden></p>
             <a id="photos-lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
         </div>
+        {# Custom fields (the viewer's own photo fields) #}
+        <div id="photos-lightbox-custom-fields" class="lightbox-custom-fields">
+        </div>
     </div>
 </dialog>
 
@@ -387,6 +390,17 @@
         var sourceEl = document.getElementById('photos-lightbox-source-link');
         if (it.sourceUrl) { sourceEl.href = it.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
         else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
+        _loadLbCustomFields(it.id);
+    }
+
+    // Load the viewer's custom-field strip for the current photo (204 = no fields).
+    var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+    function _loadLbCustomFields(imgId) {
+        var el = document.getElementById('photos-lightbox-custom-fields');
+        if (!el) return;
+        el.innerHTML = '';
+        if (!imgId || !window.htmx) return;
+        htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#photos-lightbox-custom-fields', swap: 'innerHTML' });
     }
     document.addEventListener('keydown', function (e) {
         var lb = document.getElementById('photos-lightbox');

@@ -56,7 +56,7 @@
                     </div>
                 </div>
             </article>
-            {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" %}
+            {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" map_obj=card.map %}
             {% endwith %}
             {% endfor %}
         </div>

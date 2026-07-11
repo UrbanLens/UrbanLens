@@ -1,0 +1,25 @@
+{# Compact custom-fields strip shown under the photo / markup-map lightboxes. #}
+{# Context: rows ({field, value} dicts), url_name, target_arg. #}
+{# The whole strip re-renders on each save (hx-target on the wrapping div). #}
+<div class="cf-lightbox-strip">
+    {% for row in rows %}
+    <div class="cf-lightbox-item">
+        <label class="cf-value-label" title="{{ row.field.get_field_type_display }} field">
+            <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
+            {{ row.field.name }}
+        </label>
+        <input class="cf-input cf-value-input cf-value-input--{{ row.field.field_type }}"
+               type="{{ row.field.input_type }}"
+               {% if row.field.field_type == 'number' %}step="any"{% endif %}
+               name="value"
+               value="{{ row.value.input_value|default:'' }}"
+               placeholder="{% if row.field.field_type == 'date' %}{% else %}Not set{% endif %}"
+               aria-label="{{ row.field.name }}"
+               hx-post="{% url url_name target_arg %}"
+               hx-vals='{"field_id": "{{ row.field.id }}"}'
+               hx-trigger="change"
+               hx-target="closest .cf-lightbox-strip"
+               hx-swap="outerHTML">
+    </div>
+    {% endfor %}
+</div>

@@ -215,6 +215,19 @@
             </div>
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
+
+        <div hx-get="{% url 'pin.custom_fields' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','custom-fields')], ul:unhide"
+            hx-swap="outerHTML"
+            id="pin-custom-fields-panel"
+            class="custom-fields-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="custom-fields">
+            <div class="card-header">
+                <i class="material-symbols-outlined">tune</i>
+                <span>Custom Fields</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        </div>
     </div>{# end .pin-lists-row #}
 
     {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}

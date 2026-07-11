@@ -183,6 +183,11 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["unassigned_badges"] = [badge for badge in user_badges if badge.id not in assigned_badge_ids]
         trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
         context["trust_rating"] = trust.rating if trust else 0
+
+        from urbanlens.dashboard.controllers.custom_fields import rows_for_target
+        from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
+
+        context["custom_field_rows"] = rows_for_target(my_profile, CustomFieldEntity.PROFILE, profile)
         context["my_profile"] = my_profile
 
 
@@ -908,8 +913,10 @@ def _render_profile_annotation_partial(
     Returns:
         Rendered HTML partial.
     """
+    from urbanlens.dashboard.controllers.custom_fields import rows_for_target
     from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
     from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+    from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
     from urbanlens.dashboard.models.profile.note import ProfileNote
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
@@ -930,5 +937,6 @@ def _render_profile_annotation_partial(
             "assigned_badge_ids": assigned_ids,
             "unassigned_badges": [badge for badge in user_badges if badge.id not in assigned_ids],
             "trust_rating": trust.rating if trust else 0,
+            "custom_field_rows": rows_for_target(author, CustomFieldEntity.PROFILE, subject),
         },
     )

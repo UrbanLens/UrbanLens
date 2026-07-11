@@ -30,6 +30,7 @@ VALID_EXPORT_TYPES = frozenset(
         "photos",
         "trips",
         "settings",
+        "custom_fields",
         "google_takeout",
     },
 )
@@ -37,6 +38,7 @@ VALID_EXPORT_TYPES = frozenset(
 _ORDERED_TYPES = [
     "profile",
     "settings",
+    "custom_fields",
     "pins",
     "google_takeout",
     "badges",
@@ -142,6 +144,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
     exporters: dict[str, tuple[Any, str]] = {
         "profile": (_export_profile, "Exporting profile..."),
         "settings": (_export_settings, "Exporting settings..."),
+        "custom_fields": (_export_custom_fields, "Exporting custom fields..."),
         "pins": (_export_pins, "Exporting pins..."),
         "google_takeout": (_export_pins_google_takeout, "Exporting Google Takeout format..."),
         "badges": (_export_badges, "Exporting badges..."),
@@ -282,6 +285,59 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
     }
     with open(os.path.join(temp_dir, "settings.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
+
+
+def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export the user's custom field definitions and every stored value.
+
+    Each field row carries its values inline, with targets referenced by UUID
+    (matching the UUIDs used in the other export files) plus a human-readable
+    label so the export is useful on its own.
+    """
+    from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
+
+    fields = CustomField.objects.filter(profile=profile).order_by("entity_type", "order", "name").prefetch_related(
+        "values__pin",
+        "values__image",
+        "values__target_profile",
+        "values__markup_map",
+    )
+
+    rows = []
+    for field in fields:
+        values = []
+        for value in field.values.all():
+            if field.entity_type == CustomFieldEntity.PIN and value.pin:
+                target_uuid, target_label = str(value.pin.uuid), value.pin.effective_name
+            elif field.entity_type == CustomFieldEntity.PHOTO and value.image:
+                target_uuid, target_label = str(value.image.uuid), value.image.caption or ""
+            elif field.entity_type == CustomFieldEntity.PROFILE and value.target_profile:
+                target_uuid, target_label = str(value.target_profile.uuid), value.target_profile.username
+            elif field.entity_type == CustomFieldEntity.MARKUP_MAP and value.markup_map:
+                target_uuid, target_label = str(value.markup_map.uuid), value.markup_map.title or ""
+            else:
+                continue
+            values.append(
+                {
+                    "target_type": field.entity_type,
+                    "target_uuid": target_uuid,
+                    "target_label": target_label,
+                    "value": value.export_value(),
+                },
+            )
+        rows.append(
+            {
+                "uuid": str(field.uuid),
+                "entity_type": field.entity_type,
+                "name": field.name,
+                "field_type": field.field_type,
+                "created": str(field.created),
+                "values": values,
+            },
+        )
+
+    with open(os.path.join(temp_dir, "custom_fields.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:

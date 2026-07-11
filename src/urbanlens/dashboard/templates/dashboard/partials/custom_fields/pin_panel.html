@@ -1,0 +1,53 @@
+{# Pin detail page: Custom Fields card. Collapsible like the other pin sections. #}
+<div id="pin-custom-fields-panel" class="custom-fields-panel card"
+     data-collapse-scope="pin" data-collapse-section="custom-fields">
+    <div class="card-header">
+        <i class="material-symbols-outlined">tune</i>
+        <span>Custom Fields</span>
+        <button type="button" class="btn btn--icon-sm" title="Add a custom field"
+                onclick="var f = this.closest('.custom-fields-panel').querySelector('.cf-add-form'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input[name=name]').focus();">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </div>
+
+    {% if rows %}
+    <div class="cf-value-rows">
+        {% for row in rows %}
+        <div class="cf-value-row">
+            <label class="cf-value-label" title="{{ row.field.get_field_type_display }} field">
+                <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
+                {{ row.field.name }}
+            </label>
+            {% url 'pin.custom_fields.value' pin.slug row.field.id as post_url %}
+            {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="#pin-custom-fields-panel" %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="cf-panel-empty">
+        Track anything extra about your pins - a gate code, permit status, build year, or whatever else matters to you.
+        Fields you add here appear on every pin and as map filters.
+    </p>
+    {% endif %}
+
+    <form class="cf-add-form" {% if rows %}hidden{% endif %}
+          hx-post="{% url 'pin.custom_fields' pin.slug %}"
+          hx-target="#pin-custom-fields-panel"
+          hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="text" name="name" class="cf-input cf-name-input" placeholder="New field name..." maxlength="100" required>
+        <select name="field_type" class="cf-input cf-type-select" title="Field type">
+            {% for value, label in field_types %}
+            <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </form>
+
+    <p class="cf-panel-footnote">
+        Only you can see custom fields.
+        <a href="{% url 'settings.view' %}#customize-settings-section">Manage in Settings</a>
+    </p>
+</div>

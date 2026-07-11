@@ -106,6 +106,8 @@ Context:
       <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
       <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
     </div>
+    {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
+    <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
   </div>
 </dialog>
 
@@ -323,6 +325,7 @@ Context:
         document.getElementById('lightbox-img').src = fallback.url;
         document.getElementById('lightbox-caption').textContent = fallback.caption || '';
         _setLightboxMeta({});
+        _loadLightboxCustomFields(null);
         document.getElementById('gallery-lightbox').showModal();
         return;
       }
@@ -344,6 +347,19 @@ Context:
     var caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
     document.getElementById('lightbox-caption').textContent = caption;
     _setLightboxMeta(item);
+    _loadLightboxCustomFields(item.id);
+  }
+
+  // Load the viewer's custom-field strip for the current photo. The endpoint
+  // returns 204 (leaving the strip empty) for photos the viewer doesn't own
+  // or when they have no photo fields defined.
+  var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+  function _loadLightboxCustomFields(imgId) {
+    var el = document.getElementById('lightbox-custom-fields');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx) return;
+    htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
   }
 
   function _setLightboxMeta(item) {

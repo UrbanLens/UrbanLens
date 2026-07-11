@@ -91,6 +91,25 @@
         </div>
     </div>
 
+    {# -- Custom fields (viewer's own people fields; hidden when none defined) -- #}
+    {% if custom_field_rows %}
+    <div class="profile-annotation-custom-fields">
+        <p class="profile-annotation-label">Custom Fields</p>
+        <div class="cf-value-rows">
+            {% for row in custom_field_rows %}
+            <div class="cf-value-row">
+                <label class="cf-value-label" title="{{ row.field.get_field_type_display }} field">
+                    <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
+                    {{ row.field.name }}
+                </label>
+                {% url 'profile.custom_field_value' subject.slug row.field.id as post_url %}
+                {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="#profile-annotation-inner" %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     {# -- Notes list ----------------------------------------------------------- #}
     <div class="profile-annotation-notes">
         <p class="profile-annotation-label">Notes</p>

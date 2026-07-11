@@ -1,0 +1,302 @@
+// Custom fields: Settings > Customize panel, pin detail card, profile
+// annotation block, map filter inputs, and the lightbox value strips.
+
+// -- Shared inputs ------------------------------------------------------------
+
+.cf-input {
+  background: var(--ul-control-bg);
+  border: 1px solid var(--ul-control-border);
+  border-radius: 6px;
+  color: var(--ul-grey-8);
+  font-size: .85rem;
+  padding: .35rem .55rem;
+  transition: border-color .15s, box-shadow .15s;
+
+  &:focus {
+    outline: none;
+    border-color: var(--ul-color-accent);
+    box-shadow: 0 0 0 2px var(--ul-color-accent-ring);
+  }
+}
+
+.cf-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cf-type-select {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.cf-type-icon {
+  font-size: 1rem;
+  color: var(--ul-grey-5);
+  flex: 0 0 auto;
+}
+
+.cf-add-form,
+.cf-field-edit {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+
+  &[hidden] { display: none; }
+}
+
+.cf-add-btn {
+  color: var(--ul-color-accent);
+}
+
+// -- Settings > Customize panel ------------------------------------------------
+
+.cf-settings-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.cf-group {
+  background: var(--ul-grey-1);
+  border: 1px solid var(--ul-border);
+  border-radius: 8px;
+  padding: .85rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+
+.cf-group-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+
+  .material-symbols-outlined {
+    font-size: 1.15rem;
+    color: var(--ul-grey-5);
+  }
+}
+
+.cf-group-title {
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.cf-group-count {
+  margin-left: auto;
+  background: var(--ul-grey-2);
+  border-radius: 999px;
+  color: var(--ul-grey-6);
+  font-size: .7rem;
+  padding: .1rem .5rem;
+}
+
+.cf-group-empty {
+  color: var(--ul-grey-5);
+  font-size: .8rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.cf-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.cf-field-row {
+  border-radius: 6px;
+
+  &:hover { background: var(--ul-hover-bg); }
+}
+
+.cf-field-display {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .25rem .35rem;
+
+  &[hidden] { display: none; }
+}
+
+.cf-field-name {
+  flex: 1 1 auto;
+  font-size: .85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-type-chip {
+  background: var(--ul-grey-2);
+  border-radius: 999px;
+  color: var(--ul-grey-6);
+  font-size: .68rem;
+  padding: .05rem .5rem;
+  flex: 0 0 auto;
+}
+
+.cf-field-actions {
+  display: flex;
+  gap: .1rem;
+  opacity: 0;
+  transition: opacity .15s;
+
+  .cf-field-row:hover &,
+  .cf-field-row:focus-within & { opacity: 1; }
+}
+
+.cf-delete-btn:hover {
+  color: var(--ul-color-danger-accent, #e05555);
+}
+
+// -- Value rows (pin detail card + profile annotation block) --------------------
+
+.custom-fields-panel {
+  .cf-value-rows { padding: .5rem .85rem 0; }
+  .cf-add-form { padding: .5rem .85rem 0; }
+}
+
+.cf-value-rows {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.cf-value-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.cf-value-label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  color: var(--ul-grey-6);
+  font-size: .8rem;
+  flex: 0 0 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-value-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cf-panel-empty {
+  color: var(--ul-grey-5);
+  font-size: .8rem;
+  margin: 0;
+  padding: .5rem .85rem 0;
+}
+
+.cf-panel-footnote {
+  color: var(--ul-grey-5);
+  font-size: .72rem;
+  margin: 0;
+  padding: .5rem .85rem .75rem;
+
+  a { color: var(--ul-color-accent); }
+}
+
+.profile-annotation-custom-fields {
+  margin-top: .75rem;
+
+  .cf-value-label { flex-basis: 34%; }
+}
+
+// -- Map filter panel ------------------------------------------------------------
+
+.fp-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  margin-bottom: .6rem;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.fp-custom-field-label {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  color: var(--ul-grey-6);
+  font-size: .78rem;
+
+  .material-symbols-outlined { font-size: .95rem; }
+}
+
+.fp-cf-input {
+  @extend .cf-input;
+  width: 100%;
+}
+
+.fp-custom-field-range {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+
+  .fp-cf-input { flex: 1 1 0; min-width: 0; }
+}
+
+.fp-cf-range-sep {
+  color: var(--ul-grey-5);
+  flex: 0 0 auto;
+}
+
+// -- Lightbox strip (photos + markup maps) -----------------------------------------
+
+.lightbox-custom-fields {
+  width: 100%;
+
+  &:empty { display: none; }
+}
+
+.cf-lightbox-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem 1.25rem;
+  padding: .35rem 1rem .75rem;
+
+  .cf-value-label {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, .55);
+  }
+
+  .cf-value-input {
+    flex: 0 1 11rem;
+    background: rgba(255, 255, 255, .08);
+    border-color: rgba(255, 255, 255, .15);
+    color: rgba(255, 255, 255, .85);
+
+    &::placeholder { color: rgba(255, 255, 255, .35); }
+  }
+}
+
+.cf-lightbox-item {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+// The markup-map dialog is a light-themed dialog, unlike the photo lightbox.
+.comment-map-view-dialog .cf-lightbox-strip {
+  .cf-value-label { color: var(--ul-grey-6); }
+
+  .cf-value-input {
+    background: var(--ul-control-bg);
+    border-color: var(--ul-control-border);
+    color: var(--ul-grey-8);
+
+    &::placeholder { color: var(--ul-grey-5); }
+  }
+}

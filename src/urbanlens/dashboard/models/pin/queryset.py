@@ -236,7 +236,45 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             qs = qs.filter(created__date__gte=created_after)
         if created_before := criteria.get("created_before"):
             qs = qs.filter(created__date__lte=created_before)
+        if custom_fields := criteria.get("custom_fields"):
+            qs = qs.filter_by_custom_fields(custom_fields)
         return qs.distinct()
+
+    def filter_by_custom_fields(self, custom_field_criteria) -> Self:
+        """Filter pins by the owner's custom field values.
+
+        Each criterion gets its own ``filter()`` call so it joins its own
+        CustomFieldValue row (AND semantics across fields), while a number/date
+        range stays within a single join so both bounds apply to the same value.
+
+        Args:
+            custom_field_criteria: List of dicts from
+                ``SearchForm.parse_custom_field_criteria()``: each has ``field``
+                plus ``contains`` (text), ``min``/``max`` (number), or
+                ``after``/``before`` (date).
+
+        Returns:
+            Filtered QuerySet.
+        """
+        qs = self
+        for criterion in custom_field_criteria:
+            field = criterion.get("field")
+            if field is None:
+                continue
+            lookups: dict = {"custom_field_values__field": field}
+            if contains := criterion.get("contains"):
+                lookups["custom_field_values__value_text__icontains"] = contains
+            if (minimum := criterion.get("min")) is not None:
+                lookups["custom_field_values__value_number__gte"] = minimum
+            if (maximum := criterion.get("max")) is not None:
+                lookups["custom_field_values__value_number__lte"] = maximum
+            if (after := criterion.get("after")) is not None:
+                lookups["custom_field_values__value_date__gte"] = after
+            if (before := criterion.get("before")) is not None:
+                lookups["custom_field_values__value_date__lte"] = before
+            if len(lookups) > 1:
+                qs = qs.filter(**lookups)
+        return qs
 
     def rated(self, rating) -> Self:
         """

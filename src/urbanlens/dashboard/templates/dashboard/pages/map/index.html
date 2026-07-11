@@ -97,7 +97,7 @@
 
         <form id="filter-form"
               hx-post="{% url 'map.search' %}"
-              hx-trigger="change, input delay:600ms from:[name=name]"
+              hx-trigger="change, input delay:600ms from:[name=name], input delay:600ms from:[name^='cf_']"
               hx-target="#map-body"
               hx-swap="outerHTML">
             {% csrf_token %}
@@ -261,6 +261,46 @@
                         {% endfor %}
                     </div>
                     <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
+                </div>
+            </details>
+            {% endif %}
+
+            {% if custom_filter_fields %}
+            {# Custom fields -- collapsible; only rendered when the user defined pin fields -- #}
+            <details class="fp-accordion-item" id="fp-acc-custom-fields" data-importance="low">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Custom Fields</span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    {% for field in custom_filter_fields %}
+                    <div class="fp-custom-field" title="{{ field.get_field_type_display }} field">
+                        <span class="fp-custom-field-label">
+                            <i class="material-symbols-outlined">{{ field.type_icon }}</i>
+                            {{ field.name }}
+                        </span>
+                        {% if field.field_type == 'number' %}
+                        <div class="fp-custom-field-range">
+                            <input type="number" step="any" name="cf_{{ field.id }}_min" class="fp-cf-input" placeholder="Min" aria-label="{{ field.name }} minimum">
+                            <span class="fp-cf-range-sep">–</span>
+                            <input type="number" step="any" name="cf_{{ field.id }}_max" class="fp-cf-input" placeholder="Max" aria-label="{{ field.name }} maximum">
+                        </div>
+                        {% elif field.field_type == 'date' %}
+                        <div class="fp-date-block">
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">After</span>
+                                <input type="date" name="cf_{{ field.id }}_after" class="fp-date-input" aria-label="{{ field.name }} after">
+                            </div>
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">Before</span>
+                                <input type="date" name="cf_{{ field.id }}_before" class="fp-date-input" aria-label="{{ field.name }} before">
+                            </div>
+                        </div>
+                        {% else %}
+                        <input type="text" name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--text" placeholder="Contains..." autocomplete="off" aria-label="{{ field.name }}">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
             </details>
             {% endif %}

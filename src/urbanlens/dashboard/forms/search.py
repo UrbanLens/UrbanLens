@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from django import forms
 
 from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
 class SearchForm(forms.Form):
@@ -21,6 +26,11 @@ class SearchForm(forms.Form):
     ``and``  - pin must have ALL badges in the group.
     ``or``   - pin must have AT LEAST ONE badge in the group.
     ``not``  - pin must have NONE of the badges in the group.
+
+    When constructed with a ``profile``, one form field per custom pin field is
+    added dynamically (named ``cf_<id>`` for text, ``cf_<id>_min``/``_max`` for
+    numbers, ``cf_<id>_after``/``_before`` for dates) so the owner can filter
+    the map by their own custom field values.
     """
 
     name = forms.CharField(required=False)
@@ -52,6 +62,58 @@ class SearchForm(forms.Form):
     max_vulnerability = forms.IntegerField(required=False, min_value=0)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+
+    def __init__(self, *args, profile: Profile | None = None, **kwargs) -> None:
+        """Build the form, adding one filter field per custom pin field when a profile is given.
+
+        Args:
+            *args: Standard form args (usually the request data).
+            profile: The requesting user's profile; enables custom-field filters.
+            **kwargs: Standard form kwargs.
+        """
+        super().__init__(*args, **kwargs)
+        self.custom_fields: list[CustomField] = []
+        if profile is None:
+            return
+        self.custom_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
+        for cf in self.custom_fields:
+            if cf.field_type == CustomFieldType.NUMBER:
+                self.fields[f"cf_{cf.pk}_min"] = forms.DecimalField(required=False)
+                self.fields[f"cf_{cf.pk}_max"] = forms.DecimalField(required=False)
+            elif cf.field_type == CustomFieldType.DATE:
+                self.fields[f"cf_{cf.pk}_after"] = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+                self.fields[f"cf_{cf.pk}_before"] = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+            else:
+                self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
+
+    def parse_custom_field_criteria(self) -> list[dict] | None:
+        """Collect active custom-field filters from cleaned_data.
+
+        Returns:
+            List of criteria dicts (each carrying its ``field`` plus the active
+            bounds/text), or None when no custom-field filter is set. Shapes::
+
+                {"field": cf, "contains": str}                      # text
+                {"field": cf, "min": Decimal|None, "max": ...}      # number
+                {"field": cf, "after": date|None, "before": ...}    # date
+        """
+        criteria: list[dict] = []
+        for cf in self.custom_fields:
+            if cf.field_type == CustomFieldType.NUMBER:
+                minimum = self.cleaned_data.get(f"cf_{cf.pk}_min")
+                maximum = self.cleaned_data.get(f"cf_{cf.pk}_max")
+                if minimum is not None or maximum is not None:
+                    criteria.append({"field": cf, "min": minimum, "max": maximum})
+            elif cf.field_type == CustomFieldType.DATE:
+                after = self.cleaned_data.get(f"cf_{cf.pk}_after")
+                before = self.cleaned_data.get(f"cf_{cf.pk}_before")
+                if after is not None or before is not None:
+                    criteria.append({"field": cf, "after": after, "before": before})
+            else:
+                text = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
+                if text:
+                    criteria.append({"field": cf, "contains": text})
+        return criteria or None
 
     def parse_badge_groups(self) -> list[dict] | None:
         """Parse the ``badge_groups`` JSON field into a list of group dicts.
