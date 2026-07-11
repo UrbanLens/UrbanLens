@@ -65,13 +65,12 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Is UrbanLens free to use?</span>
+                    <span>Is UrbanLens free?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes, as in coffee and speech; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can
-                        check out the source code on our
+                        Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our
                         <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
                     </p>
                 </div>
@@ -79,7 +78,7 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>How can I be fully anonymous?</span>
+                    <span>How can I be anonymous?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
@@ -100,24 +99,12 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span></span>
-                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
-                </summary>
-                <div class="faq-item-body">
-                    <p>
-                    </p>
-                </div>
-            </details>
-
-            <details class="faq-item">
-                <summary class="faq-item-summary">
                     <span>I already have pins saved elsewhere. Can I bring them in?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes - you can import pins from a CSV file. Every imported pin is shown to you for review
-                        before anything is saved, and imports are never made public automatically. See the
+                        Yes - you can import pins from a whole bunch of other places. Every imported pin is shown to you for review before anything is saved. See the
                         <a href="{% url 'help.import_pins' %}">pin import guide</a> for details.
                     </p>
                 </div>
@@ -135,13 +122,43 @@
         <div class="faq-list">
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Are my pins public by default?</span>
+                    <span>Are my pins public?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
                         No. Every pin is private by default. Sharing is opt-in and granular - you choose whether
-                        to share a pin with specific friends, a trip, or no one at all.
+                        to share a pin with specific friends, a trip, or no one at all. Big, obvious confirmation dialogs will be shown to you before anything gets shared.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Nobody can see my pins? Really?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Correct. Nobody. Not even me.
+                    </p>
+                    <p>
+                        The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, AI tools can help you understand the codebase and verify your data is safe.
+                    </p>
+                    <p>
+                        But let's also have a reality check.
+                    </p>
+                    <p>
+                        Anytime someone else owns the hardware your data is stored on, there is a pathway for them to see your data. Even if your data is encrypted, the hardware owner could intercept the data before encryption, or brute force the encryption key. If any mapping site out there tells you they can't see your pins without telling you this caveat, they're lying to you.
+                    </p>
+                    <p>
+                        I put a ton of time into trying to design something that didn't even store coordinates on my server, in order to get past this problem. If you look back through the git history, you can probably find a bunch of notes I wrote about it. I experimented with several ideas, and got part of the way through designing a peer-to-peer network before I came to the conclusion that this problem might be intractable.
+                    </p>
+                    <p>
+                        So the best I can do is show you every line of code in my application, and promise that I won't hack into my own software in order to see your pins. And if you're worried about it, you should take my code and put it on your own machine, where nobody has access except you.
+                    </p>
+                    <p>
+                        Please don't trust anyone else who doesn't explain this to you, and makes you assurances they can't keep.
                     </p>
                 </div>
             </details>
@@ -153,10 +170,12 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        A location's wiki is a community-editable page for history, architectural notes, hazards,
-                        and access details. It's entirely separate from your personal pin - contributing to a
-                        wiki never exposes your pin's notes, coordinates, or visit history, and participation is
-                        always opt-in.
+                        A wiki is a community-editable page that is only accessible to people who already have the pin on their map.</p>
+                    <p>
+                        It's entirely separate from your personal pin. It's opt-in, so most wikis are going to be blank, unless someone decides to add information to them.
+                    </p>
+                    <p>
+                        The core idea behind a wiki is that sharing exploring information is hard. Sometimes you want to share updates with other explorers who already know about the place, but you don't want to broadcast the location to people who don't. Wikis let you share information exclusively with people who already have the pin, so you can freely share any information you'd like without worrying about publicizing a vulnerable place.
                     </p>
                 </div>
             </details>
