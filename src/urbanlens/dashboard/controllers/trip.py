@@ -203,9 +203,107 @@ def _trip_or_403(request: HttpRequest, trip_uuid: str, profile: Profile) -> Trip
     trip = Trip.objects.filter(uuid=trip_uuid).first()
     if trip is None:
         return render(request, "dashboard/pages/trips/not_found.html", status=404)
-    if trip.creator == profile or TripMembership.objects.filter(trip=trip, profile=profile).exists():
+    if _profile_can_access_trip(profile, trip):
         return trip
     return render(request, "dashboard/pages/trips/not_found.html", status=403)
+
+
+def _profile_can_access_trip(profile: Profile, trip: Trip) -> bool:
+    """Return whether a profile can view a trip.
+
+    Args:
+        profile: Profile attempting to access the trip.
+        trip: Trip being accessed.
+
+    Returns:
+        True when the profile is the creator or a member of the trip.
+    """
+    return trip.creator_id == profile.id or TripMembership.objects.filter(trip=trip, profile=profile).exists()
+
+
+def _resolve_child_trip(child_trip_uuid: str, profile: Profile, parent_trip: Trip) -> Trip | None:
+    """Resolve a child trip UUID only when the requester may view it.
+
+    Args:
+        child_trip_uuid: Submitted child trip UUID.
+        profile: Profile submitting the activity.
+        parent_trip: Trip receiving the child-trip activity.
+
+    Returns:
+        The accessible child trip, or ``None`` when the UUID is blank, invalid,
+        points at the parent trip, or references a trip outside the viewer's
+        membership.
+    """
+    if not child_trip_uuid:
+        return None
+    return (
+        Trip.objects.filter(Q(creator=profile) | Q(profiles=profile), uuid=child_trip_uuid)
+        .exclude(pk=parent_trip.pk)
+        .distinct()
+        .first()
+    )
+
+
+def _activity_privacy_hidden_ids(activities: Iterable[TripActivity], viewer: Profile) -> set[int]:
+    """Return activity IDs hidden from a viewer by the adder's profile privacy.
+
+    Args:
+        activities: Activities to evaluate.
+        viewer: Profile viewing the activities.
+
+    Returns:
+        Set of activity primary keys whose locations are hidden from the viewer.
+    """
+    activity_list = list(activities)
+    hidden: set[int] = set()
+    sensitive = [
+        act
+        for act in activity_list
+        if act.added_by_id
+        and act.added_by_id != viewer.id
+        and act.added_by
+        and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE
+        and act.location_id
+    ]
+    if sensitive:
+        _apply_trip_visibility_filter(sensitive, viewer, hidden)
+    return hidden
+
+
+def _activity_effective_location_hidden(activity: TripActivity, privacy_hidden_ids: set[int]) -> bool:
+    """Return whether an activity location should be redacted in list UI.
+
+    Args:
+        activity: Activity being rendered.
+        privacy_hidden_ids: Activity IDs hidden by profile privacy rules.
+
+    Returns:
+        True when the explicit hidden flag or privacy rules hide the location.
+    """
+    return activity.location_hidden or activity.id in privacy_hidden_ids
+
+
+def _activity_can_complete(activity: TripActivity, profile: Profile, trip: Trip, privacy_hidden_ids: set[int]) -> bool:
+    """Return whether completing an activity is safe for this viewer.
+
+    Completing an activity writes a personal pin/visit at the activity's
+    coordinates, so users who cannot know a location must not be allowed to
+    materialize it into their own data.
+
+    Args:
+        activity: Activity the profile wants to complete.
+        profile: Acting profile.
+        trip: Parent trip.
+        privacy_hidden_ids: Activity IDs hidden by profile privacy rules.
+
+    Returns:
+        True when the profile may complete the activity.
+    """
+    if activity.id in privacy_hidden_ids:
+        return False
+    if activity.location_hidden:
+        return activity.added_by_id == profile.id or _is_organizer(profile, trip)
+    return True
 
 
 def _expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
@@ -430,13 +528,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
         if v["profile_id"] == profile.id:
             user_votes[aid] = v["vote"]
 
-    # Determine which activities have their location hidden from this viewer
-    # based on the adder's trip_pin_location_visibility privacy setting.
-    viewer_hidden: set[int] = set()
-    sensitive = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
-    if sensitive:
-        _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
-
+    privacy_hidden = _activity_privacy_hidden_ids(activities, profile)
     viewer_is_organizer = _is_organizer(profile, trip)
     activities_with_index = [
         {
@@ -446,7 +538,9 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
             "vote_down": down_counts.get(act.id, 0),
             "user_vote": user_votes.get(act.id),
             "can_manage": (act.added_by_id == profile.id or viewer_is_organizer),
-            "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+            "can_complete": _activity_can_complete(act, profile, trip, privacy_hidden),
+            "child_trip_visible": bool(act.child_trip and _profile_can_access_trip(profile, act.child_trip)),
+            "effective_location_hidden": _activity_effective_location_hidden(act, privacy_hidden),
         }
         for act in activities
     ]
@@ -685,7 +779,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         location, pin = _resolve_activity_place(body, profile)
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
-        child_trip = Trip.objects.filter(uuid=child_trip_uuid).first() if child_trip_uuid else None
+        child_trip = _resolve_child_trip(child_trip_uuid, profile, trip)
 
         status = (body.get("status") or "proposed").strip()
         if status not in {"proposed", "confirmed"}:
@@ -749,7 +843,7 @@ class TripActivityEditView(LoginRequiredMixin, View):
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
         if child_trip_uuid:
-            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid).first()
+            activity.child_trip = _resolve_child_trip(child_trip_uuid, profile, trip)
         elif "child_trip_uuid" in body:
             activity.child_trip = None
 
@@ -800,6 +894,9 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         trip = result
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+        privacy_hidden = _activity_privacy_hidden_ids([activity], profile)
+        if not _activity_can_complete(activity, profile, trip, privacy_hidden):
+            return HttpResponse("You don't have permission to complete this activity.", status=403)
         already_completed = activity.status == TripActivity.STATUS_COMPLETED
 
         today = datetime.date.today()
@@ -1230,12 +1327,7 @@ class TripMapDataView(LoginRequiredMixin, View):
         trip = result
 
         activities = list(_activity_qs(trip))
-
-        # Determine activities viewer-hidden due to adder's privacy setting
-        viewer_hidden_map: set[int] = set()
-        sensitive_map = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
-        if sensitive_map:
-            _apply_trip_visibility_filter(sensitive_map, profile, viewer_hidden_map)
+        viewer_hidden_map = _activity_privacy_hidden_ids(activities, profile)
 
         include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
 
@@ -1268,8 +1360,13 @@ class TripMapDataView(LoginRequiredMixin, View):
             # Include child trip's activities as ghost markers
             if act.child_trip_id and act.child_trip_id not in seen_child_acts:
                 seen_child_acts.add(act.child_trip_id)
+                if not act.child_trip or not _profile_can_access_trip(profile, act.child_trip):
+                    continue
                 child_acts = list(_activity_qs(act.child_trip))
+                child_hidden_map = _activity_privacy_hidden_ids(child_acts, profile)
                 for child_act in child_acts:
+                    if child_act.location_hidden or child_act.id in child_hidden_map:
+                        continue
                     child_coords = _activity_coords(child_act)
                     if not child_coords:
                         continue
