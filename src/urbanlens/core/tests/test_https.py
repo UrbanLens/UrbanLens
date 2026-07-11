@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.http import HttpResponse
 from django.middleware.security import SecurityMiddleware
-from django.test import RequestFactory, override_settings
+from django.test import Client, RequestFactory, override_settings
 
 from urbanlens.core.tests.testcase import TestCase
 
@@ -45,3 +45,28 @@ class HttpsRedirectMiddlewareTests(TestCase):
         request = RequestFactory().get("/dashboard/")
         response = SecurityMiddleware(_ok_response)(request)
         self.assertEqual(response.status_code, 200)
+
+
+class DockerHealthProbeTests(TestCase):
+    """Container healthchecks curl /health/ with Host: localhost."""
+
+    @override_settings(
+        ALLOWED_HOSTS=["urbanlens.org"],
+        SECURE_SSL_REDIRECT=True,
+        SECURE_PROXY_SSL_HEADER=None,
+        SECURE_REDIRECT_EXEMPT=[r"^health"],
+    )
+    def test_localhost_probe_fails_when_localhost_missing_from_allowed_hosts(self) -> None:
+        response = Client(HTTP_HOST="localhost").get("/health/")
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(
+        ALLOWED_HOSTS=["urbanlens.org", "localhost", "127.0.0.1"],
+        SECURE_SSL_REDIRECT=True,
+        SECURE_PROXY_SSL_HEADER=None,
+        SECURE_REDIRECT_EXEMPT=[r"^health"],
+    )
+    def test_localhost_probe_succeeds_for_docker_healthcheck(self) -> None:
+        response = Client(HTTP_HOST="localhost").get("/health/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"Okay!")

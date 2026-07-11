@@ -8,7 +8,6 @@ from typing import Annotated, Any, Self
 from django import conf
 from django.conf import LazySettings
 from django.core.management.utils import get_random_secret_key
-
 from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
@@ -30,10 +29,14 @@ _ENV_FILE_PATHS = [
 
 
 def _default_allowed_hosts() -> list[str]:
-    """Local dev defaults to a wildcard-friendly host list; other environments lock down to the canonical domain."""
-    if os.getenv("UL_ENVIRONMENT", EnvironmentTypes.LOCAL).lower() == EnvironmentTypes.LOCAL:
-        return ["urbanlens.org", "localhost", "127.0.0.1"]
-    return ["urbanlens.org"]
+    """Return the default ``ALLOWED_HOSTS`` list for the current environment.
+
+    ``localhost`` and ``127.0.0.1`` are always included so Docker's internal
+    ``curl http://localhost:8000/health/`` healthchecks (see docker-compose.yml)
+    succeed without opening the app to arbitrary public Host headers. Override
+    the full list via ``UL_ALLOWED_HOSTS`` when deploying to a custom domain.
+    """
+    return ["urbanlens.org", "localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
