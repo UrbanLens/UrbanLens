@@ -134,7 +134,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
         location = get_object_or_404(Location, slug=location_slug)
-        wiki = _wiki_for_location(location)
+        wiki = get_object_or_404(Wiki, location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
@@ -147,7 +147,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
         location = get_object_or_404(Location, slug=location_slug)
-        wiki = _wiki_for_location(location)
+        wiki = get_object_or_404(Wiki, location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -181,7 +181,7 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         location = get_object_or_404(Location, slug=location_slug)
-        wiki = _wiki_for_location(location)
+        wiki = get_object_or_404(Wiki, location=location)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]

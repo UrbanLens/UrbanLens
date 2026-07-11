@@ -242,6 +242,13 @@ class PinBulkEditViewTests(TestCase):
         self._edit({"uuids": [str(self.pin_a.uuid)], "remove_badge_ids": [self.tag_present.id]})
         self.assertNotIn(self.tag_present, self.pin_a.badges.all())
 
+    def test_add_ignores_another_users_private_badge(self) -> None:
+        """A forged add_badge_ids must not attach another profile's private badge."""
+        other_profile = baker.make(User).profile
+        foreign_badge = baker.make(Badge, kind=KIND_TAG, profile=other_profile, name="foreign")
+        self._edit({"uuids": [str(self.pin_a.uuid)], "add_badge_ids": [foreign_badge.id]})
+        self.assertNotIn(foreign_badge, self.pin_a.badges.all())
+
 
 class PinBulkEditBadgeOptionsViewTests(TestCase):
     """GET /map/pins/bulk-edit/badge-options/ only offers badges present on the selection."""
