@@ -179,33 +179,6 @@
                     </p>
                 </div>
             </details>
-
-            <details class="faq-item">
-                <summary class="faq-item-summary">
-                    <span>Can other users find me or my pins without my permission?</span>
-                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
-                </summary>
-                <div class="faq-item-body">
-                    <p>
-                        No. Other users can't discover you until you take an action to become visible to them.
-                        Even friend requests don't reveal whether an account exists until the request is accepted.
-                        Read more on our <a href="{% url 'values' %}">Values</a> page.
-                    </p>
-                </div>
-            </details>
-
-            <details class="faq-item">
-                <summary class="faq-item-summary">
-                    <span>Do you sell location data or run ads?</span>
-                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
-                </summary>
-                <div class="faq-item-body">
-                    <p>
-                        Never. We don't sell pin, photo, or location data, and we don't run ads. There's nothing
-                        on UrbanLens whose purpose is to monetize what you document.
-                    </p>
-                </div>
-            </details>
         </div>
     </div>
 </section>
@@ -224,24 +197,34 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes. Trips support RSVPs, member management, and shared itineraries with per-trip privacy
-                        controls, so you can coordinate an expedition without exposing pin details to anyone who
-                        hasn't been invited.
+                        Yes. Trips support RSVPs, member management, and shared itineraries with per-trip and per-pin privacy controls, so you can coordinate an expedition without exposing pin details. Only people you invite to the trip can see anything, and even then, you can make some pins even more private; people on the trip who don't have the pin will see "Secret Location", until you're ready to share the exact location. Is this overkill? Probably.
                     </p>
                 </div>
             </details>
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Can UrbanLens create pins automatically from my photos?</span>
+                    <span>Organizing my pins sounds tedious. Pretend this is a question.</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        If you opt in, UrbanLens can read GPS coordinates from your photos' EXIF metadata and
-                        suggest a matching pin - or let you create one directly. Photos without GPS data can be
-                        dragged onto the map to assign a location manually.
+                        I like automating things. So I automated things.
                     </p>
+                    <p>
+                        There are lots of ways to make this easier.
+                    </p>
+                    <ul>
+                        <li>If your pins are in saved lists in Google Maps, you'll be given a chance to create different tags for each list that you import, so you don't have to redo the organizational system you already set up.</li>
+                        <li>During import, you can click a checkbox to have an AI help you tag them, too. It does its best. Try not to hurt its feelings.</li>
+                        <li>When you upload photos, you can opt in to have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
+                        <li>A friend of mine had a loose text file of notes about places... so I support that, too. Upload a text file and an AI will help out. Your mileage may vary.</li>
+                        <li>Importing your location history can automatically make pins for you, if you want it to. The location history file is deleted immediately, just like all the other stuff you import.</li>
+                        <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button. I'm sorry, I know clicking buttons is hard.)</li>
+                        <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but I tested it and it works.</li>
+                        <li>Group trips make pins. So do safety checkins. And as many other things as I could think of.</li>
+                        <li>Once you have your pins here, you can nest them into categories and tags in a whole bunch of configurations, which lets you search and filter in cool ways. Like... you could make your map only display pins that are in the "church" and "want to go" categories, but not in the "no entry" or "demolished" categories, and then you can keep adding filters onto that.</li>
+                    </ul>
                 </div>
             </details>
 
@@ -252,23 +235,24 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Accounts have a storage quota for photos and attachments, shown on your profile page.
-                        Uploaded images are automatically optimized to help you fit more within your quota
-                        without losing meaningful detail.
+                        I'm just one person, and I bought a lot of hard drives, but I don't have unlimited space. I gave a few GB to people I've never met, and a little bit more to my friends. It adds up pretty fast.
+                    <p>
+                        You can see how much space you have on your profile page. Uploaded images are automatically optimized to help you fit more within your quota without losing meaningful detail.
                     </p>
                 </div>
             </details>
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
-                    <span>Where do the extra details on a pin's page come from (Wikipedia, weather, etc.)?</span>
+                    <span>Where do the extra details on a pin page come from?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Pin detail pages can pull in supplementary context from external sources - things like
-                        Wikipedia summaries, historical imagery, weather, and relevant public datasets - to help
-                        you research a location before you visit.
+                        The site tries its best to pull in supplementary data, and filter out the junk that doesn't apply. So it can show things like Wikipedia summaries, historical imagery, weather, and relevant public datasets - to help you research a location before you visit.
+                    </p>
+                    <p>
+                        When these external APIs are contacted, we only send the minimum amount of data needed to get a relevant response. That usually means just the name of the place, or the coordinates.
                     </p>
                 </div>
             </details>
@@ -280,7 +264,7 @@
 <section class="faq-section faq-section--alt" id="safety">
     <div class="faq-section-inner">
         <div class="faq-section-label">Safety</div>
-        <h2 class="faq-section-title">Staying safe in the field.</h2>
+        <h2 class="faq-section-title">Staying safe.</h2>
 
         <div class="faq-list">
             <details class="faq-item">
@@ -290,9 +274,19 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        A safety check-in lets you tell trusted contacts where you're going and when to expect
-                        you back. If you don't check in by your expected return time, it can automatically
-                        escalate and notify the people you've chosen.
+                        When you go to a new place, you're supposed to tell a trusted friend where you're going, and ask them to check in on you when you're supposed to be back... but oh gosh, I never got in that habit. Plus, what am I supposed to do when I'm going somewhere secret, and I don't want to advertise its location? I guess if I get hurt, I just die.
+                    </p>
+                    <p>
+                        A safety check-in lets you save all the details of the trip ahead of time, without sharing it with anyone until you don't come home. Only then are they contacted to help find you.
+                    </p>
+                    <p>
+                        You should understand there are downsides to this approach, and you shouldn't rely on it as your only safety plan. Since your contacts aren't notified until after you're in trouble, they might be busy and just not see the message for hours, or days. Emails might end up in a spam folder. They could see that you sent a message to 3 other people, and assume one of the other 3 will do the job, so they can go to bed. The site could go down, and not send the notice out at all!
+                    </p>
+                    <p>
+                        I added this feature because I wanted it for me, and the people I care about, but you should keep doing the safety stuff you already do in addition to using this feature. This shouldn't replace the safety stuff you already do.
+                    </p>
+                    <p>
+                        In addition, you should choose your contacts wisely, and make sure they'll do the thing you want them to do if they get a message. If you send a poorly worded message to your grandma, she's going to call the police on you after your phone dies.
                     </p>
                 </div>
             </details>
@@ -305,20 +299,13 @@
                 <div class="faq-item-body">
                     <p>
                         Yes. Safety check-ins support notifying contacts by email in addition to other UrbanLens
-                        users, so the people who need to know you're overdue don't need an account of their own.
+                        users, so the people who need to know you're overdue don't need an account of their own. They don't need to login. They just need to click a link in their email.
                     </p>
-                </div>
-            </details>
-
-            <details class="faq-item">
-                <summary class="faq-item-summary">
-                    <span>Can I attach hazard notes to a pin?</span>
-                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
-                </summary>
-                <div class="faq-item-body">
                     <p>
-                        Yes. Pins support structural hazard notes and vulnerability ratings, so you and anyone
-                        you share the pin with can see known risks before heading out.
+                        Once contacted, they will see a map you drew of where you're going, and a trip plan you wrote for them. They'll also be able to send messages to one another, in case one of them gets important information the other people need to know.
+                    </p>
+                    <p>
+                        No one who doesn't have an special link to the check-in page can see the page or those details, and no one but you can see it until you don't check in.
                     </p>
                 </div>
             </details>
@@ -341,7 +328,13 @@
                 <div class="faq-item-body">
                     <p>
                         Yes. Any data we store about you is visible on your own profile page - there's no hidden
-                        user data on UrbanLens that isn't displayed back to you.
+                        user data on UrbanLens that isn't displayed back to you. We don't even store your ip.
+                    </p>
+                    <p>
+                        But it's time for another reality check about ip addresses.
+                    </p>
+                    <p>
+                        UrbanLens relies on services from other open source software, too, like a web server to handle your web traffic, a caching layer to make the site fast, and more. Some of those services see details about you, like your ip address, just because of the nature of web traffic. Sometimes those details are put into log files. I rotate those log files regularly, and no one without access to my server could ever see them in the first place... but, that's no reason not to use a VPN. They cost like $3 a month.
                     </p>
                 </div>
             </details>
@@ -354,7 +347,13 @@
                 <div class="faq-item-body">
                     <p>
                         Yes. Account deletion is available from your profile settings and removes your personal
-                        data from UrbanLens.
+                        data from UrbanLens. The site gets rid of all of it, and I really mean all of it.
+                    </p>
+                    <p>
+                        You have 1 week to undo the deletion, and during that time your data will still exist on our servers in a separate backup file that isn't visible on the site. If you don't undo the deletion, your data will be gone forever.
+                    </p>
+                    <p>
+                        There's an export tool you can use to get a copy of your data before you do that.
                     </p>
                 </div>
             </details>
@@ -368,7 +367,7 @@
                     <p>
                         Yes - the full source is on
                         <a href="https://github.com/UrbanLens/UrbanLens">GitHub</a>. Contributions are welcome,
-                        and we ask that any contributed code align with the principles on our
+                        and we just ask that any contributed code align with the principles on our
                         <a href="{% url 'values' %}">Values</a> page.
                     </p>
                 </div>
@@ -382,8 +381,7 @@
                 <div class="faq-item-body">
                     <p>
                         UrbanLens is built and maintained by one person, not a company. It started as a personal
-                        tool for a small circle of friends and grew from there. Read the full story on our
-                        <a href="{% url 'about' %}">About</a> page.
+                        tool for me, then for a small circle of friends, and it's growing from there.
                     </p>
                 </div>
             </details>
