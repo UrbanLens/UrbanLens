@@ -19,6 +19,7 @@ from urbanlens.dashboard.controllers import (
     comments,
     custom_fields,
     detail_pins,
+    direct_messages,
     friendship,
     image_gallery,
     location_wiki,
@@ -923,6 +924,21 @@ urlpatterns = [
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
+    path(
+        "messages/",
+        include(
+            [
+                path("", direct_messages.MessagesPageView.as_view(), name="messages.view"),
+                path("dropdown/", direct_messages.MessagesDropdownView.as_view(), name="messages.dropdown"),
+                path("unread-count/", direct_messages.MessagesUnreadCountView.as_view(), name="messages.unread_count"),
+                path("recipients/", direct_messages.RecipientSearchView.as_view(), name="messages.recipients"),
+                path("list/", direct_messages.ConversationListView.as_view(), name="messages.list"),
+                path("<slug:profile_slug>/", direct_messages.ConversationView.as_view(), name="messages.conversation"),
+                path("<slug:profile_slug>/send/", direct_messages.ConversationSendView.as_view(), name="messages.send"),
+                path("<slug:profile_slug>/read/", direct_messages.ConversationReadView.as_view(), name="messages.read"),
+            ],
+        ),
+    ),
     path(
         "notifications/",
         include(

@@ -32,6 +32,26 @@
         <div class="app-nav-right">
             {% if user.is_authenticated %}
 
+            {# -- Messages (only once the user has ever used direct messages) --- #}
+            {% if show_messages_icon %}
+            <div class="nav-notif nav-msg" id="nav-msg">
+                <button class="nav-notif-btn" id="nav-msg-btn" type="button"
+                        aria-haspopup="true" aria-expanded="false" aria-label="Messages">
+                    <i class="material-icons nav-notif-icon">forum</i>
+                    <span id="msg-badge-wrap"
+                          hx-get="{% url 'messages.unread_count' %}"
+                          hx-trigger="load, every 60s, msgCountRefresh from:body"
+                          hx-swap="innerHTML">
+                    </span>
+                </button>
+                <div class="nav-notif-panel" id="msg-dropdown-wrap" role="menu"
+                     hx-get="{% url 'messages.dropdown' %}"
+                     hx-trigger="msgOpen from:body"
+                     hx-swap="innerHTML">
+                </div>
+            </div>
+            {% endif %}
+
             {# -- Notification bell -------------------------------------------- #}
             <div class="nav-notif" id="nav-notif">
                 <button class="nav-notif-btn" id="nav-notif-btn" type="button"
@@ -160,11 +180,14 @@
     var btn       = document.getElementById('nav-user-btn');
     var notifWrap = document.getElementById('nav-notif');
     var notifBtn  = document.getElementById('nav-notif-btn');
+    var msgWrap   = document.getElementById('nav-msg');
+    var msgBtn    = document.getElementById('nav-msg-btn');
     var _loaded   = false;
 
     function openMenu() {
         if (!menu) return;
         closeNotif();
+        closeMsg();
         menu.classList.add('is-open');
         btn.setAttribute('aria-expanded', 'true');
     }
@@ -177,6 +200,7 @@
     function openNotif() {
         if (!notifWrap) return;
         closeMenu();
+        closeMsg();
         notifWrap.classList.add('is-open');
         notifBtn.setAttribute('aria-expanded', 'true');
         if (!_loaded) { _loaded = true; document.body.dispatchEvent(new Event('notifOpen')); }
@@ -185,6 +209,27 @@
         if (!notifWrap) return;
         notifWrap.classList.remove('is-open');
         notifBtn.setAttribute('aria-expanded', 'false');
+    }
+    function openMsg() {
+        if (!msgWrap) return;
+        closeMenu();
+        closeNotif();
+        msgWrap.classList.add('is-open');
+        msgBtn.setAttribute('aria-expanded', 'true');
+        // Re-fetch on every open so previews and unread pills are always current.
+        document.body.dispatchEvent(new Event('msgOpen'));
+    }
+    function closeMsg() {
+        if (!msgWrap) return;
+        msgWrap.classList.remove('is-open');
+        msgBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (msgBtn) {
+        msgBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            msgWrap.classList.contains('is-open') ? closeMsg() : openMsg();
+        });
     }
 
     if (btn) {
@@ -230,11 +275,12 @@
     document.addEventListener('click', function (e) {
         if (menu      && !menu.contains(e.target))      closeMenu();
         if (notifWrap && !notifWrap.contains(e.target)) closeNotif();
+        if (msgWrap   && !msgWrap.contains(e.target))   closeMsg();
     });
 
-    // Escape closes both
+    // Escape closes all of them
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { closeMenu(); closeNotif(); closeDrawer(); }
+        if (e.key === 'Escape') { closeMenu(); closeNotif(); closeMsg(); closeDrawer(); }
     });
 
     // -- Mobile hamburger drawer -----------------------------------------------

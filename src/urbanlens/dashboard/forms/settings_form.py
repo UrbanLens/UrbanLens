@@ -97,6 +97,12 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Contact Visibility",
         help_text="Who can see your contact methods on your profile.",
     )
+    direct_message_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Direct Messages",
+        help_text="Who can send you direct messages. Anyone you message first can always reply.",
+    )
 
     class Meta:
         model = Profile
@@ -108,6 +114,7 @@ class PrivacySettingsForm(forms.ModelForm):
             "viewer_photo_filter",
             "trip_pin_location_visibility",
             "contact_visibility",
+            "direct_message_visibility",
         ]
 
     def __init__(self, *args, **kwargs):

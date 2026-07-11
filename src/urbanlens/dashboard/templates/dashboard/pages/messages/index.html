@@ -1,0 +1,257 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block title %}Messages{% endblock %}
+
+{% block content %}
+<div class="dm-page page-content{% if active_partner %} dm-page--thread-open{% endif %}" id="dm-page"
+     data-my-slug="{{ profile.slug }}"
+     data-list-url="{% url 'messages.list' %}">
+
+    <div class="dm-layout">
+
+        {# -- Left pane: conversations ---------------------------------------- #}
+        <aside class="dm-sidebar" id="dm-sidebar">
+            <div class="dm-sidebar__header">
+                <h1 class="dm-title"><i class="material-symbols-outlined">forum</i> Messages</h1>
+                <button type="button" class="btn btn--sm btn--primary dm-compose-btn" id="dm-compose-btn"
+                        aria-expanded="false" aria-controls="dm-compose">
+                    <i class="material-symbols-outlined">edit_square</i>
+                    New message
+                </button>
+            </div>
+
+            <div class="dm-compose" id="dm-compose" hidden>
+                <label class="dm-compose__label" for="dm-recipient-input">To</label>
+                <input type="search" id="dm-recipient-input" class="dm-compose__input"
+                       name="q" placeholder="Search people..." autocomplete="off"
+                       hx-get="{% url 'messages.recipients' %}"
+                       hx-trigger="input changed delay:300ms, search"
+                       hx-target="#dm-recipient-results"
+                       hx-swap="innerHTML">
+                <div id="dm-recipient-results" class="dm-recipient-results"></div>
+            </div>
+
+            <div class="dm-sidebar__list"
+                 hx-get="{% url 'messages.list' %}"
+                 hx-trigger="dmListRefresh from:body"
+                 hx-swap="innerHTML"
+                 hx-vals='js:{active: window.dmActiveSlug()}'>
+                {% include "dashboard/partials/messages/_conversation_list.html" %}
+            </div>
+        </aside>
+
+        {# -- Right pane: active thread ---------------------------------------- #}
+        <section class="dm-thread-pane" id="dm-thread-pane" aria-live="polite">
+            {% if active_partner %}
+            {% include "dashboard/partials/messages/_thread.html" %}
+            {% else %}
+            <div class="dm-thread-placeholder">
+                <i class="material-symbols-outlined" aria-hidden="true">chat_bubble</i>
+                <p>Select a conversation</p>
+                <p class="dm-thread-placeholder__hint">or start a new one to plan your next explore.</p>
+            </div>
+            {% endif %}
+        </section>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    var page = document.getElementById('dm-page');
+    if (!page) return;
+    var mySlug = page.dataset.mySlug;
+
+    function activeThread() { return document.getElementById('dm-thread'); }
+    window.dmActiveSlug = function () {
+        var thread = activeThread();
+        return thread ? thread.dataset.partnerSlug : '';
+    };
+
+    function toast(level, message) {
+        if (window.toastr) toastr[level](message);
+    }
+
+    function scrollMessages() {
+        var list = document.getElementById('dm-messages');
+        if (list) list.scrollTop = list.scrollHeight;
+    }
+
+    function refreshList() {
+        htmx.trigger(document.body, 'dmListRefresh');
+        htmx.trigger(document.body, 'msgCountRefresh');
+    }
+
+    function appendBubble(msg, own) {
+        var list = document.getElementById('dm-messages');
+        if (!list) return;
+        var empty = document.getElementById('dm-thread-empty');
+        if (empty) empty.hidden = true;
+
+        var li = document.createElement('li');
+        li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them');
+
+        var body = document.createElement('span');
+        body.className = 'dm-bubble__body';
+        body.textContent = msg.body;
+
+        var time = document.createElement('span');
+        time.className = 'dm-bubble__time';
+        var created = new Date(msg.created);
+        time.textContent = isNaN(created.getTime()) ? '' : created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+        li.appendChild(body);
+        li.appendChild(time);
+        list.appendChild(li);
+        scrollMessages();
+    }
+
+    function markThreadRead() {
+        var thread = activeThread();
+        if (!thread || !thread.dataset.readUrl) return;
+        var form = document.getElementById('dm-composer');
+        var csrf = form ? form.querySelector('[name=csrfmiddlewaretoken]') : null;
+        fetch(thread.dataset.readUrl, {
+            method: 'POST',
+            headers: csrf ? { 'X-CSRFToken': csrf.value } : {},
+        }).then(function () {
+            htmx.trigger(document.body, 'msgCountRefresh');
+        }).catch(function () { /* badge catches up on its next poll */ });
+    }
+
+    // -- Live delivery over the site-wide messages socket ----------------------
+    // Mirrors the safety check-in chat: exponential backoff, permanent close on
+    // 4404, and a plain-POST fallback when the socket is down at send time.
+    var ws = null;
+    var retryDelay = 1000;
+    var maxDelay = 15000;
+    var retryCount = 0;
+    var permanentlyClosed = false;
+    var warnedSlowReconnect = false;
+
+    function setConnected(connected) {
+        var status = document.getElementById('dm-conn-status');
+        if (status) status.hidden = connected;
+    }
+
+    function connect() {
+        var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        ws = new WebSocket(proto + location.host + '/ws/messages/');
+        ws.onopen = function () {
+            retryDelay = 1000;
+            retryCount = 0;
+            warnedSlowReconnect = false;
+            setConnected(true);
+        };
+        ws.onclose = function (ev) {
+            setConnected(false);
+            if (ev.code === 4404) {
+                permanentlyClosed = true;
+                return;
+            }
+            if (permanentlyClosed) return;
+            retryCount += 1;
+            if (retryCount === 5 && !warnedSlowReconnect) {
+                warnedSlowReconnect = true;
+                toast('warning', 'Still trying to reconnect - messages may be delayed.');
+            }
+            setTimeout(connect, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, maxDelay);
+        };
+        ws.onerror = function () { ws.close(); };
+        ws.onmessage = function (ev) {
+            var msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            if (msg.type === 'error') {
+                toast('error', msg.detail || "Your message couldn't be sent.");
+                return;
+            }
+            if (msg.type !== 'message') return;
+
+            var active = window.dmActiveSlug();
+            if (msg.sender_slug === active) {
+                // Incoming message on the thread we're looking at.
+                appendBubble(msg, false);
+                markThreadRead();
+                htmx.trigger(document.body, 'dmListRefresh');
+            } else if (msg.sender_slug === mySlug && msg.recipient_slug === active) {
+                // Our own message (from this or another tab) echoing back.
+                appendBubble(msg, true);
+                htmx.trigger(document.body, 'dmListRefresh');
+            } else {
+                refreshList();
+            }
+        };
+    }
+    setConnected(false);
+    connect();
+
+    // -- Composer: WebSocket first, plain POST fallback -------------------------
+    // Delegated because HTMX replaces the whole thread pane on conversation switch.
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || form.id !== 'dm-composer') return;
+        e.preventDefault();
+
+        var input = document.getElementById('dm-composer-input');
+        var body = input.value.trim();
+        if (!body) return;
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ recipient: window.dmActiveSlug(), body: body }));
+            input.value = '';
+            input.focus();
+            return;
+        }
+
+        // Socket down: plain POST, then swap in the refreshed thread the server
+        // returns. On failure the input is restored so the message isn't lost.
+        var formData = new FormData(form);
+        input.value = '';
+        fetch(form.action, { method: 'POST', body: formData })
+            .then(function (resp) {
+                if (resp.ok) {
+                    return resp.text().then(function (html) {
+                        var pane = document.getElementById('dm-thread-pane');
+                        pane.innerHTML = html;
+                        htmx.process(pane);
+                        scrollMessages();
+                        refreshList();
+                    });
+                }
+                return resp.text().then(function (text) {
+                    throw new Error(text || 'Message failed to send.');
+                });
+            })
+            .catch(function (err) {
+                input.value = body;
+                toast('error', err.message || 'Message failed to send. Please try again.');
+            });
+    });
+
+    // -- Compose panel toggle ----------------------------------------------------
+    var composeBtn = document.getElementById('dm-compose-btn');
+    var composePanel = document.getElementById('dm-compose');
+    if (composeBtn && composePanel) {
+        composeBtn.addEventListener('click', function () {
+            var open = !composePanel.hidden;
+            composePanel.hidden = open;
+            composeBtn.setAttribute('aria-expanded', String(!open));
+            if (!open) document.getElementById('dm-recipient-input').focus();
+        });
+    }
+
+    // Keep the thread scrolled to the newest message after HTMX pane swaps,
+    // and show the thread pane on mobile when a conversation is opened.
+    document.body.addEventListener('htmx:afterSwap', function (ev) {
+        if (ev.detail.target && ev.detail.target.id === 'dm-thread-pane') {
+            page.classList.add('dm-page--thread-open');
+            scrollMessages();
+            var input = document.getElementById('dm-composer-input');
+            if (input) input.focus();
+        }
+    });
+    scrollMessages();
+}());
+</script>
+{% endblock %}

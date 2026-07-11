@@ -1,0 +1,43 @@
+{% comment %}
+Navbar messages dropdown - recent conversations. Context: `conversations`
+(list of dicts from services.direct_messages.conversations_for).
+{% endcomment %}
+<div class="msg-dropdown" id="msg-dropdown">
+  <div class="msg-dropdown__header">
+    <span class="msg-dropdown__title">Messages</span>
+    <a href="{% url 'messages.view' %}" class="msg-dropdown__all-link">See all</a>
+  </div>
+
+  {% if conversations %}
+  <ul class="msg-dropdown-list" role="list">
+    {% for conv in conversations %}
+    <li>
+      <a class="msg-dropdown-item{% if conv.unread_count %} msg-dropdown-item--unread{% endif %}"
+         href="{% url 'messages.conversation' conv.partner.slug %}">
+        <span class="msg-avatar" aria-hidden="true">
+          {% if conv.partner.avatar %}
+          <img src="{{ conv.partner.avatar.url }}" alt="" class="msg-avatar-img">
+          {% else %}
+          <span class="msg-avatar-initial">{{ conv.partner.username|first|upper }}</span>
+          {% endif %}
+        </span>
+        <span class="msg-dropdown-item__text">
+          <span class="msg-dropdown-item__name">{{ conv.partner.username }}</span>
+          <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message.body|truncatechars:60 }}</span>
+        </span>
+        <span class="msg-dropdown-item__meta">
+          <span class="msg-dropdown-item__time">{{ conv.last_message.created|timesince }} ago</span>
+          {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="msg-empty">
+    <i class="material-icons msg-empty__icon" aria-hidden="true">forum</i>
+    <p class="msg-empty__text">No messages yet</p>
+    <p class="msg-empty__hint">Conversations with other explorers will appear here</p>
+  </div>
+  {% endif %}
+</div>

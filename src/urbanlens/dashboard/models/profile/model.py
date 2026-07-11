@@ -58,6 +58,7 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "viewer_photo_filter",
     "trip_pin_location_visibility",
     "contact_visibility",
+    "direct_message_visibility",
 )
 
 
@@ -167,6 +168,12 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.FRIENDS,
         help_text="Who can see your contact methods (phone, Signal, Discord, etc.).",
+    )
+    direct_message_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
+        help_text="Who can send you direct messages.",
     )
 
     # Style preferences
@@ -663,6 +670,31 @@ class Profile(abstract.PublicDashboardModel):
         if viewer is None:
             return False
         return self.visibility_permits(self.contact_visibility, self, viewer)
+
+    def accepts_direct_messages_from(self, sender: Profile) -> bool:
+        """Return True if ``sender`` may send this profile a direct message.
+
+        Evaluates this profile's ``direct_message_visibility`` setting through
+        the shared ``visibility_permits`` evaluator, with one addition: a
+        profile that has already messaged the sender can always be replied to,
+        regardless of the setting - starting a conversation is an implicit
+        invitation to answer.
+
+        Args:
+            sender: The profile attempting to send a message.
+
+        Returns:
+            True when the sender passes the direct_message_visibility setting
+            or this profile previously messaged the sender.
+        """
+        if self.pk == sender.pk:
+            return False
+        if self.visibility_permits(self.direct_message_visibility, self, sender):
+            return True
+
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        return DirectMessage.objects.filter(sender=self, recipient=sender).exists()
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).

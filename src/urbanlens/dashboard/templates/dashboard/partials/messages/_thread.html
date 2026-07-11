@@ -1,0 +1,60 @@
+{% comment %}
+One conversation thread: header, message bubbles, composer. Context:
+`partner`, `thread_messages`, `can_message_partner`, `max_message_length`.
+Swapped into #dm-thread-pane by HTMX; the page's WebSocket JS (see
+pages/messages/index.html) reads the data attributes off #dm-thread to route
+live messages and fall back to the plain POST endpoint when the socket is down.
+{% endcomment %}
+<div class="dm-thread" id="dm-thread"
+     data-partner-slug="{{ partner.slug }}"
+     data-send-url="{% url 'messages.send' partner.slug %}"
+     data-read-url="{% url 'messages.read' partner.slug %}">
+
+  <div class="dm-thread__header">
+    <a class="dm-thread__back" href="{% url 'messages.view' %}" aria-label="Back to conversations">
+      <i class="material-symbols-outlined">arrow_back</i>
+    </a>
+    <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
+      {% if partner.avatar %}
+      <img src="{{ partner.avatar.url }}" alt="" class="msg-avatar-img">
+      {% else %}
+      <span class="msg-avatar-initial">{{ partner.username|first|upper }}</span>
+      {% endif %}
+    </span>
+    <div class="dm-thread__who">
+      <a class="dm-thread__name" href="{% url 'profile.view_user' partner.slug %}">{{ partner.username }}</a>
+      <span class="dm-thread__status" id="dm-conn-status" hidden>Reconnecting...</span>
+    </div>
+  </div>
+
+  <ul class="dm-messages" id="dm-messages" role="list">
+    {% for message in thread_messages %}
+    {% ifchanged message.created|date:"Y-m-d" %}
+    <li class="dm-day-sep" aria-hidden="true"><span>{{ message.created|date:"M j, Y" }}</span></li>
+    {% endifchanged %}
+    <li class="dm-bubble {% if message.sender_id == partner.pk %}dm-bubble--them{% else %}dm-bubble--own{% endif %}">
+      <span class="dm-bubble__body">{{ message.body }}</span>
+      <span class="dm-bubble__time">{{ message.created|date:"g:i A" }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="dm-thread-empty" id="dm-thread-empty" {% if thread_messages %}hidden{% endif %}>
+    This is the beginning of your conversation with {{ partner.username }}.
+  </p>
+
+  {% if can_message_partner %}
+  <form class="dm-composer" id="dm-composer" action="{% url 'messages.send' partner.slug %}" method="post">
+    {% csrf_token %}
+    <input type="text" name="body" id="dm-composer-input" autocomplete="off"
+           placeholder="Message {{ partner.username }}..." maxlength="{{ max_message_length }}" required>
+    <button type="submit" class="btn btn--primary dm-composer__send" aria-label="Send message">
+      <i class="material-symbols-outlined">send</i>
+    </button>
+  </form>
+  {% else %}
+  <p class="dm-composer-locked">
+    <i class="material-symbols-outlined" aria-hidden="true">lock</i>
+    {{ partner.username }} isn't accepting messages from you right now.
+  </p>
+  {% endif %}
+</div>

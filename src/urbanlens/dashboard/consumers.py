@@ -94,6 +94,124 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
         return profile.pk
 
 
+class DirectMessageConsumer(AsyncWebsocketConsumer):
+    """Real-time direct-message channel for a logged-in user.
+
+    Mounted at ``ws/messages/``. Authentication comes from the session cookie
+    via Channels' ``AuthMiddlewareStack``. Each connection joins the
+    per-profile group from ``services.direct_messages.direct_message_group_name``;
+    ``create_direct_message`` broadcasts every new message to both the sender's
+    and the recipient's groups, so all of either party's open tabs update at once.
+
+    Sending: the client submits ``{"recipient": "<profile slug>", "body": "..."}``
+    frames; validation, privacy enforcement, persistence, and the broadcast all
+    live in ``create_direct_message`` - the same function the HTTP fallback
+    (``ConversationSendView``) uses, mirroring the safety check-in chat split.
+
+    Close codes on ``connect()`` failure (same contract as
+    ``SafetyCheckinChatConsumer``, which the frontend reconnect logic branches on):
+
+    - ``4404``: the session is unauthenticated - permanent, retrying won't help.
+    - ``4500``: an unexpected server-side error - transient, safe to retry.
+    """
+
+    async def connect(self):
+        """Authenticate the session and join the profile's direct-message group."""
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        try:
+            self.profile_id = await self._get_profile_id()
+            from urbanlens.dashboard.services.direct_messages import direct_message_group_name
+
+            self.group_name = direct_message_group_name(self.profile_id)
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+        except Exception:
+            logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
+            await self.close(code=4500)
+
+    async def disconnect(self, close_code):
+        """Leave the direct-message group, if we ever joined one."""
+        if hasattr(self, "group_name"):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Direct message socket failed to leave group %s cleanly", self.group_name)
+
+    async def receive(self, text_data):
+        """Persist an incoming message; the service broadcasts it to both parties.
+
+        Args:
+            text_data: JSON string with ``recipient`` (profile slug) and
+                ``body`` fields. Unparseable or blank frames are silently
+                ignored; a frame that fails validation or privacy checks gets
+                an explicit ``{"type": "error", ...}`` reply so the sender
+                always learns their message didn't go through.
+        """
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Direct message socket received an unparseable frame from profile %s", self.profile_id)
+            return
+        body = str(data.get("body") or "").strip()
+        recipient_slug = str(data.get("recipient") or "").strip()
+        if not body or not recipient_slug:
+            return
+
+        try:
+            await self._create_message(recipient_slug, body)
+        except (ValueError, PermissionError) as exc:
+            await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+        except Exception:
+            logger.exception("Direct message failed to save from profile %s", self.profile_id)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+
+    async def dm_message(self, event):
+        """Deliver a broadcasted message to this connection.
+
+        Args:
+            event: The group-send event, with a ``message`` dict payload.
+        """
+        await self.send(text_data=json.dumps(event["message"]))
+
+    @database_sync_to_async
+    def _get_profile_id(self):
+        """Resolve (creating if needed) the session user's profile id.
+
+        Returns:
+            The primary key of the user's Profile.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=self.scope["user"])
+        return profile.pk
+
+    @database_sync_to_async
+    def _create_message(self, recipient_slug, body):
+        """Resolve the recipient and create the message through the shared service.
+
+        Args:
+            recipient_slug: URL slug of the recipient profile.
+            body: Message text.
+
+        Raises:
+            ValueError: Blank/too-long body, or no such recipient.
+            PermissionError: The recipient's privacy settings reject the sender.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.direct_messages import create_direct_message
+
+        sender = Profile.objects.select_related("user").get(pk=self.profile_id)
+        try:
+            recipient = Profile.objects.select_related("user").get(slug=recipient_slug)
+        except Profile.DoesNotExist:
+            raise ValueError("That user could not be found.") from None
+        create_direct_message(sender, recipient, body)
+
+
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     """Real-time chat for a safety check-in, shared by the owner and every emergency contact.
 

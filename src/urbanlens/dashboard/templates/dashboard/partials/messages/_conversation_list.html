@@ -1,0 +1,45 @@
+{% comment %}
+Conversation list for the messages page sidebar. Context: `conversations`
+(from services.direct_messages.conversations_for), `active_slug` (slug of the
+open conversation, or empty string).
+{% endcomment %}
+<div id="dm-conversation-list">
+  {% if conversations %}
+  <ul class="dm-conv-list" role="list">
+    {% for conv in conversations %}
+    <li>
+      <a class="dm-conv-item{% if conv.unread_count %} dm-conv-item--unread{% endif %}{% if conv.partner.slug == active_slug and active_slug %} dm-conv-item--active{% endif %}"
+         href="{% url 'messages.conversation' conv.partner.slug %}"
+         hx-get="{% url 'messages.conversation' conv.partner.slug %}"
+         hx-target="#dm-thread-pane"
+         hx-swap="innerHTML"
+         hx-push-url="true">
+        <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
+          {% if conv.partner.avatar %}
+          <img src="{{ conv.partner.avatar.url }}" alt="" class="msg-avatar-img">
+          {% else %}
+          <span class="msg-avatar-initial">{{ conv.partner.username|first|upper }}</span>
+          {% endif %}
+        </span>
+        <span class="dm-conv-item__text">
+          <span class="dm-conv-item__top">
+            <span class="dm-conv-item__name">{{ conv.partner.username }}</span>
+            <span class="dm-conv-item__time">{{ conv.last_message.created|timesince }} ago</span>
+          </span>
+          <span class="dm-conv-item__bottom">
+            <span class="dm-conv-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message.body|truncatechars:70 }}</span>
+            {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="dm-conv-empty">
+    <i class="material-symbols-outlined" aria-hidden="true">forum</i>
+    <p>No conversations yet.</p>
+    <p class="dm-conv-empty__hint">Use <strong>New message</strong> to start one.</p>
+  </div>
+  {% endif %}
+</div>

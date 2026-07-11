@@ -176,6 +176,29 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
 
 
+def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
+    """Expose whether the navbar messages icon should render for this user.
+
+    The icon only appears once the user has ever sent or received a direct
+    message - users who have never touched the feature don't get an extra
+    navbar icon competing for attention.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``show_messages_icon`` (bool).
+    """
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
+
+            return {"show_messages_icon": has_used_direct_messages(request.user.profile)}
+        except (ImportError, AttributeError, DatabaseError):
+            pass
+    return {"show_messages_icon": False}
+
+
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     """Expose subscription-gated feature visibility to templates."""
     try:
