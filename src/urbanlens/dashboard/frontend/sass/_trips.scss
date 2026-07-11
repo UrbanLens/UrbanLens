@@ -615,10 +615,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 5px;
-    border: none;
-    background: transparent;
-    color: var(--ul-grey-6);
+    border-radius: 0;
     cursor: pointer;
     transition: background .15s, color .15s;
 
@@ -633,8 +630,6 @@
     }
 
     &.view-toggle-btn--active {
-        background: var(--ul-grey-0);
-        color: $color-blue-500;
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
     }
 }

@@ -8,6 +8,7 @@ inline inside a bigger per-pin JS object) and interpolate JSON into it via
 `{{ ... |safe }}` - `json_script` doesn't fit there, so this replicates just
 its escaping.
 """
+
 from __future__ import annotations
 
 import json

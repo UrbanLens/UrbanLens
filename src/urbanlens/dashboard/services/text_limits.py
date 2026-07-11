@@ -8,6 +8,7 @@ These same numbers are also set as each field's `max_length` on the model
 a `MaxLengthValidator` that Django Forms/DRF serializers pick up automatically)
 so the limit is enforced consistently regardless of which write path is used.
 """
+
 from __future__ import annotations
 
 MAX_PIN_DESCRIPTION_LENGTH = 10_000

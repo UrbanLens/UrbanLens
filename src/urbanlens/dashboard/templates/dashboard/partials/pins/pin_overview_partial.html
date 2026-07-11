@@ -35,6 +35,7 @@
                                     hx-target="#pin-location-picker"
                                     hx-swap="innerHTML"
                                     data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
+                                    data-tooltip-pos="left"
                                     title="Switch to a different shared location">
                                 <i class="material-symbols-outlined">swap_horiz</i>
                             </button>
@@ -47,6 +48,7 @@
                                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                                 hx-confirm="Detach from this location? Your pin will move to its own independent location without a community wiki."
                                 data-tooltip="Unlink this pin from the shared location. It gets its own independent location; you can create a wiki for it later."
+                                data-tooltip-pos="left"
                                 title="Detach from this shared location">
                             <i class="material-symbols-outlined">link_off</i>
                         </button>
@@ -115,13 +117,13 @@
             </div>
             {% endif %}
             <div class="pin-stats">
-                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=True client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="danger" label="Danger" help="How hazardous this site feels - structural risks, environmental hazards, or unsafe conditions (1 = low, 5 = extreme)." modifier="danger" wide=False client_version=client_version %}
 
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="priority" label="Priority" help="How urgently you want to visit this pin (1 = low, 5 = must visit soon)." modifier="priority" wide=False client_version=client_version %}
 
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="rating" label="Rating" help="Your quality rating for this location." modifier="" wide=False client_version=client_version %}
 
-                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=True client_version=client_version %}
+                {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=False client_version=client_version %}
             </div>
             <div class="detail-items">
                 {% if pin.has_place_name %}

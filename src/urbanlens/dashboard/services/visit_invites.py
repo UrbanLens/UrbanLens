@@ -95,10 +95,7 @@ def _send_visit_invite_email(request: HttpRequest, owner: Profile, email: str) -
     signup_url = request.build_absolute_uri(f"/signup/?invite={invitation.token}")
     context = {"inviter": owner, "signup_url": signup_url}
     subject = f"{owner.username} invited you to join UrbanLens"
-    text_body = (
-        f"Hi,\n\n{owner.username} logged a visit with you on UrbanLens - a private mapping platform "
-        f"for urban explorers and photographers - and invited you to join.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-    )
+    text_body = f"Hi,\n\n{owner.username} logged a visit with you on UrbanLens - a private mapping platform for urban explorers and photographers - and invited you to join.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
     html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
     try:
