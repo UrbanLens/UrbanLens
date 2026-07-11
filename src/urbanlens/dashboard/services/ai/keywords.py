@@ -246,6 +246,7 @@ CATEGORY_PATTERNS: dict[str, list[str]] = {
     ],
 }
 
+
 @functools.lru_cache(maxsize=1)
 def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
     """Return the lazily-compiled pattern dict, building it on first access.

@@ -47,7 +47,7 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     and a real wiki the requester hasn't pinned all raise the identical
     ``Http404`` - deliberately indistinguishable, so guessing slugs can never
     reveal which locations other users have pinned.
-    
+
     TODO: We need the wiki->location relationship to be a FK, not a O2O... because a wiki applies
     to any coordinates in a boundary, and multiple locations will have coordinates in that boundary.
     This is slightly tricky, because we currently attach boundaries to Locations, which means two
