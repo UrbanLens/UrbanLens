@@ -169,11 +169,16 @@
     .faq-item {
         background: var(--ul-grey-0);
         border: 1px solid var(--ul-grey-1b);
+        border-left: 3px solid transparent;
         border-radius: 12px;
         padding: 0;
         overflow: hidden;
+        transition: border-color .15s ease, box-shadow .15s ease;
 
         &[open] {
+            border-left-color: var(--primary-color);
+            box-shadow: 0 8px 24px -18px rgba(0, 0, 0, .35);
+
             .faq-item-chevron {
                 transform: rotate(180deg);
             }
@@ -203,6 +208,12 @@
         &:hover {
             color: var(--primary-color);
         }
+
+        &:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: -2px;
+            border-radius: 8px;
+        }
     }
 
     .faq-item-chevron {
@@ -214,13 +225,13 @@
     .faq-item-body {
         padding: 0 1.35rem 1.35rem;
 
-        p, ul {
+        p, ul, ol {
             font-size: .95rem;
             color: var(--ul-grey-7);
             line-height: 1.7;
             margin: 0;
 
-            & + p, & + ul {
+            & + p, & + ul, & + ol {
                 margin-top: .85rem;
             }
 
@@ -234,14 +245,64 @@
             }
         }
 
+        // Bullet list - subtle accent dot instead of the default disc.
         ul {
-            padding-left: 1.25rem;
+            list-style: none;
+            padding-left: 1.35rem;
 
             li {
+                position: relative;
                 margin: 0;
+
+                &::before {
+                    content: '';
+                    position: absolute;
+                    left: -1.1rem;
+                    top: .68em;
+                    width: 5px;
+                    height: 5px;
+                    border-radius: 50%;
+                    background: var(--primary-color);
+                    opacity: .55;
+                }
 
                 & + li {
                     margin-top: .5rem;
+                }
+            }
+        }
+
+        // Numbered list - circular badge markers instead of the default numerals.
+        ol.faq-ordered-list {
+            list-style: none;
+            padding-left: 0;
+            counter-reset: faq-count;
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+
+            li {
+                counter-increment: faq-count;
+                position: relative;
+                margin: 0;
+                padding-left: 2.4rem;
+                min-height: 1.7rem;
+
+                &::before {
+                    content: counter(faq-count);
+                    position: absolute;
+                    left: 0;
+                    top: -.05em;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 1.7rem;
+                    height: 1.7rem;
+                    border-radius: 50%;
+                    background: rgba($primary-color, .12);
+                    color: var(--primary-color);
+                    font-size: .8rem;
+                    font-weight: 700;
                 }
             }
         }
