@@ -45,7 +45,8 @@ class WikiCommentsViewTests(TestCase):
         self.assertEqual(response.context["location"], self.location)
         self.assertTrue(self.wiki.comments.filter(text="Great spot!").exists())
 
-    def test_forbidden_without_a_pin_at_this_location(self):
+    def test_not_found_without_a_pin_at_this_location(self):
+        """404, not 403 - a wiki you haven't pinned must look nonexistent (see wiki_access)."""
         other_location, _other_wiki = _location_with_wiki("Unpinned Place")
         response = self.client.get(reverse("location.wiki.comments", args=[other_location.slug]))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)

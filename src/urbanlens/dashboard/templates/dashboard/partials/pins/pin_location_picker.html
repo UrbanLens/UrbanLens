@@ -17,7 +17,7 @@
             {% endif %}
         </div>
         <div class="pin-loc-option-actions">
-            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" class="btn btn--ghost btn--sm" title="Open wiki">
+            <a href="{% url 'location.wiki' loc.slug %}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm" title="Open wiki">
                 <i class="material-symbols-outlined">open_in_new</i>
             </a>
             {% if not pin.location or loc.slug != pin.location.slug %}

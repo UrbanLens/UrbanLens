@@ -23,6 +23,12 @@ from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 
 _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
+# connect() resolves the check-in via database_sync_to_async, and that worker
+# thread opens a brand-new DB connection. WebsocketCommunicator's default 1 s
+# handshake timeout regularly loses that race on Windows dev machines, so give
+# it room to breathe - fast environments are unaffected.
+_CONNECT_TIMEOUT = 15
+
 
 def _run(coro):
     return asyncio.run(coro)
@@ -60,11 +66,11 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _owner_and_contact_exchange_messages(self):
         owner_comm = self._owner_communicator()
-        connected, _ = await owner_comm.connect()
+        connected, _ = await owner_comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertTrue(connected)
 
         contact_comm = self._contact_communicator(self.contact.token)
-        connected, _ = await contact_comm.connect()
+        connected, _ = await contact_comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertTrue(connected)
 
         await owner_comm.send_to(text_data=json.dumps({"body": "On my way back"}))
@@ -83,7 +89,7 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _invalid_token_is_rejected(self):
         comm = self._contact_communicator(uuid.uuid4())
-        connected, close_code = await comm.connect()
+        connected, close_code = await comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertFalse(connected)
         self.assertEqual(close_code, 4404)
 
@@ -93,7 +99,7 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
     async def _unauthenticated_owner_route_is_rejected(self):
         comm = self._owner_communicator()
         comm.scope["user"] = AnonymousUser()
-        connected, close_code = await comm.connect()
+        connected, close_code = await comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertFalse(connected)
         self.assertEqual(close_code, 4404)
 
@@ -102,7 +108,7 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _blank_message_is_silently_ignored(self):
         comm = self._owner_communicator()
-        connected, _ = await comm.connect()
+        connected, _ = await comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertTrue(connected)
 
         await comm.send_to(text_data=json.dumps({"body": "   "}))
@@ -115,7 +121,7 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _oversized_message_gets_error_frame(self):
         comm = self._owner_communicator()
-        connected, _ = await comm.connect()
+        connected, _ = await comm.connect(timeout=_CONNECT_TIMEOUT)
         self.assertTrue(connected)
 
         await comm.send_to(text_data=json.dumps({"body": "x" * 5000}))

@@ -447,16 +447,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # Category helpers (personal classification for this pin)
     # ------------------------------------------------------------------
 
-    def change_category(self, category_id: int) -> None:
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-
-        from urbanlens.dashboard.models.badges.model import Badge
-
-        category = Badge.objects.get(id=category_id, kind="category")
-        self.badges.remove(*self.badges.filter(kind="category"))
-        self.badges.add(category)
-        self.save()
-
     def add_category(self, category_name: str, save: bool = True) -> Badge | None:
         from urbanlens.dashboard.models.badges.model import Badge
 

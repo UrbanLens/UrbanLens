@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any, TypedDict
+import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import CharField, Q
@@ -345,7 +346,20 @@ def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Loc
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
-        location = Location.objects.filter(uuid=location_ref).first() or Location.objects.filter(slug=location_ref).first()
+        # Only locations the requester has pinned themselves may be attached
+        # by reference. A wiki existing at a location does NOT make it
+        # visible to non-pinners - wikis are only ever visible to profiles
+        # who already have a pin there (see services.wiki_access) - so this
+        # must not fall back to "any location with a wiki". Otherwise a user
+        # could probe guessable slugs/uuids to pull names and coordinates of
+        # locations other users have pinned privately.
+        visible = Location.objects.filter(pins__profile=profile).distinct()
+        try:
+            location_uuid = uuid.UUID(location_ref)
+        except ValueError:
+            location = visible.filter(slug=location_ref).first()
+        else:
+            location = visible.filter(uuid=location_uuid).first()
         if location is not None:
             return location, None
 
@@ -1049,9 +1063,10 @@ class TripMembersView(LoginRequiredMixin, View):
 
         from django.contrib.auth.models import User
 
-        try:
-            user = User.objects.get(username__iexact=username)
-        except User.DoesNotExist:
+        # Usernames are case-sensitively unique, so an iexact lookup can match
+        # several accounts; prefer the exact match instead of 500ing.
+        user = User.objects.filter(username=username).first() or User.objects.filter(username__iexact=username).order_by("id").first()
+        if user is None:
             return HttpResponse(f'No user found with username "{escape(username)}".', status=404)
 
         max_members = SiteSettings.get_current().max_trip_members
@@ -1131,7 +1146,6 @@ class TripLocationSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
 
         # The separator is a single merged character class rather than
@@ -1161,28 +1175,11 @@ class TripLocationSearchView(LoginRequiredMixin, View):
             for pin in pin_rows
         ]
 
-        db_rows = list(
-            Location.objects.filter(Q(wiki__name__icontains=q) | Q(official_name__icontains=q))
-            .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
-            .values(
-                "uuid",
-                "display_name",
-                "locality",
-                "administrative_area_level_1",
-            )[:5],
-        )
-        db_results = [
-            {
-                "uuid": str(row["uuid"]),
-                "name": row["display_name"] or "Unnamed location",
-                "display_name": row["display_name"] or "Unnamed location",
-                "locality": row["locality"],
-                "administrative_area_level_1": row["administrative_area_level_1"],
-                "type": "db",
-            }
-            for row in db_rows
-        ]
-
+        # No location-by-name search beyond the requester's own pins above:
+        # wikis are only ever visible to profiles with a pin at that
+        # location, so matching Location rows globally (even just by wiki
+        # name) would let any user enumerate locations other users have
+        # pinned privately.
         geocoded_results: list[dict] = []
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if profile.external_apis_enabled:
@@ -1204,7 +1201,7 @@ class TripLocationSearchView(LoginRequiredMixin, View):
             except (ImportError, OSError, ValueError) as exc:
                 logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
 
-        return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
+        return JsonResponse({"results": coordinate_results + pin_results + geocoded_results})
 
 
 class TripMapDataView(LoginRequiredMixin, View):

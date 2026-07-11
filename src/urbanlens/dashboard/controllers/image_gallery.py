@@ -13,16 +13,18 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.storage import quota_error_for_upload
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
+
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +39,22 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
 # -- Pin gallery --------------------------------------------------------------
 
 
+def _own_pin(request: HttpRequest, pin_slug: str) -> Pin:
+    """Resolve a pin slug to the requesting user's pin, or 404.
+
+    Pin slugs are only unique per profile, so an unscoped slug lookup would
+    both match other users' pins and raise MultipleObjectsReturned when two
+    users share a slug. The pin detail page (which hosts these gallery
+    panels) is owner-only, so its gallery endpoints are too.
+    """
+    return get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+
+
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
 
     def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = _own_pin(request, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
@@ -53,7 +66,7 @@ class PinGalleryView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
         """Upload an image to a pin. Rejects a file the uploader already has on this pin."""
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = _own_pin(request, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
@@ -87,7 +100,7 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the pin photo map layer."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = _own_pin(request, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images = Image.objects.filter(pin=pin).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]
@@ -133,9 +146,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
-        location = get_object_or_404(Location, slug=location_slug)
-        wiki = get_object_or_404(Wiki, location=location)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
         return {"location": location, "wiki": wiki, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
@@ -146,9 +157,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
-        location = get_object_or_404(Location, slug=location_slug)
-        wiki = get_object_or_404(Wiki, location=location)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
@@ -180,9 +189,7 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        location = get_object_or_404(Location, slug=location_slug)
-        wiki = get_object_or_404(Wiki, location=location)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})

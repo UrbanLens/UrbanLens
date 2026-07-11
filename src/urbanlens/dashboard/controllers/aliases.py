@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError
@@ -18,12 +19,14 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
-from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -139,18 +142,11 @@ class PinAliasToggleNicknameView(LoginRequiredMixin, View):
         return _render_pin_panel(request, pin)
 
 
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class LocationAliasView(LoginRequiredMixin, View):
     """GET: HTMX partial listing a wiki's aliases.  POST: add a new alias."""
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         # Wikis are created lazily, so official-name candidates gathered before
         # the wiki existed have no alias rows yet; backfill them from the cache
         # (DB reads only - no network) now that there is a wiki to attach to.
@@ -158,11 +154,10 @@ class LocationAliasView(LoginRequiredMixin, View):
         return _render_location_panel(request, location, wiki)
 
     def post(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         name = (request.POST.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
             WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
@@ -178,13 +173,12 @@ class LocationAliasView(LoginRequiredMixin, View):
 
 class LocationAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
         alias.delete()
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -197,12 +191,11 @@ class LocationAliasUseView(LoginRequiredMixin, View):
     """POST: make one of the wiki's aliases its current community name."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         previous_name = wiki.name
         wiki.name = alias.name
         wiki.save(update_fields=["name", "updated"])
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -217,7 +210,7 @@ class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
     """POST: flip one of the wiki's aliases between nickname-only and a plain alias."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         alias.toggle_nickname()
         return _render_location_panel(request, location, wiki)

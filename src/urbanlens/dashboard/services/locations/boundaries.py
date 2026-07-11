@@ -104,7 +104,9 @@ class BoundaryProviderChain:
             try:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
             except Exception:
-                # TODO: Catch specific exception
+                # Deliberately broad: boundary providers are plugins running
+                # arbitrary gateway code; one failing provider must never
+                # abort boundary resolution for the rest.
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
                 continue
             if resolved.property_polygon is None:

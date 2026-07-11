@@ -1074,9 +1074,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not profile.external_apis_enabled:
             return HttpResponse("External weather lookups are turned off in your settings.", status=403)
 
-        # Get the pin
+        # Get the pin. Slugs are only unique per profile, so the lookup must be
+        # scoped to the requesting user (also prevents probing other users' pins).
         try:
-            pin: Pin = Pin.objects.get(slug=pin_slug)
+            pin: Pin = Pin.objects.get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 

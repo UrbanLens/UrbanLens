@@ -18,15 +18,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
 
 
 def _location_for_coords(latitude, longitude) -> Location:
@@ -187,6 +181,12 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
     interest, hazards - nested under a location's wiki via ``Wiki.parent_wiki``.
     Unlike the old Pin-backed community detail pins, a Wiki has no owning
     profile, so there is no per-viewer "added_by"/"is_mine" attribution.
+
+    A location with no wiki and a wiki the requester hasn't pinned both
+    return the same empty list - this is a background map-overlay poll, not
+    a page load, so there is no good "not found" response to give it; the
+    empty array must look identical in both cases so it can't be used to
+    detect wikis at locations the requester hasn't pinned.
     """
 
     def get(self, request, location_slug):
@@ -194,9 +194,9 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
-            # A location with no wiki yet simply has no child wikis to show -
-            # the map overlay shouldn't error just because nobody has created
-            # a wiki page for this spot.
+            return JsonResponse({"detail_pins": []})
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not location_visible_to(location, profile):
             return JsonResponse({"detail_pins": []})
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
@@ -210,7 +210,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return render(
             request,
@@ -224,8 +224,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
 
     def post(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body)
@@ -279,9 +278,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
             body = json.loads(request.body)
@@ -332,9 +330,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         child_name = child_wiki.name
 

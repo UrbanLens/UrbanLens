@@ -6,6 +6,7 @@ import datetime
 from decimal import Decimal
 import json
 import logging
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
@@ -227,6 +228,9 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
     try:
         hours = float(request.POST.get("grace_period_hours", "1"))
     except ValueError:
+        hours = 1.0
+    # nan/inf would crash timedelta(); fall back to the default instead.
+    if not math.isfinite(hours):
         hours = 1.0
     return datetime.timedelta(hours=max(hours, 0.25))
 

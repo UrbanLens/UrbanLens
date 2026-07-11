@@ -10,6 +10,7 @@ import contextlib
 from datetime import timedelta
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -145,7 +146,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         try:
             max_bbox = float(request.POST.get("max_bbox_area_km2", settings.max_bbox_area_km2))
-            if max_bbox > 0:
+            # A persisted nan/inf would break every downstream bbox comparison.
+            if max_bbox > 0 and math.isfinite(max_bbox):
                 settings.max_bbox_area_km2 = max_bbox
         except (ValueError, TypeError):
             pass

@@ -42,7 +42,7 @@
     </span>
   </div>
   {% else %}
-  <a href="{{ comment.image.url }}" target="_blank" class="comment-image-link">
+  <a href="{{ comment.image.url }}" target="_blank" rel="noopener" class="comment-image-link">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image">
   </a>
   {% endif %}

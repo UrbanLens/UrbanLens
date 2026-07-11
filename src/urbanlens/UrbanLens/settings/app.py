@@ -205,7 +205,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         }
 
     @property
-    def databases(self) -> dict[str, dict[str, str | None]]:
+    def databases(self) -> dict[str, dict[str, Any]]:
+        """Django DATABASES configuration.
+
+        Values are heterogeneous: most keys map to strings, but keys like
+        ``TEST`` and ``OPTIONS`` hold nested dicts.
+        """
         return conf.settings.DATABASES
 
     @property

@@ -10,14 +10,14 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
 from django.db.models import Prefetch
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import render
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from geopy.geocoders import Nominatim
+import requests
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.badges.model import (
     COLOR_CHOICES,
@@ -176,7 +176,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def post_add_pin(self, request, *args, **kwargs):
         try:
-            name = request.POST.get("name")
+            # Clamped to Pin.name's max_length so an oversized value can't
+            # 500 with a database DataError (escaping happens at render time).
+            name = (request.POST.get("name") or "")[:255]
             latitude = request.POST.get("latitude")
             longitude = request.POST.get("longitude")
             address = request.POST.get("address", None)
@@ -405,7 +407,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 
@@ -504,7 +506,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         image = request.FILES.get("image")
         if not image:
             return HttpResponse("No image provided.", status=400)
-        pin = Pin.objects.get(slug=pin_slug)
+        # Pin slugs are only unique per profile; an unscoped lookup would match
+        # other users' pins (and 500 on cross-user slug collisions).
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checksum = compute_checksum(image)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
@@ -515,25 +519,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size)
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
-
-    def change_category(self, request, pin_slug, *args, **kwargs):
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-
-        category_id = request.POST.get("category")
-        pin = Pin.objects.get(slug=pin_slug)
-        pin.change_category(category_id)
-        return HttpResponseRedirect(reverse("view_map"))
-
-    def post_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm(request.POST)
-        if form.is_valid():
-            pins = Pin.objects.all().filter_by_criteria(form.cleaned_data)
-            return render(request, "dashboard/pages/map/index.html", {"pins": pins})
-        return None
-
-    def get_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm()
-        return render(request, "dashboard/pages/map/advanced_search.html", {"form": form})
 
     def map_pins_json(self, request, *args, **kwargs):
         """Return pin data as JSON with optional bbox filtering for two-phase map loading.
@@ -650,6 +635,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "not found"}, status=404)
 
         name = request.POST.get("name")
+        if name is not None:
+            # Clamped to Pin.name's max_length so an oversized value can't
+            # 500 with a database DataError (escaping happens at render time).
+            name = name[:255]
         latitude = request.POST.get("latitude") or None
         longitude = request.POST.get("longitude") or None
         icon = request.POST.get("icon")
@@ -784,8 +773,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                                 "url": "",
                             }
                         )
-                except Exception as exc:
-                    # TODO: Catch specific exception
+                except (requests.RequestException, OSError, ValueError, KeyError) as exc:
+                    # Transport/HTTP failures plus malformed-response parsing;
+                    # a Places outage must not break the rest of the layer.
                     if "403" in str(exc):
                         logger.warning(
                             "Google Places API returned 403 Forbidden - enable 'Places API (New)' in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. API key: %s",

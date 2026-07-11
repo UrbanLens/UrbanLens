@@ -48,33 +48,18 @@ from urbanlens.dashboard.controllers import (
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.pin import PinViewSet
-from urbanlens.dashboard.models.profile import ProfileViewSet
-
-# from urbanlens.dashboard.models.comments import CommentViewSet
-# from urbanlens.dashboard.models.images import ImageViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
 
 logger = logging.getLogger(__name__)
 
 app_name = "dashboard"
 
-# Define all our REST API routes
-routes = {
-    # 'categories': CategoryViewSet,
-    "pins": PinViewSet,
-    "profiles": ProfileViewSet,
-    "reviews": ReviewViewSet,
-    # 'comments': CommentViewSet,
-    # 'images': ImageViewSet
-}
+# The REST surface is deliberately minimal: the frontend only uses
+# PATCH/DELETE on individual pins (map popup quick-edit, pin move, delete)
+# and the review-create-or-update path below (star-rating widget). Nothing
+# external consumes this API; expose more only when the app itself needs it.
 router = routers.DefaultRouter()
-
-# Register each viewset with the router
-for route, viewset in routes.items():
-    if hasattr(viewset, "basename"):
-        router.register(route, viewset, basename=viewset.basename)
-    else:
-        router.register(route, viewset)
+router.register("pins", PinViewSet, basename=PinViewSet.basename)
 
 urlpatterns = [
     path(
@@ -207,14 +192,6 @@ urlpatterns = [
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
-                # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
-                path(
-                    "change_category/<slug:pin_slug>/",
-                    maps.MapController.as_view({"post": "change_category"}),
-                    name="pin.change_category",
-                ),
-                # path('delete/<slug:pin_slug>/', MapController.delete_pin, name='delete_pin'),
-                # path('add_review/<slug:pin_slug>/', map.MapController.as_view(), name='add_review'),
                 path(
                     "pin/",
                     include(

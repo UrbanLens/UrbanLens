@@ -36,7 +36,7 @@
         </div>
         <div class="comment-text">{{ item.rendered_text }}</div>
         {% if c.image %}
-        <a href="{{ c.image.url }}" target="_blank" class="comment-image-link">
+        <a href="{{ c.image.url }}" target="_blank" rel="noopener" class="comment-image-link">
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
         </a>
         {% endif %}
@@ -160,7 +160,7 @@
               </div>
               <div class="comment-text">{{ reply_item.rendered_text }}</div>
               {% if r.image %}
-              <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
+              <a href="{{ r.image.url }}" target="_blank" rel="noopener" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">
               </a>
               {% endif %}

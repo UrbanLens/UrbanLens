@@ -66,6 +66,9 @@ class PinSerializer(serializers.ModelSerializer):
             "rating",
             "statuses",
         ]
+        # Ownership is assigned server-side from request.user; a writable
+        # profile field would let a user reassign pins to someone else.
+        read_only_fields = ["profile"]
 
     def create(self, validated_data):
         if "name_is_user_provided" not in validated_data:

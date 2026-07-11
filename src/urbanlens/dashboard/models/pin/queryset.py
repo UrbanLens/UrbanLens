@@ -4,12 +4,11 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
-from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
-from django.db.models import F, Q
+from django.db.models import Q
 from django.utils import timezone
 
 # App Imports
@@ -105,19 +104,19 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
-    def nearby_pins(self, latitude, longitude, radius):
+    def nearby_pins(self, latitude, longitude, radius) -> Self:
+        """Return pins whose Location lies within ``radius`` kilometers of a point.
 
-        R = 6371  # radius of the Earth in km
-        lat1 = radians(latitude)
-        lon1 = radians(longitude)
-        lat2 = radians(F("location__latitude"))
-        lon2 = radians(F("location__longitude"))
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        distance = R * c
-        return self.filter(distance__lte=distance)
+        Args:
+            latitude: WGS-84 latitude of the search center.
+            longitude: WGS-84 longitude of the search center.
+            radius: Search radius in kilometers.
+
+        Returns:
+            Pins whose location point falls within the radius.
+        """
+        center = Point(float(longitude), float(latitude), srid=4326)
+        return self.filter(location__point__distance_lte=(center, D(km=radius)))
 
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""

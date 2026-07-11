@@ -564,8 +564,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             )
                         for pin in file_pins:
                             pin.badges.add(file_tag)
-                    except Exception as exc:
-                        # TODO: Catch specific exception
+                    except (DatabaseError, ValueError) as exc:
+                        # Tagging is best-effort decoration; a failure here
+                        # must not abort the surrounding import stream.
                         logger.exception("Unable to add badge to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)

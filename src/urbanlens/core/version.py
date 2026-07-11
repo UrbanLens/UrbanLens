@@ -289,9 +289,14 @@ def trigger_development_app_reload() -> tuple[bool, str]:
     """
     logger.info("Attempting to reload the server...")
     parent_cmd = _parent_process_command()
+    # signal.SIGHUP does not exist on Windows, so fall back to its universal
+    # POSIX number. The branch is only reachable under gunicorn on POSIX
+    # (_parent_process_command requires /proc); elsewhere os.kill fails with
+    # OSError and is reported as a normal failure.
+    sighup = getattr(signal, "SIGHUP", 1)
     if "gunicorn" in parent_cmd:
         try:
-            os.kill(os.getppid(), signal.SIGHUP)
+            os.kill(os.getppid(), sighup)
         except OSError:
             logger.warning("could not signal gunicorn master to reload", exc_info=True)
             return False, "Could not signal the application server to reload."

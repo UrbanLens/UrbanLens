@@ -62,9 +62,9 @@ class GoogleGeocodingGateway(Gateway):
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         if not self.api_key:
-            # TODO: Build k=>v pairs for all settings to help logging (temporarily for debugging)
-            settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("_")}
-            logger.error("Settings that are missing the api key: %s", settings_dict)
+            # Never dump the settings object here - it contains every other
+            # configured secret. The missing key's env var name is enough.
+            logger.error("Google Geocoding Gateway is missing an API key (set UL_GOOGLE_UNRESTRICTED_API_KEY).")
             raise ValueError("Google Geocoding Gateway requires an API Key.")
 
     def decode_place_name(self, place_name: str) -> str:

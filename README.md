@@ -5,12 +5,6 @@
 
 ### Map, log, and share the places worth exploring.
 
-[CI](https://github.com/UrbanLens/UrbanLens/actions/workflows/ci.yml)
-[Security](https://github.com/UrbanLens/UrbanLens/actions/workflows/security.yml)
-[Release Please](https://github.com/UrbanLens/UrbanLens/actions/workflows/release-please.yml)
-
-
-
 ---
 
 
@@ -38,7 +32,7 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | Backend         | Django + Django REST Framework, Channels (WebSockets), Celery                                                |
 | Database        | PostgreSQL with PostGIS (geospatial queries)                                                                 |
-| Frontend        | HTMX-first interactivity, Mapbox GL for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun |
+| Frontend        | HTMX-first interactivity, Leaflet for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun   |
 | Geospatial      | GeoDjango, GeoPandas, Shapely, FastKML, geopy                                                                |
 | Auth            | Django auth plus Google and Discord OAuth                                                                    |
 | External data   | Google Maps/Places/Search, OpenWeatherMap, Smithsonian, National Park Service, OpenAI, and more              |

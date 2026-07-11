@@ -1,5 +1,5 @@
 # Abstract Base Classes
-from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel, DashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet, Serializer, ViewSet
+from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel, DashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet, Serializer
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
@@ -44,6 +44,6 @@ from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource
-from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer, WikiViewSet
+from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote

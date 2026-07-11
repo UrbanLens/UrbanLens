@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import requests
+
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.redact import redact_coordinate
@@ -105,8 +107,8 @@ class MapillaryGateway(StreetViewProvider):
 
         try:
             data = self.search_images_near_coordinates(latitude, longitude, radius=radius, limit=limit)
-        except Exception as exc:
-            # TODO: Catch specific exception
+        except (requests.RequestException, OSError, ValueError, KeyError) as exc:
+            # Transport/HTTP failures plus malformed-response parsing.
             logger.warning("Mapillary search failed for %s, %s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return
 
