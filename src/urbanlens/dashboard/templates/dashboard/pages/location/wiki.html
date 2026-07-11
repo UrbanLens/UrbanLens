@@ -347,6 +347,23 @@
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
+(function () {
+    try {
+        var key = 'ul_recent_wikis_v1';
+        var entry = {
+            slug: '{{ location.slug|escapejs }}',
+            title: '{{ wiki.name|escapejs }}',
+            subtitle: '{{ location.address|default:"Community wiki"|truncatechars:80|escapejs }}',
+            url: '{% url 'location.wiki' location.slug %}'
+        };
+        var list = JSON.parse(window.localStorage.getItem(key) || '[]');
+        list = Array.isArray(list) ? list.filter(function (item) { return item.slug !== entry.slug; }) : [];
+        list.unshift(entry);
+        window.localStorage.setItem(key, JSON.stringify(list.slice(0, 10)));
+    } catch (e) {}
+}());
+</script>
+<script>
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
