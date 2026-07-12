@@ -1262,6 +1262,25 @@
             }, { once: true });
         };
 
+        // -- Render a small non-interactive Leaflet map into `el` -------------
+        // Shared by the .comment-map-thumb renderer below and the DM
+        // composer's attach-preview chip (which fetches the same snapshot
+        // shape via markup_map.snapshot instead of reading a json_script tag).
+        // Caller is responsible for sizing `el` (height/width) before calling.
+        window._renderMapThumb = function (el, data, refLatLng) {
+            if (typeof L === 'undefined') return null;
+            var tmap = L.map(el, { zoomControl: false, attributionControl: false, dragging: false,
+                                      scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
+            if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
+            _fitMapToMarkup(tmap, data);
+            tmap.invalidateSize();
+            var mg = L.layerGroup().addTo(tmap);
+            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+            if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
+            return tmap;
+        };
+
         // -- Render thumbnail map inside .comment-map-thumb --------------------
         // Runs on DOMContentLoaded and after HTMX swaps
         function _initThumbs() {
@@ -1292,17 +1311,7 @@
                 // regardless of whether the compiled CSS has loaded yet.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';
-                var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
-                                          scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
-                if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
-                _fitMapToMarkup(tmap, data);
-                tmap.invalidateSize();
-                var mg = L.layerGroup().addTo(tmap);
-                (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
-
-                var refLatLng = _readMarkerLatLng(preview);
-                if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
+                window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
             });
         }
 

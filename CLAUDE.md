@@ -23,6 +23,7 @@ the full path to the venv executable:
 ```powershell
 .venv_windows\Scripts\python.exe  # Python interpreter
 .venv_windows\Scripts\ruff.exe --fix # Linter
+.venv_windows\Scripts\bandit.exe -c pyproject.toml -r src
 ```
 Type checking (mypy) and pytest work on Windows - GeoDjango's GDAL/GEOS
 dependency is satisfied via DLLs vendored by `geopandas`'s `pyogrio` dependency, resolved in

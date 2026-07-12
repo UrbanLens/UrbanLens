@@ -21,6 +21,7 @@ from urbanlens.dashboard.forms.settings_form import PrivacySettingsForm
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -223,6 +224,12 @@ class CreateDirectMessageTests(TestCase):
         create_direct_message(self.sender, self.recipient, "hello")
         self.assertFalse(NotificationLog.objects.filter(profile=self.recipient).exists())
         self.assertTrue(DirectMessage.objects.exists())
+
+    def test_map_only_message_notification_has_nonblank_preview(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.sender)
+        create_direct_message(self.sender, self.recipient, "", markup_map_uuid=str(markup_map.uuid))
+        notification = NotificationLog.objects.get(profile=self.recipient)
+        self.assertIn("map", notification.message.lower())
 
 
 # -- QuerySet helpers --------------------------------------------------------------

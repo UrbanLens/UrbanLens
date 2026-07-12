@@ -1029,6 +1029,7 @@ urlpatterns = [
             [
                 path("new/", markup.MarkupMapCreateView.as_view(), name="markup_map.create"),
                 path("<uuid:map_uuid>/json/", markup.MarkupJsonView.as_view(), name="markup_map.json"),
+                path("<uuid:map_uuid>/snapshot/", markup.MarkupMapSnapshotView.as_view(), name="markup_map.snapshot"),
                 path("<uuid:map_uuid>/view/", markup.MarkupMapViewStateView.as_view(), name="markup_map.view_state"),
                 path("<uuid:map_uuid>/delete/", markup.MarkupMapDeleteView.as_view(), name="markup_map.delete"),
                 path("<uuid:map_uuid>/clone/", markup.MarkupMapCloneView.as_view(), name="markup_map.clone"),

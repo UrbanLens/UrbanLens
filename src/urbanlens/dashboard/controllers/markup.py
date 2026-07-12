@@ -348,6 +348,33 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
         markup_map.save(update_fields=[*updates, "updated"])
 
 
+class MarkupMapSnapshotView(LoginRequiredMixin, View):
+    """Return a MarkupMap's full snapshot (viewport + markup) as JSON.
+
+    Unlike ``MarkupJsonView`` (which returns each item's compact Leaflet-edit
+    shape), this returns the same ``{center_lat, ..., markup: [{latlngs, ...}]}``
+    format ``to_snapshot()`` embeds server-side for read-only thumbnails - the
+    DM composer fetches it client-side to render a live preview of a map the
+    caller is about to attach, before the message is sent.
+
+    GET /markup-maps/<map_uuid>/snapshot/
+    """
+
+    def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Return the caller's own map as a snapshot dict.
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to read.
+
+        Returns:
+            JsonResponse with the snapshot fields, or 404 if the caller
+            doesn't own that map.
+        """
+        markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        return JsonResponse(markup_map.to_snapshot())
+
+
 class MarkupMapViewStateView(LoginRequiredMixin, View):
     """Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
 

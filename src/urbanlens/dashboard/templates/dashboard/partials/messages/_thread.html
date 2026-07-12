@@ -11,7 +11,9 @@ live messages and fall back to the plain POST endpoint when the socket is down.
      data-send-url="{% url 'messages.send' partner.slug %}"
      data-read-url="{% url 'messages.read' partner.slug %}"
      data-view-url="{% url 'messages.conversation' partner.slug %}"
-     data-partner-encrypts="{% if partner_e2ee_enrolled %}1{% else %}0{% endif %}">
+     data-partner-encrypts="{% if partner_e2ee_enrolled %}1{% else %}0{% endif %}"
+     {% url 'markup_map.snapshot' '11111111-1111-1111-1111-111111111111' as markup_snapshot_url_template %}
+     data-markup-snapshot-url-template="{{ markup_snapshot_url_template }}">
 
   <div class="dm-thread__header">
     <a class="dm-thread__back" href="{% url 'messages.view' %}" aria-label="Back to conversations">
@@ -209,6 +211,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
   <div class="dm-composer-attachments" id="dm-composer-attachments">
     <div class="dm-composer-attachment-chips" id="dm-composer-image-chips"></div>
     <span class="dm-composer-attachment-chip dm-composer-attachment-chip--map" id="dm-map-chip" hidden>
+      <span class="dm-map-chip-thumb" id="dm-map-chip-thumb"></span>
       <i class="material-symbols-outlined">map</i> Map attached
       <button type="button" id="dm-map-chip-remove" aria-label="Remove attached map">&times;</button>
     </span>

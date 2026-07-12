@@ -450,6 +450,29 @@ class MarkupMapEndpointTests(TestCase):
         self.assertEqual(self.client.get(reverse("markup_map.json", args=[map_uuid])).status_code, 404)
         self.assertEqual(self.client.post(reverse("markup_map.delete", args=[map_uuid])).status_code, 404)
 
+    def test_snapshot_endpoint_returns_to_snapshot_shape(self) -> None:
+        map_uuid = self._create_map()
+        baker.make(
+            "dashboard.PinMarkup",
+            parent_map=MarkupMap.objects.get(uuid=map_uuid),
+            profile=self.profile,
+            markup_type="line",
+            geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        )
+        response = self.client.get(reverse("markup_map.snapshot", args=[map_uuid]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["center_lat"], 40.0)
+        self.assertEqual(data["layer_mode"], "topographic")
+        self.assertEqual(len(data["markup"]), 1)
+        self.assertEqual(data["markup"][0]["latlngs"], [[0, 0], [1, 1]])
+
+    def test_snapshot_of_other_users_map_is_a_404(self) -> None:
+        map_uuid = self._create_map()
+        other = baker.make("auth.User")
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("markup_map.snapshot", args=[map_uuid])).status_code, 404)
+
 
 class CheckinCreateLinksMapTests(TestCase):
     """The check-in create POST links a draft map submitted in ``markup_map``."""

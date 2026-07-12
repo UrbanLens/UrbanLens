@@ -262,6 +262,29 @@
 
     // -- Pending attachments for the next message to be sent ---------------------
     var pendingAttachments = { images: [], mapUuid: null };
+    var _mapChipThumbMap = null;   // Leaflet instance currently rendered in the chip, if any
+    var _mapChipThumbUuid = null;  // uuid it was rendered for, so unrelated re-renders don't re-fetch
+
+    function _renderMapChipThumb(uuid) {
+        var thumbEl = document.getElementById('dm-map-chip-thumb');
+        if (!thumbEl) return;
+        if (uuid === _mapChipThumbUuid) return;
+        if (_mapChipThumbMap) { _mapChipThumbMap.remove(); _mapChipThumbMap = null; }
+        _mapChipThumbUuid = uuid;
+        thumbEl.innerHTML = '';
+        if (!uuid || !window._renderMapThumb) return;
+        var thread = document.getElementById('dm-thread');
+        var template = thread ? thread.dataset.markupSnapshotUrlTemplate : '';
+        if (!template) return;
+        var url = template.replace('11111111-1111-1111-1111-111111111111', uuid);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || uuid !== _mapChipThumbUuid) return;  // stale response (map already changed/removed)
+                _mapChipThumbMap = window._renderMapThumb(thumbEl, data, null);
+            })
+            .catch(function () {});
+    }
 
     function renderAttachmentChips() {
         var wrap = document.getElementById('dm-composer-image-chips');
@@ -290,6 +313,7 @@
         if (mapChip) mapChip.hidden = !pendingAttachments.mapUuid;
         var mapField = document.getElementById('dm-markup-map-uuid');
         if (mapField) mapField.value = pendingAttachments.mapUuid || '';
+        _renderMapChipThumb(pendingAttachments.mapUuid);
     }
 
     function resetAttachments() {

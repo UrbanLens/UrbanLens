@@ -17,7 +17,7 @@
             <span class="alias-chip-name">{{ alias.name }}</span>
             <button type="button"
                     class="alias-chip-nickname-toggle{% if alias.is_nickname %} is-active{% endif %}"
-                    title="{% if alias.is_nickname %}Nickname only - not used in external searches. Click to allow.{% else %}Click to mark as nickname-only (excluded from external searches).{% endif %}"
+                    title="{% if alias.is_nickname %}Nickname - not used in external searches. Click to allow.{% else %}Click to exclude from web searches.{% endif %}"
                     hx-post="{% url 'pin.alias.toggle_nickname' pin.slug alias.id %}"
                     hx-target="#pin-aliases-panel"
                     hx-swap="outerHTML">
@@ -59,7 +59,7 @@
         <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
         <label class="alias-nickname-check" title="Nickname-only aliases help you find your own pins, but are never sent to external APIs (Google, Wikipedia, etc).">
             <input type="checkbox" name="is_nickname" value="1">
-            <span class="alias-nickname-check-text">Nickname only</span>
+            <span class="alias-nickname-check-text">Don't use in web searches</span>
         </label>
         <button type="submit" class="alias-add-btn">
             <i class="material-symbols-outlined">add</i>
@@ -69,11 +69,11 @@
     <details class="alias-help">
         <summary class="alias-help-summary">
             <i class="material-symbols-outlined">help</i>
-            What are aliases and "Nickname only"?
+            What are aliases and "Nicknames"?
         </summary>
         <div class="alias-help-body">
-            <p>Aliases are the other names a place goes by - former names, local nicknames, or codenames. They help you find this pin in search, and they improve the results pulled from external sources.</p>
-            <p><strong>Nickname only</strong> keeps an alias private to UrbanLens: it still works in your own searches, but it is never included in queries sent to external services (Google, Wikipedia, etc). Use it for names the wider internet shouldn't see. The <i class="material-symbols-outlined alias-help-inline-icon">person</i> button on each alias toggles this.</p>
+            <p>Aliases are alternate names - former names, local nicknames, or codenames. They are used when you search for your own pins, and also when we contact external sources, like google searches.</p>
+            <p>Check <strong>Don't use in web searches</strong> to make an alias a nickname. Nicknames are unofficial names that won't improve search results. Like "The Lounge", "The Office with a Bad Smell", "Rooftop Hangout", or "John's Place". They will still be used when you search for your own pins on the site, but they won't ever leave the site for external searches.</p>
         </div>
     </details>
 </div>

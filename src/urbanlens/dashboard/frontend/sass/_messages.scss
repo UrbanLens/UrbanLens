@@ -763,6 +763,15 @@
     pointer-events: none;
 }
 
+// .dm-bubble sizes itself to its content (the align-self: flex-start/flex-end
+// above overrides #dm-messages' default flex stretch), so the shared
+// .comment-map-preview/.comment-map-thumb pair - which size themselves via
+// percentage widths - has no definite container width to resolve against and
+// collapses toward zero. Give it an explicit width here instead.
+.dm-bubble .comment-map-preview {
+    width: min(280px, 60vw);
+}
+
 .dm-composer-attachments {
     display: flex;
     flex-wrap: wrap;
@@ -807,6 +816,16 @@
         height: 28px;
         object-fit: cover;
         border-radius: 6px;
+    }
+
+    .dm-map-chip-thumb {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        overflow: hidden;
+        pointer-events: none; // preview only, matches .comment-map-thumb
+        background: var(--ul-grey-1);
     }
 
     button {

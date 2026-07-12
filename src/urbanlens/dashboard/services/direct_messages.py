@@ -265,8 +265,14 @@ def _notify_recipient(message: DirectMessage) -> None:
 
     if message.is_encrypted:
         preview = "🔒 Encrypted message"
-    else:
+    elif message.body:
         preview = message.body if len(message.body) <= 120 else message.body[:120].rstrip() + "…"
+    elif message.markup_map_id:
+        preview = "🗺️ Shared a map"
+    elif message.images.exists():
+        preview = "📷 Shared a photo"
+    else:
+        preview = "New message"
     NotificationLog.objects.create(
         profile=message.recipient,
         status=Status.UNREAD,
