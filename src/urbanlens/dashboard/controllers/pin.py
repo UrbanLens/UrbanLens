@@ -106,6 +106,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # simple for the majority of users who never nest pins.
         include_children = request.GET.get("children") == "1"
 
+        from urbanlens.dashboard.models.pin_list.model import PinList
+
+        pin_lists = list(PinList.objects.filter(profile=profile).order_by("name"))
+
         return render(
             request,
             "dashboard/pages/location/index.html",
@@ -130,6 +134,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "today": today.isoformat(),
                 "min_date": min_date.isoformat(),
                 "security_level_choices": SecurityLevel.choices,
+                "pin_lists": pin_lists,
                 "pin_security_values": [
                     ("fences", "Fences", pin.fences),
                     ("alarms", "Alarms", pin.alarms),

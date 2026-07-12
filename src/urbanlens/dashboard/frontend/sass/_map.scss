@@ -1484,6 +1484,29 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+.pin-list-add-to-list-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    margin: 0 15px 10px;
+    padding: .5rem .7rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: .8rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.pin-list-add-to-list-btn:hover {
+    border-color: rgba(90, 150, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+}
+
 .pin-list {
     list-style: none;
     margin: 0;
@@ -1900,6 +1923,86 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 
 .fp-accordion-body {
     padding-bottom: 12px;
+}
+
+/* -- Save Filter button + Saved Filters section -------------------------- */
+.fp-save-filter {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+}
+
+.fp-save-filter:hover {
+    color: var(--ul-grey-4);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.fp-saved-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fp-saved-filter-chip {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.fp-saved-filter-apply {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: var(--ul-grey-4);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+
+    i {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.45);
+    }
+}
+
+.fp-saved-filter-apply:hover {
+    border-color: rgba(90, 150, 255, 0.5);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.fp-saved-filter-delete {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+    i {
+        font-size: 0.95rem;
+    }
+}
+
+.fp-saved-filter-delete:hover {
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
 }
 
 /* -- Combined Scores section (rating, danger, priority, vulnerability) -- */

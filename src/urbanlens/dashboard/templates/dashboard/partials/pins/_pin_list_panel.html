@@ -14,6 +14,11 @@ resend the filter-form fields on every page click, so filters stay applied.
     <div class="pin-list-count">
         <strong>{{ total_count }}</strong> place{{ total_count|pluralize }}
     </div>
+    {% if total_count %}
+    <button type="button" class="pin-list-add-to-list-btn" onclick="openAddToListDialog()">
+        <i class="material-symbols-outlined">playlist_add</i> Add these pins to a list
+    </button>
+    {% endif %}
     {% if pins %}
     <ul class="pin-list">
         {% for pin in pins %}

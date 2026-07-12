@@ -41,6 +41,7 @@
     {% include "dashboard/partials/pins/_bulk_delete_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
+    {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
 
     {# -- Floating address search bar (shared component) -------------------- #}
     {% map_search_bar prefix="addr" %}
@@ -50,6 +51,10 @@
         <div class="fp-header">
             <span class="fp-title">Filter (F)</span>
             {% include "dashboard/partials/ui/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
+            <button type="button" class="fp-save-filter" id="fp-save-filter-btn" style="display:none"
+                    onclick="document.getElementById('save-filter-dialog').showModal()" aria-label="Save filter">
+                <i class="material-symbols-outlined">bookmark_add</i>
+            </button>
             <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
         </div>
 
@@ -263,11 +268,31 @@
             </details>
             {% endif %}
 
+            {% include "dashboard/partials/pins/_saved_filters_section.html" %}
+
             <button type="button" class="fp-reset" onclick="resetFilters()">
                 <i class="material-symbols-outlined">refresh</i> Clear all filters
             </button>
         </form>
     </div>
+
+    {# -- Save Filter dialog ------------------------------------------------ #}
+    <dialog id="save-filter-dialog" class="ul-dialog">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Save Filter" %}
+        <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
+              hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
+              hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="saved-filter-name">Name <span class="required">*</span></label>
+                <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100" placeholder="e.g. Must-visit demolitions" autocomplete="off">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Save Filter</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </dialog>
 
     {# -- Pin list panel (left-docked) ------------------------------------ #}
     <div id="pin-list-panel">
@@ -2170,16 +2195,21 @@
     });
     map.invalidateSize();
 
-    // Re-validate map size on resize and orientation change (important on mobile)
+    // Re-validate map size on resize and orientation change (important on mobile).
+    // Also re-fits the filter panel's accordion sections to the new viewport height
+    // (self-guards on the panel being open, so this is a cheap no-op while it's closed).
     (function () {
-        var _resizeTimer;
+        var _resizeTimer, _fitTimer;
         function onResize() {
             clearTimeout(_resizeTimer);
             _resizeTimer = setTimeout(function () { map.invalidateSize(); }, 150);
+            clearTimeout(_fitTimer);
+            _fitTimer = setTimeout(function () { _autoFitFilterSections(); }, 150);
         }
         window.addEventListener('resize', onResize);
         window.addEventListener('orientationchange', function () {
             setTimeout(function () { map.invalidateSize(); }, 300);
+            setTimeout(function () { _autoFitFilterSections(); }, 300);
         });
     }());
 
@@ -2974,6 +3004,45 @@
         const isOpen = panel.classList.toggle('open');
         btn.classList.toggle('active', isOpen);
         mapEl.classList.toggle('filter-open', isOpen);
+        if (isOpen) requestAnimationFrame(_autoFitFilterSections);
+    }
+
+    // Measures the filter panel's actual available height vs. its fully-expanded
+    // content height, and collapses accordion sections (least important first)
+    // until it fits - rather than guessing from fixed window-height breakpoints.
+    // Panels carry data-importance="high|medium|low"; new panels just need the
+    // attribute, no code change here.
+    function _autoFitFilterSections() {
+        const panel = document.getElementById('filter-panel');
+        const form = document.getElementById('filter-form');
+        const header = panel?.querySelector('.fp-header');
+        if (!panel || !form || !header || !panel.classList.contains('open')) return;
+
+        const sections = Array.from(form.querySelectorAll('.fp-accordion-item[data-importance]'));
+        if (!sections.length) return;
+
+        // Open everything first so scrollHeight reflects the true natural content height.
+        sections.forEach(el => { el.open = true; });
+
+        const formStyle = getComputedStyle(form);
+        const vPad = parseFloat(formStyle.paddingTop || '0') + parseFloat(formStyle.paddingBottom || '0');
+        const available = panel.clientHeight - header.offsetHeight - vPad;
+        if (available <= 0) return; // panel not laid out yet
+
+        if (form.scrollHeight <= available) return; // everything fits, nothing to collapse
+
+        // Collapse least-important-first; high importance is the last resort.
+        const order = { low: 0, medium: 1, high: 2 };
+        const collapsible = sections
+            .filter(el => el.dataset.importance in order)
+            .sort((a, b) => order[a.dataset.importance] - order[b.dataset.importance]);
+
+        for (const el of collapsible) {
+            if (form.scrollHeight <= available) break;
+            el.open = false;
+        }
+        // If it still overflows after collapsing everything, #filter-form's own
+        // overflow-y:auto lets the user scroll as a last resort.
     }
 
     // -- Pin list panel ------------------------------------------------------
@@ -3013,6 +3082,62 @@
             }
         }
         if (window.matchMedia('(max-width: 768px)').matches) _togglePinListPanel();
+    }
+
+    // -- Add these (filtered) pins to a list ----------------------------------
+    function openAddToListDialog() {
+        document.getElementById('add-to-list-dialog')?.showModal();
+    }
+
+    function filterAddToListResults(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#add-to-list-results li').forEach((li) => {
+            li.style.display = (!q || (li.dataset.search || '').includes(q)) ? '' : 'none';
+        });
+    }
+
+    function _csrfToken() {
+        return document.querySelector('#filter-form [name=csrfmiddlewaretoken]')?.value || '';
+    }
+
+    function addPinsToList(listUuid, confirmed) {
+        const form = document.getElementById('filter-form');
+        const params = new URLSearchParams(new FormData(form));
+        if (confirmed) params.set('confirmed', 'true');
+        const addUrl = "{% url 'lists.items.add' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', listUuid);
+        fetch(addUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': _csrfToken() },
+            body: params,
+        }).then((response) => {
+            if (response.status === 409) {
+                return response.json().then((data) => {
+                    document.getElementById('list-add-confirm-text').textContent =
+                        `Add ${data.count} pins to this list?`;
+                    const dlg = document.getElementById('list-add-confirm-dialog');
+                    document.getElementById('list-add-confirm-btn').onclick = () => {
+                        dlg.close();
+                        addPinsToList(listUuid, true);
+                    };
+                    dlg.showModal();
+                });
+            }
+            document.getElementById('add-to-list-dialog')?.close();
+            if (typeof toastr !== 'undefined') toastr.success('Pins added to list.');
+        });
+    }
+
+    function createListAndAddPins() {
+        const nameInput = document.getElementById('add-to-list-new-name');
+        const name = (nameInput.value || '').trim();
+        if (!name) { nameInput.focus(); return; }
+        fetch("{% url 'lists.create' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': _csrfToken(), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ name }),
+        }).then((r) => r.json()).then((data) => {
+            if (data.ok) { nameInput.value = ''; addPinsToList(data.uuid); }
+        });
     }
 
     document.getElementById('filter-form').addEventListener('change', () => _refreshPinList());
@@ -3085,11 +3210,103 @@
             }
         }
         btn?.classList.toggle('has-filters', count > 0);
+        const saveBtn = document.getElementById('fp-save-filter-btn');
+        if (saveBtn) saveBtn.style.display = count > 0 ? '' : 'none';
     }
 
     // Show the active-filter count badge whenever any filter changes
     document.getElementById('filter-form').addEventListener('change', _updateFilterBadge);
     document.getElementById('filter-form').addEventListener('input', _updateFilterBadge);
+
+    // -- Apply a saved filter, merged additively with whatever is already active --
+    // Conflict rule: for a given scalar/range field, an already-active sidebar
+    // value always wins - the saved filter only fills in fields currently at
+    // their default. Badges are always UNIONED into the current included set
+    // (never touching excludes), regardless of whether other badges are active.
+    function applySavedFilter(chipEl) {
+        let criteria;
+        try {
+            criteria = JSON.parse(chipEl.dataset.criteria || '{}');
+        } catch (e) {
+            return;
+        }
+        const form = document.getElementById('filter-form');
+        if (!form) return;
+
+        // Dual-range slider fields: each hidden input's value is empty when its
+        // handle sits at the full-range default; only apply when still empty.
+        const sliderFields = {
+            min_rating: 'min', max_rating: 'max',
+            min_priority: 'min', max_priority: 'max',
+            min_danger: 'min', max_danger: 'max',
+            min_vulnerability: 'min', max_vulnerability: 'max',
+        };
+        for (const [fieldName, role] of Object.entries(sliderFields)) {
+            if (!(fieldName in criteria) || criteria[fieldName] == null) continue;
+            const hidden = form.querySelector(`input[name="${fieldName}"][data-role="${role}-hidden"]`);
+            if (!hidden || (hidden.value || '').trim() !== '') continue;
+            const root = hidden.closest('[data-ul-dual-range-slider]');
+            const slider = root ? root.querySelector(`[data-role="${role}"]`) : null;
+            if (!slider) continue;
+            slider.value = String(criteria[fieldName]);
+            if (window.UrbanLensDualRangeSlider) window.UrbanLensDualRangeSlider.sync(root);
+        }
+
+        // Visit status (single hidden field driving the radio chips + date UI).
+        if (criteria.has_visits) {
+            const hiddenVisits = document.getElementById('fp-visits-hidden');
+            if (hiddenVisits && !(hiddenVisits.value || '').trim() && typeof _syncVisitUI === 'function') {
+                _syncVisitUI(criteria.has_visits);
+            }
+        }
+
+        // Plain date inputs.
+        for (const key of ['visited_after', 'visited_before', 'created_after', 'created_before']) {
+            if (!(key in criteria) || !criteria[key]) continue;
+            const input = form.querySelector(`input[name="${key}"]`);
+            if (input && !(input.value || '').trim()) input.value = criteria[key];
+        }
+        if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
+        if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
+
+        // Badges: union saved include-ids into the current included set; never
+        // touch excludes, and never auto-add a saved filter's exclusions.
+        if (Array.isArray(criteria.badge_groups)) {
+            for (const group of criteria.badge_groups) {
+                if (group.op === 'not') continue;
+                for (const id of (group.ids || [])) {
+                    const key = String(id);
+                    if (_badgeState.get(key) !== 'excl') _badgeState.set(key, 'incl');
+                }
+            }
+            _formulaGroups = null; // merged state may mix groups; fall back to simple chip mode
+            _serializeBadgeGroups();
+            _rebuildBadgeSelected();
+        }
+
+        // Custom fields: same "current wins if empty" rule, keyed by cf_<field_id>*.
+        for (const cf of (criteria.custom_fields || [])) {
+            if ('contains' in cf) {
+                const input = form.querySelector(`[name="cf_${cf.field_id}"]`);
+                if (input && !(input.value || '').trim() && cf.contains) input.value = cf.contains;
+            } else if ('min' in cf || 'max' in cf) {
+                const minInput = form.querySelector(`[name="cf_${cf.field_id}_min"]`);
+                const maxInput = form.querySelector(`[name="cf_${cf.field_id}_max"]`);
+                if (minInput && !(minInput.value || '').trim() && cf.min != null) minInput.value = cf.min;
+                if (maxInput && !(maxInput.value || '').trim() && cf.max != null) maxInput.value = cf.max;
+            } else if ('after' in cf || 'before' in cf) {
+                const afterInput = form.querySelector(`[name="cf_${cf.field_id}_after"]`);
+                const beforeInput = form.querySelector(`[name="cf_${cf.field_id}_before"]`);
+                if (afterInput && !(afterInput.value || '').trim() && cf.after) afterInput.value = cf.after;
+                if (beforeInput && !(beforeInput.value || '').trim() && cf.before) beforeInput.value = cf.before;
+            }
+        }
+
+        // Trigger the sidebar's normal submission path.
+        htmx.trigger(form, 'change');
+        _refreshPinList();
+        _updateFilterBadge();
+    }
 
     // Restore filter state from URL params (supports Back button + page refresh)
     function _restoreFiltersFromUrl() {
@@ -3165,26 +3382,6 @@
         _showFilterFetchIndicator();
     });
     document.getElementById('filter-form').addEventListener('htmx:afterRequest', _hideFilterFetchIndicator);
-
-    // -- Auto-expand filter accordion sections based on importance and screen height --
-    // Panels carry data-importance="high|medium|low"; collapse least important first on
-    // shorter screens.  New panels added to the sidebar just need the attribute - no code change.
-    (function _autoExpandSections() {
-        const h = window.innerHeight;
-        // importance thresholds: only open panels whose importance <= maxImportance
-        // 1=high (always), 2=medium (tall screens), 3=low (very tall screens)
-        let maxImportance;
-        if (h >= 800) { maxImportance = 3; }        // all (including low-importance)
-        else if (h >= 650) { maxImportance = 2; }   // high + medium
-        else if (h >= 500) { maxImportance = 1; }   // high only
-        else { maxImportance = 0; }                 // all collapsed
-
-        const importanceMap = { high: 1, medium: 2, low: 3 };
-        document.querySelectorAll('#filter-panel .fp-accordion-item[data-importance]').forEach(el => {
-            const level = importanceMap[el.dataset.importance] ?? 99;
-            if (level <= maxImportance) el.open = true;
-        });
-    })();
 
     // -- Prevent filter panel pointer events from reaching the Leaflet map --
     document.getElementById('filter-panel').addEventListener('wheel', function (e) {

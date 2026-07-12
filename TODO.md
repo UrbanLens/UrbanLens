@@ -80,7 +80,7 @@ Features planned for this release.
 * Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
 * Limit failed login attempts. [UL-28]
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
-* When creating maps for comments, allow using satellite mode or topographic mode as well as the default view. [UL-13]
+* When creating maps for comments, allow using street mode, satellite mode, or topographic mode for the default view. [UL-13]
 * Discord SSO [UL-11]
 * "Don't leave page" dialog before a settings page is fully saved. [UL-9]
 * Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
@@ -283,6 +283,7 @@ Features planned for future releases.
 * One time: I'm not seeing the community wiki section appear on a particular pin details page. (4143533n-7355362w)
 * Import pins is a little clunky.
 * "Import my instagram" feature to port over photos you've posted.
+* Find a way to make it easy to identify and/or fix situations where you have other pins on the main map which fall within the boundaries of another one of your pins.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

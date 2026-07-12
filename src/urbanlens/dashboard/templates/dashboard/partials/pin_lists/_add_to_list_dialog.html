@@ -1,0 +1,34 @@
+{% comment %}
+"Add these pins to a list" picker, used from the main map's pin-list panel
+and (with `?pin_uuid=`) the pin detail page's Badges section. Context: pin_lists.
+{% endcomment %}
+<dialog id="add-to-list-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add to a List" %}
+    <input type="search" id="add-to-list-search" class="pin-list-add-results-search" placeholder="Search your lists..." oninput="filterAddToListResults(this.value)" autocomplete="off">
+    <ul class="pin-list-add-results" id="add-to-list-results">
+        <li data-search="create a new list">
+            <div class="pin-list-add-results-item pin-list-add-results-item--new">
+                <i class="material-symbols-outlined">add</i>
+                <input type="text" id="add-to-list-new-name" placeholder="New list name..." maxlength="100" autocomplete="off">
+                <button type="button" class="btn btn--primary btn--sm" onclick="createListAndAddPins()">Create</button>
+            </div>
+        </li>
+        {% for pin_list in pin_lists %}
+        <li data-search="{{ pin_list.name|lower }}">
+            <button type="button" class="pin-list-add-results-item" onclick="addPinsToList('{{ pin_list.uuid }}')">
+                <i class="material-symbols-outlined">bookmarks</i> {{ pin_list.name }}
+                <span class="pin-list-add-results-count">{{ pin_list.pin_count }}</span>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+</dialog>
+
+<dialog id="list-add-confirm-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add a lot of pins?" %}
+    <p id="list-add-confirm-text"></p>
+    <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="list-add-confirm-btn">Add anyway</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>

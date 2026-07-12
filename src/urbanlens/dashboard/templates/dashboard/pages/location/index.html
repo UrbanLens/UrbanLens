@@ -203,6 +203,11 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
 
+        <button type="button" class="btn btn--secondary pin-add-to-list-btn" onclick="document.getElementById('add-to-list-dialog').showModal()">
+            <i class="material-symbols-outlined">playlist_add</i> Add to a list
+        </button>
+        {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
+
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
             hx-swap="outerHTML"
@@ -524,6 +529,43 @@
 
 {% block scripts %}
 <script>
+    // -- Add this pin to a list -------------------------------------------------
+    const PIN_LIST_ADD_PIN_ID = "{{ pin.id }}";
+
+    function filterAddToListResults(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#add-to-list-results li').forEach((li) => {
+            li.style.display = (!q || (li.dataset.search || '').includes(q)) ? '' : 'none';
+        });
+    }
+
+    function addPinsToList(listUuid) {
+        const addUrl = "{% url 'lists.items.add' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', listUuid);
+        const params = new URLSearchParams();
+        params.append('pin_ids', PIN_LIST_ADD_PIN_ID);
+        fetch(addUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': "{{ csrf_token }}" },
+            body: params,
+        }).then(() => {
+            document.getElementById('add-to-list-dialog')?.close();
+            if (typeof toastr !== 'undefined') toastr.success('Added to list.');
+        });
+    }
+
+    function createListAndAddPins() {
+        const nameInput = document.getElementById('add-to-list-new-name');
+        const name = (nameInput.value || '').trim();
+        if (!name) { nameInput.focus(); return; }
+        fetch("{% url 'lists.create' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': "{{ csrf_token }}", 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ name }),
+        }).then((r) => r.json()).then((data) => {
+            if (data.ok) { nameInput.value = ''; addPinsToList(data.uuid); }
+        });
+    }
+
     // -- Pin edit dialog: submit only the fields the user actually changed ------
     // Snapshots the form's values when the dialog opens. On submit, any field whose
     // value still matches its snapshot is dropped from the request - so a field another

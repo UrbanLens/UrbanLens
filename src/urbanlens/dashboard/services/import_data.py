@@ -663,13 +663,91 @@ def _safe_set(
         logger.debug("Skipped setting %s=%r: could not validate choices", field_name, value)
 
 
+def _import_pin_lists(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    badge_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import pin lists (idempotent by UUID) and their pin membership rows.
+
+    Smart-list config (``smart_filter``/``smart_boundary``) is copied as-is;
+    it is not re-evaluated against the importing profile's pins here - the
+    normal smart-membership signal/service picks it back up the next time a
+    member pin is saved or the list is edited.
+    """
+    from django.db import IntegrityError
+
+    from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+
+    rows = _read_json(data_dir, "pin_lists.json")
+    if not rows:
+        return
+    total_rows = len(rows)
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+        uuid_str = row.get("uuid", "")
+
+        existing = PinList.objects.filter(uuid=uuid_str).first() if uuid_str else None
+        if existing:
+            result.inc_skipped("pin_lists")
+            continue
+
+        smart_boundary = None
+        if row.get("smart_boundary"):
+            from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+
+            try:
+                smart_boundary = parse_multipolygon_geojson(row["smart_boundary"])
+            except (ValueError, TypeError):
+                result.warnings.append(f"Could not import boundary for list '{row.get('name', uuid_str)}'.")
+
+        defaults: dict[str, Any] = {
+            "name": row.get("name") or "Imported list",
+            "description": row.get("description") or "",
+            "is_smart": bool(row.get("is_smart")),
+            "smart_filter": row.get("smart_filter"),
+            "smart_boundary": smart_boundary,
+        }
+        if uuid_str:
+            defaults["uuid"] = uuid_str
+
+        try:
+            pin_list = PinList.objects.create(profile=profile, **defaults)
+        except IntegrityError:
+            # Name collision with an existing list - suffix rather than overwrite it.
+            defaults["name"] = f"{defaults['name']} (imported)"
+            pin_list = PinList.objects.create(profile=profile, **defaults)
+
+        items = [
+            PinListItem(
+                pin_list=pin_list,
+                pin_id=pin_uuid_map[item_row["pin_uuid"]],
+                order=item_row.get("order", 0),
+                added_via=item_row.get("added_via", PinListItem.ADDED_MANUAL),
+            )
+            for item_row in row.get("items", [])
+            if item_row.get("pin_uuid") in pin_uuid_map
+        ]
+        if items:
+            PinListItem.objects.bulk_create(items)
+
+        result.inc_created("pin_lists")
+
+
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["badges", "pins", "visit_history", "connections", "settings"]
+_IMPORT_ORDER = ["badges", "pins", "pin_lists", "visit_history", "connections", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
     "badges": _import_badges,
     "pins": _import_pins,
+    "pin_lists": _import_pin_lists,
     "visit_history": _import_visit_history,
     "connections": _import_connections,
     "settings": _import_settings,
@@ -678,6 +756,7 @@ _IMPORTERS: dict[str, Any] = {
 _STEP_MESSAGES = {
     "badges": "Importing badges...",
     "pins": "Importing pins and locations...",
+    "pin_lists": "Importing lists...",
     "visit_history": "Importing visit history...",
     "connections": "Importing connections...",
     "settings": "Applying settings...",

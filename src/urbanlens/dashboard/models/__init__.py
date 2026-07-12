@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote
+from urbanlens.dashboard.models.pin_list import PinList, PinListItem
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail
@@ -40,6 +41,7 @@ from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource
+from urbanlens.dashboard.models.saved_filter import SavedFilter
 from urbanlens.dashboard.models.safety import (
     EmergencyContactDefault,
     SafetyCheckin,

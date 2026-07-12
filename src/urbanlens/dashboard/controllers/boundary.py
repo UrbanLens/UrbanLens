@@ -27,7 +27,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
+from django.contrib.gis.geos import GEOSException
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -41,41 +41,13 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.geo import geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
-
-
-def _geojson(geom) -> dict | None:
-    """Serialize a GEOS geometry to a GeoJSON dict, or None."""
-    return json.loads(geom.geojson) if geom else None
-
-
-def _parse_multipolygon(polygon_geojson: dict) -> MultiPolygon:
-    """Parse a GeoJSON geometry into a MultiPolygon.
-
-    Args:
-        polygon_geojson: A GeoJSON Polygon or MultiPolygon geometry dict.
-
-    Returns:
-        The parsed geometry, coerced to MultiPolygon.
-
-    Raises:
-        ValueError: If the payload isn't valid polygonal GeoJSON.
-        TypeError: If the geometry is valid but not polygonal.
-    """
-    try:
-        geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-    except (GEOSException, TypeError, ValueError) as exc:
-        raise ValueError("Invalid polygon geometry") from exc
-    if isinstance(geom, Polygon):
-        geom = MultiPolygon(geom, srid=geom.srid)
-    if not isinstance(geom, MultiPolygon):
-        raise TypeError("Boundary must be a Polygon or MultiPolygon")
-    return geom
 
 
 def _parse_boundary_type(value) -> str | None:

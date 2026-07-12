@@ -1,0 +1,553 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+// -- Pin Lists --------------------------------------------------------------
+
+.pin-lists-page {
+    padding-bottom: 3rem;
+}
+
+// -- Hero header (mirrors the Thanks page's .attr-hero gradient treatment) --
+.pin-lists-header {
+    padding: 2.5rem 1.25rem 2rem;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    color: var(--ul-grey-8);
+    margin: -1.5rem -1.25rem 1.75rem;
+
+    @include up($breakpoint-sm) {
+        padding: 3.5rem 1.5rem 2.75rem;
+        margin: -2rem -2rem 2rem;
+    }
+}
+
+.pin-lists-header-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .6rem;
+}
+
+.pin-lists-eyebrow {
+    margin: 0;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ul-grey-6);
+}
+
+.pin-lists-title {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: var(--ul-grey-8);
+
+    @include up($breakpoint-sm) {
+        font-size: 2.4rem;
+    }
+}
+
+.pin-lists-subtitle {
+    margin: 0 0 .5rem;
+    color: var(--ul-grey-7);
+    font-size: .92rem;
+    max-width: 34rem;
+}
+
+// -- Toolbar ------------------------------------------------------------
+.pin-lists-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+    padding: 0 1.25rem;
+
+    @include up($breakpoint-sm) {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2rem;
+    }
+}
+
+.pin-lists-search {
+    width: 100%;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    font-size: .88rem;
+
+    @include up($breakpoint-sm) {
+        max-width: 260px;
+    }
+}
+
+.pin-lists-sort-control {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.pin-lists-sort-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+#pin-lists-sort-select {
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .4rem .6rem;
+    font-size: .85rem;
+    cursor: pointer;
+}
+
+// -- Grid of list cards ---------------------------------------------------
+.pin-lists-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0 1.25rem;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(2, 1fr);
+        padding: 0 2rem;
+    }
+
+    @include up($breakpoint-md) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.pin-list-card {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: 1.1rem;
+    border-radius: 12px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+
+    &:hover {
+        border-color: $color-blue-500;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+    }
+}
+
+.pin-list-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pin-list-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(90, 150, 255, .14);
+    color: $color-blue-500;
+}
+
+.pin-list-card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #2ea44f;
+    background: rgba(46, 164, 79, .14);
+    border-radius: 999px;
+    padding: .18rem .55rem;
+}
+
+.pin-list-card-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.pin-list-card-description {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    line-height: 1.4;
+}
+
+.pin-list-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: .5rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-list-card-count {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+// -- Empty state ------------------------------------------------------------
+.pin-lists-empty {
+    text-align: center;
+    padding: 4rem 1.5rem;
+    color: var(--ul-grey-6);
+    max-width: 26rem;
+    margin: 0 auto;
+
+    .material-symbols-outlined {
+        font-size: 2.6rem;
+        color: var(--ul-grey-3);
+        margin-bottom: .5rem;
+    }
+
+    h2 {
+        margin: 0 0 .35rem;
+        color: var(--ul-grey-8);
+        font-size: 1.15rem;
+    }
+
+    p {
+        margin: 0 0 1rem;
+        font-size: .88rem;
+    }
+}
+
+// -- Detail page --------------------------------------------------------
+.pin-list-detail-page {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+
+    @include up($breakpoint-sm) {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
+
+.pin-list-detail-header {
+    margin-bottom: 1.5rem;
+}
+
+.pin-list-detail-header-top {
+    margin-bottom: .75rem;
+}
+
+.pin-list-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    color: var(--ul-grey-6);
+    text-decoration: none;
+    font-size: .85rem;
+
+    &:hover { color: $color-blue-500; }
+}
+
+.pin-list-detail-header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    @include up($breakpoint-sm) {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+    }
+}
+
+.pin-list-detail-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin: 0 0 .35rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--ul-grey-8);
+}
+
+.pin-list-detail-description {
+    margin: 0 0 .35rem;
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+    max-width: 40rem;
+}
+
+.pin-list-detail-count {
+    margin: 0;
+    color: var(--ul-grey-5);
+    font-size: .8rem;
+}
+
+.pin-list-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+}
+
+.pin-list-trip-actions {
+    display: flex;
+    gap: .5rem;
+}
+
+// -- Smart config panel -----------------------------------------------------
+.pin-list-smart-panel {
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 12px;
+    background: var(--ul-grey-0a);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.pin-list-smart-panel-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: 1rem 1.1rem;
+}
+
+.pin-list-smart-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+}
+
+.pin-list-smart-panel-body {
+    padding: 0 1.1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.pin-list-smart-row label {
+    display: block;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    margin-bottom: .35rem;
+}
+
+.pin-list-smart-row select {
+    width: 100%;
+    max-width: 320px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .45rem .6rem;
+    font-size: .85rem;
+}
+
+.pin-list-smart-hint {
+    margin: .4rem 0 0;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+}
+
+.pin-list-boundary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .35rem;
+}
+
+.pin-list-boundary-map {
+    height: 280px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--ul-grey-1a);
+
+    @include up($breakpoint-sm) {
+        height: 340px;
+    }
+}
+
+// -- Items list ---------------------------------------------------------
+.pin-list-items-section {
+    margin-bottom: 2rem;
+}
+
+.pin-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.pin-list-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .75rem;
+    border-radius: 9px;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+
+    &--ghost {
+        opacity: .4;
+    }
+}
+
+.pin-list-item-drag-handle {
+    display: flex;
+    align-items: center;
+    color: var(--ul-grey-4);
+    cursor: grab;
+    touch-action: none;
+}
+
+.pin-list-item-link {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ul-grey-8);
+    font-size: .88rem;
+    min-width: 0;
+}
+
+.pin-list-item-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.pin-list-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pin-list-item-provenance {
+    display: flex;
+    align-items: center;
+    color: $color-blue-500;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.pin-list-item-remove {
+    background: none;
+    border: none;
+    color: var(--ul-grey-4);
+    cursor: pointer;
+    padding: .2rem;
+    display: flex;
+    border-radius: 5px;
+    transition: color .15s, background .15s;
+
+    &:hover {
+        color: #fca5a5;
+        background: rgba(239, 68, 68, .12);
+    }
+}
+
+.pin-list-items-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+}
+
+// -- Add pins / add to trip dialogs --------------------------------------
+.pin-list-add-results {
+    list-style: none;
+    margin: .5rem 0 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.pin-list-add-results-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    text-align: left;
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+    font-size: .85rem;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+
+    &:hover {
+        border-color: $color-blue-500;
+    }
+}
+
+.pin-list-add-results-search {
+    width: 100%;
+    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+    font-size: .85rem;
+}
+
+.pin-list-add-results-item--new {
+    cursor: default;
+
+    &:hover { border-color: var(--ul-grey-1a); }
+
+    input[type="text"] {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: var(--ul-grey-8);
+        font-size: .85rem;
+        min-width: 0;
+
+        &:focus { outline: none; }
+    }
+}
+
+.pin-list-add-results-count {
+    margin-left: auto;
+    font-size: .75rem;
+    color: var(--ul-grey-5);
+}
+
+// -- Pin detail page "Add to a list" button ------------------------------
+.pin-add-to-list-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: .5rem;
+}

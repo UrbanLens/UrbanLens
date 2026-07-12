@@ -141,6 +141,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
         custom_filter_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
+        saved_filters = list(profile.saved_filters.all())
+        from urbanlens.dashboard.models.pin_list.model import PinList
+
+        pin_lists = list(PinList.objects.filter(profile=profile).order_by("name"))
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -157,6 +161,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "filter_badges": filter_badges_list,
                 "filter_badges_json": filter_badges_json,
                 "custom_filter_fields": custom_filter_fields,
+                "saved_filters": saved_filters,
+                "pin_lists": pin_lists,
                 "icon_categories": ICON_CATEGORIES,
                 "color_choices": COLOR_CHOICES,
                 "profile_uuid": profile.uuid,

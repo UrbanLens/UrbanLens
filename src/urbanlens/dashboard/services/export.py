@@ -33,6 +33,7 @@ VALID_EXPORT_TYPES = frozenset(
         "custom_fields",
         "google_takeout",
         "direct_messages",
+        "pin_lists",
     },
 )
 
@@ -48,6 +49,7 @@ _ORDERED_TYPES = [
     "comments",
     "photos",
     "trips",
+    "pin_lists",
     "direct_messages",
 ]
 
@@ -155,6 +157,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         "comments": (_export_comments, "Exporting comments..."),
         "photos": (_export_photos, "Exporting photos..."),
         "trips": (_export_trips, "Exporting trips..."),
+        "pin_lists": (_export_pin_lists, "Exporting lists..."),
         "direct_messages": (_export_direct_messages, "Exporting direct messages..."),
     }
 
@@ -658,4 +661,31 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
         )
 
     with open(os.path.join(temp_dir, "trips.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
+
+
+def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    from urbanlens.dashboard.models.pin_list.model import PinList
+
+    lists = PinList.objects.filter(profile=profile).prefetch_related("items__pin").order_by("created")
+
+    rows = []
+    for pin_list in lists:
+        rows.append(
+            {
+                "uuid": str(pin_list.uuid),
+                "name": pin_list.name,
+                "description": pin_list.description or "",
+                "is_smart": pin_list.is_smart,
+                "smart_filter": pin_list.smart_filter,
+                "smart_boundary": json.loads(pin_list.smart_boundary.geojson) if pin_list.smart_boundary else None,
+                "created": str(pin_list.created),
+                "items": [
+                    {"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via}
+                    for item in pin_list.items.all()
+                ],
+            },
+        )
+
+    with open(os.path.join(temp_dir, "pin_lists.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)

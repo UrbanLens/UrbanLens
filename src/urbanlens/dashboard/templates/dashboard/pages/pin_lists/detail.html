@@ -1,0 +1,342 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% endblock %}
+
+{% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block content %}
+<div class="pin-lists-page page-content pin-list-detail-page">
+
+    <section class="pin-list-detail-header">
+        <div class="pin-list-detail-header-top">
+            <a href="{% url 'lists.list' %}" class="pin-list-back-link">
+                <i class="material-symbols-outlined">arrow_back</i> Lists
+            </a>
+        </div>
+        <div class="pin-list-detail-header-main">
+            <div>
+                <h1 class="pin-list-detail-title" id="pin-list-title-display">
+                    {{ pin_list.name }}
+                    {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
+                </h1>
+                {% if pin_list.description %}
+                <p class="pin-list-detail-description" id="pin-list-description-display">{{ pin_list.description }}</p>
+                {% endif %}
+                <p class="pin-list-detail-count">{{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}</p>
+            </div>
+            <div class="pin-list-detail-actions">
+                <button type="button" class="btn btn--secondary" onclick="document.getElementById('edit-list-dialog').showModal()">
+                    <i class="material-symbols-outlined">edit</i> Edit
+                </button>
+                <button type="button" class="btn btn--secondary" onclick="document.getElementById('add-pins-dialog').showModal()">
+                    <i class="material-symbols-outlined">add_location_alt</i> Add Pins
+                </button>
+                <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()">
+                    <i class="material-symbols-outlined">draw</i>
+                    {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
+                </button>
+                <div class="pin-list-trip-actions">
+                    <button type="button" class="btn btn--primary" onclick="pinListCreateTrip()">
+                        <i class="material-symbols-outlined">flight_takeoff</i> Create Trip
+                    </button>
+                    <button type="button" class="btn btn--secondary" onclick="document.getElementById('add-to-trip-dialog').showModal()">
+                        <i class="material-symbols-outlined">luggage</i> Add to Trip
+                    </button>
+                </div>
+                <button type="button" class="btn btn--danger-ghost" onclick="pinListDelete()">
+                    <i class="material-symbols-outlined">delete</i> Delete
+                </button>
+            </div>
+        </div>
+    </section>
+
+    {# -- Smart list configuration ------------------------------------------- #}
+    <section class="pin-list-smart-panel">
+        <div class="pin-list-smart-panel-header">
+            <label class="pin-list-smart-toggle">
+                <input type="checkbox" id="pin-list-is-smart" {% if pin_list.is_smart %}checked{% endif %} onchange="pinListToggleSmart(this.checked)">
+                <span>Smart list</span>
+            </label>
+            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Smart lists auto-include pins matching a saved filter and/or falling inside a boundary you draw. New/edited pins are added or removed automatically; pins you added manually always stay." %}
+        </div>
+        <div class="pin-list-smart-panel-body" id="pin-list-smart-body" {% if not pin_list.is_smart %}hidden{% endif %}>
+            <div class="pin-list-smart-row">
+                <label for="pin-list-saved-filter-select">Match pins from a saved filter</label>
+                <select id="pin-list-saved-filter-select" onchange="pinListSetSavedFilter(this.value)">
+                    <option value="">None</option>
+                    {% for filter in saved_filters %}
+                    <option value="{{ filter.uuid }}" {% if pin_list.smart_filter == filter.criteria %}selected{% endif %}>{{ filter.name }}</option>
+                    {% endfor %}
+                </select>
+                {% if not saved_filters %}
+                <p class="pin-list-smart-hint">You don't have any saved filters yet - save one from the map's filter panel first.</p>
+                {% endif %}
+            </div>
+            <div class="pin-list-smart-row">
+                <div class="pin-list-boundary-header">
+                    <label>Match pins inside a boundary</label>
+                    <button type="button" class="btn btn--ghost btn--sm" onclick="pinListClearBoundary()">
+                        <i class="material-symbols-outlined">close</i> Clear
+                    </button>
+                </div>
+                <div id="pin-list-boundary-map" class="pin-list-boundary-map"></div>
+            </div>
+        </div>
+    </section>
+
+    {# -- Items -------------------------------------------------------------- #}
+    <section class="pin-list-items-section">
+        {% include "dashboard/partials/pin_lists/_items_panel.html" %}
+    </section>
+</div>
+
+{# -- Edit list dialog ------------------------------------------------------ #}
+<dialog id="edit-list-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit List" %}
+    <form onsubmit="return pinListSaveEdit(event)">
+        <div class="form-row">
+            <label for="edit-list-name">List name <span class="required">*</span></label>
+            <input type="text" id="edit-list-name" required maxlength="100" value="{{ pin_list.name }}">
+        </div>
+        <div class="form-row">
+            <label for="edit-list-description">Description</label>
+            <textarea id="edit-list-description" rows="3">{{ pin_list.description }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg">Save</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+{# -- Add pins dialog --------------------------------------------------------#}
+<dialog id="add-pins-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Pins" %}
+    <div class="form-row">
+        <input type="search" id="add-pins-search" placeholder="Search your pins..." autocomplete="off" oninput="pinListSearchPins(this.value)">
+    </div>
+    <ul class="pin-list-add-results" id="add-pins-results"></ul>
+</dialog>
+
+{# -- Add to trip dialog ------------------------------------------------------#}
+<dialog id="add-to-trip-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add to Trip" %}
+    <input type="search" id="add-to-trip-search" class="pin-list-add-results-search" placeholder="Search your trips..." oninput="pinListFilterTrips(this.value)" autocomplete="off">
+    <ul class="pin-list-add-results" id="add-to-trip-results">
+        {% for trip in trips %}
+        <li data-search="{{ trip.name|lower }}">
+            <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.uuid }}')">
+                <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    {% if not trips %}<p class="pin-list-smart-hint">You're not on any trips yet.</p>{% endif %}
+</dialog>
+
+{# -- >100 pins confirmation dialog ------------------------------------------#}
+<dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add a lot of pins?" %}
+    <p id="pin-list-confirm-bulk-add-text"></p>
+    <div class="form-actions">
+        <button type="button" class="btn btn--primary" id="pin-list-confirm-bulk-add-btn">Add anyway</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    const LIST_UUID = "{{ pin_list.uuid }}";
+    const ITEMS_ADD_URL = "{% url 'lists.items.add' pin_list.uuid %}";
+    const LIST_EDIT_URL = "{% url 'lists.edit' pin_list.uuid %}";
+    const LIST_DELETE_URL = "{% url 'lists.delete' pin_list.uuid %}";
+    const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.uuid %}";
+    const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.uuid %}";
+    const MARKUP_MAP_URL = "{% url 'lists.markup_map' pin_list.uuid %}";
+    const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+    function jsonHeaders() {
+        return { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF };
+    }
+
+    // -- Sortable item reordering --------------------------------------------
+    let _sortable = null;
+    function initSortable() {
+        const list = document.getElementById('pin-list-items');
+        if (!list || typeof Sortable === 'undefined') return;
+        if (_sortable) _sortable.destroy();
+        _sortable = new Sortable(list, {
+            animation: 150,
+            handle: '.pin-list-item-drag-handle',
+            ghostClass: 'pin-list-item--ghost',
+            onEnd: () => savePinListOrder(list),
+        });
+    }
+    function savePinListOrder(list) {
+        const items = Array.from(list.querySelectorAll('.pin-list-item[data-id]')).map((el) => ({ id: el.dataset.id }));
+        fetch(list.dataset.saveUrl, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ items }) });
+    }
+    initSortable();
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail.target && e.detail.target.id === 'pin-list-items') initSortable();
+    });
+
+    // -- Edit dialog ----------------------------------------------------------
+    window.pinListSaveEdit = function (event) {
+        event.preventDefault();
+        const name = document.getElementById('edit-list-name').value.trim();
+        const description = document.getElementById('edit-list-description').value;
+        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ name, description }) })
+            .then((r) => { if (r.ok) window.location.reload(); });
+        return false;
+    };
+
+    window.pinListDelete = function () {
+        if (!confirm('Delete this list? This cannot be undone.')) return;
+        fetch(LIST_DELETE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then(() => { window.location = "{% url 'lists.list' %}"; });
+    };
+
+    // -- Smart config -----------------------------------------------------
+    window.pinListToggleSmart = function (checked) {
+        document.getElementById('pin-list-smart-body').hidden = !checked;
+        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ is_smart: checked }) })
+            .then((r) => r.json()).then(() => refreshItems());
+    };
+
+    window.pinListSetSavedFilter = function (savedFilterUuid) {
+        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ saved_filter_uuid: savedFilterUuid }) })
+            .then((r) => r.json()).then(() => refreshItems());
+    };
+
+    window.pinListClearBoundary = function () {
+        _boundaryLayers.clearLayers();
+        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ smart_boundary: null }) })
+            .then((r) => r.json()).then(() => refreshItems());
+    };
+
+    function refreshItems() {
+        fetch("{% url 'lists.items' pin_list.uuid %}").then((r) => r.text()).then((html) => {
+            document.getElementById('pin-list-items').outerHTML = html;
+            initSortable();
+        });
+    }
+
+    // -- Add pins search ----------------------------------------------------
+    let _pinSearchTimer;
+    window.pinListSearchPins = function (query) {
+        clearTimeout(_pinSearchTimer);
+        const resultsEl = document.getElementById('add-pins-results');
+        if ((query || '').trim().length < 2) { resultsEl.innerHTML = ''; return; }
+        _pinSearchTimer = setTimeout(() => {
+            fetch("{% url 'map.autocomplete.local' %}?q=" + encodeURIComponent(query))
+                .then((r) => r.json())
+                .then((data) => {
+                    const pins = (data.results || []).filter((r) => r.type === 'pin' && r.pin_slug);
+                    resultsEl.innerHTML = pins.map((p) => (
+                        '<li><button type="button" class="pin-list-add-results-item" onclick="pinListAddPinBySlug(\'' + p.pin_slug + '\')">' +
+                        '<i class="material-symbols-outlined">location_on</i> ' + p.title + '</button></li>'
+                    )).join('') || '<li class="pin-list-smart-hint">No matching pins.</li>';
+                });
+        }, 250);
+    };
+
+    window.pinListAddPinBySlug = function (slug) {
+        const body = new URLSearchParams();
+        body.append('pin_slugs', slug);
+        fetch(ITEMS_ADD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
+            .then((r) => r.text()).then((html) => {
+                document.getElementById('pin-list-items').outerHTML = html;
+                initSortable();
+            });
+    };
+
+    // -- Create / add to trip ------------------------------------------------
+    window.pinListCreateTrip = function () {
+        fetch(CREATE_TRIP_URL, { method: 'POST', headers: jsonHeaders(), body: '{}' })
+            .then((r) => r.json()).then((data) => { if (data.ok) window.location = data.redirect; });
+    };
+
+    window.pinListAddToTrip = function (tripUuid) {
+        fetch(ADD_TO_TRIP_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ trip_uuid: tripUuid }) })
+            .then((r) => r.json()).then((data) => { if (data.ok) window.location = data.redirect; });
+    };
+
+    window.pinListFilterTrips = function (query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#add-to-trip-results li').forEach((li) => {
+            li.style.display = (!q || (li.dataset.search || '').includes(q)) ? '' : 'none';
+        });
+    };
+
+    // -- Markup map -----------------------------------------------------------
+    window.pinListCreateMarkupMap = function () {
+        fetch(MARKUP_MAP_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then((r) => r.json()).then((data) => {
+                if (data.ok) { window.location = data.redirect; }
+                else { alert(data.error || 'Unable to create markup map.'); }
+            });
+    };
+
+    // -- Boundary drawing mini-map --------------------------------------------
+    const mapEl = document.getElementById('pin-list-boundary-map');
+    let _boundaryLayers = { clearLayers: function () {} };
+    if (mapEl) {
+        const centerLat = {{ map_center_lat|default:39.8283 }};
+        const centerLng = {{ map_center_lng|default:-98.5795 }};
+        const boundaryMap = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(boundaryMap);
+        const drawnItems = new L.FeatureGroup().addTo(boundaryMap);
+        _boundaryLayers = drawnItems;
+
+        {% if pin_list.smart_boundary %}
+        try {
+            const existingGeoJson = {{ pin_list.smart_boundary.geojson|safe }};
+            L.geoJSON(existingGeoJson, {
+                onEachFeature: function (feature, layer) { drawnItems.addLayer(layer); },
+            });
+            if (drawnItems.getLayers().length) boundaryMap.fitBounds(drawnItems.getBounds());
+        } catch (e) { /* malformed stored geometry - ignore */ }
+        {% endif %}
+
+        const drawControl = new L.Control.Draw({
+            draw: { polygon: true, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
+            edit: { featureGroup: drawnItems, remove: true },
+        });
+        boundaryMap.addControl(drawControl);
+
+        function saveBoundary() {
+            const layers = drawnItems.getLayers();
+            const geometry = layers.length === 0 ? null : { type: 'MultiPolygon', coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
+            fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ smart_boundary: geometry }) })
+                .then((r) => r.json()).then(() => refreshItems());
+        }
+
+        boundaryMap.on(L.Draw.Event.CREATED, function (e) { drawnItems.addLayer(e.layer); saveBoundary(); });
+        boundaryMap.on(L.Draw.Event.EDITED, saveBoundary);
+        boundaryMap.on(L.Draw.Event.DELETED, saveBoundary);
+    }
+
+    // -- Bulk-add >100 confirmation (used when Add Pins search results are large
+    // via the map's own "Add these pins to a list" flow landing here) ---------
+    window._pinListConfirmBulkAdd = function (count, onConfirm) {
+        document.getElementById('pin-list-confirm-bulk-add-text').textContent =
+            'Add ' + count + ' pins to this list?';
+        const dlg = document.getElementById('pin-list-confirm-bulk-add-dialog');
+        const btn = document.getElementById('pin-list-confirm-bulk-add-btn');
+        btn.onclick = function () { dlg.close(); onConfirm(); };
+        dlg.showModal();
+    };
+})();
+</script>
+{% endblock %}
