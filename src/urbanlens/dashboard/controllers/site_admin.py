@@ -17,6 +17,7 @@ import time
 from urllib.parse import urlencode
 
 import django
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
@@ -828,6 +829,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     "used_bytes": used_bytes,
                     "percent_used": percent_used,
                     "avatar_hue": sum(ord(char) for char in member.username) % 360,
+                    "is_pending_deletion": profile.is_pending_deletion,
+                    "deletion_scheduled_for": profile.deletion_scheduled_for,
                 }
             )
 
@@ -842,6 +845,64 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "total_users": page.paginator.count,
             },
         )
+
+    def post(self, request: HttpRequest):
+        """Admin-initiated account deletion, sharing the self-service flow's grace period and undo.
+
+        Reuses ``request_deletion``/``cancel_deletion`` verbatim - a deletion
+        triggered here goes through the exact same 7-day grace period,
+        reminder, and hard-delete task as a user deleting their own data, and
+        can be undone the same way (either the user logging back in, or an
+        admin using ``cancel_delete`` here).
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.account_deletion import cancel_deletion, request_deletion
+
+        if not isinstance(request.user, User):
+            return HttpResponseForbidden()
+
+        redirect_params = {k: v for k, v in {"q": request.POST.get("q", ""), "page": request.POST.get("page", "")}.items() if v}
+        redirect_url = reverse("site_admin_users") + (f"?{urlencode(redirect_params)}" if redirect_params else "")
+
+        target = User.objects.filter(pk=request.POST.get("user_id")).select_related("profile").first()
+        if target is None:
+            messages.error(request, "User not found.")
+            return HttpResponseRedirect(redirect_url)
+
+        profile, _ = Profile.objects.get_or_create(user=target)
+        viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile_visible = profile.can_view_profile(viewer_profile)
+        display_username = target.username if profile_visible else "this hidden user"
+
+        action = request.POST.get("action")
+
+        if action == "cancel_delete":
+            cancel_deletion(profile)
+            messages.success(request, f"Deletion cancelled for {display_username}.")
+            return HttpResponseRedirect(redirect_url)
+
+        if action == "request_delete":
+            if target.pk == request.user.pk:
+                messages.error(request, 'Use "Delete my data" in your own settings to delete your own account.')
+                return HttpResponseRedirect(redirect_url)
+            if target.is_superuser or any(group.name == SITE_ADMIN_GROUP_NAME for group in target.groups.all()):
+                messages.error(request, "Admin accounts can't be deleted this way.")
+                return HttpResponseRedirect(redirect_url)
+
+            expected = target.username if profile_visible else "hidden user"
+            confirm_text = (request.POST.get("confirm_text") or "").strip()
+            if confirm_text.lower() != expected.lower():
+                messages.error(request, f'Type "{expected}" exactly to confirm.')
+                return HttpResponseRedirect(redirect_url)
+
+            request_deletion(profile)
+            messages.success(
+                request,
+                f"{display_username.capitalize()}'s account is scheduled for deletion on {profile.deletion_scheduled_for:%B %d, %Y}. You (or they) can undo this any time before then.",
+            )
+            return HttpResponseRedirect(redirect_url)
+
+        return HttpResponseRedirect(redirect_url)
 
 
 class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):

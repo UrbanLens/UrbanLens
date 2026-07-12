@@ -2079,6 +2079,21 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
+/* Inline (in-flow) variant for forms and dialogs - cancels the floating
+   positioning at every breakpoint. */
+.addr-search-bar--inline {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+
+    @include up($breakpoint-sm) {
+        top: auto;
+        left: auto;
+        width: 100%;
+    }
+}
+
 .addr-search-bar:focus-within {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .24), 0 0 0 2px rgba(var(--ul-primary-rgb, 79, 70, 229), .18);
     border-color: var(--ul-grey-3b);

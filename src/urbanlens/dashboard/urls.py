@@ -21,6 +21,7 @@ from urbanlens.dashboard.controllers import (
     detail_pins,
     direct_message_shares,
     direct_messages,
+    e2ee,
     friendship,
     image_gallery,
     location_wiki,
@@ -310,11 +311,6 @@ urlpatterns = [
                                 "<slug:pin_slug>/edit/",
                                 pin_edit.PinEditView.as_view(),
                                 name="pin.edit",
-                            ),
-                            path(
-                                "<slug:pin_slug>/delete/",
-                                pin_edit.PinDeleteView.as_view(),
-                                name="pin.delete",
                             ),
                             path(
                                 "<slug:pin_slug>/notes/",
@@ -758,7 +754,6 @@ urlpatterns = [
             [
                 path("", trip.TripListView.as_view(), name="trips.list"),
                 path("create/", trip.TripCreateView.as_view(), name="trips.create"),
-                path("location-search/", trip.TripLocationSearchView.as_view(), name="trips.location_search"),
                 path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
                 path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),
@@ -930,6 +925,20 @@ urlpatterns = [
                 path("<slug:profile_slug>/share/pin/", direct_message_shares.MessageSharePinView.as_view(), name="messages.share.pin"),
                 path("<slug:profile_slug>/share/trip/", direct_message_shares.MessageShareTripView.as_view(), name="messages.share.trip"),
                 path("<slug:profile_slug>/share/friend/", direct_message_shares.MessageShareFriendView.as_view(), name="messages.share.friend"),
+            ],
+        ),
+    ),
+    path(
+        "e2ee/",
+        include(
+            [
+                path("login-params/", e2ee.E2EELoginParamsView.as_view(), name="e2ee.login_params"),
+                path("enroll/", e2ee.E2EEEnrollView.as_view(), name="e2ee.enroll"),
+                path("keys/", e2ee.E2EEOwnKeysView.as_view(), name="e2ee.keys"),
+                path("keys/<slug:profile_slug>/", e2ee.E2EEPartnerKeyView.as_view(), name="e2ee.partner_key"),
+                path("conversation-key/<slug:profile_slug>/", e2ee.E2EEConversationKeyView.as_view(), name="e2ee.conversation_key"),
+                path("rewrap/", e2ee.E2EERewrapView.as_view(), name="e2ee.rewrap"),
+                path("reset/", e2ee.E2EEResetView.as_view(), name="e2ee.reset"),
             ],
         ),
     ),

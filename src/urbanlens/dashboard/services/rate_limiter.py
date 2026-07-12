@@ -125,6 +125,18 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=5000,
         notes="Free k-anonymity range API. Used when users set or change passwords.",
     ),
+    "sms": ServiceDefaults(
+        display_name="Twilio SMS",
+        calls_per_minute=10,
+        calls_per_day=200,
+        notes="Billed per message sent - keep this conservative.",
+    ),
+    "whatsapp": ServiceDefaults(
+        display_name="Twilio WhatsApp",
+        calls_per_minute=10,
+        calls_per_day=200,
+        notes="Billed per message sent - keep this conservative.",
+    ),
 }
 
 

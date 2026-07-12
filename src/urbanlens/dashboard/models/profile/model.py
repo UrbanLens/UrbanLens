@@ -558,6 +558,29 @@ class Profile(abstract.PublicDashboardModel):
         ).exists()
 
     @staticmethod
+    def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
+        """Return True when ``sender`` has an unanswered friend request to ``recipient``.
+
+        Sending a friend request deliberately opens the sender's own privacy
+        gates to the recipient - one way only - so the recipient can look at
+        who is asking before deciding (see :meth:`visibility_permits`).
+
+        Args:
+            sender: The profile that sent the request.
+            recipient: The profile the request was sent to.
+
+        Returns:
+            True when an unanswered Friendship row exists from sender to recipient.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(
+            from_profile=sender,
+            to_profile=recipient,
+            status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+        ).exists()
+
+    @staticmethod
     def _have_common_pin(subject: Profile, other: Profile) -> bool:
         """Return True when both profiles have pinned at least one shared Location.
 
@@ -643,6 +666,9 @@ class Profile(abstract.PublicDashboardModel):
 
         Accepted friends qualify for every option except NO_ONE - a friend is
         never more of a stranger than someone who merely shares a pin or trip.
+        A pending friend request *sent by* ``subject`` counts the recipient as
+        a friend too (one way only): asking someone to connect deliberately
+        lets them see who is asking.
 
         Args:
             visibility: The ``VisibilityChoice`` value being evaluated.
@@ -656,7 +682,7 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if visibility == VisibilityChoice.NO_ONE:
             return False
-        if Profile.are_friends(subject, other):
+        if Profile.are_friends(subject, other) or Profile.has_pending_request_to(subject, other):
             return True
         if visibility == VisibilityChoice.FRIENDS:
             return False

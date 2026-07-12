@@ -145,8 +145,26 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "reaction_picker_emojis": REACTION_PICKER_EMOJIS,
         "partner_online": partner_online,
         "image_permission_status": _image_permission_status(profile, partner),
+        "partner_e2ee_enrolled": _e2ee_enrolled(partner),
         **identity,
     }
+
+
+def _e2ee_enrolled(profile: Profile) -> bool:
+    """Return True when `profile` has a direct-message encryption key bundle.
+
+    Drives whether the composer encrypts: a message is only encrypted when
+    both participants have published a key bundle.
+
+    Args:
+        profile: The profile to check.
+
+    Returns:
+        True when a ``MessagingKeyBundle`` exists for this profile.
+    """
+    from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+    return MessagingKeyBundle.objects.filter(profile=profile).exists()
 
 
 def _image_permission_status(viewer: Profile, sender: Profile) -> str:
@@ -253,11 +271,15 @@ class ConversationSendView(LoginRequiredMixin, View):
         partner = _get_partner(profile, profile_slug)
         image_ids = [int(v) for v in request.POST.getlist("image_ids") if v.isdigit()]
         reply_to_raw = request.POST.get("reply_to", "")
+        key_version_raw = request.POST.get("key_version", "")
         try:
             create_direct_message(
                 profile,
                 partner,
                 request.POST.get("body", ""),
+                ciphertext=request.POST.get("ciphertext", ""),
+                nonce=request.POST.get("nonce", ""),
+                key_version=int(key_version_raw) if key_version_raw.isdigit() else 0,
                 image_ids=image_ids,
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,

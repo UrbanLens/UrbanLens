@@ -35,6 +35,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _e2ee_enrolled(profile: Profile) -> bool:
+    """Return True when the profile has a direct-message encryption key bundle.
+
+    Args:
+        profile: The profile whose enrollment to check.
+
+    Returns:
+        True when a ``MessagingKeyBundle`` exists for this profile.
+    """
+    from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+    return MessagingKeyBundle.objects.filter(profile=profile).exists()
+
+
 class SettingsView(LoginRequiredMixin, View):
     def _build_map_center_context(self, profile: Profile) -> dict:
         """Return preview coordinates and centroid for the map-center settings section.
@@ -92,6 +106,9 @@ class SettingsView(LoginRequiredMixin, View):
             "external_api_form": ExternalApiSettingsForm(instance=profile),
             "direct_message_form": DirectMessageSettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
+            "e2ee_enrolled": _e2ee_enrolled(profile),
+            "e2ee_has_password": request.user.has_usable_password(),
+            "self_slug": profile.ensure_slug(),
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
         }

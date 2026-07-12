@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import requests
 from typing_extensions import TypeVar
@@ -20,6 +21,12 @@ Response = TypeVar("Response", bound=dict[str, Any], default=dict[str, Any])
 
 
 class CloudflareGateway(LLMGateway[Response]):
+    #: Cost per thousand (sent, received) tokens, in USD, per Cloudflare's
+    #: published Workers AI per-model pricing (developers.cloudflare.com/workers-ai/platform/pricing).
+    MODEL_COSTS: ClassVar[dict[str, tuple[Decimal, Decimal]]] = {
+        DEFAULT_MODEL: (Decimal("0.00011"), Decimal("0.00019")),
+    }
+
     def setup(self, **kwargs):
         if not self.api_url:
             self.api_url = str(settings.cloudflare_worker_ai_endpoint)

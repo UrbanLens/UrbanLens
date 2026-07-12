@@ -1,4 +1,4 @@
-"""Email verification token model for new user registrations."""
+"""Account-level auth models: email verification tokens and client-side KDF enrollment."""
 
 from __future__ import annotations
 
@@ -12,6 +12,36 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.abstract import DashboardModel
 from urbanlens.dashboard.models.account.queryset import EmailVerificationManager
+
+
+class AccountKdf(DashboardModel):
+    """Marks an account as using client-side derived authentication.
+
+    When this row exists, the browser derives the credential sent at login
+    (``authKey``) from the raw password via Argon2id + ``auth_salt``, and the
+    server's stored password hash is a hash of that derived key - the raw
+    password never reaches the server. Accounts without a row authenticate
+    with the raw password as usual ("legacy" mode) and are upgraded
+    transparently on their next successful login.
+
+    ``auth_salt`` is deliberately independent of
+    ``MessagingKeyBundle.password_wrap_salt`` so the authentication credential
+    and the key-wrapping key are cryptographically separated - knowing one
+    derivation reveals nothing about the other.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="account_kdf")
+    # Argon2id salt (base64) for deriving the login credential client-side.
+    auth_salt = models.CharField(max_length=64)
+
+    if TYPE_CHECKING:
+        user_id: int
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_account_kdf"
+
+    def __str__(self) -> str:
+        return f"AccountKdf(user={self.user_id})"
 
 
 class EmailVerification(DashboardModel):

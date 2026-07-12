@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the map thumbnails and the expand dialogs. #}
@@ -21,7 +22,7 @@
     </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="maps" %}
+        {% memories_tabs "maps" %}
 
         {% if map_cards %}
         <div class="memories-maps-grid">

@@ -66,6 +66,10 @@ def message_preview(message: Any, viewer_id: int) -> str:
     tombstone = message.tombstone_text_for(viewer_id)
     if tombstone:
         return tombstone
+    if message.is_encrypted:
+        # The server can't read the body; the client swaps in the real preview
+        # after decrypting (see the quote-box's data-e2ee-* attributes).
+        return "🔒 Message"
     if message.body:
         return message.body[:80]
     if message.images.exists():

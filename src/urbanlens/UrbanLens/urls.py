@@ -14,6 +14,7 @@ from django.urls import include, path, re_path
 
 from urbanlens.dashboard.controllers.account import (
     CustomLoginView,
+    E2EEPasswordResetConfirmView,
     PostLoginRedirectView,
     ResendVerificationView,
     SignupView,
@@ -60,7 +61,7 @@ urlpatterns = [
     path("accounts/password_reset/done/", auth_views.PasswordResetDoneView.as_view(), name="password_reset_done"),
     path(
         "accounts/reset/<uidb64>/<token>/",
-        auth_views.PasswordResetConfirmView.as_view(),
+        E2EEPasswordResetConfirmView.as_view(),
         name="password_reset_confirm",
     ),
     path("accounts/reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),

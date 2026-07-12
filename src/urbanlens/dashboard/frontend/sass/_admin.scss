@@ -1401,6 +1401,17 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         white-space: nowrap;
     }
 
+    &__col--actions &__value {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    &__inline-form {
+        display: inline-flex;
+    }
+
     &__empty {
         display: flex;
         align-items: center;

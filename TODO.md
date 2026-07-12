@@ -103,6 +103,7 @@ Features planned for this release.
 # Future Features
 Features planned for future releases.
 
+* Clean up ui on page dashboard/site-admin/subscriptions/ (bad padding, save buttons should go away for autosave, flex or grid adjustments, active grant actions being visible by default is confusing.)
 * On the profile page, if the user has instagram linked, then show a section with the most recent instagram posts for that user. [UL-44]
 * Allow users to specify their signal username. Ideally, make it easy for users to add them to their signal contacts if it's provided. [UL-45]
 * On the pin details and location wiki pages, we want to be able to show the property ownership records. However, there is not a consistent database to access that information that I'm aware of. Therefore, we need to have a strategy for looking up that information per county. To accomplish this, we need to create code to use AI to determine where to find that information for the given county, attempt to access the record for the given location, and if that's successful, then save the strategy used to the DB so that the same strategy can be used for other addresses in that county in the future. [UL-46]

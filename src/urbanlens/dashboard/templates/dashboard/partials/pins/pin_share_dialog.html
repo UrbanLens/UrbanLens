@@ -40,21 +40,24 @@
 
       <section class="pin-share-section">
         <h3 class="pin-share-section-title"><i class="material-symbols-outlined">label_important</i> Name</h3>
-        <div class="form-row">
-          <select id="pin-share-name-choice" name="name_choice" onchange="_pinShareNameChanged(this)">
-            <option value="">Use current name - {{ pin.effective_name }}</option>
+        <label class="pin-share-children-row">
+          <input type="checkbox" id="pin-share-use-own-name" onchange="_pinShareNameModeChanged(this)">
+          <span>Share your pin's name</span>
+        </label>
+        <div class="form-row" id="pin-share-custom-name-row">
+          <input type="text" id="pin-share-custom-name" name="custom_name" maxlength="255"
+                 placeholder="Name to share this pin under (blank keeps the current name)">
+          <p class="pin-share-section-hint">A new name also gets added to your own list of aliases for this pin.</p>
+        </div>
+        <div class="form-row" id="pin-share-name-choice-row" hidden>
+          <select id="pin-share-name-choice" name="name_choice" disabled>
+            <option value="">Current name - {{ pin.effective_name }}</option>
             {% for alias in aliases %}
             {% if alias.name != pin.effective_name %}
             <option value="alias:{{ alias.id }}">{{ alias.name }}</option>
             {% endif %}
             {% endfor %}
-            <option value="custom">Other - type a new name&hellip;</option>
           </select>
-        </div>
-        <div class="form-row" id="pin-share-custom-name-row" hidden>
-          <input type="text" id="pin-share-custom-name" name="custom_name" maxlength="255"
-                 placeholder="Name to share this pin under">
-          <p class="pin-share-section-hint">This also gets added to your own list of aliases for this pin.</p>
         </div>
       </section>
 
@@ -92,11 +95,18 @@
   {% endif %}
 </div>
 <script>
-function _pinShareNameChanged(select) {
-    var row = document.getElementById('pin-share-custom-name-row');
+// Name section: a free-text field by default; checking "Share your pin's name"
+// swaps it for a dropdown of the pin's current name and aliases. The hidden
+// control is disabled/cleared so only the visible one is ever submitted.
+function _pinShareNameModeChanged(checkbox) {
+    var customRow = document.getElementById('pin-share-custom-name-row');
+    var choiceRow = document.getElementById('pin-share-name-choice-row');
+    var select = document.getElementById('pin-share-name-choice');
     var input = document.getElementById('pin-share-custom-name');
-    var isCustom = select.value === 'custom';
-    row.hidden = !isCustom;
-    if (isCustom) { input.focus(); } else { input.value = ''; }
+    var useOwnName = checkbox.checked;
+    customRow.hidden = useOwnName;
+    choiceRow.hidden = !useOwnName;
+    select.disabled = !useOwnName;
+    if (useOwnName) { input.value = ''; } else { select.value = ''; input.focus(); }
 }
 </script>

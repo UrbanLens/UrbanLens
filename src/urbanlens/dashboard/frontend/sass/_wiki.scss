@@ -63,9 +63,9 @@
     }
 
     .wiki-notice {
-        position: fixed;
-        top: 6rem;
-        right: calc(5vw + 2rem);
+        position: absolute;
+        top: 2rem;
+        right: calc(5vw + 1.5rem);
         display: flex;
         align-items: flex-start;
         gap: .5rem;
@@ -76,13 +76,15 @@
         font-size: .83rem;
         max-width: 320px;
         line-height: 1.45;
-        z-index: 99;
+        z-index: 999;
         transition: top .3s ease, right .3s ease;
+        box-shadow: 0px 5px 20px rgba(0,0,0,0.5);
 
         // Once the header has scrolled out of view, the notice would otherwise
         // float in the middle of the page since it's position: fixed - tuck it
         // into the top-right corner instead.
         &.wiki-notice--pinned {
+            position: fixed;
             top: 0.2rem;
             right: 0.5rem;
         }

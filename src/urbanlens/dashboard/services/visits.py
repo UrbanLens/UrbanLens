@@ -553,8 +553,12 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
     pins = Pin.objects.filter(profile=profile).root_pins().select_related("location")
     created_visits: list[PinVisit] = []
 
+    already_visited_today = set(
+        PinVisit.objects.filter(pin__in=pins, visited_at__date=timestamp.date()).values_list("pin_id", flat=True),
+    )
+
     for pin in pins:
-        if pin.visit_history.filter(visited_at__date=timestamp.date()).exists():
+        if pin.pk in already_visited_today:
             continue
 
         polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)

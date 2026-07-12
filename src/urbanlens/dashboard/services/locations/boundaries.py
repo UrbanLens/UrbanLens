@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
@@ -103,6 +104,13 @@ class BoundaryProviderChain:
                 continue
             try:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
+            except SoftTimeLimitExceeded:
+                # The task is being asked to wind down (Celery soft time limit) -
+                # this is not a per-provider failure, so it must not be swallowed
+                # like one: continuing to the next provider would just burn the
+                # remaining time budget and risk the hard time limit SIGKILLing
+                # the worker mid-write. Let it propagate so the task exits cleanly.
+                raise
             except Exception:
                 # TODO: Catch specific exception
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))

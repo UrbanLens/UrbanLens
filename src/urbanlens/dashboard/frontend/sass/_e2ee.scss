@@ -1,0 +1,202 @@
+// End-to-end encryption UI: recovery-key overlay, settings card, locked
+// banner, and the decrypt-in-place states shared by the messages page.
+
+.e2ee-recovery-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, .72);
+}
+
+.e2ee-recovery-dialog {
+    width: 100%;
+    max-width: 460px;
+    background: var(--surface, #fff);
+    color: var(--text, #1f2937);
+    border-radius: 16px;
+    padding: 1.75rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+
+    h2 {
+        margin: 0 0 .75rem;
+        font-size: 1.25rem;
+        font-weight: 800;
+    }
+
+    p {
+        margin: 0 0 1rem;
+        font-size: .9rem;
+        line-height: 1.55;
+        color: var(--text-muted, #6b7280);
+    }
+}
+
+.e2ee-recovery-key {
+    display: block;
+    padding: .85rem 1rem;
+    margin-bottom: 1rem;
+    background: var(--surface-alt, #f3f4f6);
+    border: 1px dashed var(--border, #d1d5db);
+    border-radius: 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 1rem;
+    letter-spacing: .06em;
+    word-break: break-all;
+    text-align: center;
+}
+
+.e2ee-recovery-actions {
+    display: flex;
+    gap: .6rem;
+    margin-bottom: 1.25rem;
+
+    button {
+        flex: 1;
+        padding: .6rem;
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 9px;
+        background: var(--surface, #fff);
+        color: var(--text, #1f2937);
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--surface-alt, #f3f4f6);
+        }
+    }
+}
+
+.e2ee-recovery-done {
+    width: 100%;
+    padding: .8rem;
+    border: none;
+    border-radius: 10px;
+    background: #4f46e5;
+    color: #fff;
+    font-weight: 700;
+    font-size: .95rem;
+    cursor: pointer;
+
+    &:hover {
+        background: #4338ca;
+    }
+}
+
+.e2ee-recovery-later {
+    width: 100%;
+    margin-top: .6rem;
+    padding: .4rem;
+    border: none;
+    background: none;
+    color: var(--text-muted, #9ca3af);
+    font-size: .82rem;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+// -- Settings encryption card --------------------------------------------------
+
+.settings-e2ee-card {
+    margin-top: 1.25rem;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 12px;
+    background: var(--surface-alt, #f9fafb);
+}
+
+.settings-e2ee-title {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0 0 .5rem;
+    font-size: 1rem;
+    font-weight: 700;
+
+    i {
+        font-size: 1.15rem;
+        color: #4f46e5;
+    }
+}
+
+.settings-e2ee-status {
+    margin: .6rem 0 .85rem;
+    font-size: .88rem;
+    line-height: 1.5;
+    color: var(--text-muted, #6b7280);
+}
+
+.settings-e2ee-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+
+    button[hidden] {
+        display: none;
+    }
+}
+
+// -- Locked banner on the messages page ----------------------------------------
+
+.dm-locked-banner {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .7rem 1rem;
+    margin: .5rem;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: .85rem;
+
+    &[hidden] {
+        display: none;
+    }
+
+    button {
+        margin-left: auto;
+        padding: .4rem .8rem;
+        border: none;
+        border-radius: 8px;
+        background: #d97706;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #b45309;
+        }
+    }
+}
+
+// -- Encrypted bubble states ---------------------------------------------------
+
+.dm-bubble__body.e2ee-pending {
+    font-style: italic;
+    opacity: .6;
+}
+
+.dm-bubble__body.e2ee-failed {
+    font-style: italic;
+    color: #b91c1c;
+}
+
+.dm-lock-icon {
+    font-size: .8rem;
+    vertical-align: middle;
+    opacity: .6;
+    margin-left: .25rem;
+}
+
+.dm-e2ee-hint {
+    font-size: .75rem;
+    color: var(--text-muted, #9ca3af);
+    margin: .35rem 0 0;
+}

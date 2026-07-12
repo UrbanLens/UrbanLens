@@ -524,19 +524,32 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
         is_sender = message.sender_id == profile.pk
         partner = message.recipient if is_sender else message.sender
         tombstone = message.tombstone_text_for(profile.pk)
-        rows.append(
-            {
-                "id": message.pk,
-                "direction": "sent" if is_sender else "received",
-                "partner_display_name": _identity(partner)["display_name"],
-                "body": tombstone or message.body,
-                "is_tombstoned": bool(tombstone),
-                "image_count": message.images.count() if not tombstone else 0,
-                "has_map": bool(message.markup_map_id) and not tombstone,
-                "created": str(message.created),
-                "read": message.read_at is not None,
-            },
-        )
+        row: dict[str, Any] = {
+            "id": message.pk,
+            "direction": "sent" if is_sender else "received",
+            "partner_display_name": _identity(partner)["display_name"],
+            "is_tombstoned": bool(tombstone),
+            "image_count": message.images.count() if not tombstone else 0,
+            "has_map": bool(message.markup_map_id) and not tombstone,
+            "created": str(message.created),
+            "read": message.read_at is not None,
+        }
+        if tombstone:
+            row["body"] = tombstone
+        elif message.is_encrypted:
+            # End-to-end encrypted: the server has no plaintext. Export the raw
+            # ciphertext (only the user's own key can read it) plus a note, and
+            # offer an in-browser "download decrypted transcript" on the
+            # messages page for a readable copy.
+            row["body"] = None
+            row["encrypted"] = True
+            row["ciphertext"] = message.ciphertext
+            row["nonce"] = message.nonce
+            row["key_version"] = message.key_version
+            row["note"] = "End-to-end encrypted. Decrypt with your account's message key (see the messages page)."
+        else:
+            row["body"] = message.body
+        rows.append(row)
 
     with open(os.path.join(temp_dir, "direct_messages.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)

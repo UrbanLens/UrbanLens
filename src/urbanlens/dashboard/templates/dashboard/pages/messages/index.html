@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block title %}Messages{% endblock %}
 
@@ -58,11 +59,76 @@
 
 <div id="dm-share-dialog-host"></div>
 
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script>
 (function () {
     var page = document.getElementById('dm-page');
     if (!page) return;
     var mySlug = page.dataset.mySlug;
+
+    // -- End-to-end encryption ---------------------------------------------------
+    var E2EE = window.UrbanLensE2EE || null;
+    if (E2EE) {
+        E2EE.init({
+            selfSlug: mySlug,
+            urls: {
+                loginParams: "{% url 'e2ee.login_params' %}",
+                enroll: "{% url 'e2ee.enroll' %}",
+                keys: "{% url 'e2ee.keys' %}",
+                rewrap: "{% url 'e2ee.rewrap' %}",
+                reset: "{% url 'e2ee.reset' %}",
+                partnerKeyBase: "{% url 'e2ee.keys' %}",
+                conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+                login: "{% url 'login' %}",
+                faqUrl: "{% url 'faq' %}#faq-e2ee",
+            },
+        });
+    }
+
+    // True when the open thread's partner has published encryption keys.
+    function partnerEncrypts() {
+        var thread = activeThread();
+        return !!(thread && thread.dataset.partnerEncrypts === '1');
+    }
+
+    // Decrypt every pending encrypted element in the open thread, and reflect
+    // this device's lock state in the banner + composer.
+    function refreshEncryption() {
+        if (!E2EE) return;
+        var thread = activeThread();
+        if (!thread) return;
+        var partner = thread.dataset.partnerSlug;
+        E2EE.decryptDom(thread, partner).catch(function (err) { console.error('E2EE decrypt pass failed', err); });
+        if (partnerEncrypts()) {
+            E2EE.getUnlockState().then(function (state) {
+                var locked = state === 'locked';
+                var banner = document.getElementById('dm-locked-banner');
+                if (banner) banner.hidden = !locked;
+                var input = document.getElementById('dm-composer-input');
+                var send = document.querySelector('#dm-composer .dm-composer__send');
+                if (input) {
+                    input.disabled = locked;
+                    input.placeholder = locked ? 'Unlock this device to send encrypted messages' : input.placeholder;
+                }
+                if (send) send.disabled = locked;
+            });
+        }
+    }
+
+    // Encrypt an outgoing body when the partner is enrolled; otherwise fall back
+    // to plaintext. Returns the frame fields to merge into the send payload.
+    function buildOutgoingPayload(partner, body) {
+        if (!E2EE || !body || !partnerEncrypts()) {
+            return Promise.resolve({ body: body });
+        }
+        return E2EE.encryptForPartner(partner, body).then(function (enc) {
+            if (!enc) return { body: body };
+            return { body: '', ciphertext: enc.ciphertext, nonce: enc.nonce, key_version: enc.key_version };
+        }).catch(function (err) {
+            console.error('E2EE encrypt failed; sending plaintext', err);
+            return { body: body };
+        });
+    }
 
     function activeThread() { return document.getElementById('dm-thread'); }
     window.dmActiveSlug = function () {
@@ -229,12 +295,31 @@
             var quoteSnippet = document.createElement('span');
             quoteSnippet.className = 'dm-quote-box__snippet';
             quoteSnippet.textContent = msg.reply_to.preview;
+            if (msg.reply_to.ciphertext) {
+                quoteSnippet.dataset.e2eeCt = msg.reply_to.ciphertext;
+                quoteSnippet.dataset.e2eeNonce = msg.reply_to.nonce;
+                quoteSnippet.dataset.e2eeKv = msg.reply_to.key_version;
+                quoteSnippet.dataset.e2eeTruncate = '80';
+            }
             quote.appendChild(quoteAuthor);
             quote.appendChild(quoteSnippet);
             li.appendChild(quote);
         }
 
-        if (msg.body) {
+        if (msg.ciphertext) {
+            var encBody = document.createElement('span');
+            encBody.className = 'dm-bubble__body e2ee-pending';
+            encBody.textContent = '🔒 Decrypting…';
+            encBody.dataset.e2eeCt = msg.ciphertext;
+            encBody.dataset.e2eeNonce = msg.nonce;
+            encBody.dataset.e2eeKv = msg.key_version;
+            li.appendChild(encBody);
+            var lockIcon = document.createElement('i');
+            lockIcon.className = 'material-symbols-outlined dm-lock-icon';
+            lockIcon.title = 'End-to-end encrypted';
+            lockIcon.textContent = 'lock';
+            li.appendChild(lockIcon);
+        } else if (msg.body) {
             var body = document.createElement('span');
             body.className = 'dm-bubble__body';
             body.textContent = msg.body;
@@ -273,6 +358,9 @@
         updateReactionBar(msg.id, []);
 
         list.appendChild(li);
+        if (msg.ciphertext && E2EE) {
+            E2EE.decryptDom(li, window.dmActiveSlug()).catch(function (err) { console.error('E2EE decrypt failed', err); });
+        }
         scrollMessages();
 
         // A live map attachment needs the server-rendered viewer partial (the
@@ -433,42 +521,63 @@
         var replyToField = document.getElementById('dm-reply-to-id');
         var replyToId = replyToField && replyToField.value ? parseInt(replyToField.value, 10) : null;
         if (!body && !imageIds.length && !mapUuid) return;
+        var partner = window.dmActiveSlug();
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ recipient: window.dmActiveSlug(), body: body, image_ids: imageIds, markup_map_uuid: mapUuid, reply_to: replyToId }));
+        // Encryption (if any) happens before the frame leaves the browser. The
+        // body text is only encrypted; attachments stay server-visible in v1.
+        buildOutgoingPayload(partner, body).then(function (content) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    recipient: partner,
+                    body: content.body || '',
+                    ciphertext: content.ciphertext || '',
+                    nonce: content.nonce || '',
+                    key_version: content.key_version || 0,
+                    image_ids: imageIds,
+                    markup_map_uuid: mapUuid,
+                    reply_to: replyToId,
+                }));
+                input.value = '';
+                input.focus();
+                resetAttachments();
+                cancelReply();
+                return;
+            }
+
+            // Socket down: plain POST, then swap in the refreshed thread the
+            // server returns. On failure the input is restored so nothing is lost.
+            var formData = new FormData(form);
+            formData.set('body', content.body || '');
+            if (content.ciphertext) {
+                formData.set('ciphertext', content.ciphertext);
+                formData.set('nonce', content.nonce);
+                formData.set('key_version', String(content.key_version));
+            }
+            imageIds.forEach(function (id) { formData.append('image_ids', id); });
             input.value = '';
-            input.focus();
-            resetAttachments();
-            cancelReply();
-            return;
-        }
-
-        // Socket down: plain POST, then swap in the refreshed thread the server
-        // returns. On failure the input is restored so the message isn't lost.
-        var formData = new FormData(form);
-        imageIds.forEach(function (id) { formData.append('image_ids', id); });
-        input.value = '';
-        fetch(form.action, { method: 'POST', body: formData })
-            .then(function (resp) {
-                if (resp.ok) {
-                    return resp.text().then(function (html) {
-                        var pane = document.getElementById('dm-thread-pane');
-                        pane.innerHTML = html;
-                        htmx.process(pane);
-                        resetAttachments();
-                        cancelReply();
-                        scrollMessages();
-                        refreshList();
+            fetch(form.action, { method: 'POST', body: formData })
+                .then(function (resp) {
+                    if (resp.ok) {
+                        return resp.text().then(function (html) {
+                            var pane = document.getElementById('dm-thread-pane');
+                            pane.innerHTML = html;
+                            htmx.process(pane);
+                            resetAttachments();
+                            cancelReply();
+                            scrollMessages();
+                            refreshList();
+                            refreshEncryption();
+                        });
+                    }
+                    return resp.text().then(function (text) {
+                        throw new Error(text || 'Message failed to send.');
                     });
-                }
-                return resp.text().then(function (text) {
-                    throw new Error(text || 'Message failed to send.');
+                })
+                .catch(function (err) {
+                    input.value = body;
+                    toast('error', err.message || 'Message failed to send. Please try again.');
                 });
-            })
-            .catch(function (err) {
-                input.value = body;
-                toast('error', err.message || 'Message failed to send. Please try again.');
-            });
+        });
     });
 
     // -- Attach photo ------------------------------------------------------------
@@ -730,16 +839,80 @@
     // Keep the thread scrolled to the newest message after HTMX pane swaps,
     // and show the thread pane on mobile when a conversation is opened.
     document.body.addEventListener('htmx:afterSwap', function (ev) {
-        if (ev.detail.target && ev.detail.target.id === 'dm-thread-pane') {
+        if (!ev.detail.target) return;
+        if (ev.detail.target.id === 'dm-thread-pane') {
             page.classList.add('dm-page--thread-open');
             resetAttachments();
             cancelReply();
             scrollMessages();
             sendOpenThread();
+            refreshEncryption();
             var input = document.getElementById('dm-composer-input');
             if (input) input.focus();
+        } else if (ev.detail.target.id === 'dm-conversation-list' || ev.detail.target.closest && ev.detail.target.closest('#dm-conversation-list')) {
+            decryptSidebarPreviews();
         }
     });
+
+    // Sidebar last-message previews for encrypted conversations decrypt in place.
+    function decryptSidebarPreviews() {
+        if (!E2EE) return;
+        document.querySelectorAll('#dm-conversation-list [data-e2ee-preview]').forEach(function (node) {
+            var partner = node.dataset.partner;
+            var ct = node.dataset.ct, nonce = node.dataset.nonce, kv = parseInt(node.dataset.kv || '0', 10);
+            if (!partner || !ct || !nonce || !kv) return;
+            var prefix = node.textContent.indexOf('You: ') === 0 ? 'You: ' : '';
+            node.removeAttribute('data-e2ee-preview');
+            E2EE.decryptFromPartner(partner, ct, nonce, kv).then(function (plaintext) {
+                if (plaintext !== null) {
+                    node.textContent = prefix + (plaintext.length > 70 ? plaintext.slice(0, 69) + '…' : plaintext);
+                }
+            }).catch(function () { /* leave the lock placeholder */ });
+        });
+    }
+
+    // Download a plaintext transcript of the open thread. The bubbles are
+    // already decrypted in the DOM, so this is purely client-side - the only
+    // place a readable copy of an encrypted conversation ever exists.
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#dm-download-transcript')) return;
+        var thread = activeThread();
+        if (!thread) return;
+        var partner = thread.dataset.partnerSlug;
+        var lines = [];
+        thread.querySelectorAll('.dm-bubble').forEach(function (bubble) {
+            var who = bubble.classList.contains('dm-bubble--own') ? 'You' : partner;
+            var bodyEl = bubble.querySelector('.dm-bubble__body');
+            var timeEl = bubble.querySelector('.dm-bubble__time');
+            var text = bodyEl ? bodyEl.textContent.trim() : (bubble.querySelector('.dm-bubble__tombstone') ? '[' + bubble.querySelector('.dm-bubble__tombstone').textContent.trim() + ']' : '');
+            var time = timeEl ? timeEl.textContent.trim() : '';
+            if (text) lines.push((time ? '[' + time + '] ' : '') + who + ': ' + text);
+        });
+        var blob = new Blob(['Conversation with ' + partner + '\n\n' + lines.join('\n') + '\n'], { type: 'text/plain' });
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'urbanlens-conversation-' + partner + '.txt';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+
+    // Unlock button on the locked banner: prompt for the recovery key.
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#dm-locked-unlock-btn') || !E2EE) return;
+        var key = window.prompt('Enter your recovery key to unlock this device:');
+        if (!key) return;
+        E2EE.unlockWithRecovery(key).then(function (ok) {
+            if (ok) {
+                refreshEncryption();
+                toast('success', 'This device is unlocked.');
+            } else {
+                toast('error', 'That recovery key did not match.');
+            }
+        });
+    });
+
+    refreshEncryption();
+    decryptSidebarPreviews();
     scrollMessages();
 }());
 </script>

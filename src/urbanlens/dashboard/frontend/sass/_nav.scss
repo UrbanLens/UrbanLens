@@ -793,7 +793,7 @@ nav .brand-logo img {
 
 // -- Notification preferences (settings page section) -----------------------
 
-$notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
+$notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
 
 .notif-prefs {
     margin-top: 2rem;
@@ -829,7 +829,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         border-radius: $radius-md;
         overflow: hidden;
         font-size: .84rem;
-        max-width: 40rem;
+        max-width: 49rem;
         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }
 

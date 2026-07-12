@@ -508,9 +508,10 @@
             <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
             <button type="button" class="btn btn--danger pin-edit-delete-btn"
-                    hx-delete="{% url 'pin.delete' pin.slug %}"
-                    hx-confirm="Permanently delete this pin? This cannot be undone."
-                    hx-target="body"
+                    onclick="window.deletePinCascade('{{ pin.uuid }}', '{{ pin.effective_name|escapejs }}', '{{ csrf_token }}').then(function (result) {
+                        if (result === true) { window.location = '{% url 'map.view' %}'; }
+                        else if (result === null) { toastr.error('Failed to delete pin'); }
+                    })"
                     style="margin-left:auto">
                 <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">delete</i>
                 Delete Pin

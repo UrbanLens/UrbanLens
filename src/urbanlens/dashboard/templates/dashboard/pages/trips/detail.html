@@ -182,16 +182,15 @@
         </div>
 
         <div class="form-row">
-            <label>Location <small>(optional - search existing or enter an address)</small></label>
+            <label>Location <small>(optional - search your pins, or enter an address, coordinates, or Plus Code)</small></label>
             <div class="activity-location-search-wrap">
-                <input type="text" id="activity-location-search"
-                       placeholder="Search by name or address..." autocomplete="off">
+                {# Shared "jump to" search component - same suggestions engine as the main map. #}
+                {% map_search_bar "activity-loc" placeholder="Search pins, addresses, coordinates..." show_history=False extra_class="addr-search-bar--inline" %}
                 <input type="hidden" name="location_uuid" id="activity-location-uuid">
                 <input type="hidden" name="pin_uuid" id="activity-pin-uuid">
                 <input type="hidden" name="geocoded_lat" id="activity-geocoded-lat">
                 <input type="hidden" name="geocoded_lng" id="activity-geocoded-lng">
                 <input type="hidden" name="geocoded_name" id="activity-geocoded-name">
-                <div id="activity-location-suggestions" class="location-suggestions" hidden></div>
                 <span id="activity-location-display" class="activity-location-display"></span>
             </div>
         </div>
@@ -292,14 +291,13 @@
         <div class="form-row">
             <label>Location <small>(optional)</small></label>
             <div class="activity-location-search-wrap">
-                <input type="text" id="edit-activity-location-search"
-                       placeholder="Search by name or address..." autocomplete="off">
+                {# Shared "jump to" search component - same suggestions engine as the main map. #}
+                {% map_search_bar "edit-activity-loc" placeholder="Search pins, addresses, coordinates..." show_history=False extra_class="addr-search-bar--inline" %}
                 <input type="hidden" name="location_uuid" id="edit-activity-location-uuid">
                 <input type="hidden" name="pin_uuid" id="edit-activity-pin-uuid">
                 <input type="hidden" name="geocoded_lat" id="edit-activity-geocoded-lat">
                 <input type="hidden" name="geocoded_lng" id="edit-activity-geocoded-lng">
                 <input type="hidden" name="geocoded_name" id="edit-activity-geocoded-name">
-                <div id="edit-activity-location-suggestions" class="location-suggestions" hidden></div>
                 <span id="edit-activity-location-display" class="activity-location-display"></span>
             </div>
             <button type="button" class="btn btn--ghost"
@@ -900,114 +898,47 @@ window.tripToggleShowCompleted = function () {
 }());
 
 // -- Location search (shared between add + edit dialogs) ------------------
+// Uses the shared LocationSearchEngine, so the suggestions (your pins,
+// addresses, Google Places, plain/DMS coordinates, Plus Codes) behave exactly
+// like the main map's "jump to" bar.
 (function () {
-    function _initLocationSearch(cfg) {
-        var searchInput = document.getElementById(cfg.searchId);
-        var uuidInput   = document.getElementById(cfg.uuidId);
-        var suggestions = document.getElementById(cfg.suggestionsId);
-        var display     = document.getElementById(cfg.displayId);
-        var latInput    = document.getElementById(cfg.latId);
-        var lngInput    = document.getElementById(cfg.lngId);
-        var nameInput   = document.getElementById(cfg.nameId);
-        var pinInput    = cfg.pinId ? document.getElementById(cfg.pinId) : null;
-
-        if (!searchInput) return;
-
-        var debounce;
-        searchInput.addEventListener('input', function () {
-            clearTimeout(debounce);
-            var q = this.value.trim();
-            if (q.length < 2) {
-                suggestions.innerHTML = '';
-                suggestions.hidden = true;
-                return;
-            }
-            debounce = setTimeout(function () {
-                fetch('{% url "trips.location_search" %}?q=' + encodeURIComponent(q), {
-                    headers: {'X-Requested-With': 'XMLHttpRequest'}
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    suggestions.innerHTML = '';
-                    var results = data.results || [];
-
-                    if (!results.length) {
-                        var empty = document.createElement('li');
-                        empty.className = 'location-suggestion-item location-suggestion-empty';
-                        empty.textContent = 'No locations found';
-                        suggestions.appendChild(empty);
-                        suggestions.hidden = false;
-                        return;
-                    }
-
-                    var labels = {coordinates: 'Coordinates', pin: 'Your pins', db: 'Shared locations', geocoded: 'Addresses and cities'};
-                    var shownHeaders = {};
-
-                    results.forEach(function (loc) {
-                        var displayName = loc.display_name || loc.name;
-                        if (!shownHeaders[loc.type]) {
-                            var header = document.createElement('li');
-                            header.className = 'location-suggestion-header';
-                            header.textContent = labels[loc.type] || 'Results';
-                            suggestions.appendChild(header);
-                            shownHeaders[loc.type] = true;
-                        }
-
-                        var li = document.createElement('li');
-                        li.className = 'location-suggestion-item' +
-                            ((loc.type === 'geocoded' || loc.type === 'coordinates') ? ' location-suggestion-geocoded' : '');
-
-                        if (loc.type === 'geocoded' || loc.type === 'coordinates') {
-                            li.textContent = displayName;
-                        } else {
-                            li.textContent = displayName +
-                                (loc.locality ? ', ' + loc.locality : '') +
-                                (loc.administrative_area_level_1 ? ', ' + loc.administrative_area_level_1 : '');
-                        }
-
-                        li.addEventListener('click', function () {
-                            if (pinInput) pinInput.value = '';
-                            if (loc.type === 'geocoded' || loc.type === 'coordinates') {
-                                uuidInput.value = '';
-                                if (latInput)  latInput.value  = loc.lat;
-                                if (lngInput)  lngInput.value  = loc.lng;
-                                if (nameInput) nameInput.value = displayName;
-                            } else if (loc.type === 'pin') {
-                                uuidInput.value = '';
-                                if (pinInput) pinInput.value = loc.uuid;
-                                if (latInput)  latInput.value  = '';
-                                if (lngInput)  lngInput.value  = '';
-                                if (nameInput) nameInput.value = '';
-                            } else {
-                                uuidInput.value = loc.uuid;
-                                if (latInput)  latInput.value  = '';
-                                if (lngInput)  lngInput.value  = '';
-                                if (nameInput) nameInput.value = '';
-                            }
-                            display.textContent = displayName;
-                            searchInput.value = '';
-                            suggestions.innerHTML = '';
-                            suggestions.hidden = true;
-                        });
-                        suggestions.appendChild(li);
-                    });
-                    suggestions.hidden = false;
-                });
-            }, 300);
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-                suggestions.innerHTML = '';
-                suggestions.hidden = true;
-            }
+    function _initLocationSearch(prefix, cfg) {
+        function _set(id, value) {
+            var el = document.getElementById(id);
+            if (el) el.value = value;
+        }
+        window.LocationSearchEngine.attach(prefix, {
+            sources: {
+                localPins: { url: '{% url "map.autocomplete.local" %}' },
+                osmNominatim: true,
+                googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
+            },
+            resolvePlaceUrl: '{% url "map.resolve_place" %}',
+            enableMyLocation: false,
+            defaultZoom: 16,
+            onSelect: function (result) {
+                _set(cfg.uuidId, '');
+                _set(cfg.pinId, '');
+                if (result.type === 'pin' && result.pinSlug) {
+                    _set(cfg.pinId, result.pinSlug);
+                    _set(cfg.latId, '');
+                    _set(cfg.lngId, '');
+                    _set(cfg.nameId, '');
+                } else {
+                    // Addresses, coordinates, Plus Codes, places, wikis: submit
+                    // as a geocoded point so it becomes the activity's location.
+                    _set(cfg.latId, result.lat);
+                    _set(cfg.lngId, result.lng);
+                    _set(cfg.nameId, result.title || '');
+                }
+                var display = document.getElementById(cfg.displayId);
+                if (display) display.textContent = result.title || (result.lat.toFixed(5) + ', ' + result.lng.toFixed(5));
+            },
         });
     }
 
-    _initLocationSearch({
-        searchId: 'activity-location-search',
+    _initLocationSearch('activity-loc', {
         uuidId:   'activity-location-uuid',
-        suggestionsId: 'activity-location-suggestions',
         displayId: 'activity-location-display',
         latId:    'activity-geocoded-lat',
         lngId:    'activity-geocoded-lng',
@@ -1015,10 +946,8 @@ window.tripToggleShowCompleted = function () {
         pinId:    'activity-pin-uuid',
     });
 
-    _initLocationSearch({
-        searchId: 'edit-activity-location-search',
+    _initLocationSearch('edit-activity-loc', {
         uuidId:   'edit-activity-location-uuid',
-        suggestionsId: 'edit-activity-location-suggestions',
         displayId: 'edit-activity-location-display',
         latId:    'edit-activity-geocoded-lat',
         lngId:    'edit-activity-geocoded-lng',
@@ -1414,11 +1343,12 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-end-date').value     = li.dataset.actEndDate || '';
     document.getElementById('edit-activity-end-time').value     = li.dataset.actEndTime || '';
     document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
+    document.getElementById('edit-activity-pin-uuid').value      = '';
     document.getElementById('edit-activity-geocoded-lat').value  = '';
     document.getElementById('edit-activity-geocoded-lng').value  = '';
     document.getElementById('edit-activity-geocoded-name').value = '';
     document.getElementById('edit-activity-location-display').textContent = li.dataset.actLocationName || '';
-    document.getElementById('edit-activity-location-search').value = '';
+    document.getElementById('edit-activity-loc-search-input').value = '';
 
     var childTripUuid = li.dataset.actChildTripUuid || '';
     var childTripName = li.dataset.actChildTripName || '';
@@ -1448,10 +1378,12 @@ function tripOpenEditDialog(li) {
 
 function _clearEditLocation() {
     document.getElementById('edit-activity-location-uuid').value  = '';
+    document.getElementById('edit-activity-pin-uuid').value       = '';
     document.getElementById('edit-activity-geocoded-lat').value   = '';
     document.getElementById('edit-activity-geocoded-lng').value   = '';
     document.getElementById('edit-activity-geocoded-name').value  = '';
     document.getElementById('edit-activity-location-display').textContent = '';
+    document.getElementById('edit-activity-loc-search-input').value = '';
 }
 
 // -- Child trip search ----------------------------------------------------

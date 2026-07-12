@@ -779,7 +779,6 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         location = Location.objects.by_cid(cid).first() if cid else None
 
                         pin_defaults: dict[str, Any] = {
-                            "profile": user_profile,
                             "name": pin_name,
                             "description": description,
                         }
@@ -882,11 +881,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if children:
                     yield from GoogleMapsGateway._iter_kml_placemarks(children)
 
+    # fastkml matches elements by exact namespace URI, so an `https://` KML/GX/Atom
+    # namespace (seen from some third-party exporters, e.g. multiplottr.com) fails to
+    # match its `http://`-only schema and silently yields zero features - no exception,
+    # just an empty pin list. Normalize to `http://` before parsing.
+    _KML_NAMESPACE_RE = re.compile(rb"https://((?:www\.)?(?:opengis\.net|google\.com/kml|w3\.org)/)")
+
     def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
         try:
             # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`
             # declaration (which every Google Takeout KML/KMZ has), so the raw
             # bytes must be passed through undecoded and let lxml sniff the encoding.
+            file_contents = self._KML_NAMESPACE_RE.sub(rb"http://\1", file_contents)
             k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
 
             pins: list[dict[str, Any]] = []

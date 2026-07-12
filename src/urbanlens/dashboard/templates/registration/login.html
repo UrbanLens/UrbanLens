@@ -18,7 +18,7 @@
 </div>
 {% endif %}
 
-<form method="post" class="auth-form" novalidate>
+<form method="post" class="auth-form" id="password-login-form" novalidate>
     {% csrf_token %}
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
@@ -82,4 +82,28 @@
     <a href="{% url 'password_reset' %}" style="font-size:.82rem;color:#9ca3af;font-weight:400">Forgot your password?</a>
 </div>
 
+{% endblock %}
+
+{% block auth_scripts %}
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script>
+    // End-to-end encryption login flow: derive the login credential (and the
+    // message-key unwrapping key) from the password in the browser, so the
+    // raw password never reaches the server for enrolled accounts.
+    UrbanLensE2EE.init({
+        selfSlug: null,
+        urls: {
+            loginParams: "{% url 'e2ee.login_params' %}",
+            enroll: "{% url 'e2ee.enroll' %}",
+            keys: "{% url 'e2ee.keys' %}",
+            rewrap: "{% url 'e2ee.rewrap' %}",
+            reset: "{% url 'e2ee.reset' %}",
+            partnerKeyBase: "{% url 'e2ee.keys' %}",
+            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            login: "{% url 'login' %}",
+            faqUrl: "{% url 'faq' %}#faq-e2ee",
+        },
+    });
+    UrbanLensE2EE.wireLoginForm(document.getElementById("password-login-form"));
+</script>
 {% endblock %}

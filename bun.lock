@@ -8,6 +8,7 @@
         "bun": "^1.0.15",
         "dotenv": "^17.4.2",
         "dotenv-expand": "^13.0.0",
+        "libsodium-wrappers-sumo": "^0.8.4",
         "sass": "^1.101.0",
         "sass-loader": "^17.0.0",
         "semver": "^7.3.5",
@@ -17,6 +18,7 @@
       "devDependencies": {
         "@types/leaflet": "^1.9.21",
         "@types/leaflet-draw": "^1.0.13",
+        "@types/libsodium-wrappers-sumo": "^0.8.2",
         "@types/sortablejs": "^1.15.9",
         "bun-types": "latest",
         "sortablejs": "^1.15.7",
@@ -77,6 +79,8 @@
 
     "@types/leaflet-draw": ["@types/leaflet-draw@1.0.13", "", { "dependencies": { "@types/leaflet": "^1.9" } }, "sha512-YU82kilOaU+wPNbqKCCDfHH3hqepN6XilrBwG/mSeZ/z4ewumaRCOah44s3FMxSu/Aa0SVa3PPJvhIZDUA09mw=="],
 
+    "@types/libsodium-wrappers-sumo": ["@types/libsodium-wrappers-sumo@0.8.2", "", { "dependencies": { "libsodium-wrappers-sumo": "*" } }, "sha512-uFOBpg/r21hExVlh2ty8YpDfSR+Yy3Jn8XS4+SSjitbhTxdYq+pBz/49XRxyUFe8SzqujHf/Wu0/O4d+FUtNfQ=="],
+
     "@types/node": ["@types/node@20.11.30", "", { "dependencies": { "undici-types": "~5.26.4" } }, "sha512-dHM6ZxwlmuZaRmUPfv1p+KrdD1Dci04FbdEm/9wEMouFqxYoFl5aMkt0VMAUtYRQDyYvD41WJLukhq/ha3YuTw=="],
 
     "@types/sortablejs": ["@types/sortablejs@1.15.9", "", {}, "sha512-7HP+rZGE2p886PKV9c9OJzLBI6BBJu1O7lJGYnPyG3fS4/duUCcngkNCjsLwIMV+WMqANe3tt4irrXHSIe68OQ=="],
@@ -100,6 +104,10 @@
     "is-extglob": ["is-extglob@2.1.1", "", {}, "sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ=="],
 
     "is-glob": ["is-glob@4.0.3", "", { "dependencies": { "is-extglob": "^2.1.1" } }, "sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg=="],
+
+    "libsodium-sumo": ["libsodium-sumo@0.8.4", "", {}, "sha512-TMtHShQfVVsaxDygyapvUC3o7YsPgXa/hRWeIgzyFz6w5k/1hirGptCxp1U7XwW3rCskaTTYKgV10v86UiGgNw=="],
+
+    "libsodium-wrappers-sumo": ["libsodium-wrappers-sumo@0.8.4", "", { "dependencies": { "libsodium-sumo": "^0.8.0" } }, "sha512-ql7hcgulKZ3ekfa2DGAogcCKsWU0diA/0nArz1CFzh93WQdb46/Kj18ka/Hifq6uA3Ush34Pc6vU/6HXeRwUkg=="],
 
     "lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
 

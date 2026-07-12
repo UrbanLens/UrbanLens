@@ -10,7 +10,8 @@ live messages and fall back to the plain POST endpoint when the socket is down.
      data-partner-slug="{{ partner.slug }}"
      data-send-url="{% url 'messages.send' partner.slug %}"
      data-read-url="{% url 'messages.read' partner.slug %}"
-     data-view-url="{% url 'messages.conversation' partner.slug %}">
+     data-view-url="{% url 'messages.conversation' partner.slug %}"
+     data-partner-encrypts="{% if partner_e2ee_enrolled %}1{% else %}0{% endif %}">
 
   <div class="dm-thread__header">
     <a class="dm-thread__back" href="{% url 'messages.view' %}" aria-label="Back to conversations">
@@ -37,6 +38,9 @@ live messages and fall back to the plain POST endpoint when the socket is down.
           <i class="material-symbols-outlined">person</i> View profile
         </a>
         {% endif %}
+        <button type="button" class="dm-bubble-menu__item" id="dm-download-transcript">
+          <i class="material-symbols-outlined">download</i> Download transcript
+        </button>
         <form method="post" action="{% url 'friend.mute' partner.id %}">
           {% csrf_token %}
           <button type="submit" class="dm-bubble-menu__item">
@@ -62,6 +66,12 @@ live messages and fall back to the plain POST endpoint when the socket is down.
     </div>
   </div>
 
+  <div class="dm-locked-banner" id="dm-locked-banner" hidden>
+    <i class="material-symbols-outlined" aria-hidden="true">lock</i>
+    <span>This device can't read your encrypted messages yet.</span>
+    <button type="button" id="dm-locked-unlock-btn">Unlock</button>
+  </div>
+
   <ul class="dm-messages" id="dm-messages" role="list">
     {% for message in thread_messages %}
     {% ifchanged message.created|date:"Y-m-d" %}
@@ -79,10 +89,10 @@ live messages and fall back to the plain POST endpoint when the socket is down.
       {% if message.reply_to_id %}
       <div class="dm-quote-box">
         <span class="dm-quote-box__author">{{ message.reply_to.sender.username }}</span>
-        <span class="dm-quote-box__snippet">{{ message.reply_to|message_preview:viewer_id }}</span>
+        <span class="dm-quote-box__snippet"{% if message.reply_to.is_encrypted %} data-e2ee-ct="{{ message.reply_to.ciphertext }}" data-e2ee-nonce="{{ message.reply_to.nonce }}" data-e2ee-kv="{{ message.reply_to.key_version }}" data-e2ee-truncate="80"{% endif %}>{{ message.reply_to|message_preview:viewer_id }}</span>
       </div>
       {% endif %}
-      {% if message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
+      {% if message.is_encrypted %}<span class="dm-bubble__body e2ee-pending" data-e2ee-ct="{{ message.ciphertext }}" data-e2ee-nonce="{{ message.nonce }}" data-e2ee-kv="{{ message.key_version }}">🔒 Decrypting…</span><i class="material-symbols-outlined dm-lock-icon" title="End-to-end encrypted">lock</i>{% elif message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
       {% with images=message.images.all %}
       {% if images %}
         {% if message.sender_id == viewer_id or message.images_revealed or image_permission_status == "allowed" %}

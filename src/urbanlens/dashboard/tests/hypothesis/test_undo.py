@@ -241,7 +241,7 @@ class DeleteViewsStashUndoTests(TestCase):
 
     def test_pin_delete_view_stashes_undo(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Doomed Pin")
-        self.client.delete(reverse("pin.delete", args=[pin.slug]))
+        self.client.delete(f"/dashboard/rest/pins/{pin.uuid}/")
         self.assertTrue(UndoAction.objects.filter(profile=self.profile, model_label="pin").exists())
 
     def test_trip_delete_view_stashes_undo(self) -> None:

@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block content %}
 <div class="settings-page page-content">
@@ -304,6 +305,28 @@
                     <button type="submit" class="settings-save-btn">Save</button>
                 </div>
             </form>
+
+            {# -- Encryption (E2EE key management) ------------------------------ #}
+            <div class="settings-e2ee-card" id="e2ee-card"
+                 data-enrolled="{% if e2ee_enrolled %}1{% else %}0{% endif %}"
+                 data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}">
+                <h4 class="settings-e2ee-title">
+                    <i class="material-symbols-outlined">lock</i>
+                    End-to-end encryption
+                </h4>
+                <p class="settings-help">
+                    New messages between people who both use UrbanLens are end-to-end encrypted:
+                    only you and the person you're talking to can read them, not our servers.
+                    <a href="{% url 'faq' %}#faq-e2ee" target="_blank" rel="noopener">What's a recovery key, and why do I need one?</a>
+                </p>
+                <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
+
+                <div class="settings-e2ee-actions">
+                    <button type="button" class="settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
+                    <button type="button" class="settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
+                    <button type="button" class="settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
+                </div>
+            </div>
         </div>
         </div>
     </section>
@@ -962,6 +985,87 @@
 {% block scripts %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script>
+// -- Encryption card: status, recovery key, unlock, reset ----------------------
+(function () {
+    var card = document.getElementById('e2ee-card');
+    if (!card || !window.UrbanLensE2EE) return;
+    UrbanLensE2EE.init({
+        selfSlug: "{{ self_slug }}",
+        urls: {
+            loginParams: "{% url 'e2ee.login_params' %}",
+            enroll: "{% url 'e2ee.enroll' %}",
+            keys: "{% url 'e2ee.keys' %}",
+            rewrap: "{% url 'e2ee.rewrap' %}",
+            reset: "{% url 'e2ee.reset' %}",
+            partnerKeyBase: "{% url 'e2ee.keys' %}",
+            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            login: "{% url 'login' %}",
+            faqUrl: "{% url 'faq' %}#faq-e2ee",
+        },
+    });
+
+    var status = document.getElementById('e2ee-status');
+    var viewBtn = document.getElementById('e2ee-view-recovery');
+    var unlockBtn = document.getElementById('e2ee-unlock');
+    var resetBtn = document.getElementById('e2ee-reset');
+    var hasPassword = card.dataset.hasPassword === '1';
+
+    function setStatus(text) { status.textContent = text; }
+
+    UrbanLensE2EE.getUnlockState().then(function (state) {
+        if (state === 'not-enrolled') {
+            setStatus('Encryption is not set up yet on your account. Sign in again or open Messages to finish setup.');
+            return;
+        }
+        if (state === 'unlocked') {
+            setStatus('Encryption is active and this device can read your messages.');
+            viewBtn.hidden = false;
+            resetBtn.hidden = false;
+        } else {
+            setStatus("This device can't read your encrypted messages yet. Unlock it with your recovery key.");
+            unlockBtn.hidden = false;
+            resetBtn.hidden = false;
+        }
+    });
+
+    viewBtn.addEventListener('click', function () {
+        UrbanLensE2EE.regenerateRecoveryKey().then(function (display) {
+            if (display) {
+                UrbanLensE2EE.showRecoveryDialog(display);
+            } else if (window.toastr) {
+                toastr.error('Could not generate a recovery key. This device may be locked.');
+            }
+        });
+    });
+
+    unlockBtn.addEventListener('click', function () {
+        var key = window.prompt('Enter your recovery key:');
+        if (!key) return;
+        UrbanLensE2EE.unlockWithRecovery(key).then(function (ok) {
+            if (ok) {
+                window.location.reload();
+            } else if (window.toastr) {
+                toastr.error('That recovery key did not match.');
+            }
+        });
+    });
+
+    resetBtn.addEventListener('click', function () {
+        if (window.prompt('This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.') !== 'RESET') return;
+        var password = hasPassword ? window.prompt('Confirm your account password:') : undefined;
+        if (hasPassword && !password) return;
+        UrbanLensE2EE.resetKeys(password || undefined).then(function (display) {
+            if (display) {
+                UrbanLensE2EE.showRecoveryDialog(display).then(function () { window.location.reload(); });
+            } else if (window.toastr) {
+                toastr.error('Could not reset your encryption keys.');
+            }
+        });
+    });
+}());
+</script>
 <script>
 function applyThemePreview(theme) {
     var root = document.getElementById('html-root');

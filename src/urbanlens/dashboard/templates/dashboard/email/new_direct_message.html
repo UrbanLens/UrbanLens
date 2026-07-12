@@ -24,7 +24,7 @@
         <strong>{{ sender.username }}</strong> sent you a message on UrbanLens:
       </p>
 
-      <p style="margin:0 0 24px;padding:14px 18px;background:#f9fafb;border-left:3px solid #6366f1;border-radius:6px;color:#374151;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ preview }}</p>
+      {% if preview %}<p style="margin:0 0 24px;padding:14px 18px;background:#f9fafb;border-left:3px solid #6366f1;border-radius:6px;color:#374151;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ preview }}</p>{% endif %}
 
       <div style="text-align:center;margin:28px 0">
         <a href="{{ conversation_url }}"

@@ -41,6 +41,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -532,8 +533,16 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
     try:
         source.fetch(pin)
     except (RateLimitExceededError, ServiceDisabledError) as exc:
-        logger.info("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
+        logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
+    except SoftTimeLimitExceeded:
+        # Celery's own worker log already recorded the soft time limit at
+        # WARNING with full task context; a second ERROR-level traceback here
+        # would just be noise for the same event. Suppress like any other
+        # failure and let the task end - re-raising would still hit the hard
+        # time limit before doing anything useful with the remaining budget.
+        logger.warning("Panel fetch %s for pin %s hit its soft time limit; suppressing for %ss", source_key, pin.pk, FAILURE_SKIP_TTL_SECONDS)
+        cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     except Exception:
         logger.exception("Panel fetch %s for pin %s failed", source_key, pin.pk)
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)

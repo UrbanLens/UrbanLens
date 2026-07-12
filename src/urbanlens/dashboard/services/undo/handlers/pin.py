@@ -95,9 +95,17 @@ class PinUndoHandler(UndoHandler):
 
         for entry, pin in zip(payload, restored, strict=True):
             old_parent_pk = entry["parent_pin_old_pk"]
-            if old_parent_pk and old_parent_pk in old_to_new:
-                pin.parent_pin = old_to_new[old_parent_pk]
-                pin.save(update_fields=["parent_pin"])
+            if old_parent_pk:
+                if old_parent_pk in old_to_new:
+                    pin.parent_pin = old_to_new[old_parent_pk]
+                    pin.save(update_fields=["parent_pin"])
+                else:
+                    # The parent wasn't part of this deletion (a sub pin was
+                    # deleted on its own) - reattach to it if it still exists.
+                    surviving_parent = Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).first()
+                    if surviving_parent is not None:
+                        pin.parent_pin = surviving_parent
+                        pin.save(update_fields=["parent_pin"])
             if entry["badge_ids"]:
                 pin.badges.set(entry["badge_ids"])
 

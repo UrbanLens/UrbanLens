@@ -23,7 +23,7 @@ Navbar messages dropdown - recent conversations. Context: `conversations`
         </span>
         <span class="msg-dropdown-item__text">
           <span class="msg-dropdown-item__name">{{ conv.display_name }}</span>
-          <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message.body|truncatechars:60 }}</span>
+          <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% else %}{{ conv.last_message.body|truncatechars:60 }}{% endif %}</span>
         </span>
         <span class="msg-dropdown-item__meta">
           <span class="msg-dropdown-item__time">{{ conv.last_message.created|timesince }} ago</span>

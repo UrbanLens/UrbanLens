@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block title %}Sharing{% endblock %}
 
@@ -13,7 +14,7 @@
     </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="sharing" unlogged_visits_count=unlogged_visits|length %}
+        {% memories_tabs "sharing" %}
 
         {% if share_groups %}
         <div class="memories-sharing-list">

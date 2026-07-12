@@ -9,7 +9,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
-from django.contrib.auth import REDIRECT_FIELD_NAME
+from django.contrib.auth import REDIRECT_FIELD_NAME, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -174,6 +174,7 @@ class SignupView(generic.CreateView):
 
     def form_valid(self, form: RegistrationForm) -> HttpResponse:
         user = form.save()
+        _store_signup_auth_salt(user, self.request.POST.get("e2ee_auth_salt", ""))
         invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
         verification = EmailVerification.objects.create(
             user=user,
@@ -212,6 +213,26 @@ class SignupView(generic.CreateView):
             logger.exception("Failed to send verification email to %s", user.email)
             # Store the verify URL in session for debug display
             self.request.session["debug_verify_url"] = verify_url
+
+
+def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
+    """Record a signup's client-side KDF salt, enrolling the account in derived auth.
+
+    When the signup form's JS derived the login credential in the browser, the
+    salt it used arrives as ``e2ee_auth_salt`` - storing it is what makes the
+    login page derive the same credential later. A signup without it (JS
+    unavailable) simply stays a legacy raw-password account and upgrades
+    transparently on first login.
+
+    Args:
+        user: The newly created user.
+        auth_salt: The base64 salt from the signup POST, possibly blank.
+    """
+    from urbanlens.dashboard.models.account import AccountKdf
+    from urbanlens.dashboard.services.e2ee import MAX_SALT_LENGTH, valid_blob
+
+    if valid_blob(auth_salt, MAX_SALT_LENGTH):
+        AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
 
 
 # -- Email verification views ----------------------------------------------
@@ -321,6 +342,67 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
     except (smtplib.SMTPException, OSError):
         logger.exception("Failed to send verification email to %s", user.email)
         request.session["debug_verify_url"] = verify_url
+
+
+# -- Password reset (E2EE-aware) --------------------------------------------
+
+
+class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
+    """PasswordResetConfirmView that keeps derived-auth accounts consistent.
+
+    An email-link reset never sees the old password, which has two E2EE
+    consequences this view handles:
+
+    - Derived-auth accounts (``AccountKdf`` exists) get their new credential
+      derived client-side; the fresh salt arrives as ``e2ee_auth_salt`` and
+      replaces the stored one. If the field is missing (JS failed), the
+      ``AccountKdf`` row is deleted so the account reverts to legacy
+      raw-password auth instead of being locked out by a derivation mismatch -
+      it re-upgrades transparently at the next login.
+    - Any password-wrapped private-key copy is now undecryptable (the old
+      password is gone), so it is flagged stale. The next login from a device
+      that still holds the cached key silently re-wraps it; a cold device
+      falls back to the recovery key.
+    """
+
+    def get_context_data(self, **kwargs) -> dict:
+        """Add ``e2ee_mode`` so the template's JS knows whether to derive.
+
+        Args:
+            **kwargs: Base context kwargs.
+
+        Returns:
+            The template context with ``e2ee_mode`` (``derived``/``legacy``).
+        """
+        from urbanlens.dashboard.models.account import AccountKdf
+
+        context = super().get_context_data(**kwargs)
+        user = getattr(self, "user", None)
+        context["e2ee_mode"] = "derived" if user is not None and AccountKdf.objects.filter(user=user).exists() else "legacy"
+        return context
+
+    def form_valid(self, form) -> HttpResponse:
+        """Persist the new password, then reconcile the account's E2EE state.
+
+        Args:
+            form: The valid SetPasswordForm.
+
+        Returns:
+            The parent redirect response.
+        """
+        from urbanlens.dashboard.models.account import AccountKdf
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+        from urbanlens.dashboard.services.e2ee import MAX_SALT_LENGTH, valid_blob
+
+        response = super().form_valid(form)
+        user = form.user
+        auth_salt = self.request.POST.get("e2ee_auth_salt", "")
+        if valid_blob(auth_salt, MAX_SALT_LENGTH):
+            AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
+        else:
+            AccountKdf.objects.filter(user=user).delete()
+        MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)
+        return response
 
 
 # -- Custom login view -----------------------------------------------------

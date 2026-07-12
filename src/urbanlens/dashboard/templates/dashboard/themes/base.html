@@ -641,6 +641,7 @@
         </div>
         <div class="confirm-dialog-footer">
             <button type="button" id="confirm-dialog-cancel" class="btn btn--ghost">Cancel</button>
+            <button type="button" id="confirm-dialog-alt" class="btn btn--secondary" hidden>No</button>
             <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
         </div>
     </dialog>
@@ -649,6 +650,7 @@
         var _resolve = null;
         var dlg = document.getElementById('confirm-dialog');
         var okBtn = document.getElementById('confirm-dialog-ok');
+        var altBtn = document.getElementById('confirm-dialog-alt');
 
         function _done(result) {
             if (_resolve) { var r = _resolve; _resolve = null; r(result); }
@@ -658,9 +660,12 @@
         document.getElementById('confirm-dialog-cancel').addEventListener('click', function () { _done(false); });
         document.getElementById('confirm-dialog-x').addEventListener('click', function () { _done(false); });
         okBtn.addEventListener('click', function () { _done(true); });
+        altBtn.addEventListener('click', function () { _done('alt'); });
         // Catches all close paths: backdrop click, Escape key, and direct .close() calls
         dlg.addEventListener('close', function () { _done(false); });
 
+        // Resolves with true (confirm), false (cancel/dismiss), or 'alt' when
+        // opts.altLabel was given and the user picked the alternative action.
         window.confirmDialog = function (opts) {
             if (typeof opts === 'string') opts = { message: opts };
             opts = opts || {};
@@ -669,10 +674,55 @@
                 (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
             okBtn.textContent = opts.confirmLabel || 'Confirm';
             okBtn.className = (opts.danger === false) ? 'btn btn--primary' : 'btn--danger-filled';
+            altBtn.hidden = !opts.altLabel;
+            if (opts.altLabel) altBtn.textContent = opts.altLabel;
             return new Promise(function (resolve) {
                 _resolve = resolve;
                 dlg.showModal();
             });
+        };
+
+        // -- Shared pin delete flow (map popup, pin edit dialog, pin detail page) --
+        // Confirms the delete, then lets the server veto with a 409 when the pin
+        // has sub pins so the user decides whether those are deleted too or kept.
+        // Resolves with true (deleted), false (user cancelled), or null (request failed).
+        window.deletePinCascade = async function (pinUuid, pinName, csrfToken) {
+            var confirmed = await window.confirmDialog({
+                title: 'Delete Pin',
+                message: 'Delete "' + (pinName || 'this pin') + '"?\n\nYou can restore it from Settings → Undo History.',
+                confirmLabel: 'Delete',
+            });
+            if (!confirmed) return false;
+
+            var url = '/dashboard/rest/pins/' + encodeURIComponent(pinUuid) + '/';
+            async function _send(query) {
+                return fetch(url + (query || ''), {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+            }
+
+            var response;
+            try { response = await _send(''); } catch (e) { return null; }
+
+            if (response.status === 409) {
+                var data = null;
+                try { data = await response.json(); } catch (e) { /* non-JSON 409 */ }
+                if (!data || !data.requires_children_decision) return null;
+                var n = data.children || 0;
+                var plural = n === 1 ? '' : 's';
+                var them = n === 1 ? 'it' : 'them';
+                var choice = await window.confirmDialog({
+                    title: 'Delete sub pins too?',
+                    message: 'This pin has ' + n + ' sub pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
+                    confirmLabel: 'Delete all',
+                    altLabel: 'Keep sub pin' + plural,
+                });
+                if (!choice) return false;
+                try { response = await _send(choice === 'alt' ? '?children=keep' : '?children=delete'); } catch (e) { return null; }
+            }
+
+            return response.ok ? true : null;
         };
     }());
     </script>
@@ -1413,6 +1463,34 @@
     {% include 'dashboard/partials/ui/_tooltips_script.html' %}
     {% include 'dashboard/partials/ui/_page_explainer_script.html' %}
     {% include 'dashboard/partials/layout/_notification_push.html' %}
+    {% if e2ee_needs_oauth_enroll %}
+    <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+    <script>
+        // Passwordless (OAuth) account with no message-encryption keys yet:
+        // enroll transparently in the background. The recovery key stays
+        // viewable in Settings > Direct Messages while this device holds the
+        // decrypted key, so nothing is lost if the toast goes unnoticed.
+        (function () {
+            UrbanLensE2EE.init({
+                selfSlug: null,
+                urls: {
+                    loginParams: "{% url 'e2ee.login_params' %}",
+                    enroll: "{% url 'e2ee.enroll' %}",
+                    keys: "{% url 'e2ee.keys' %}",
+                    rewrap: "{% url 'e2ee.rewrap' %}",
+                    reset: "{% url 'e2ee.reset' %}",
+                    partnerKeyBase: "{% url 'e2ee.keys' %}",
+                    conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+                    login: "{% url 'login' %}",
+                    faqUrl: "{% url 'faq' %}#faq-e2ee",
+                },
+            });
+            UrbanLensE2EE.enrollOauthIfNeeded().catch(function (error) {
+                console.error("E2EE OAuth enrollment failed", error);
+            });
+        }());
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 
 </body>

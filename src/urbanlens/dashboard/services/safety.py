@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyPreference,
 )
 from urbanlens.dashboard.services.email_normalization import normalize_email
+from urbanlens.dashboard.services.notification_delivery import send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -506,6 +507,16 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
                     "wiki_url": _absolute_url(wiki_path),
                 },
             )
+
+        message_text = f"Safety check-in posted to {wiki.name}: {checkin.profile.username} hasn't checked in from a trip there. {checkin_url}"
+        try:
+            prefs = recipient.notification_preferences
+        except AttributeError:
+            prefs = None
+        if prefs and prefs.wiki_safety_checkin_whatsapp:
+            send_whatsapp(recipient, message_text)
+        if prefs and prefs.wiki_safety_checkin_sms:
+            send_sms(recipient, message_text)
 
 
 def create_checkin(

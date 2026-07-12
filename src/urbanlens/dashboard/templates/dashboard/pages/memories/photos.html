@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
@@ -23,7 +24,7 @@
     </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="photos" %}
+        {% memories_tabs "photos" %}
 
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
                onchange="photosHandleFiles(this.files); this.value='';">

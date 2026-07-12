@@ -27,7 +27,7 @@ open conversation, or empty string).
             <span class="dm-conv-item__time">{{ conv.last_message.created|timesince }} ago</span>
           </span>
           <span class="dm-conv-item__bottom">
-            <span class="dm-conv-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message.body|truncatechars:70 }}</span>
+            <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-partner="{{ conv.partner.slug }}"{% endif %}>{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% else %}{{ conv.last_message.body|truncatechars:70 }}{% endif %}</span>
             {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
           </span>
         </span>

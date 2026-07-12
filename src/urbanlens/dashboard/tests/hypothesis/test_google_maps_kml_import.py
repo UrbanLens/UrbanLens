@@ -92,6 +92,22 @@ class TakeoutKmlToDictTests(TestCase):
 
         self.assertEqual(pins, [])
 
+    def test_https_kml_namespace_still_parses(self):
+        # Some third-party exporters (e.g. multiplottr.com) declare the KML
+        # namespace as `https://www.opengis.net/kml/2.2` instead of `http://`.
+        # fastkml matches elements by exact namespace URI, so this previously
+        # produced zero features with no exception raised - a silent failure
+        # surfaced to users as "No valid location files found in the upload."
+        data = _kml_bytes(_placemark_xml("HTTPS Namespace", 38.6244206, -90.1610675)).replace(
+            b"http://www.opengis.net/kml/2.2",
+            b"https://www.opengis.net/kml/2.2",
+        )
+
+        pins = self.gateway.takeout_kml_to_dict(data, self.profile)
+
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0]["name"], "HTTPS Namespace")
+
     @_hyp
     @given(
         name=st.text(

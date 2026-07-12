@@ -1,6 +1,7 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 {% load map_components %}
+{% load memories_components %}
 
 {% block header %}
 {% if has_memory_data %}
@@ -38,7 +39,7 @@
     {% endif %}
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" unlogged_visits_count=unlogged_visits|length %}
+        {% memories_tabs "timeline" %}
 
         {% if not has_memory_data %}
         {% if not unlogged_visits %}

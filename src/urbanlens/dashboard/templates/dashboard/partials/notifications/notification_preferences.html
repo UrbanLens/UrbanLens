@@ -20,21 +20,23 @@
                 <span class="notif-prefs__hdr">None</span>
                 <span class="notif-prefs__hdr">Notification</span>
                 <span class="notif-prefs__hdr">Email</span>
+                <span class="notif-prefs__hdr">WhatsApp</span>
+                <span class="notif-prefs__hdr">SMS</span>
             </div>
 
             {% for field, title in pref_fields %}
-            {% with current=prefs|get_attr:field %}
+            {% with current=prefs|get_attr:field wa_field=field|add:"_whatsapp" sms_field=field|add:"_sms" %}
             <div class="notif-prefs__row">
                 <span class="notif-prefs__label">{{ title }}</span>
 
                 {# None - decorative checkbox; no name, so it is never submitted.       #}
-                {# Checked when neither site nor email is active.                        #}
+                {# Checked when no channel (site, email, WhatsApp, or SMS) is active.     #}
                 <label class="notif-prefs__cell">
                     <span class="notif-prefs__sr-only">{{ title }}: none</span>
                     <input type="checkbox"
                            class="notif-none-box"
                            data-field="{{ field }}"
-                           {% if current == 'none' %}checked{% endif %}
+                           {% if current == 'none' and not prefs|get_attr:wa_field and not prefs|get_attr:sms_field %}checked{% endif %}
                            onchange="notifNone(this)">
                 </label>
 
@@ -57,6 +59,28 @@
                            class="notif-delivery-box"
                            data-field="{{ field }}"
                            {% if current == 'email' or current == 'both' %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+
+                {# WhatsApp - independent boolean toggle, not part of the site/email enum above #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: WhatsApp</span>
+                    <input type="checkbox"
+                           name="{{ wa_field }}"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if prefs|get_attr:wa_field %}checked{% endif %}
+                           onchange="notifDelivery(this)">
+                </label>
+
+                {# SMS - independent boolean toggle #}
+                <label class="notif-prefs__cell">
+                    <span class="notif-prefs__sr-only">{{ title }}: SMS</span>
+                    <input type="checkbox"
+                           name="{{ sms_field }}"
+                           class="notif-delivery-box"
+                           data-field="{{ field }}"
+                           {% if prefs|get_attr:sms_field %}checked{% endif %}
                            onchange="notifDelivery(this)">
                 </label>
             </div>

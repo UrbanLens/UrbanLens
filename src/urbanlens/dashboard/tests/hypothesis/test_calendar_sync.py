@@ -84,6 +84,54 @@ class TripToEventBodyTests(TestCase):
         with self.assertRaises(ValueError):
             trip_to_event_body(trip)
 
+    def test_end_date_derived_from_activity_scheduled_end(self):
+        """Without explicit dates, the latest activity end (not just start) sets the event's end."""
+        trip = Trip.objects.create(name="Derived")
+        TripActivity.objects.create(
+            trip=trip,
+            title="Overnight stay",
+            scheduled_at=datetime.datetime(2026, 9, 4, 18, 0, tzinfo=datetime.UTC),
+            scheduled_end=datetime.datetime(2026, 9, 6, 11, 0, tzinfo=datetime.UTC),
+        )
+        body = trip_to_event_body(trip)
+        self.assertEqual(body["start"]["date"], "2026-09-04")
+        # Exclusive all-day end: inclusive end (Sep 6) + 1 day.
+        self.assertEqual(body["end"]["date"], "2026-09-07")
+
+    def test_trip_event_uses_first_activity_location(self):
+        """The all-day trip event carries the first shareable activity location."""
+        trip = Trip.objects.create(name="Located", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        TripActivity.objects.create(
+            trip=trip,
+            title="Second stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 15, 0, tzinfo=datetime.UTC),
+            lat_override=42.1,
+            lng_override=-74.2,
+        )
+        TripActivity.objects.create(
+            trip=trip,
+            title="First stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            lat_override=41.5,
+            lng_override=-73.9,
+        )
+        body = trip_to_event_body(trip)
+        self.assertEqual(body["location"], "41.500000, -73.900000")
+
+    def test_trip_event_skips_hidden_locations(self):
+        """Secret activity locations never leak into the trip-level event."""
+        trip = Trip.objects.create(name="Secretive", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        TripActivity.objects.create(
+            trip=trip,
+            title="Secret first stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            location_hidden=True,
+            lat_override=41.5,
+            lng_override=-73.9,
+        )
+        body = trip_to_event_body(trip)
+        self.assertNotIn("location", body)
+
 
 class EventToTripKwargsTests(TestCase):
     """event_to_trip_kwargs parses Google event resources defensively."""

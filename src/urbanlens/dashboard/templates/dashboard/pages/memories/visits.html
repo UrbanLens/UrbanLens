@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the shared visit dialog's map-attach composer. #}
@@ -20,7 +21,7 @@
     </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="visits" unlogged_visits_count=unlogged_visits|length %}
+        {% memories_tabs "visits" %}
 
         {% if unlogged_visits %}
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}

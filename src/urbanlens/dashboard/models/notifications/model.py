@@ -85,21 +85,61 @@ class NotificationLog(abstract.DashboardModel):
 
 
 class NotificationPreference(abstract.DashboardModel):
-    """Per-user delivery preferences for each notification type."""
+    """Per-user delivery preferences for each notification type.
+
+    Site/email delivery is a single ``DeliveryPreference`` choice per type
+    (see below). WhatsApp and SMS are independent on/off toggles instead of
+    being folded into that enum: each is billed per message sent (unlike
+    email), so they default off, and a 4-way combined enum would need 16
+    string values to cover every combination - a plain boolean per channel
+    is simpler and keeps the existing site/email columns untouched.
+    """
 
     trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    trip_updated_whatsapp = models.BooleanField(default=False)
+    trip_updated_sms = models.BooleanField(default=False)
+
     friend_request = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_request_whatsapp = models.BooleanField(default=False)
+    friend_request_sms = models.BooleanField(default=False)
+
     message = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    message_whatsapp = models.BooleanField(default=False)
+    message_sms = models.BooleanField(default=False)
+
     comment_reply = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_reply_whatsapp = models.BooleanField(default=False)
+    comment_reply_sms = models.BooleanField(default=False)
+
     comment_liked = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_liked_whatsapp = models.BooleanField(default=False)
+    comment_liked_sms = models.BooleanField(default=False)
+
     friend_accepted = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_accepted_whatsapp = models.BooleanField(default=False)
+    friend_accepted_sms = models.BooleanField(default=False)
+
     added_to_trip = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    added_to_trip_whatsapp = models.BooleanField(default=False)
+    added_to_trip_sms = models.BooleanField(default=False)
+
     wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    wiki_updated_whatsapp = models.BooleanField(default=False)
+    wiki_updated_sms = models.BooleanField(default=False)
+
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    pin_shared_whatsapp = models.BooleanField(default=False)
+    pin_shared_sms = models.BooleanField(default=False)
+
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    visit_suggested_whatsapp = models.BooleanField(default=False)
+    visit_suggested_sms = models.BooleanField(default=False)
+
     # Defaults to BOTH (not SITE like the rest): this alerts pin owners that someone may be
     # missing at their pinned place - an email is the point when the recipient isn't logged in.
     wiki_safety_checkin = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
+    wiki_safety_checkin_whatsapp = models.BooleanField(default=False)
+    wiki_safety_checkin_sms = models.BooleanField(default=False)
 
     profile = models.OneToOneField(
         "dashboard.Profile",

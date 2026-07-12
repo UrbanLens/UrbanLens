@@ -68,13 +68,17 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, 
     if trip_url:
         description = f"{description}\n\n{trip_url}".strip()
 
-    return {
+    body: dict[str, Any] = {
         "summary": trip.name,
         "description": description,
         "start": {"date": start.isoformat()},
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
+    location_string = _trip_location_string(trip)
+    if location_string:
+        body["location"] = location_string
+    return body
 
 
 def _activity_location_string(activity: TripActivity) -> str | None:
@@ -98,6 +102,29 @@ def _activity_location_string(activity: TripActivity) -> str | None:
     lng = activity.lng_override if activity.lng_override is not None else (float(location.longitude) if location else None)
     if lat is not None and lng is not None:
         return f"{lat:.6f}, {lng:.6f}"
+    return None
+
+
+def _trip_location_string(trip: Trip) -> str | None:
+    """Human-readable location for the trip-level calendar event.
+
+    Uses the trip's first activity (by schedule, then manual order) that has a
+    shareable location, so the exported all-day event points at where the trip
+    starts.
+
+    Args:
+        trip: The trip being exported.
+
+    Returns:
+        A location string for the event, or None when no activity has one.
+    """
+    if trip.pk is None:
+        # Unsaved trips (e.g. pure-mapping property tests) have no activities.
+        return None
+    for activity in trip.activities.select_related("location", "pin__location"):
+        location_string = _activity_location_string(activity)
+        if location_string:
+            return location_string
     return None
 
 

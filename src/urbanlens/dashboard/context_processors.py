@@ -187,16 +187,23 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
         request: The current HttpRequest.
 
     Returns:
-        dict with ``show_messages_icon`` (bool).
+        dict with ``show_messages_icon`` (bool) and ``e2ee_needs_oauth_enroll``
+        (bool - True for passwordless accounts with no key bundle yet, which
+        base.html enrolls transparently in the background).
     """
     if isinstance(request.user, User):
         try:
+            from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
             from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
 
-            return {"show_messages_icon": has_used_direct_messages(request.user.profile)}
+            needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
+            return {
+                "show_messages_icon": has_used_direct_messages(request.user.profile),
+                "e2ee_needs_oauth_enroll": needs_oauth_enroll,
+            }
         except (ImportError, AttributeError, DatabaseError):
             pass
-    return {"show_messages_icon": False}
+    return {"show_messages_icon": False, "e2ee_needs_oauth_enroll": False}
 
 
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:

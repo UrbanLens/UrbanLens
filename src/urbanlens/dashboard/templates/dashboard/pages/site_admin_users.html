@@ -34,7 +34,7 @@
         <span class="users-list__col users-list__col--login">Last login</span>
         <span class="users-list__col users-list__col--subscriptions">Subscriptions</span>
         <span class="users-list__col users-list__col--storage">Storage</span>
-        <span class="users-list__col users-list__col--admin">Admin</span>
+        <span class="users-list__col users-list__col--actions">Actions</span>
       </div>
       <ul class="users-list__items">
         {% for row in rows %}
@@ -79,11 +79,15 @@
           <div class="users-list__col users-list__col--subscriptions">
             <span class="users-list__label">Subscriptions</span>
             <div class="users-list__value users-list__chips">
+              {% if row.is_site_admin %}
+              <span class="ul-badge ul-badge--primary"><i class="material-symbols-outlined">shield_person</i> Admin</span>
+              {% endif %}
               {% for role in row.roles %}
               <span class="ul-chip"><i class="material-symbols-outlined">workspace_premium</i>{{ role.name }}</span>
-              {% empty %}
-              <span class="users-list__muted">None</span>
               {% endfor %}
+              {% if not row.is_site_admin and not row.roles %}
+              <span class="users-list__muted">None</span>
+              {% endif %}
             </div>
           </div>
 
@@ -101,13 +105,32 @@
             </div>
           </div>
 
-          <div class="users-list__col users-list__col--admin">
-            <span class="users-list__label">Admin</span>
+          <div class="users-list__col users-list__col--actions">
+            <span class="users-list__label">Actions</span>
             <div class="users-list__value">
-              {% if row.is_site_admin %}
-              <span class="ul-badge ul-badge--primary"><i class="material-symbols-outlined">shield_person</i> Admin</span>
+              {% if row.is_pending_deletion %}
+              <span class="ul-badge ul-badge--warning" title="Scheduled for deletion on {{ row.deletion_scheduled_for|date:'F j, Y' }}">
+                <i class="material-symbols-outlined">hourglass_top</i> Pending deletion
+              </span>
+              <form method="post" class="users-list__inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel_delete">
+                <input type="hidden" name="user_id" value="{{ row.user.pk }}">
+                <input type="hidden" name="q" value="{{ search }}">
+                <input type="hidden" name="page" value="{{ page_obj.number }}">
+                <button type="submit" class="btn btn--ghost btn--sm">
+                  <i class="material-symbols-outlined">undo</i> Undo
+                </button>
+              </form>
+              {% elif row.is_site_admin and row.user.pk != request.user.pk %}
+              <span class="users-list__muted" title="Admin accounts can't be deleted from this page.">—</span>
+              {% elif row.user.pk == request.user.pk %}
+              <span class="users-list__muted" title="Use &quot;Delete my data&quot; in your own settings to delete your own account.">—</span>
               {% else %}
-              <span class="users-list__muted">—</span>
+              <button type="button" class="btn btn--danger btn--sm"
+                      onclick="openAdminDeleteUserDialog('{{ row.user.pk }}', '{{ row.display_username|escapejs }}', {{ row.profile_visible|yesno:'true,false' }}, '{{ search|escapejs }}', '{{ page_obj.number }}')">
+                <i class="material-symbols-outlined">delete_forever</i> Delete
+              </button>
               {% endif %}
             </div>
           </div>
@@ -137,5 +160,64 @@
     </div>
     {% endif %}
   </section>
+
+  <dialog id="admin-delete-user-dialog" class="ul-dialog delete-account-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete this user's account" title_id="admin-delete-user-dialog-title" %}
+    <form method="post" id="admin-delete-user-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="request_delete">
+      <input type="hidden" name="user_id" id="admin-delete-user-id">
+      <input type="hidden" name="q" id="admin-delete-user-q">
+      <input type="hidden" name="page" id="admin-delete-user-page">
+      <div class="ul-dialog-body delete-account-dialog-body">
+        <p class="delete-account-warning">
+          This will schedule <strong id="admin-delete-user-name"></strong>'s account and all of their data
+          (pins, photos, trips, reviews, and everything else) for permanent deletion after a 7-day grace
+          period - the same grace period as if they'd deleted their own account. Either of you can undo it
+          any time before then.
+        </p>
+        <label class="form-field">
+          <span class="form-label" id="admin-delete-user-confirm-label"></span>
+          <input type="text" name="confirm_text" id="admin-delete-user-confirm-input" class="form-input"
+                 autocomplete="off" spellcheck="false" required>
+        </label>
+      </div>
+      <div class="ul-dialog-footer">
+        <button type="submit" id="admin-delete-user-confirm-btn" class="btn btn--danger-filled" disabled>
+          <i class="material-symbols-outlined">delete_forever</i> Delete this account
+        </button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 </div>
+
+<script>
+(function () {
+  var dialog = document.getElementById('admin-delete-user-dialog');
+  var nameEl = document.getElementById('admin-delete-user-name');
+  var labelEl = document.getElementById('admin-delete-user-confirm-label');
+  var confirmInput = document.getElementById('admin-delete-user-confirm-input');
+  var confirmBtn = document.getElementById('admin-delete-user-confirm-btn');
+  var expected = '';
+
+  window.openAdminDeleteUserDialog = function (userId, displayUsername, profileVisible, search, page) {
+    expected = profileVisible ? displayUsername : 'hidden user';
+    document.getElementById('admin-delete-user-id').value = userId;
+    document.getElementById('admin-delete-user-q').value = search || '';
+    document.getElementById('admin-delete-user-page').value = page || '';
+    nameEl.textContent = profileVisible ? displayUsername : 'this hidden user';
+    labelEl.textContent = 'Type "' + expected + '" to confirm';
+    confirmInput.value = '';
+    confirmInput.placeholder = expected;
+    confirmBtn.disabled = true;
+    dialog.showModal();
+    confirmInput.focus();
+  };
+
+  confirmInput.addEventListener('input', function () {
+    confirmBtn.disabled = confirmInput.value.trim().toLowerCase() !== expected.toLowerCase();
+  });
+})();
+</script>
 {% endblock %}

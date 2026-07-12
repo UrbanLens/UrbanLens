@@ -9,7 +9,6 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -18,7 +17,6 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -462,29 +460,6 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
         note = get_object_or_404(PinNote, id=note_id, pin=pin)
         note.delete()
         return HttpResponse("", status=200)
-
-
-class PinDeleteView(LoginRequiredMixin, View):
-    """Delete a pin owned by the current user.
-
-    DELETE /map/pin/<pin_slug>/delete/
-
-    Returns a 200 with an HX-Redirect header so HTMX navigates to the map after deletion.
-    """
-
-    def delete(self, request, pin_slug):
-        result = _pin_for_user(pin_slug, request)
-        if isinstance(result, HttpResponse):
-            return result
-        pin = result
-        logger.info("User %s deleted pin %s", request.user.id, pin.id)
-        subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
-        stash_for_undo("pin", subtree, request.user.profile)
-        for descendant in subtree:
-            descendant.delete()
-        response = HttpResponse("", status=200)
-        response["HX-Redirect"] = reverse("map.view")
-        return response
 
 
 class PinDetachChildView(LoginRequiredMixin, View):

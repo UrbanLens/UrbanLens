@@ -4,8 +4,7 @@
 
 <div class="ul-dialog-body">
     <p class="calendar-import-account">
-        Review what will be created. Uncheck anything you don't want - no trips
-        are created and no invitations are sent until you confirm.
+        Review what will be created. Uncheck anything you don't want.
     </p>
 
     <form hx-post="{% url 'trips.calendar.import' %}"
@@ -79,14 +78,14 @@
                 <i class="material-symbols-outlined">download</i>
                 Import {{ importable_count }} trip{{ importable_count|pluralize }}
             </button>
-            <button type="button" class="btn btn--ghost"
+            <button type="button" class="btn btn--secondary"
                     hx-get="{% url 'trips.calendar.import' %}"
                     hx-target="#calendar-import-dialog"
                     hx-swap="innerHTML">
                 <i class="material-symbols-outlined">arrow_back</i>
                 Back
             </button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--secondary" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
 </div>

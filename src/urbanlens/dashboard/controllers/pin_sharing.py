@@ -126,8 +126,12 @@ class PinShareCreateView(LoginRequiredMixin, View):
 
         shared_name = None
         name_choice = request.POST.get("name_choice") or ""
+        custom_name = (request.POST.get("custom_name") or "").strip()
+        if not name_choice and custom_name:
+            # The dialog's default mode is a free-text name field with no
+            # explicit choice control - a typed name means "share under this".
+            name_choice = "custom"
         if name_choice == "custom":
-            custom_name = (request.POST.get("custom_name") or "").strip()
             if not custom_name:
                 return HttpResponse("Enter a name, or choose one of your existing aliases.", status=400)
             length_error = text_length_error(custom_name, 255, "Name")

@@ -101,11 +101,10 @@
                 <i class="material-symbols-outlined">edit</i>
             </button>
             <button type="button" class="btn btn--icon-sm pin-delete-btn" title="Delete pin"
-                    hx-delete="/dashboard/rest/pins/{{ pin.uuid }}/"
-                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                    hx-confirm="Delete this pin? This removes the pin and all of its detail pins from your map. You can restore it from Settings → Undo History."
-                    hx-swap="none"
-                    hx-on::after-request="if(event.detail.successful){window.location='{% url 'map.view' %}'}">
+                    onclick="window.deletePinCascade('{{ pin.uuid }}', '{{ pin.effective_name|escapejs }}', '{{ csrf_token }}').then(function (result) {
+                        if (result === true) { window.location = '{% url 'map.view' %}'; }
+                        else if (result === null) { toastr.error('Failed to delete pin'); }
+                    })">
                 <i class="material-symbols-outlined">delete</i>
             </button>
         </div>

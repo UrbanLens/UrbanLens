@@ -15,6 +15,7 @@ from django.db.models import (
     IntegerField,
     Manager as DjangoManager,
     ManyToManyField,
+    Max,
     UUIDField,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
@@ -119,13 +120,17 @@ class Trip(abstract.FrontendDashboardModel):
 
     @property
     def effective_end_date(self) -> date | None:
-        """``end_date`` if set, else the latest scheduled activity's date."""
+        """``end_date`` if set, else the latest scheduled activity's end (or start) date."""
         if self.end_date:
             return self.end_date
-        last = self.activities.filter(scheduled_at__isnull=False).order_by("-scheduled_at").first()
-        if last is None or last.scheduled_at is None:
+        latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
+            last_start=Max("scheduled_at"),
+            last_end=Max("scheduled_end"),
+        )
+        candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
+        if not candidates:
             return None
-        return last.scheduled_at.date()
+        return max(candidates).date()
 
     @property
     def timeline_status(self) -> str:

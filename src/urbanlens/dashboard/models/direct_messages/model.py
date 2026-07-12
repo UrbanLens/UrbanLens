@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckConstraint, DateTimeField, F, ForeignKey, Index, Q, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckConstraint, DateTimeField, F, ForeignKey, Index, PositiveIntegerField, Q, TextField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -31,8 +31,17 @@ class DirectMessage(abstract.DashboardModel):
     when creating rows outside of ``create_direct_message``.
     """
 
-    body = TextField(max_length=MAX_DIRECT_MESSAGE_LENGTH)
+    body = TextField(max_length=MAX_DIRECT_MESSAGE_LENGTH, blank=True, default="")
     read_at = DateTimeField(null=True, blank=True)
+
+    # End-to-end encrypted alternative to ``body`` (exactly one of the two may
+    # be non-empty). Base64 crypto_secretbox output produced in the sender's
+    # browser under the conversation key - the server cannot read it.
+    ciphertext = TextField(blank=True, default="")
+    # Base64 random nonce used for ``ciphertext``.
+    nonce = CharField(max_length=64, blank=True, default="")
+    # Which ConversationKey.version encrypted this message (0 = plaintext).
+    key_version = PositiveIntegerField(default=0)
 
     sender = ForeignKey(
         "dashboard.Profile",
@@ -89,6 +98,15 @@ class DirectMessage(abstract.DashboardModel):
         markup_map_id: int | None
 
     objects = DirectMessageManager()
+
+    @property
+    def is_encrypted(self) -> bool:
+        """True when this message's content is end-to-end encrypted.
+
+        Returns:
+            True when ``ciphertext`` is set (the server cannot read the body).
+        """
+        return bool(self.ciphertext)
 
     @property
     def is_unread(self) -> bool:
@@ -157,6 +175,8 @@ class DirectMessage(abstract.DashboardModel):
         Returns:
             String like "DM <sender id> -> <recipient id>: <body prefix>".
         """
+        if self.is_encrypted:
+            return f"DM {self.sender_id} -> {self.recipient_id}: [encrypted]"
         return f"DM {self.sender_id} -> {self.recipient_id}: {self.body[:60]}"
 
     class Meta(abstract.DashboardModel.Meta):
@@ -171,5 +191,10 @@ class DirectMessage(abstract.DashboardModel):
             CheckConstraint(
                 condition=~Q(sender=F("recipient")),
                 name="db_dm_no_self_message",
+            ),
+            # A message is plaintext (body) or encrypted (ciphertext), never both.
+            CheckConstraint(
+                condition=Q(body="") | Q(ciphertext=""),
+                name="db_dm_body_xor_ciphertext",
             ),
         ]

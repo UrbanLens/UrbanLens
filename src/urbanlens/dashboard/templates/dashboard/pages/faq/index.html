@@ -355,6 +355,30 @@
                 </div>
             </details>
 
+            <details class="faq-item" id="faq-e2ee">
+                <summary class="faq-item-summary">
+                    <span>What's a "recovery key", and why does UrbanLens want me to save one?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Your direct messages are end-to-end encrypted. That's a fancy way of saying: they're scrambled on your device before they're sent, and only you and the person you're talking to can unscramble them. Not other users, not site admins, not me. I genuinely can't read your messages, even if I wanted to.
+                    </p>
+                    <p>
+                        To make that work, your browser generates a secret key for you the first time you log in. That key is what actually unlocks your messages. Normally you never think about it - your password unlocks it automatically, on any device, every time you log in.
+                    </p>
+                    <p>
+                        The recovery key is a backup plan for the one situation your password can't cover: if you ever reset your password using the "forgot password" email link, the site never actually sees your old password, so it can't use it to unlock your old key the normal way. Same thing if you signed up with Google or Discord and never set a password at all, and you're logging in from a brand new device. In both of those cases, the recovery key is what lets you keep reading your old encrypted messages instead of losing access to them.
+                    </p>
+                    <p>
+                        So: save it somewhere safe (a password manager is perfect for this) when the site shows it to you. If you ever lose both your password-based access <em>and</em> your recovery key, there's genuinely no way for anyone, including me, to get your old encrypted messages back - that's the tradeoff for me not being able to read them either. You can always start fresh with a new key from Settings, you'll just lose access to messages sent before that point.
+                    </p>
+                    <p>
+                        One honest caveat: attachments like photos and shared maps in direct messages aren't encrypted yet, just the text of the messages themselves. And this only protects against someone getting a copy of the database - it doesn't protect against a compromised device that's already logged in and unlocked.
+                    </p>
+                </div>
+            </details>
+
             <details class="faq-item">
                 <summary class="faq-item-summary">
                     <span>Is UrbanLens open source? Can I contribute?</span>
@@ -406,4 +430,25 @@
     </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    // <details> elements don't open themselves just because they're the
+    // linked hash target - open and scroll to it manually so links from
+    // elsewhere in the app (e.g. "What is this?" on the recovery-key dialog)
+    // land on an expanded answer instead of a collapsed summary line.
+    function openHashTarget() {
+        if (!location.hash) return;
+        var target = document.getElementById(location.hash.slice(1));
+        if (target && target.tagName === 'DETAILS') {
+            target.open = true;
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+    document.addEventListener('DOMContentLoaded', openHashTarget);
+    window.addEventListener('hashchange', openHashTarget);
+}());
+</script>
 {% endblock %}

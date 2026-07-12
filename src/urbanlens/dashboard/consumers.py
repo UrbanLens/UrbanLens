@@ -182,16 +182,20 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             return
 
         body = str(data.get("body") or "").strip()
+        ciphertext = str(data.get("ciphertext") or "").strip()
+        nonce = str(data.get("nonce") or "").strip()
+        key_version = data.get("key_version")
+        key_version = int(key_version) if isinstance(key_version, int) else 0
         recipient_slug = str(data.get("recipient") or "").strip()
         image_ids = [int(v) for v in data.get("image_ids") or [] if isinstance(v, int)]
         markup_map_uuid = str(data.get("markup_map_uuid") or "").strip() or None
         reply_to_id = data.get("reply_to")
         reply_to_id = int(reply_to_id) if isinstance(reply_to_id, int) else None
-        if not recipient_slug or not (body or image_ids or markup_map_uuid):
+        if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
             return
 
         try:
-            await self._create_message(recipient_slug, body, image_ids, markup_map_uuid, reply_to_id)
+            await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
         except (ValueError, PermissionError) as exc:
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
         except Exception:
@@ -244,18 +248,21 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         return profile.pk
 
     @database_sync_to_async
-    def _create_message(self, recipient_slug, body, image_ids, markup_map_uuid, reply_to_id):
+    def _create_message(self, recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id):
         """Resolve the recipient and create the message through the shared service.
 
         Args:
             recipient_slug: URL slug of the recipient profile.
-            body: Message text.
+            body: Plaintext message text (blank for encrypted messages).
+            ciphertext: End-to-end encrypted body (base64), or blank.
+            nonce: Base64 nonce for ``ciphertext``.
+            key_version: ConversationKey version that encrypted this message.
             image_ids: PKs of the sender's unattached Image rows to attach.
             markup_map_uuid: UUID of a MarkupMap owned by the sender to attach.
             reply_to_id: PK of an earlier message in this conversation to quote.
 
         Raises:
-            ValueError: Blank/too-long body, or no such recipient.
+            ValueError: Blank/too-long/malformed content, or no such recipient.
             PermissionError: The recipient's privacy settings reject the sender.
         """
         from urbanlens.dashboard.models.profile.model import Profile
@@ -266,7 +273,17 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             recipient = Profile.objects.select_related("user").get(slug=recipient_slug)
         except Profile.DoesNotExist:
             raise ValueError("That user could not be found.") from None
-        create_direct_message(sender, recipient, body, image_ids=image_ids, markup_map_uuid=markup_map_uuid, reply_to_id=reply_to_id)
+        create_direct_message(
+            sender,
+            recipient,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            image_ids=image_ids,
+            markup_map_uuid=markup_map_uuid,
+            reply_to_id=reply_to_id,
+        )
 
 
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):

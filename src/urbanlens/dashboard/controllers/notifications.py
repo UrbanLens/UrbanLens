@@ -148,6 +148,8 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
             else:
                 value = DeliveryPreference.NONE
             setattr(prefs, field, value)
+            setattr(prefs, f"{field}_whatsapp", f"{field}_whatsapp" in request.POST)
+            setattr(prefs, f"{field}_sms", f"{field}_sms" in request.POST)
         prefs.save()
         return self._render(request, prefs, saved=True)
 

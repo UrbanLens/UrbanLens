@@ -1,7 +1,7 @@
 # Abstract Base Classes
 from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel, DashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet, Serializer
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.account import EmailVerification
+from urbanlens.dashboard.models.account import AccountKdf, EmailVerification
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.direct_messages import (
     ImagePermissionStatus,
     MessageRetentionChoice,
 )
+from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation

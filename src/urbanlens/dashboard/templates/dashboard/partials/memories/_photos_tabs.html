@@ -1,9 +1,13 @@
 {% comment %}
 Timeline | Photos | Maps | Sharing | Visits tab strip for the Memories section.
 
+Rendered by {% memories_tabs active %} (see dashboard/templatetags/memories_components.py;
+do not include this file directly). The tag computes unlogged_visits_count itself so the
+tab strip is identical on every Memories subpage.
+
 Context:
   active            - "timeline", "photos", "maps", "sharing", or "visits" (which tab is current)
-  unlogged_visits_count - optional count badge shown on the Visits tab; the tab is hidden when zero/missing
+  unlogged_visits_count - count badge shown on the Visits tab; the tab is hidden when zero
 {% endcomment %}
 <nav class="memories-tabs" aria-label="Memories views">
     <a href="{% url 'memories.view' %}"

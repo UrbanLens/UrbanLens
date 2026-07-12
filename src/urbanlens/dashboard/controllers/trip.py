@@ -5,12 +5,11 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any, TypedDict
+import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import CharField, Q
-from django.db.models.functions import Coalesce
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -338,9 +337,17 @@ def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Loc
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pin_uuid = (body.get("pin_uuid") or "").strip()
-    if pin_uuid:
-        pin = Pin.objects.filter(profile=profile, uuid=pin_uuid).select_related("location").first()
+    pin_ref = (body.get("pin_uuid") or body.get("pin_slug") or "").strip()
+    if pin_ref:
+        # The shared location-search engine identifies pins by slug (falling
+        # back to the uuid when a pin has no slug), so accept either form.
+        pin_qs = Pin.objects.filter(profile=profile).select_related("location")
+        pin = pin_qs.filter(slug=pin_ref).first()
+        if pin is None:
+            try:
+                pin = pin_qs.filter(uuid=uuid.UUID(pin_ref)).first()
+            except ValueError:
+                pin = None
         if pin is not None:
             return pin.location, pin
 
@@ -1160,96 +1167,6 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         activities_html = _activities_panel_html(request, trip, profile, oob=True)
         members_response.content += activities_html.encode()
         return members_response
-
-
-class TripLocationSearchView(LoginRequiredMixin, View):
-    """JSON search for locations to add as activities.
-
-    Searches existing Location records by name, then falls back to Nominatim
-    geocoding so the user can enter arbitrary addresses.
-
-    GET /trips/location-search/?q=<query>
-    """
-
-    def get(self, request):
-        q = (request.GET.get("q") or "").strip()
-        if len(q) < 2:
-            return JsonResponse({"results": []})
-
-        from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        # The separator is a single merged character class rather than
-        # `\s*[, ]\s*` - adjacent `\s*` groups flanking a class that also
-        # matches whitespace let a run of spaces be split among the three
-        # groups in many equivalent ways, which is a polynomial ReDoS.
-        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)\s*$", q) if len(q) <= 64 else None
-        coordinate_results: list[dict] = []
-        if coordinate_match:
-            lat = float(coordinate_match.group(1))
-            lng = float(coordinate_match.group(2))
-            if -90 <= lat <= 90 and -180 <= lng <= 180:
-                coordinate_results.append({"name": f"{lat:.6f}, {lng:.6f}", "lat": lat, "lng": lng, "type": "coordinates"})
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_rows = list(
-            Pin.objects.filter(profile=profile).filter(Q(name__icontains=q) | Q(location__official_name__icontains=q) | Q(location__wiki__name__icontains=q) | Q(description__icontains=q)).select_related("location")[:5],
-        )
-        pin_results = [
-            {
-                "uuid": str(pin.uuid),
-                "name": pin.effective_name or "Untitled pin",
-                "locality": pin.effective_city,
-                "administrative_area_level_1": pin.effective_state,
-                "type": "pin",
-            }
-            for pin in pin_rows
-        ]
-
-        db_rows = list(
-            Location.objects.filter(Q(wiki__name__icontains=q) | Q(official_name__icontains=q))
-            .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
-            .values(
-                "uuid",
-                "display_name",
-                "locality",
-                "administrative_area_level_1",
-            )[:5],
-        )
-        db_results = [
-            {
-                "uuid": str(row["uuid"]),
-                "name": row["display_name"] or "Unnamed location",
-                "display_name": row["display_name"] or "Unnamed location",
-                "locality": row["locality"],
-                "administrative_area_level_1": row["administrative_area_level_1"],
-                "type": "db",
-            }
-            for row in db_rows
-        ]
-
-        geocoded_results: list[dict] = []
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if profile.external_apis_enabled:
-            try:
-                from geopy.geocoders import Nominatim
-
-                geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
-                geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
-                if geo_hits:
-                    for hit in geo_hits:
-                        geocoded_results.append(
-                            {
-                                "name": hit.address,
-                                "lat": hit.latitude,
-                                "lng": hit.longitude,
-                                "type": "geocoded",
-                            },
-                        )
-            except (ImportError, OSError, ValueError) as exc:
-                logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
-
-        return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
 
 
 class TripMapDataView(LoginRequiredMixin, View):

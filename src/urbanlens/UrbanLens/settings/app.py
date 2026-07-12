@@ -137,6 +137,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     nps_api_key: str | None = Field(default=None, description="The national park service api key")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
     discord_client_id: str | None = Field(default=None, description="The discord client ID")
+    twilio_account_sid: str | None = Field(default=None, description="The Twilio account SID, for outbound SMS/WhatsApp notifications")
+    twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
+    twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
+    twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
 
     # DB
     database_engine: str = Field(default="psqlextra.backend", description="The database engine")

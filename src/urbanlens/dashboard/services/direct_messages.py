@@ -156,16 +156,30 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
     reply_to = None
     if message.reply_to_id and message.reply_to is not None:
         quoted = message.reply_to
+        if quoted.is_encrypted:
+            # The server can't produce a plaintext preview - ship the quoted
+            # ciphertext so the recipient's client decrypts its own preview.
+            quoted_preview = "🔒 Message"
+        elif quoted.body:
+            quoted_preview = quoted.body[:80]
+        else:
+            quoted_preview = "📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")
         reply_to = {
             "id": quoted.pk,
             "sender_name": quoted.sender.username,
-            "preview": quoted.body[:80] if quoted.body else ("📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")),
+            "preview": quoted_preview,
+            "ciphertext": quoted.ciphertext,
+            "nonce": quoted.nonce,
+            "key_version": quoted.key_version,
         }
 
     return {
         "type": "message",
         "id": message.pk,
         "body": message.body,
+        "ciphertext": message.ciphertext,
+        "nonce": message.nonce,
+        "key_version": message.key_version,
         "created": message.created.isoformat(),
         "sender_slug": message.sender.slug or "",
         "sender_name": message.sender.username,
@@ -228,7 +242,10 @@ def _notify_recipient(message: DirectMessage) -> None:
     if already_unread:
         return
 
-    preview = message.body if len(message.body) <= 120 else message.body[:120].rstrip() + "…"
+    if message.is_encrypted:
+        preview = "🔒 Encrypted message"
+    else:
+        preview = message.body if len(message.body) <= 120 else message.body[:120].rstrip() + "…"
     NotificationLog.objects.create(
         profile=message.recipient,
         status=Status.UNREAD,
@@ -356,12 +373,19 @@ def send_message_email_now(message: DirectMessage) -> None:
 
     cache.set(_email_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
-    preview = message.body if len(message.body) <= 200 else message.body[:200].rstrip() + "…"
+    if message.is_encrypted:
+        # End-to-end encrypted - the server has no plaintext to preview.
+        preview = ""
+    else:
+        preview = message.body if len(message.body) <= 200 else message.body[:200].rstrip() + "…"
     conversation_path = reverse("messages.conversation", kwargs={"profile_slug": message.sender.ensure_slug()})
     conversation_url = f"{settings.SITE_URL.rstrip('/')}{conversation_path}"
     context = {"sender": message.sender, "recipient": message.recipient, "preview": preview, "conversation_url": conversation_url}
     subject = f"New message from {message.sender.username}"
-    text_body = f"{message.sender.username} sent you a message on UrbanLens:\n\n{preview}\n\nReply: {conversation_url}"
+    if preview:
+        text_body = f"{message.sender.username} sent you a message on UrbanLens:\n\n{preview}\n\nReply: {conversation_url}"
+    else:
+        text_body = f"{message.sender.username} sent you a message on UrbanLens.\n\nReply: {conversation_url}"
     html_body = render_to_string("dashboard/email/new_direct_message.html", context)
 
     try:
@@ -379,6 +403,9 @@ def create_direct_message(
     recipient: Profile,
     body: str,
     *,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
     image_ids: list[int] | None = None,
     markup_map_uuid: str | None = None,
     reply_to_id: int | None = None,
@@ -388,7 +415,12 @@ def create_direct_message(
     Args:
         sender: The profile sending the message.
         recipient: The profile receiving it.
-        body: Message text. May be blank if at least one attachment is given.
+        body: Plaintext message text. Must be blank when ``ciphertext`` is
+            given; may be blank if at least one attachment is given.
+        ciphertext: End-to-end encrypted body (base64), produced client-side
+            under the conversation key. Mutually exclusive with ``body``.
+        nonce: Base64 nonce for ``ciphertext`` (required with it).
+        key_version: ``ConversationKey.version`` that encrypted this message.
         image_ids: PKs of the sender's own not-yet-attached ``Image`` rows
             (uploaded separately beforehand) to attach to this message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
@@ -398,15 +430,24 @@ def create_direct_message(
         The newly created DirectMessage.
 
     Raises:
-        ValueError: If ``body`` and every attachment are absent/invalid, or
-            ``body`` exceeds ``MAX_DIRECT_MESSAGE_LENGTH``.
+        ValueError: If both ``body`` and ``ciphertext`` are given, both (and
+            every attachment) are absent, or either exceeds its length limit.
         PermissionError: If the recipient's privacy settings don't permit the
             sender. Callers surface this as a 403 / socket error message.
     """
+    from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
+
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
         raise ValueError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
-    if not body and not image_ids and not markup_map_uuid:
+    if ciphertext:
+        if body:
+            raise ValueError("A message is either plaintext or encrypted, never both.")
+        if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
+            raise ValueError("Malformed encrypted message.")
+    elif nonce or key_version:
+        raise ValueError("Malformed encrypted message.")
+    if not body and not ciphertext and not image_ids and not markup_map_uuid:
         raise ValueError("Message cannot be empty.")
     if not can_direct_message(sender, recipient):
         raise PermissionError("This user isn't accepting messages from you.")
@@ -425,6 +466,9 @@ def create_direct_message(
         sender=sender,
         recipient=recipient,
         body=body,
+        ciphertext=ciphertext,
+        nonce=nonce,
+        key_version=key_version,
         markup_map=markup_map,
         reply_to=reply_to,
         sender_delete_after=sender.direct_message_delete_after,
