@@ -144,7 +144,7 @@ class GooglePlacesGateway(Gateway):
             Tuple of (image bytes, Content-Type header value).
         """
         url = f"https://places.googleapis.com/v1/{photo_name}/media"
-        params = {"maxWidthPx": max_width, "key": self.api_key}
+        params = {"maxWidthPx": str(max_width), "key": self.api_key}
         response = self.session.get(url, params=params, stream=True)
         response.raise_for_status()
         return response.content, response.headers.get("Content-Type", "image/jpeg")

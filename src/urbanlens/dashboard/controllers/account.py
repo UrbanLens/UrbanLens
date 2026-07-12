@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PASSPHRASE_RATE_KEY = "passphrase_suggest:{ip}"  # noqa: S105
+_PASSPHRASE_RATE_KEY = "passphrase_suggest:{ip}"  # noqa: S105  # nosec B105 - cache key template, not a credential
 _PASSPHRASE_RATE_LIMIT = 30  # suggestion batches per IP per window
 _PASSPHRASE_RATE_WINDOW = 60 * 10  # 10 minutes
 
@@ -401,7 +401,7 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
             AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
         else:
             AccountKdf.objects.filter(user=user).delete()
-        MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)
+        MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)  # nosec B106 - "" is a field-emptiness filter, not a credential
         return response
 
 

@@ -22,11 +22,11 @@ _field = EncryptedTextField()
 
 
 def _encrypt_column(cursor, table: str, column: str) -> None:
-    cursor.execute(f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")  # noqa: S608 - table/column are hardcoded constants below, not user input
+    cursor.execute(f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL AND {column} != ''")  # noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input
     rows = cursor.fetchall()
     for pk, plaintext in rows:
         ciphertext = _field.get_prep_value(plaintext)
-        cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [ciphertext, pk])  # noqa: S608
+        cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [ciphertext, pk])  # noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input
 
 
 def encrypt_existing_tokens(apps, schema_editor) -> None:

@@ -223,7 +223,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         }
 
     @property
-    def databases(self) -> dict[str, dict[str, str | None]]:
+    def databases(self) -> dict[str, dict[str, Any]]:
         return conf.settings.DATABASES
 
     @property

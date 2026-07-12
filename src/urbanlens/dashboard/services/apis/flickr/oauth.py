@@ -24,9 +24,9 @@ from requests_oauthlib import OAuth1Session
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
-REQUEST_TOKEN_URL = "https://www.flickr.com/services/oauth/request_token"  # noqa: S105 - OAuth endpoint URL, not a credential
+REQUEST_TOKEN_URL = "https://www.flickr.com/services/oauth/request_token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
 AUTHORIZE_URL = "https://www.flickr.com/services/oauth/authorize"
-ACCESS_TOKEN_URL = "https://www.flickr.com/services/oauth/access_token"  # noqa: S105 - OAuth endpoint URL, not a credential
+ACCESS_TOKEN_URL = "https://www.flickr.com/services/oauth/access_token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
 
 _OAUTH_TIMEOUT = 30
 

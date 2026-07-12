@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 - OAuth endpoint URL, not a credential
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 _OAUTH_TIMEOUT = 30
