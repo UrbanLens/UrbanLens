@@ -18,6 +18,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.pin_list.signals
         from urbanlens.dashboard.models.profile.model import Profile
         import urbanlens.dashboard.models.profile.signals
+        import urbanlens.dashboard.models.trips.signals
         import urbanlens.dashboard.models.wiki.signals
         from urbanlens.dashboard.plugins import plugin_registry
 

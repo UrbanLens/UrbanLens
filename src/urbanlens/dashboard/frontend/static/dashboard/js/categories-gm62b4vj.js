@@ -3,13 +3,13 @@ import {
   renderTreeView,
   resetColorPicker,
   resetIconPicker
-} from "./categories-we5ca0ws.js";
+} from "./categories-bbs4ykdk.js";
 import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
-} from "./categories-agkcnzxy.js";
+} from "./categories-cm6bs6jx.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/badge-bulk-manager.ts
 function escHtml(s) {

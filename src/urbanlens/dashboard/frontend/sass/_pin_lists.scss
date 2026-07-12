@@ -351,6 +351,13 @@
         &:hover { background: var(--ul-hover-bg); }
 
         .material-symbols-outlined { font-size: 1.1rem; color: var(--ul-grey-6); }
+
+        &:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+
+            &:hover { background: none; }
+        }
     }
 }
 

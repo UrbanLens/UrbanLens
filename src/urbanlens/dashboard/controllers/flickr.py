@@ -109,7 +109,7 @@ class FlickrConnectView(LoginRequiredMixin, View):
             pending = start_authorization(callback_uri)
         except (FlickrNotConfiguredError, GatewayRequestError):
             messages.error(request, "Flickr integration is not configured on this server.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
         cache.set(_request_token_cache_key(pending.oauth_token), {"secret": pending.oauth_token_secret, "pid": profile.id}, _REQUEST_TOKEN_CACHE_TTL)
         return redirect(pending.authorization_url)
@@ -125,14 +125,14 @@ class FlickrCallbackView(LoginRequiredMixin, View):
         stashed = cache.get(_request_token_cache_key(oauth_token)) if oauth_token else None
         if not stashed or not oauth_verifier or stashed.get("pid") != profile.id:
             messages.error(request, "The Flickr connection request was invalid or expired. Please try again.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#flickr-settings-section")
         cache.delete(_request_token_cache_key(oauth_token))
 
         try:
             grant = finish_authorization(oauth_token=oauth_token, oauth_token_secret=stashed["secret"], oauth_verifier=oauth_verifier)
         except (FlickrNotConfiguredError, GatewayRequestError):
             messages.error(request, "Flickr access was not granted.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
         FlickrAccount.objects.update_or_create(
             profile=profile,

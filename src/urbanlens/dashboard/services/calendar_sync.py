@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink, get_calendar_account
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import (
     ACTIVITY_ID_EVENT_PROPERTY,
@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarEventNotFoundError,
     GoogleCalendarGateway,
 )
+from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
@@ -523,15 +524,17 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
     unparsable events are skipped with a reason.
 
     Each selection may carry per-event options confirmed on the review page:
-    whether to create an activity from the event's location, and which friend
-    profiles to invite as trip members. Invitees are re-validated - only
-    accepted friends of the importer are ever added.
+    whether to create an activity from the event's location, which friend
+    profiles to invite as trip members, and whether to keep the new trip
+    synced to the calendar event going forward. Invitees are re-validated -
+    only accepted friends of the importer are ever added.
 
     Args:
         account: The user's connected calendar account.
         selections: Either bare Google event ids, or dicts with ``event_id``,
-            ``create_activity`` (bool, default True), and ``invite_profile_ids``
-            (list of ints, default empty) keys.
+            ``create_activity`` (bool, default True), ``invite_profile_ids``
+            (list of ints, default empty), and ``auto_sync`` (bool, default
+            False) keys.
 
     Returns:
         Tuple of (created trips, human-readable skip reasons, number of
@@ -577,6 +580,7 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
             google_event_id=event_id,
             direction=CalendarSyncDirection.IMPORTED,
             last_synced=timezone.now(),
+            auto_sync=bool(selection.get("auto_sync")),
         )
         if selection.get("create_activity", True):
             _create_activity_from_event(trip, event, profile)
@@ -737,3 +741,33 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
         gateway.delete_event(link.google_event_id)
         link.delete()
     return True
+
+
+def push_auto_synced_trip_changes(trip: Trip) -> int:
+    """Push a trip's current state to every calendar it is set to auto-sync with.
+
+    Called after a trip or one of its activities changes. Only trip-level
+    links with ``auto_sync`` enabled are pushed - this is one-way (UrbanLens
+    to Google) and never pulls edits made on the Google Calendar side back in.
+    A failure on one profile's calendar (e.g. a revoked OAuth grant) is logged
+    and does not stop the others from syncing.
+
+    Args:
+        trip: The trip whose linked calendar events should be refreshed.
+
+    Returns:
+        The number of calendars the trip was successfully pushed to.
+    """
+    links = TripCalendarLink.objects.filter(trip=trip, activity__isnull=True, auto_sync=True).select_related("profile")
+    synced = 0
+    for link in links:
+        account = get_calendar_account(link.profile)
+        if account is None:
+            continue
+        try:
+            export_trip_to_calendar(account, trip)
+        except (GatewayRequestError, ValueError):
+            logger.warning("Auto-sync of trip %s to profile %s's calendar failed.", trip.uuid, link.profile_id, exc_info=True)
+            continue
+        synced += 1
+    return synced

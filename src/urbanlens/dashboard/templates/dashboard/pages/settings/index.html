@@ -8,6 +8,32 @@
         <p class="settings-subtitle">Manage your account preferences</p>
     </div>
 
+    <div class="settings-tabs" role="tablist" id="settings-tabs">
+        <button type="button" class="settings-tab active" data-tab="privacy" role="tab" aria-selected="true">
+            <i class="material-symbols-outlined">lock</i> Privacy
+        </button>
+        <button type="button" class="settings-tab" data-tab="connections" role="tab" aria-selected="false">
+            <i class="material-symbols-outlined">cable</i> Connections
+        </button>
+        <button type="button" class="settings-tab" data-tab="messages" role="tab" aria-selected="false">
+            <i class="material-symbols-outlined">chat</i> Messages
+        </button>
+        <button type="button" class="settings-tab" data-tab="security" role="tab" aria-selected="false">
+            <i class="material-symbols-outlined">passkey</i> Security
+        </button>
+        <button type="button" class="settings-tab" data-tab="map" role="tab" aria-selected="false">
+            <i class="material-symbols-outlined">map</i> Map &amp; Display
+        </button>
+        <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false">
+            <i class="material-symbols-outlined">manage_accounts</i> Account
+        </button>
+    </div>
+
+    {# ======================================================================= #}
+    {# Privacy tab                                                             #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel active" data-tab-panel="privacy" id="tab-panel-privacy">
+
     {# -- Privacy ------------------------------------------------------------- #}
     {# Community, Memories, and External Services each bulk-gate what UrbanLens tracks or #}
     {# exposes about you, so their toggles live here as subsections rather than their own #}
@@ -91,7 +117,7 @@
                 <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
-            
+
             <div class="settings-field">
                 <label class="settings-label" for="{{ privacy_form.contact_visibility.id_for_label }}">
                     {{ privacy_form.contact_visibility.label }}
@@ -256,7 +282,24 @@
                 </div>
             </form>
         </div>
+        </div>
+    </section>
+    </div> {# /tab-panel-privacy #}
 
+    {# ======================================================================= #}
+    {# Connections tab                                                         #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="connections" id="tab-panel-connections">
+    <section class="settings-section ul-section" id="connections-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">cable</i>
+            <div>
+                <h2 class="settings-section-title">Connections</h2>
+                <p class="settings-section-desc">Import photos automatically from services you already use.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
         {# -- Immich (subsection) ------------------------------------------------ #}
         <div class="settings-subsection" id="immich-settings-section">
             <h3 class="settings-subsection-title">
@@ -292,15 +335,24 @@
                 <p class="loading-text">Loading...</p>
             </div>
         </div>
+        </div>
+    </section>
+    </div> {# /tab-panel-connections #}
 
-        {# -- Direct Messages (subsection) --------------------------------------- #}
-        <div class="settings-subsection" id="direct-message-settings-section">
-            <h3 class="settings-subsection-title">
-                <i class="material-symbols-outlined">chat</i>
-                Direct Messages
-            </h3>
-            <p class="settings-section-desc">Presence, read receipts, disappearing messages, and friend recommendations in your conversations.</p>
+    {# ======================================================================= #}
+    {# Messages tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="messages" id="tab-panel-messages">
+    <section class="settings-section ul-section" id="direct-message-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">chat</i>
+            <div>
+                <h2 class="settings-section-title">Messages</h2>
+                <p class="settings-section-desc">Presence, read receipts, disappearing messages, and encryption for your conversations.</p>
+            </div>
+        </div>
 
+        <div class="settings-section-body">
             <form method="post" class="settings-form" id="direct-message-form">
                 {% csrf_token %}
                 <input type="hidden" name="section" value="direct_messages">
@@ -380,17 +432,177 @@
                 <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
 
                 <div class="settings-e2ee-actions">
-                    <button type="button" class="settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
-                    <button type="button" class="settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
-                    <button type="button" class="settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
+                    <button type="button" class="btn btn--secondary settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
                 </div>
             </div>
         </div>
+    </section>
+    </div> {# /tab-panel-messages #}
+
+    {# ======================================================================= #}
+    {# Security tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="security" id="tab-panel-security">
+    {# -- Security (passkeys, authenticator app, backup codes) ---------------- #}
+    <section class="settings-section ul-section" id="security-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">passkey</i>
+            <div>
+                <h2 class="settings-section-title">Security</h2>
+                <p class="settings-section-desc">Add a passkey or authenticator app for optional two-factor sign-in.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <p class="settings-e2ee-status">
+                {% if passkeys or has_totp %}
+                Two-factor sign-in is <strong>on</strong>{% if passkeys %} ({{ passkeys|length }} passkey{{ passkeys|length|pluralize }}){% endif %}{% if has_totp %} + authenticator app{% endif %}.
+                {% else %}
+                Two-factor sign-in is <strong>off</strong>. Add a passkey or authenticator app below to turn it on.
+                {% endif %}
+            </p>
+
+            <p class="settings-help">
+                Passkeys work with Face ID, Windows Hello, security keys, and password managers
+                like Bitwarden. Once you've added one, signing in requires your password
+                <em>and</em> a passkey. Remove your last passkey to turn this back off.
+            </p>
+
+            {% if passkeys %}
+            <ul class="passkey-list" id="passkey-list">
+                {% for cred in passkeys %}
+                <li class="passkey-list-item">
+                    <div class="passkey-list-item-info">
+                        <i class="material-symbols-outlined">passkey</i>
+                        <div>
+                            <form method="post" action="{% url 'settings.security.passkeys.rename' cred.pk %}" class="passkey-rename-form">
+                                {% csrf_token %}
+                                <input type="text" name="name" value="{{ cred.name }}" maxlength="100" class="passkey-name-input" aria-label="Passkey nickname">
+                                <button type="submit" class="btn btn--secondary btn--sm">Save</button>
+                            </form>
+                            <span class="settings-help">
+                                Added {{ cred.created|date:"M j, Y" }}{% if cred.last_used_at %} - last used {{ cred.last_used_at|date:"M j, Y" }}{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'settings.security.passkeys.delete' cred.pk %}"
+                          onsubmit="return confirm('Remove this passkey? Make sure you have another way to sign in first.');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--danger btn--sm" title="Remove this passkey" aria-label="Remove this passkey">
+                            <i class="material-symbols-outlined">delete</i>
+                        </button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            <div class="settings-actions" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+                <input type="text" id="new-passkey-name" placeholder="Nickname (e.g. Bitwarden, YubiKey)" maxlength="100" class="passkey-name-input" style="max-width:320px">
+                <button type="button" class="settings-save-btn" id="add-passkey-btn">
+                    <i class="material-symbols-outlined">add</i>
+                    Add a passkey
+                </button>
+            </div>
+
+            {# -- Authenticator app (TOTP) subsection ------------------------------ #}
+            <div class="settings-subsection" id="totp-settings-section">
+                <h3 class="settings-subsection-title">
+                    <i class="material-symbols-outlined">qr_code_2</i>
+                    Authenticator app
+                </h3>
+                <p class="settings-section-desc">Use an app like Google Authenticator, Authy, or Bitwarden's TOTP field for two-factor sign-in.</p>
+
+                {% if has_totp %}
+                <p class="settings-help">An authenticator app is <strong>enabled</strong> on this account.</p>
+                <form method="post" action="{% url 'settings.security.totp.disable' %}"
+                      onsubmit="return confirm('Remove your authenticator app? Make sure you have another way to sign in first.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--danger btn--sm">
+                        <i class="material-symbols-outlined">delete</i>
+                        Remove authenticator app
+                    </button>
+                </form>
+                {% elif pending_totp_secret %}
+                <div class="totp-setup">
+                    <img src="{% url 'settings.security.totp.qrcode' %}" alt="QR code for authenticator app setup" class="totp-qrcode">
+                    <p class="settings-help">
+                        Scan this with your authenticator app, or enter this key manually:
+                        <code class="totp-manual-key">{{ pending_totp_secret }}</code>
+                    </p>
+                    <form method="post" action="{% url 'settings.security.totp.confirm' %}" class="settings-form">
+                        {% csrf_token %}
+                        <div class="settings-field">
+                            <label class="settings-label" for="totp-confirm-code">Enter the 6-digit code from your app</label>
+                            <input type="text" name="code" id="totp-confirm-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" required>
+                        </div>
+                        <div class="settings-actions">
+                            <button type="submit" class="settings-save-btn">Verify &amp; enable</button>
+                        </div>
+                    </form>
+                    <form method="post" action="{% url 'settings.security.totp.cancel' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--ghost btn--sm">Cancel setup</button>
+                    </form>
+                </div>
+                {% else %}
+                <form method="post" action="{% url 'settings.security.totp.start' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="settings-save-btn">
+                        <i class="material-symbols-outlined">add</i>
+                        Set up an authenticator app
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            {# -- Backup codes subsection ------------------------------------------- #}
+            <div class="settings-subsection" id="backup-codes-settings-section">
+                <h3 class="settings-subsection-title">
+                    <i class="material-symbols-outlined">key</i>
+                    Backup codes
+                </h3>
+                <p class="settings-section-desc">One-time codes to sign in if you lose access to your passkey and authenticator app.</p>
+
+                {% if new_backup_codes %}
+                <div class="backup-codes-reveal">
+                    <p class="settings-help">
+                        <strong>Save these codes somewhere safe.</strong> Each one works once, and you won't be able to see them again.
+                    </p>
+                    <ul class="backup-codes-list">
+                        {% for code in new_backup_codes %}
+                        <li><code>{{ code }}</code></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% if passkeys or has_totp %}
+                <p class="settings-help">{{ backup_code_count }} unused backup code{{ backup_code_count|pluralize }} remaining.</p>
+                <form method="post" action="{% url 'settings.security.backup_codes.generate' %}"
+                      {% if backup_code_count %}onsubmit="return confirm('Generate new backup codes? Your existing codes will stop working.');"{% endif %}>
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--secondary btn--sm">
+                        {% if backup_code_count %}Regenerate backup codes{% else %}Generate backup codes{% endif %}
+                    </button>
+                </form>
+                {% else %}
+                <p class="settings-help">Set up a passkey or authenticator app first to enable backup codes.</p>
+                {% endif %}
+            </div>
         </div>
     </section>
+    </div> {# /tab-panel-security #}
+
+    {# ======================================================================= #}
+    {# Map & Display tab                                                       #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="map" id="tab-panel-map">
 
     {# -- Style --------------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="style-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">palette</i>
             <div>
@@ -516,7 +728,7 @@
     </section>
 
     {# -- Map ----------------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="map-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">map</i>
             <div>
@@ -525,6 +737,7 @@
             </div>
         </div>
 
+        <div class="settings-section-body">
         <form method="post" class="settings-form" id="map-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="map">
@@ -670,132 +883,135 @@
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
-    </section>
 
-    {# -- Places Layer Sources ---------------------------------------------- #}
-    {% if show_places_layer %}
-    <section class="settings-section ul-section" id="places-layer-settings-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">place</i>
-            <div>
-                <h2 class="settings-section-title">Places Layer</h2>
-                <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
-            </div>
+        {# -- Places Layer Sources (subsection) ---------------------------------- #}
+        {% if show_places_layer %}
+        <div class="settings-subsection" id="places-layer-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">place</i>
+                Places Layer
+            </h3>
+            <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
+
+            <form method="post" class="settings-form" id="places-layer-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="places_layer">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_google_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_google_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_nps_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_nps_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_wikipedia_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_wikipedia_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
         </div>
+        {% endif %}
 
-        <form method="post" class="settings-form" id="places-layer-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="places_layer">
+        {# -- Markup defaults (subsection) --------------------------------------- #}
+        <div class="settings-subsection" id="markup-defaults-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">draw</i>
+                Markup
+            </h3>
+            <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
 
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_google_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if places_layer_form.places_google_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
+            <form method="post" class="settings-form" id="markup-defaults-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="markup_defaults">
+                {{ markup_defaults_form.markup_fill_color }}
+                {{ markup_defaults_form.markup_fill_opacity }}
+                {{ markup_defaults_form.markup_border_color }}
+                {{ markup_defaults_form.markup_border_opacity }}
 
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_nps_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if places_layer_form.places_nps_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_wikipedia_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if places_layer_form.places_wikipedia_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-    {% endif %}
-
-    {# -- Pin Detail Defaults ----------------------------------------------- #}
-    <section class="settings-section ul-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">draw</i>
-            <div>
-                <h2 class="settings-section-title">Markup</h2>
-                <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="markup-defaults-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="markup_defaults">
-            {{ markup_defaults_form.markup_fill_color }}
-            {{ markup_defaults_form.markup_fill_opacity }}
-            {{ markup_defaults_form.markup_border_color }}
-            {{ markup_defaults_form.markup_border_opacity }}
-
-            <div class="settings-field">
-                <label class="settings-label">Fill Color &amp; Opacity</label>
-                <p class="settings-help">The main color of arrows, shapes, and text.</p>
-                <div class="cop-widget" id="cop-fill">
-                    <div class="cop-preview-wrap">
-                        <div class="cop-checkerboard"></div>
-                        <div class="cop-preview" id="cop-fill-preview"></div>
-                    </div>
-                    <div class="cop-controls">
-                        <div class="markup-color-swatches" id="cop-fill-swatches"></div>
-                        <div class="cop-alpha-row">
-                            <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
-                                   min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
-                                   oninput="copUpdate('fill')">
-                            <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
+                <div class="settings-field">
+                    <label class="settings-label">Fill Color &amp; Opacity</label>
+                    <p class="settings-help">The main color of arrows, shapes, and text.</p>
+                    <div class="cop-widget" id="cop-fill">
+                        <div class="cop-preview-wrap">
+                            <div class="cop-checkerboard"></div>
+                            <div class="cop-preview" id="cop-fill-preview"></div>
+                        </div>
+                        <div class="cop-controls">
+                            <div class="markup-color-swatches" id="cop-fill-swatches"></div>
+                            <div class="cop-alpha-row">
+                                <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
+                                       min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
+                                       oninput="copUpdate('fill')">
+                                <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="settings-field">
-                <label class="settings-label">Border Color &amp; Opacity</label>
-                <p class="settings-help">Outline color for shapes and arrows. Leave as "None" for no border.</p>
-                <div class="cop-widget" id="cop-border">
-                    <div class="cop-preview-wrap">
-                        <div class="cop-checkerboard"></div>
-                        <div class="cop-preview" id="cop-border-preview"></div>
-                    </div>
-                    <div class="cop-controls">
-                        <div class="markup-color-swatches" id="cop-border-swatches"></div>
-                        <div class="cop-alpha-row">
-                            <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
-                                   min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
-                                   oninput="copUpdate('border')">
-                            <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
+                <div class="settings-field">
+                    <label class="settings-label">Border Color &amp; Opacity</label>
+                    <p class="settings-help">Outline color for shapes and arrows. Leave as "None" for no border.</p>
+                    <div class="cop-widget" id="cop-border">
+                        <div class="cop-preview-wrap">
+                            <div class="cop-checkerboard"></div>
+                            <div class="cop-preview" id="cop-border-preview"></div>
+                        </div>
+                        <div class="cop-controls">
+                            <div class="markup-color-swatches" id="cop-border-swatches"></div>
+                            <div class="cop-alpha-row">
+                                <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
+                                       min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
+                                       oninput="copUpdate('border')">
+                                <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+        </div>
     </section>
+    </div> {# /tab-panel-map #}
+
+    {# ======================================================================= #}
+    {# Account tab                                                             #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
 
     {# -- AI Features --------------------------------------------------------- #}
     {% if can_use_ai_features %}
@@ -940,7 +1156,7 @@
     </section>
 
     {# -- Notifications ------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="notifications-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">notifications</i>
             <div>
@@ -979,7 +1195,7 @@
     </section>
 
     {# -- Undo history ------------------------------------------------------------ #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="undo-history-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">history</i>
             <div>
@@ -998,7 +1214,7 @@
     </section>
 
     {# -- Danger Zone ----------------------------------------------------------- #}
-    <section class="settings-section ul-section settings-section--danger">
+    <section class="settings-section ul-section settings-section--danger" id="danger-zone-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">warning</i>
             <div>
@@ -1035,6 +1251,7 @@
             </div>
         </div>
     </section>
+    </div> {# /tab-panel-account #}
 </div>
 
 {% include "dashboard/partials/account/_delete_account_dialog.html" %}
@@ -1044,6 +1261,81 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+<script>
+// -- Tabs: switch panels, keep deep links (e.g. #immich-settings-section) working -----
+(function () {
+    var tabs = document.querySelectorAll('.settings-tab');
+    var panels = document.querySelectorAll('.settings-tab-panel');
+
+    function activateTab(name, opts) {
+        var found = false;
+        tabs.forEach(function (btn) {
+            var active = btn.dataset.tab === name;
+            if (active) found = true;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if (!found) return;
+        panels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.dataset.tabPanel === name);
+        });
+        // The Leaflet preview map is created while its tab may be hidden, which
+        // leaves it with a zero-size viewport - refresh it once the tab is shown.
+        if (name === 'map' && window.__settingsPreviewMap) {
+            setTimeout(function () { window.__settingsPreviewMap.invalidateSize(); }, 0);
+        }
+        if (!(opts && opts.silent)) {
+            try { history.replaceState(null, '', '#tab-' + name); } catch (e) { /* noop */ }
+        }
+    }
+
+    tabs.forEach(function (btn) {
+        btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
+    });
+
+    function activateFromHash() {
+        var hash = window.location.hash.replace('#', '');
+        if (!hash) return;
+        if (hash.indexOf('tab-') === 0) {
+            activateTab(hash.slice(4), { silent: true });
+            return;
+        }
+        var target = document.getElementById(hash);
+        if (!target) return;
+        var panel = target.closest('.settings-tab-panel');
+        if (!panel) return;
+        activateTab(panel.dataset.tabPanel, { silent: true });
+        setTimeout(function () { target.scrollIntoView({ block: 'start' }); }, 50);
+    }
+
+    activateFromHash();
+    window.addEventListener('hashchange', activateFromHash);
+}());
+</script>
+<script>
+// -- Security card: add a passkey ----------------------------------------------
+(function () {
+    var addBtn = document.getElementById('add-passkey-btn');
+    if (!addBtn || !window.UrbanLensWebAuthn) return;
+    addBtn.addEventListener('click', function () {
+        addBtn.disabled = true;
+        UrbanLensWebAuthn.registerPasskey({
+            optionsUrl: "{% url 'settings.security.passkeys.options' %}",
+            registerUrl: "{% url 'settings.security.passkeys.register' %}",
+            nameInputId: "new-passkey-name",
+        }).then(function (result) {
+            addBtn.disabled = false;
+            if (result.ok) {
+                if (window.toastr) toastr.success('Passkey added.');
+                window.location.reload();
+            } else if (window.toastr) {
+                toastr.error(result.error || 'Could not add that passkey.');
+            }
+        });
+    });
+}());
+</script>
 <script>
 // -- Encryption card: status, recovery key, unlock, reset ----------------------
 (function () {
@@ -1197,6 +1489,7 @@ function applyGuidancePreview(level) {
     // Initialise the preview Leaflet map. Tiles come from the shared
     // window.MapLayers factory so the preview always matches the real maps.
     var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
+    window.__settingsPreviewMap = previewMap;
     var _previewTileLayer = window.MapLayers.tileLayer(_currentMapViewTile).addTo(previewMap);
 
     // Switch the preview tile layer when the user picks a different map view.

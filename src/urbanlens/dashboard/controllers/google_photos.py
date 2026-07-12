@@ -111,7 +111,7 @@ class GooglePhotosConnectView(LoginRequiredMixin, View):
             url = build_authorization_url(request.build_absolute_uri(reverse("settings.google_photos.callback")), state)
         except GooglePhotosNotConfiguredError:
             messages.error(request, "Google Photos integration is not configured on this server.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
         return redirect(url)
 
 
@@ -122,7 +122,7 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         if request.GET.get("error"):
             messages.error(request, "Google Photos access was not granted.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         state = request.GET.get("state") or ""
         code = request.GET.get("code") or ""
@@ -130,16 +130,16 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             payload = signing.loads(state, salt=_STATE_SALT, max_age=_STATE_MAX_AGE_SECONDS)
         except signing.BadSignature:
             messages.error(request, "The Google Photos connection request was invalid or expired. Please try again.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
         if payload.get("pid") != profile.id or not code:
             messages.error(request, "The Google Photos connection request was invalid or expired. Please try again.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         try:
             tokens = exchange_code_for_tokens(code, request.build_absolute_uri(reverse("settings.google_photos.callback")))
         except (GooglePhotosNotConfiguredError, GatewayRequestError):
             messages.error(request, "Google Photos authorization failed.")
-            return redirect("settings.view")
+            return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         expires_in = int(tokens.get("expires_in") or 3600)
         GooglePhotosAccount.objects.update_or_create(

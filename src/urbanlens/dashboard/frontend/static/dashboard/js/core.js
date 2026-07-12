@@ -46,6 +46,47 @@
     throw Error('Dynamic require of "' + x + '" is not supported');
   });
 
+  // src/urbanlens/dashboard/frontend/ts/shared/pin-cache.ts
+  var CACHE_VERSION = 6;
+  function readRawCachedPins(profileUuid) {
+    if (!profileUuid)
+      return [];
+    try {
+      const raw = localStorage.getItem(`ul_pins_v5_${profileUuid}`);
+      if (!raw)
+        return [];
+      const cache = JSON.parse(raw);
+      if (cache?.v !== CACHE_VERSION || cache?.profileUuid !== profileUuid)
+        return [];
+      const pins = cache.pins;
+      if (!pins || typeof pins !== "object")
+        return [];
+      return Object.values(pins);
+    } catch {
+      return [];
+    }
+  }
+  function readCachedPinsForSearch(profileUuid) {
+    const results = [];
+    for (const pin of readRawCachedPins(profileUuid)) {
+      const lat = Number(pin?.latitude);
+      const lng = Number(pin?.longitude);
+      const name = typeof pin?.name === "string" ? pin.name : "";
+      if (!name || !Number.isFinite(lat) || !Number.isFinite(lng))
+        continue;
+      results.push({
+        uuid: typeof pin?.uuid === "string" ? pin.uuid : "",
+        name,
+        latitude: lat,
+        longitude: lng,
+        icon: typeof pin?.icon === "string" ? pin.icon : undefined,
+        address: typeof pin?.address === "string" ? pin.address : undefined,
+        tags: Array.isArray(pin?.tags) ? pin.tags.filter((t) => typeof t === "string") : undefined
+      });
+    }
+    return results;
+  }
+
   // src/urbanlens/dashboard/frontend/ts/shared/location-search-engine.ts
   function escHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -155,6 +196,10 @@
     });
     return results;
   }
+  var MAX_INSTANT_PIN_SUGGESTIONS = 6;
+  var LABEL_LOCAL_PINS = "Your Pins & Locations";
+  var LABEL_OSM = "Places & Addresses";
+  var LABEL_PLACES = "Google Places";
   function create(options) {
     const {
       input,
@@ -166,6 +211,7 @@
       recentPinsKey = null,
       sources = {},
       resolvePlaceUrl = null,
+      pinCacheProfileUuid = null,
       home = null,
       enableMyLocation = true,
       getUserLocationCache = null,
@@ -244,6 +290,57 @@
     function cacheUserLocation(lat, lng) {
       setUserLocationCache?.(lat, lng);
     }
+    let localPinCache = null;
+    function getLocalPinCache() {
+      if (localPinCache === null)
+        localPinCache = pinCacheProfileUuid ? readCachedPinsForSearch(pinCacheProfileUuid) : [];
+      return localPinCache;
+    }
+    function buildInstantLocalSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      if (!pinCacheProfileUuid || q.length < 2)
+        return [];
+      const results = [];
+      for (const pin of getLocalPinCache()) {
+        const nameHit = pin.name.toLowerCase().includes(q);
+        const addressHit = !nameHit && !!pin.address?.toLowerCase().includes(q);
+        const matchedTag = !nameHit && !addressHit ? pin.tags?.find((t) => t.toLowerCase().includes(q)) : undefined;
+        if (!nameHit && !addressHit && !matchedTag)
+          continue;
+        results.push({
+          type: "pin",
+          icon: pin.icon || "push_pin",
+          title: pin.name,
+          subtitle: addressHit ? pin.address : matchedTag ? `Tagged: ${matchedTag}` : "Your pin",
+          lat: pin.latitude,
+          lng: pin.longitude,
+          zoom: 16,
+          pin_slug: pin.uuid
+        });
+        if (results.length >= MAX_INSTANT_PIN_SUGGESTIONS)
+          break;
+      }
+      return results;
+    }
+    let localResultCache = null;
+    let osmResultCache = null;
+    let placesResultCache = null;
+    function suggestionSearchText(r) {
+      return `${r.title} ${r.subtitle ?? ""}`.toLowerCase();
+    }
+    function coordKey(lat, lng) {
+      if (lat == null || lng == null)
+        return null;
+      return `${lat.toFixed(5)},${lng.toFixed(5)}`;
+    }
+    function previewFromCache(cache, query, isDuplicate) {
+      if (!cache?.length)
+        return [];
+      const q = query.trim().toLowerCase();
+      if (!q)
+        return [];
+      return cache.filter((r) => !isDuplicate?.(r) && suggestionSearchText(r).includes(q));
+    }
     let addrBarTimer;
     let historyNavIdx = -1;
     let activeIdx = -1;
@@ -288,6 +385,9 @@
       searchSeq++;
       activeIdx = -1;
       historyNavIdx = -1;
+      localResultCache = null;
+      osmResultCache = null;
+      placesResultCache = null;
       if (!wasEmpty)
         input.focus();
       updateHistoryBtn();
@@ -428,17 +528,21 @@
       });
       return btn;
     }
-    async function fetchSourceIntoSlot(seq, label, url, parser, slot, onDone, fetchOpts) {
-      slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
-            <span class="addr-spinner"></span><span class="addr-source-loading-label">${escHtml(label)}...</span>
-        </div>`;
-      suggestions.hidden = false;
+    async function fetchSourceIntoSlot(seq, label, url, parser, slot, onDone, fetchOpts, onResults) {
+      const hadInstantContent = slot.childElementCount > 0;
+      if (!hadInstantContent) {
+        slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
+                <span class="addr-spinner"></span><span class="addr-source-loading-label">${escHtml(label)}...</span>
+            </div>`;
+        suggestions.hidden = false;
+      }
       try {
         const resp = await fetch(url, fetchOpts ?? { headers: { "X-Requested-With": "XMLHttpRequest" } });
         if (seq !== searchSeq)
           return;
-        slot.innerHTML = "";
         if (!resp.ok) {
+          if (!hadInstantContent)
+            slot.innerHTML = "";
           onDone?.(false);
           return;
         }
@@ -446,10 +550,14 @@
         if (seq !== searchSeq)
           return;
         const results = parser(raw);
+        onResults?.(results ?? []);
         if (!results?.length) {
+          if (!hadInstantContent)
+            slot.innerHTML = "";
           onDone?.(false);
           return;
         }
+        slot.innerHTML = "";
         slot.appendChild(makeCollapsibleHdr(label, sectionKey(label), slot));
         for (const r of results)
           slot.appendChild(buildSuggestionItem(r));
@@ -458,7 +566,8 @@
         onDone?.(true);
       } catch {
         if (seq === searchSeq) {
-          slot.innerHTML = "";
+          if (!hadInstantContent)
+            slot.innerHTML = "";
           onDone?.(false);
         }
       }
@@ -527,12 +636,10 @@
         onSelect({ lat: Number.parseFloat(results[0].lat), lng: Number.parseFloat(results[0].lon), zoom: 16, title: results[0].display_name || q, type: "address", raw: results[0] });
       }).catch(() => toast("error", "Geocoding failed - check your connection."));
     }
-    function startMultiSearch(query) {
-      onSearchStart?.();
-      const seq = ++searchSeq;
+    let pendingSlots = null;
+    function renderInstantSlots(seq, query) {
       const box = suggestions;
       box.innerHTML = "";
-      box.hidden = true;
       activeIdx = -1;
       const coordSlot = makeSlot(box);
       const localSlot = sources.localPins ? makeSlot(box) : null;
@@ -540,15 +647,6 @@
       const placesSlot = sources.googlePlaces ? makeSlot(box) : null;
       const noMsgSlot = makeSlot(box);
       const derivedSlot = makeSlot(box);
-      let pendingSources = [localSlot, osmSlot, placesSlot].filter(Boolean).length;
-      let primaryHits = 0;
-      function onPrimaryDone(hasResults) {
-        if (hasResults)
-          primaryHits++;
-        if (--pendingSources === 0 && primaryHits === 0 && !parseCoordinates(query) && !isPlusCode(query)) {
-          noMsgSlot.innerHTML = '<div class="addr-no-results">No exact matches found</div>';
-        }
-      }
       const coords = parseCoordinates(query);
       if (coords) {
         coordSlot.appendChild(makeCollapsibleHdr("Coordinates", "coordinates", coordSlot));
@@ -589,10 +687,68 @@
         box.hidden = false;
       }
       if (localSlot) {
-        fetchSourceIntoSlot(seq, "Your Pins & Locations", `${sources.localPins.url}?q=${encodeURIComponent(query)}`, (data) => data.results || [], localSlot, onPrimaryDone);
+        const instant = buildInstantLocalSuggestions(query);
+        const instantCoords = new Set(instant.map((r) => coordKey(r.lat, r.lng)).filter((k) => k !== null));
+        const preview = previewFromCache(localResultCache, query, (r) => {
+          const key = coordKey(r.lat, r.lng);
+          return key !== null && instantCoords.has(key);
+        });
+        const combined = [...instant, ...preview];
+        if (combined.length) {
+          localSlot.appendChild(makeCollapsibleHdr(LABEL_LOCAL_PINS, sectionKey(LABEL_LOCAL_PINS), localSlot));
+          for (const r of combined)
+            localSlot.appendChild(buildSuggestionItem(r));
+          box.hidden = false;
+        }
       }
       if (osmSlot) {
-        fetchSourceIntoSlot(seq, "Places & Addresses", `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`, (data) => (data || []).map((r) => ({
+        const preview = previewFromCache(osmResultCache, query);
+        if (preview.length) {
+          osmSlot.appendChild(makeCollapsibleHdr(LABEL_OSM, sectionKey(LABEL_OSM), osmSlot));
+          for (const r of preview)
+            osmSlot.appendChild(buildSuggestionItem(r));
+          box.hidden = false;
+        }
+      }
+      if (placesSlot) {
+        const preview = previewFromCache(placesResultCache, query);
+        if (preview.length) {
+          placesSlot.appendChild(makeCollapsibleHdr(LABEL_PLACES, sectionKey(LABEL_PLACES), placesSlot));
+          for (const r of preview)
+            placesSlot.appendChild(buildSuggestionItem(r));
+          box.hidden = false;
+        }
+      }
+      const derived = generateDerivedSuggestions(query);
+      derivedSlot.appendChild(makeCollapsibleHdr("Search Suggestions", "suggestions", derivedSlot));
+      for (const r of derived)
+        derivedSlot.appendChild(buildSuggestionItem(r));
+      box.hidden = false;
+      const slots = { seq, localSlot, osmSlot, placesSlot, noMsgSlot, derivedSlot };
+      pendingSlots = slots;
+      return slots;
+    }
+    function runNetworkStage(seq, query, slots) {
+      if (seq !== searchSeq || pendingSlots !== slots)
+        return;
+      onSearchStart?.();
+      const { localSlot, osmSlot, placesSlot, noMsgSlot, derivedSlot } = slots;
+      let pendingSources = [localSlot, osmSlot, placesSlot].filter(Boolean).length;
+      let primaryHits = 0;
+      function onPrimaryDone(hasResults) {
+        if (hasResults)
+          primaryHits++;
+        if (--pendingSources === 0 && primaryHits === 0 && !parseCoordinates(query) && !isPlusCode(query)) {
+          noMsgSlot.innerHTML = '<div class="addr-no-results">No exact matches found</div>';
+        }
+      }
+      if (localSlot) {
+        fetchSourceIntoSlot(seq, LABEL_LOCAL_PINS, `${sources.localPins.url}?q=${encodeURIComponent(query)}`, (data) => data.results || [], localSlot, onPrimaryDone, undefined, (results) => {
+          localResultCache = results;
+        });
+      }
+      if (osmSlot) {
+        fetchSourceIntoSlot(seq, LABEL_OSM, `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`, (data) => (data || []).map((r) => ({
           type: "address",
           title: r.name || (r.display_name || "").split(",")[0].trim(),
           subtitle: r.display_name || "",
@@ -600,10 +756,12 @@
           lng: Number.parseFloat(r.lon),
           zoom: 15,
           icon: "place"
-        })), osmSlot, onPrimaryDone, { headers: { Accept: "application/json", "Accept-Language": "en" } });
+        })), osmSlot, onPrimaryDone, { headers: { Accept: "application/json", "Accept-Language": "en" } }, (results) => {
+          osmResultCache = results;
+        });
       }
       if (placesSlot) {
-        fetchSourceIntoSlot(seq, "Google Places", `${sources.googlePlaces.url}?q=${encodeURIComponent(query)}`, (data) => data.disabled ? [] : data.results || [], placesSlot, (hasResults) => {
+        fetchSourceIntoSlot(seq, LABEL_PLACES, `${sources.googlePlaces.url}?q=${encodeURIComponent(query)}`, (data) => data.disabled ? [] : data.results || [], placesSlot, (hasResults) => {
           onPrimaryDone(hasResults);
           if (hasResults) {
             derivedSlot.querySelectorAll(".addr-suggestion--external").forEach((el) => el.remove());
@@ -611,13 +769,15 @@
               derivedSlot.querySelector(".addr-suggestion-group-hdr")?.remove();
             }
           }
+        }, undefined, (results) => {
+          placesResultCache = results;
         });
       }
-      const derived = generateDerivedSuggestions(query);
-      derivedSlot.appendChild(makeCollapsibleHdr("Search Suggestions", "suggestions", derivedSlot));
-      for (const r of derived)
-        derivedSlot.appendChild(buildSuggestionItem(r));
-      box.hidden = false;
+    }
+    function startMultiSearch(query) {
+      const seq = ++searchSeq;
+      const slots = renderInstantSlots(seq, query);
+      runNetworkStage(seq, query, slots);
     }
     function showEmptySuggestions() {
       const seq = ++searchSeq;
@@ -737,8 +897,9 @@
         showEmptySuggestions();
         return;
       }
-      suggestions.hidden = true;
-      addrBarTimer = setTimeout(() => startMultiSearch(q), 250);
+      const seq = ++searchSeq;
+      const slots = renderInstantSlots(seq, q);
+      addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 250);
     });
     input.addEventListener("keydown", function(e) {
       const items = [...suggestions.querySelectorAll(".addr-suggestion")];

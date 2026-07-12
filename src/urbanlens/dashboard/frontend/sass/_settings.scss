@@ -1,0 +1,54 @@
+@use 'variables' as *;
+
+// -- Settings page tabs ---------------------------------------------------------
+// Splits the settings page into a handful of top-level tabs so it doesn't read
+// as one long, overwhelming scroll. Panel content is otherwise unchanged from
+// the plain-section layout - only the show/hide chrome lives here.
+
+.settings-tabs {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    margin-bottom: 1.5rem;
+    scrollbar-width: thin;
+}
+
+.settings-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    padding: 0.65rem 1rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ul-grey-6);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+    }
+
+    &:hover {
+        color: var(--ul-grey-9);
+    }
+
+    &.active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+}
+
+.settings-tab-panel {
+    display: none;
+
+    &.active {
+        display: block;
+    }
+}

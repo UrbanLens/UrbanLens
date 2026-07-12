@@ -1,6 +1,6 @@
 import {
   htmxProcess
-} from "./categories-agkcnzxy.js";
+} from "./categories-cm6bs6jx.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/icon-picker.ts
 var MATERIAL_ICON_NAME = /^[a-z_]+$/;

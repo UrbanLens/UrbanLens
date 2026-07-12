@@ -35,7 +35,8 @@
                 <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
                     <i class="material-symbols-outlined">add_location_alt</i> Add Pins
                 </button>
-                <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()">
+                <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()"
+                        {% if not pin_list.pin_count and not pin_list.markup_map_id %}disabled title="Add pins to this list first"{% endif %}>
                     <i class="material-symbols-outlined">draw</i>
                     {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
                 </button>
@@ -49,10 +50,12 @@
                         <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('edit-list-dialog').showModal()">
                             <i class="material-symbols-outlined">edit</i> Edit list
                         </button>
-                        <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateTrip()">
+                        <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateTrip()"
+                                {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
                             <i class="material-symbols-outlined">flight_takeoff</i> Create trip
                         </button>
-                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('add-to-trip-dialog').showModal()">
+                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('add-to-trip-dialog').showModal()"
+                                {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
                             <i class="material-symbols-outlined">luggage</i> Add to trip
                         </button>
                         <div class="pin-list-more-menu-divider"></div>
@@ -396,6 +399,7 @@
             googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
         },
         resolvePlaceUrl: '{% url "map.resolve_place" %}',
+        pinCacheProfileUuid: '{{ request.user.profile.uuid|default:"" }}',
         enableMyLocation: false,
         defaultZoom: 15,
         onSelect: function (result) {

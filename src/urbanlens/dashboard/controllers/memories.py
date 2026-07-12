@@ -41,6 +41,7 @@ from urbanlens.dashboard.services.visits import add_visited_status, create_visit
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
     from urbanlens.dashboard.models.pin_share.model import PinShare
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,43 @@ class _ShareGroup(TypedDict):
     shares: list[PinShare]
     chain_total: int
     reshare_count: int
+
+
+class _MapShareGroup(TypedDict):
+    """One map's entry in the Sharing page's ``map_share_groups`` list."""
+
+    map: MarkupMap
+    shares: list[MarkupMapShare]
+    attachment_label: str | None
+    attachment_url: str | None
+
+
+def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
+    """Resolve a human label and link for whatever a markup map is attached to.
+
+    Args:
+        markup_map: The map to inspect.
+
+    Returns:
+        Tuple of (label, url), or (None, None) when the map is an unattached
+        draft.
+    """
+    attachment = markup_map.attachment
+    if attachment is None:
+        return None, None
+    kind, host = attachment
+    if kind == "safety_checkin":
+        return f"Safety check-in: {host.title}", reverse("safety.checkin.detail", args=[host.slug or host.uuid])
+    if kind == "comment" and host.pin_id:
+        return f"Comment on {host.pin.effective_name}", reverse("pin.details", args=[host.pin.slug])
+    if kind == "comment":
+        return f"Comment on {host.wiki.name}", reverse("location.wiki", args=[host.wiki.location.slug])
+    if kind == "trip_comment":
+        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.uuid])
+    if kind == "visit":
+        label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
+        return label, reverse("pin.details", args=[host.pin.slug])
+    return None, None
 
 
 def _unlogged_band_context(profile: Profile) -> dict[str, object]:
@@ -533,12 +571,13 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
 
 
 class MemoriesSharingView(LoginRequiredMixin, View):
-    """The "Sharing" subpage of Memories - every pin the user has shared.
+    """The "Sharing" subpage of Memories - every pin and map the user has shared.
 
     Groups the profile's sent :class:`PinShare` rows by pin, listing who each
     pin was shared with, and how far the share travelled: the chain count
     follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
-    shares for A's pin).
+    shares for A's pin). Sent :class:`MarkupMapShare` rows are grouped by map
+    the same way, minus the reshare-chain machinery PinShare has.
 
     GET /memories/sharing/
     """
@@ -550,9 +589,10 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             request: The HTTP request.
 
         Returns:
-            Rendered Sharing page listing every shared pin with its
-            recipients and chain-wide reshare counts.
+            Rendered Sharing page listing every shared pin and map with
+            their recipients (and, for pins, chain-wide reshare counts).
         """
+        from urbanlens.dashboard.models.markup.share import MarkupMapShare
         from urbanlens.dashboard.models.pin_share.model import PinShare
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -576,6 +616,25 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 },
             )
 
+        map_shares = MarkupMapShare.objects.filter(from_profile=profile).select_related("markup_map", "to_profile__user").order_by("-created")
+
+        map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
+        for map_share in map_shares:
+            map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
+
+        map_share_groups: list[_MapShareGroup] = []
+        for map_shares_for_map in map_shares_by_map.values():
+            markup_map = map_shares_for_map[0].markup_map
+            label, url = _map_attachment_info(markup_map)
+            map_share_groups.append(
+                {
+                    "map": markup_map,
+                    "shares": map_shares_for_map,
+                    "attachment_label": label,
+                    "attachment_url": url,
+                },
+            )
+
         return render(
             request,
             "dashboard/pages/memories/sharing.html",
@@ -583,6 +642,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "memories",
                 "share_groups": share_groups,
+                "map_share_groups": map_share_groups,
                 **_unlogged_band_context(profile),
             },
         )
@@ -629,30 +689,11 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Dict with the map, its snapshot (for the Leaflet thumbnail), item
             count, and - when attached - a human label + link for the host.
         """
-        kind, label, url = None, None, None
-        attachment = markup_map.attachment
-        if attachment is not None:
-            kind, host = attachment
-            if kind == "safety_checkin":
-                label = f"Safety check-in: {host.title}"
-                url = reverse("safety.checkin.detail", args=[host.slug or host.uuid])
-            elif kind == "comment" and host.pin_id:
-                label = f"Comment on {host.pin.effective_name}"
-                url = reverse("pin.details", args=[host.pin.slug])
-            elif kind == "comment":
-                label = f"Comment on {host.wiki.name}"
-                url = reverse("location.wiki", args=[host.wiki.location.slug])
-            elif kind == "trip_comment":
-                label = f"Comment on trip: {host.trip.name}"
-                url = reverse("trips.detail", args=[host.trip.uuid])
-            elif kind == "visit":
-                label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
-                url = reverse("pin.details", args=[host.pin.slug])
+        label, url = _map_attachment_info(markup_map)
         return {
             "map": markup_map,
             "snapshot": markup_map.to_snapshot(),
             "item_count": len(markup_map.items.all()),
-            "attachment_kind": kind,
             "attachment_label": label,
             "attachment_url": url,
         }

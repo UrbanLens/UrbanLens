@@ -32,6 +32,27 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
         generate.assert_not_called()
 
 
+class PushTripToCalendarTaskTests(TestCase):
+    """push_trip_to_calendar looks up the trip and delegates to the sync service."""
+
+    def test_missing_trip_is_a_noop(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.calendar_sync.push_auto_synced_trip_changes") as push:
+            result = tasks.push_trip_to_calendar(999999)
+
+        self.assertEqual(result, 0)
+        push.assert_not_called()
+
+    def test_existing_trip_is_pushed(self) -> None:
+        from model_bakery import baker
+
+        trip = baker.make("dashboard.Trip")
+        with mock.patch("urbanlens.dashboard.services.calendar_sync.push_auto_synced_trip_changes", return_value=2) as push:
+            result = tasks.push_trip_to_calendar(trip.pk)
+
+        self.assertEqual(result, 2)
+        push.assert_called_once_with(trip)
+
+
 class DatabaseBackupTaskTests(TestCase):
     """Database backup tasks use site settings and scheduled due checks."""
 

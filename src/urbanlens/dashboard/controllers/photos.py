@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
+import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -304,8 +307,14 @@ class PhotoActionView(LoginRequiredMixin, View):
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Log a visit on the pin the user chose in the manual search."""
-        pin_slug = request.POST.get("pin_slug")
-        pin = Pin.objects.filter(slug=pin_slug, profile=profile).first()
+        pin_slug = request.POST.get("pin_slug") or ""
+        # The shared location-search engine identifies pins by slug, falling back to
+        # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - accept
+        # either form here rather than only the slug.
+        pin_filter = Q(slug=pin_slug)
+        with contextlib.suppress(ValueError, AttributeError, TypeError):
+            pin_filter |= Q(uuid=uuid_lib.UUID(pin_slug))
+        pin = Pin.objects.filter(pin_filter, profile=profile).first()
         if pin is None:
             return _render_card(request, image, toast="That pin could not be found.", level="error")
         visit = log_visit_on_pin(profile, image, pin)

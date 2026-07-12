@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING, Any
+import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -35,6 +36,23 @@ logger = logging.getLogger(__name__)
 _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
+
+
+def _default_trip_name_for_list(pin_list: PinList) -> str:
+    """Build the default trip name used when creating a trip from a pin list.
+
+    Args:
+        pin_list: The list the trip is being created from.
+
+    Returns:
+        "Trip from the "[name]" list" unless the list's own name already
+        contains the word "list", in which case that would read redundantly
+        (e.g. "Trip from the "My Bucket List" list"), so it falls back to
+        "Trip from [name]".
+    """
+    if "list" in pin_list.name.lower():
+        return f"Trip from {pin_list.name}"
+    return f'Trip from the "{pin_list.name}" list'
 
 
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
@@ -229,9 +247,21 @@ class PinListAddPinsView(LoginRequiredMixin, View):
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
 
         pin_id_values = request.POST.getlist("pin_ids")
+        # The shared location-search engine identifies pins by slug, falling back to
+        # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - split
+        # out anything that parses as a uuid so Pin.uuid (also a valid identifier
+        # here) is matched too, instead of only Pin.slug.
         pin_slug_values = request.POST.getlist("pin_slugs")
-        if pin_id_values or pin_slug_values:
-            pins = list(Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_id_values) | Q(slug__in=pin_slug_values)))
+        slug_values: list[str] = []
+        uuid_values: list[str] = []
+        for value in pin_slug_values:
+            try:
+                uuid_lib.UUID(value)
+                uuid_values.append(value)
+            except (ValueError, AttributeError, TypeError):
+                slug_values.append(value)
+        if pin_id_values or slug_values or uuid_values:
+            pins = list(Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_id_values) | Q(slug__in=slug_values) | Q(uuid__in=uuid_values)))
         else:
             search_form = SearchForm(request.POST, profile=profile)
             if not search_form.is_valid():
@@ -314,7 +344,7 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
         body = _parse_body(request)
 
-        trip_name = (body.get("name") or "").strip() or f"Trip from {pin_list.name}"
+        trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
         trip = Trip.objects.create(name=trip_name, creator=profile)
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
         copy_list_pins_to_trip(pin_list, trip, profile)

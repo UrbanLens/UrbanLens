@@ -1321,6 +1321,20 @@ $memories-type-colors: (
     &--already_pinned { color: $color-indigo-500; }
 }
 
+.memories-sharing-section-title {
+    margin: 1.75rem 0 0;
+    font-size: 1rem;
+    font-weight: 600;
+
+    &:first-of-type { margin-top: .75rem; }
+}
+
+.memories-sharing-section-empty {
+    margin: .5rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
 // -- Memories > Journal: visit notes, ratings, and comments by date ---------
 
 .memories-journal-list {

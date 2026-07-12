@@ -211,6 +211,32 @@ body.page-auth {
 }
 
 
+// -- 2FA code fallback (login_2fa.html) -------------------------------------
+.auth-code-fallback {
+    margin-top: 1rem;
+
+    summary {
+        cursor: pointer;
+        font-size: .875rem;
+        font-weight: 600;
+        color: $color-indigo-600;
+        text-align: center;
+        list-style: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    .auth-form {
+        margin-top: .85rem;
+    }
+}
+
 // -- Footer links (sign up / log in) --------------------------------------
 .auth-footer {
     text-align: center;

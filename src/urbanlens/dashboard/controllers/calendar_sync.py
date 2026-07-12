@@ -209,6 +209,7 @@ class CalendarImportView(LoginRequiredMixin, View):
                 "event_id": event_id,
                 "create_activity": request.POST.get(f"create_activity_{event_id}") == "1",
                 "invite_profile_ids": [int(value) for value in request.POST.getlist(f"invite_{event_id}") if value.isdigit()],
+                "auto_sync": request.POST.get(f"auto_sync_{event_id}") == "1",
             }
             for event_id in event_ids
         ]
@@ -310,11 +311,15 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
         trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}))
         try:
-            _link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
+            link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
             return self._render_button(request, trip, profile, toast=("warning", str(exc)))
         except GatewayRequestError as exc:
             return self._render_button(request, trip, profile, toast=("error", str(exc)))
+
+        auto_sync = request.POST.get("auto_sync") == "1"
+        if link.auto_sync != auto_sync:
+            TripCalendarLink.objects.filter(pk=link.pk).update(auto_sync=auto_sync)
 
         if activity_count:
             message = f"Trip and {activity_count} activit{'ies' if activity_count != 1 else 'y'} added to your Google Calendar."
@@ -340,3 +345,29 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
         toast = ("success", "Trip removed from your Google Calendar.") if removed else ("info", "This trip was not on your Google Calendar.")
         return self._render_button(request, trip, profile, toast=toast)
+
+
+class TripCalendarAutoSyncView(LoginRequiredMixin, View):
+    """Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
+
+    POST /trips/<uuid>/calendar/auto-sync/  → flip TripCalendarLink.auto_sync for the
+    viewing profile's export link. Does not touch the calendar itself - it only
+    changes whether *later* saves trigger a push. Re-renders the calendar button.
+    """
+
+    def post(self, request, trip_uuid):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        link = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first()
+        if link is None:
+            return HttpResponse("Add this trip to your Google Calendar first.", status=400)
+
+        auto_sync = request.POST.get("auto_sync") == "1"
+        TripCalendarLink.objects.filter(pk=link.pk).update(auto_sync=auto_sync)
+
+        context = {"trip": trip, "profile": profile, **calendar_context(profile, trip)}
+        return render(request, "dashboard/partials/trips/_trip_calendar_button.html", context)

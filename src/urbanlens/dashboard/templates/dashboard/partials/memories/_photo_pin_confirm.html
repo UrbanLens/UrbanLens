@@ -23,7 +23,8 @@ Context:
      data-places-url="{% url 'map.autocomplete.places' %}"
      data-resolve-url="{% url 'map.resolve_place' %}"
      data-pins-url="{% url 'map.pins' %}"
-     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}">
+     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}"
+     data-profile-uuid="{{ request.user.profile.uuid|default:'' }}">
 
     <p class="photo-pin-confirm-intro">
         We'll drop a pin where this photo was taken. Drag the marker, search for a place or one of your pins, or click one of your pins on the map, then give it a name.

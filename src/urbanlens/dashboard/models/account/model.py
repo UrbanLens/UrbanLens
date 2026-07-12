@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.abstract import DashboardModel
 from urbanlens.dashboard.models.account.queryset import EmailVerificationManager
+from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class AccountKdf(DashboardModel):
@@ -42,6 +43,107 @@ class AccountKdf(DashboardModel):
 
     def __str__(self) -> str:
         return f"AccountKdf(user={self.user_id})"
+
+
+class WebAuthnCredential(DashboardModel):
+    """A registered passkey used as an optional second factor at login.
+
+    An account with zero rows here logs in with a password alone. The moment
+    it has one or more, ``CustomLoginView`` routes password logins through
+    ``LoginTwoFactorView`` for a passkey assertion before establishing the
+    session - 2FA is opt-in per user, never enforced site-wide. Users are
+    expected to register more than one credential (e.g. a laptop's platform
+    authenticator plus a password-manager-synced passkey like Bitwarden) so
+    losing one device doesn't lock them out.
+
+    ``credential_id``/``public_key`` are the raw bytes handed back by
+    ``webauthn.verify_registration_response()`` - never decoded or displayed,
+    only round-tripped through authentication ceremonies. ``sign_count`` lets
+    ``verify_authentication_response()`` detect cloned authenticators; synced
+    passkeys (Bitwarden, iCloud Keychain) typically report 0 forever, which
+    the library treats as "not supported" rather than a replay.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="webauthn_credentials")
+    name = models.CharField(max_length=100, blank=True)
+    credential_id = models.BinaryField(unique=True, editable=False)
+    public_key = models.BinaryField(editable=False)
+    sign_count = models.PositiveBigIntegerField(default=0)
+    aaguid = models.CharField(max_length=64, blank=True, editable=False)
+    device_type = models.CharField(max_length=16, blank=True, editable=False)
+    backup_eligible = models.BooleanField(default=False, editable=False)
+    # Authenticator transports reported at registration (e.g. "internal", "hybrid"),
+    # used to populate allowCredentials hints on later authentication ceremonies.
+    transports = models.JSONField(default=list, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        id: int
+        user_id: int
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_webauthn_credential"
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        return f"WebAuthnCredential({self.user_id}, {self.name or self.pk})"
+
+
+class TOTPDevice(DashboardModel):
+    """An authenticator-app (RFC 6238 TOTP) second factor, alternative to a passkey.
+
+    One per account, created only once the user has confirmed a code from
+    their app - an unconfirmed setup lives only in the session (see
+    ``TOTPSetupStartView``/``TOTPSetupConfirmView``) and never reaches the
+    database. ``secret`` is encrypted at rest via ``EncryptedTextField``, the
+    same mechanism already used for OAuth tokens (Flickr/Immich/Google
+    Photos) elsewhere in this app.
+
+    ``last_used_step`` blocks replay of an intercepted code: a verified
+    login records the 30-second time-step it matched, and any later
+    verification attempt for that same step (or an earlier one) is rejected
+    even if the code is still numerically valid within the tolerance window.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="totp_device")
+    secret = EncryptedTextField()
+    last_used_step = models.BigIntegerField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        user_id: int
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_totp_device"
+
+    def __str__(self) -> str:
+        return f"TOTPDevice(user={self.user_id})"
+
+
+class BackupCode(DashboardModel):
+    """A single-use recovery code for accounts with a passkey and/or TOTP device.
+
+    Generated ten at a time (``services.two_factor.generate_backup_codes``),
+    shown to the user exactly once in plaintext, and stored here only as a
+    salted hash (``django.contrib.auth.hashers``) - like a password, the
+    plaintext can never be recovered from the database. Codes are scoped to
+    the account as a whole rather than to a specific factor, since they
+    exist purely to unblock a login when every other factor is unavailable.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="backup_codes")
+    code_hash = models.CharField(max_length=128)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        id: int
+        user_id: int
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_backup_code"
+
+    def __str__(self) -> str:
+        status = "used" if self.used_at else "unused"
+        return f"BackupCode(user={self.user_id}, {status})"
 
 
 class EmailVerification(DashboardModel):

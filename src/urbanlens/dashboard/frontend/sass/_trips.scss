@@ -540,6 +540,20 @@
     }
 }
 
+.calendar-export-autosync {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        margin: 0;
+    }
+}
+
 .trip-detail-body {
     display: grid;
     grid-template-columns: 1fr;

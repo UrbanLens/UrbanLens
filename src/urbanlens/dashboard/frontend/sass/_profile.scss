@@ -1432,14 +1432,6 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 
 // -- Private profile annotation panel -----------------------------------------
 
-.profile-annotation-panel {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-left: 3px solid color-mix(in srgb, $primary-color 50%, transparent);
-    border-radius: $radius-md;
-    padding: 1.1rem 1.25rem;
-}
-
 #profile-annotation-inner {
     display: flex;
     flex-direction: column;
@@ -1461,12 +1453,6 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 .profile-annotation-title {
     font-size: 0.85rem;
     font-weight: 600;
-}
-
-.profile-annotation-badge {
-    margin-left: auto;
-    background: var(--ul-accent-amber);
-    color: var(--ul-black);
 }
 
 .profile-annotation-label {
@@ -2888,6 +2874,10 @@ a.profile-stat--link {
     align-items: center;
     gap: .75rem;
     margin-bottom: .85rem;
+
+    > div > p {
+        color: var(--ul-grey-4);
+    }
 }
 
 .profile-strip-heading h3 {

@@ -9,7 +9,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
-from django.contrib.auth import REDIRECT_FIELD_NAME, views as auth_views
+from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -17,7 +17,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import DatabaseError
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admi
 from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +448,16 @@ class CustomLoginView(LoginView):
     def form_valid(self, form: AuthenticationForm) -> HttpResponse:
         username = form.cleaned_data.get("username", "")
         _clear_login_attempts(username)
+        user = form.get_user()
+
+        from urbanlens.dashboard.services.two_factor import has_second_factor
+
+        if has_second_factor(user):
+            # Password verified, but this account has a passkey and/or TOTP device
+            # registered - hold off on auth_login() until the 2FA challenge succeeds.
+            self.request.session[_WEBAUTHN_PENDING_USER_KEY] = user.pk
+            self.request.session[_WEBAUTHN_PENDING_REDIRECT_KEY] = self.get_success_url()
+            return redirect("login.2fa")
         return super().form_valid(form)
 
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
@@ -486,6 +496,129 @@ class CustomLoginView(LoginView):
                         ],
                     )
         return super().form_invalid(form)
+
+
+_WEBAUTHN_PENDING_USER_KEY = "webauthn_pending_user_id"
+_WEBAUTHN_PENDING_REDIRECT_KEY = "webauthn_pending_redirect"
+
+
+def _pending_2fa_user(request: HttpRequest) -> User | None:
+    """Return the user mid-passkey-challenge in this session, or None.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        The active User awaiting a passkey assertion, or None if there isn't one
+        (either nothing pending, or the stashed id no longer resolves to an active user).
+    """
+    user_id = request.session.get(_WEBAUTHN_PENDING_USER_KEY)
+    if not user_id:
+        return None
+    return User.objects.filter(pk=user_id, is_active=True).first()
+
+
+def _two_factor_challenge_context(user: User, **extra: object) -> dict:
+    """Shared template context for login_2fa.html: which options this account has."""
+    from urbanlens.dashboard.services.two_factor import has_totp, remaining_backup_code_count
+    from urbanlens.dashboard.services.webauthn import has_passkeys
+
+    return {
+        "username": user.username,
+        "has_passkey": has_passkeys(user),
+        "has_code_factor": has_totp(user) or remaining_backup_code_count(user) > 0,
+        **extra,
+    }
+
+
+def _complete_two_factor_login(request: HttpRequest, user: User) -> str:
+    """Finish a 2FA-gated login: establish the session and return the post-login redirect target."""
+    redirect_to = request.session.pop(_WEBAUTHN_PENDING_REDIRECT_KEY, None) or reverse("post_login")
+    request.session.pop(_WEBAUTHN_PENDING_USER_KEY, None)
+    auth_login(request, user, backend="urbanlens.dashboard.services.auth_backend.EmailOrUsernameModelBackend")
+    return redirect_to
+
+
+class LoginTwoFactorView(View):
+    """Renders the 2FA challenge page reached after a password login.
+
+    Only reachable via ``CustomLoginView.form_valid()`` stashing a pending user
+    id in the session - visiting directly without that redirects to login.
+    Offers a passkey prompt, a TOTP/backup-code form, or both, depending on
+    what the account has configured.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        if request.user.is_authenticated:
+            return redirect("post_login")
+        user = _pending_2fa_user(request)
+        if user is None:
+            return redirect("login")
+        return render(request, "registration/login_2fa.html", _two_factor_challenge_context(user))
+
+
+class LoginTwoFactorOptionsView(View):
+    """POST: return WebAuthn authentication options for the pending user's passkeys."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        user = _pending_2fa_user(request)
+        if user is None:
+            return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
+
+        from urbanlens.dashboard.services.webauthn import WebAuthnError, build_authentication_options
+
+        try:
+            options_json = build_authentication_options(request, user)
+        except WebAuthnError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return HttpResponse(options_json, content_type="application/json")
+
+
+class LoginTwoFactorVerifyView(View):
+    """POST: verify the browser's passkey assertion and complete login."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        user = _pending_2fa_user(request)
+        if user is None:
+            return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
+
+        from urbanlens.dashboard.services.webauthn import WebAuthnError, verify_authentication
+
+        try:
+            verify_authentication(request, user, request.body.decode("utf-8"))
+        except (WebAuthnError, UnicodeDecodeError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        redirect_to = _complete_two_factor_login(request, user)
+        return JsonResponse({"ok": True, "redirect": redirect_to})
+
+
+class LoginTwoFactorCodeView(View):
+    """POST: verify a TOTP or backup code - the non-JS fallback to a passkey assertion."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        user = _pending_2fa_user(request)
+        if user is None:
+            return redirect("login")
+
+        from urbanlens.dashboard.services.two_factor import verify_login_code
+
+        code = request.POST.get("code", "")
+        if not verify_login_code(user, code):
+            context = _two_factor_challenge_context(user, code_error="That code didn't work. Please try again.")
+            return render(request, "registration/login_2fa.html", context, status=400)
+
+        redirect_to = _complete_two_factor_login(request, user)
+        return HttpResponseRedirect(redirect_to)
+
+
+class LoginTwoFactorCancelView(View):
+    """GET: abandon the pending passkey challenge and return to the login form."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        request.session.pop(_WEBAUTHN_PENDING_USER_KEY, None)
+        request.session.pop(_WEBAUTHN_PENDING_REDIRECT_KEY, None)
+        return redirect("login")
 
 
 class PostLoginRedirectView(View):

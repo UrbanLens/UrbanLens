@@ -5,12 +5,12 @@ import {
   renderTreeView,
   resetColorPicker,
   resetIconPicker
-} from "./categories-we5ca0ws.js";
+} from "./categories-bbs4ykdk.js";
 import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./categories-agkcnzxy.js";
+} from "./categories-cm6bs6jx.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-icon-picker.ts
 var bulkStateUpdaters = new Map;

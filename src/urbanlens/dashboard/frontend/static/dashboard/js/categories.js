@@ -1,12 +1,12 @@
 import {
   BulkEntityManager,
   installGlobalParentSearch
-} from "./categories-skbgr1dy.js";
+} from "./categories-gm62b4vj.js";
 import {
   installGlobalColorPicker,
   installGlobalIconPicker
-} from "./categories-we5ca0ws.js";
-import"./categories-agkcnzxy.js";
+} from "./categories-bbs4ykdk.js";
+import"./categories-cm6bs6jx.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/categories.ts
 installGlobalIconPicker();

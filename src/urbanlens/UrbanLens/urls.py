@@ -16,6 +16,11 @@ from django.urls import include, path, re_path
 from urbanlens.dashboard.controllers.account import (
     CustomLoginView,
     E2EEPasswordResetConfirmView,
+    LoginTwoFactorCancelView,
+    LoginTwoFactorCodeView,
+    LoginTwoFactorOptionsView,
+    LoginTwoFactorVerifyView,
+    LoginTwoFactorView,
     PostLoginRedirectView,
     ResendVerificationView,
     SignupView,
@@ -48,6 +53,13 @@ urlpatterns = [
     # password_change/password_change_done - views this app has no UI for and no
     # templates for. Anything not listed here falls through to the 404 catch-all.
     path("accounts/login/", CustomLoginView.as_view(), name="login"),
+    # Optional passkey (WebAuthn) second factor - reached only via CustomLoginView
+    # stashing a pending user id in the session after password verification.
+    path("accounts/login/2fa/", LoginTwoFactorView.as_view(), name="login.2fa"),
+    path("accounts/login/2fa/options/", LoginTwoFactorOptionsView.as_view(), name="login.2fa.options"),
+    path("accounts/login/2fa/verify/", LoginTwoFactorVerifyView.as_view(), name="login.2fa.verify"),
+    path("accounts/login/2fa/code/", LoginTwoFactorCodeView.as_view(), name="login.2fa.code"),
+    path("accounts/login/2fa/cancel/", LoginTwoFactorCancelView.as_view(), name="login.2fa.cancel"),
     path("accounts/post-login/", PostLoginRedirectView.as_view(), name="post_login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path(

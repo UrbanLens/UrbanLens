@@ -23,6 +23,7 @@
 @use 'tags';
 @use 'icon-picker';
 @use 'profile';
+@use 'settings';
 @use 'wiki';
 @use 'detail-pins';
 @use 'trips';
@@ -50,6 +51,7 @@
 @use 'messages';
 @use 'search';
 @use 'e2ee';
+@use 'webauthn';
 @use 'safety';
 @use 'account_deletion';
 @use 'undo_history';

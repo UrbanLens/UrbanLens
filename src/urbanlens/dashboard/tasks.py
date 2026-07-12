@@ -101,6 +101,30 @@ def generate_boundaries_for_location(location_id: int) -> bool:
         cache.delete(f"ul_boundary_generation_{location_id}")
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def push_trip_to_calendar(trip_id: int) -> int:
+    """Push a trip's current state to every calendar it is auto-synced with.
+
+    Queued after a trip or trip activity is saved, so calendar events created
+    by the "keep in sync" import option stay current without the user having
+    to re-export manually. Sync is one-way (UrbanLens to Google) only.
+
+    Args:
+        trip_id: PK of the trip that changed.
+
+    Returns:
+        The number of calendars the trip was successfully pushed to.
+    """
+    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.services.calendar_sync import push_auto_synced_trip_changes
+
+    trip = Trip.objects.filter(pk=trip_id).first()
+    if trip is None:
+        logger.info("push_trip_to_calendar: trip %s no longer exists", trip_id)
+        return 0
+    return push_auto_synced_trip_changes(trip)
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None) -> bool:
     """Build a user's data export archive outside the web request."""

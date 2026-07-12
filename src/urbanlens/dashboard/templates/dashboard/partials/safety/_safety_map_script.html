@@ -220,6 +220,7 @@ so it's always available by the time this script runs - no typeof guard needed.
                     googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
                 },
                 resolvePlaceUrl: '{% url "map.resolve_place" %}',
+                pinCacheProfileUuid: '{{ request.user.profile.uuid|default:"" }}',
                 enableMyLocation: true,
                 defaultZoom: 15,
                 onSelect: function (result) { jumpTo(result.lat, result.lng, result.zoom); },

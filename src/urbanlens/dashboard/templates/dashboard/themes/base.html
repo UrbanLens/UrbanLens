@@ -1152,6 +1152,7 @@
                     googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
                 },
                 resolvePlaceUrl: '{% url "map.resolve_place" %}',
+                pinCacheProfileUuid: '{{ request.user.profile.uuid|default:"" }}',
                 enableMyLocation: true,
                 defaultZoom: 15,
                 onSelect: function (result) {

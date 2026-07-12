@@ -8,14 +8,16 @@
 <div id="memories-sharing-page" class="memories-tab-page">
     <div class="memories-header">
         <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">ios_share</i> Pins you've shared</h1>
-            <p class="memories-subtitle">Every pin you've shared with friends, who received it, and how far it travelled from there.</p>
+            <h1 class="memories-title"><i class="material-symbols-outlined">ios_share</i> Pins &amp; maps you've shared</h1>
+            <p class="memories-subtitle">Everything you've shared with friends, who received it, and how far it travelled from there.</p>
         </div>
     </div>
 
     <div class="page-inner">
         {% memories_tabs "sharing" %}
 
+        {% if share_groups or map_share_groups %}
+        <h2 class="memories-sharing-section-title">Pins</h2>
         {% if share_groups %}
         <div class="memories-sharing-list">
             {% for group in share_groups %}
@@ -49,14 +51,55 @@
             {% endfor %}
         </div>
         {% else %}
+        <p class="memories-sharing-section-empty">You haven't shared any pins yet.</p>
+        {% endif %}
+
+        <h2 class="memories-sharing-section-title">Maps</h2>
+        {% if map_share_groups %}
+        {% url 'memories.maps' as maps_url %}
+        <div class="memories-sharing-list">
+            {% for group in map_share_groups %}
+            <article class="memories-sharing-card card">
+                <div class="memories-sharing-card-header">
+                    <a class="memories-sharing-pin-link" href="{{ group.attachment_url|default:maps_url }}">
+                        <i class="material-symbols-outlined">map</i>
+                        {{ group.map.title|default:"Untitled map" }}
+                    </a>
+                    {% if group.attachment_label %}
+                    <span class="memories-sharing-chain" data-tooltip="{{ group.attachment_label }}">
+                        <i class="material-symbols-outlined">link</i>
+                        {{ group.attachment_label }}
+                    </span>
+                    {% endif %}
+                </div>
+                <ul class="memories-sharing-recipients">
+                    {% for share in group.shares %}
+                    <li class="memories-sharing-recipient">
+                        <span class="memories-sharing-recipient-name">
+                            <i class="material-symbols-outlined">person</i>
+                            {{ share.to_profile.username }}
+                        </span>
+                        <span class="memories-sharing-recipient-meta">
+                            shared {{ share.created|date:"M j, Y" }}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="memories-sharing-section-empty">You haven't shared any maps yet.</p>
+        {% endif %}
+        {% else %}
         <section class="visits-empty-state" aria-labelledby="sharing-empty-title">
             <div class="visits-empty-hero">
                 <span class="visits-empty-icon"><i class="material-symbols-outlined">ios_share</i></span>
                 <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
             </div>
             <p class="visits-empty-kicker">Nothing here yet</p>
-            <h2 id="sharing-empty-title">You haven't shared any pins.</h2>
-            <p>If you ever share a pin with a friend, it will show up here.</p>
+            <h2 id="sharing-empty-title">You haven't shared anything.</h2>
+            <p>If you ever share a pin or a map with a friend, it will show up here.</p>
             <div class="visits-empty-actions">
                 <a class="btn btn--primary" href="{% url 'map.view' %}">
                     <i class="material-symbols-outlined">map</i> Explore your map

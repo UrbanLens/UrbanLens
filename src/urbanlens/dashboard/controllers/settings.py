@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import (
@@ -28,11 +30,28 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
+from urbanlens.dashboard.services.webauthn import list_credentials
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
+
+
+def _settings_redirect(anchor: str) -> HttpResponse:
+    """Redirect to the settings page, landing on the tab containing ``anchor``.
+
+    The page's tab-switching JS resolves an id fragment to its containing
+    ``.settings-tab-panel`` and activates that tab, so a plain section id is
+    enough to land the user back where they were instead of the default tab.
+
+    Args:
+        anchor: The id of the section/subsection element to land on.
+
+    Returns:
+        A redirect response to ``settings.view#<anchor>``.
+    """
+    return redirect(f"{reverse('settings.view')}#{anchor}")
 
 
 def _e2ee_enrolled(profile: Profile) -> bool:
@@ -47,6 +66,25 @@ def _e2ee_enrolled(profile: Profile) -> bool:
     from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
 
     return MessagingKeyBundle.objects.filter(profile=profile).exists()
+
+
+def _security_context(user: User, request: HttpRequest) -> dict:
+    """Context for the Security section: passkeys, TOTP status, backup codes.
+
+    Also pops ``new_backup_codes`` from the session, which
+    ``BackupCodesGenerateView`` stashes there as a one-time flash - the
+    plaintext codes are only ever available on the response immediately
+    after generating them.
+    """
+    from urbanlens.dashboard.services.two_factor import SESSION_PENDING_TOTP_SECRET, has_totp, remaining_backup_code_count
+
+    return {
+        "passkeys": list_credentials(user),
+        "has_totp": has_totp(user),
+        "pending_totp_secret": request.session.get(SESSION_PENDING_TOTP_SECRET),
+        "backup_code_count": remaining_backup_code_count(user),
+        "new_backup_codes": request.session.pop("new_backup_codes", None),
+    }
 
 
 class SettingsView(LoginRequiredMixin, View):
@@ -89,7 +127,7 @@ class SettingsView(LoginRequiredMixin, View):
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        if not request.user.is_authenticated:
+        if not isinstance(request.user, User):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = {
@@ -109,13 +147,14 @@ class SettingsView(LoginRequiredMixin, View):
             "e2ee_enrolled": _e2ee_enrolled(profile),
             "e2ee_has_password": request.user.has_usable_password(),
             "self_slug": profile.ensure_slug(),
+            **_security_context(request.user, request),
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
         }
         return render(request, "dashboard/pages/settings/index.html", context)
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        if not request.user.is_authenticated:
+        if not isinstance(request.user, User):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         section = request.POST.get("section")
@@ -146,7 +185,7 @@ class SettingsView(LoginRequiredMixin, View):
                 if places_layer_form.is_valid():
                     places_layer_form.save()
                     messages.success(request, "Places layer sources saved.")
-                    return redirect("settings.view")
+                    return _settings_redirect("places-layer-settings-section")
 
         elif section == "ai":
             if user_has_feature(request.user, SiteFeature.AI):
@@ -154,21 +193,21 @@ class SettingsView(LoginRequiredMixin, View):
                 if ai_form.is_valid():
                     ai_form.save()
                     messages.success(request, "AI settings saved.")
-                    return redirect("settings.view")
+                    return _settings_redirect("ai-settings-section")
 
         elif section == "markup_defaults":
             markup_defaults_form = MarkupDefaultsForm(request.POST, instance=profile)
             if markup_defaults_form.is_valid():
                 markup_defaults_form.save()
                 messages.success(request, "Annotation defaults saved.")
-                return redirect("settings.view")
+                return _settings_redirect("markup-defaults-settings-section")
 
         elif section == "privacy":
             privacy_form = PrivacySettingsForm(request.POST, instance=profile)
             if privacy_form.is_valid():
                 privacy_form.save()
                 messages.success(request, "Privacy settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("privacy-settings-section")
 
         elif section == "contact":
             contact_form = ContactSettingsForm(request.POST, exclude_user_id=request.user.pk)
@@ -176,14 +215,14 @@ class SettingsView(LoginRequiredMixin, View):
                 request.user.email = contact_form.cleaned_data["email"]
                 request.user.save(update_fields=["email"])
                 messages.success(request, "Email address saved.")
-                return redirect("settings.view")
+                return _settings_redirect("notifications-settings-section")
 
         elif section == "style":
             style_form = StyleSettingsForm(request.POST, instance=profile)
             if style_form.is_valid():
                 style_form.save()
                 messages.success(request, "Style settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("style-settings-section")
 
         elif section == "storage":
             raw_dimension = (request.POST.get("image_downscale_max_dimension") or "").strip()
@@ -198,11 +237,11 @@ class SettingsView(LoginRequiredMixin, View):
                     if is_xhr:
                         return JsonResponse({"ok": False, "errors": {"image_downscale_max_dimension": ["That photo size is not available."]}})
                     messages.error(request, "That photo size is not available.")
-                    return redirect("settings.view")
+                    return _settings_redirect("storage-settings-section")
                 profile.image_downscale_max_dimension = dimension
             profile.save(update_fields=["image_downscale_max_dimension", "updated"])
             messages.success(request, "Storage settings saved. The new photo size applies to future uploads.")
-            return redirect("settings.view")
+            return _settings_redirect("storage-settings-section")
 
         elif section == "map":
             map_display_form = MapDisplayForm(request.POST, instance=profile)
@@ -211,35 +250,35 @@ class SettingsView(LoginRequiredMixin, View):
                 map_display_form.save()
                 map_center_form.save()
                 messages.success(request, "Map settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("map-settings-section")
 
         elif section == "memories":
             memories_form = MemoriesSettingsForm(request.POST, instance=profile)
             if memories_form.is_valid():
                 memories_form.save()
                 messages.success(request, "Memories settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("memories-settings-section")
 
         elif section == "community":
             community_form = CommunitySettingsForm(request.POST, instance=profile)
             if community_form.is_valid():
                 community_form.save()
                 messages.success(request, "Community settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("community-settings-section")
 
         elif section == "external_apis":
             external_api_form = ExternalApiSettingsForm(request.POST, instance=profile)
             if external_api_form.is_valid():
                 external_api_form.save()
                 messages.success(request, "External API settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("external-api-settings-section")
 
         elif section == "direct_messages":
             direct_message_form = DirectMessageSettingsForm(request.POST, instance=profile)
             if direct_message_form.is_valid():
                 direct_message_form.save()
                 messages.success(request, "Direct message settings saved.")
-                return redirect("settings.view")
+                return _settings_redirect("direct-message-settings-section")
 
         context = {
             "privacy_form": privacy_form,
@@ -255,6 +294,7 @@ class SettingsView(LoginRequiredMixin, View):
             "external_api_form": external_api_form,
             "direct_message_form": direct_message_form,
             "preview_zoom": profile.map_default_zoom or 13,
+            **_security_context(request.user, request),
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
         }

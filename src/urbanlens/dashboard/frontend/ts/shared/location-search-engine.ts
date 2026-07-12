@@ -12,6 +12,8 @@
  * check-in destination picker.
  */
 
+import { readCachedPinsForSearch } from "./pin-cache";
+
 interface SelectResult {
     lat: number;
     lng: number;
@@ -57,6 +59,15 @@ export interface LocationSearchOptions {
         topCities?: SourceConfig;
     };
     resolvePlaceUrl?: string | null;
+    /**
+     * Profile UUID for the current user, used to read the main map's
+     * localStorage pin cache (see shared/pin-cache.ts) so a "Your Pins &
+     * Locations" section can render instantly - before the equivalent
+     * server request (sources.localPins) resolves - instead of leaving that
+     * section blank/spinning until the network responds. Best-effort only:
+     * the server response always supersedes these once it arrives.
+     */
+    pinCacheProfileUuid?: string | null;
     home?: { title?: string; subtitle?: string; lat: number; lng: number; zoom?: number } | null;
     enableMyLocation?: boolean;
     getUserLocationCache?: (() => { lat: number; lng: number } | null) | null;
@@ -207,6 +218,11 @@ function generateDerivedSuggestions(query: string): SuggestionResult[] {
     return results;
 }
 
+const MAX_INSTANT_PIN_SUGGESTIONS = 6;
+const LABEL_LOCAL_PINS = "Your Pins & Locations";
+const LABEL_OSM = "Places & Addresses";
+const LABEL_PLACES = "Google Places";
+
 function create(options: LocationSearchOptions): LocationSearchEngineInstance {
     const {
         input,
@@ -218,6 +234,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         recentPinsKey = null,
         sources = {},
         resolvePlaceUrl = null,
+        pinCacheProfileUuid = null,
         home = null,
         enableMyLocation = true,
         getUserLocationCache = null,
@@ -304,6 +321,78 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         setUserLocationCache?.(lat, lng);
     }
 
+    // Parsed once per engine instance (not per keystroke) since it's re-read from
+    // localStorage/JSON.parse - the cache itself only changes via a full page
+    // reload of the map, so re-parsing on every keystroke would be wasted work.
+    let localPinCache: ReturnType<typeof readCachedPinsForSearch> | null = null;
+    function getLocalPinCache(): ReturnType<typeof readCachedPinsForSearch> {
+        if (localPinCache === null) localPinCache = pinCacheProfileUuid ? readCachedPinsForSearch(pinCacheProfileUuid) : [];
+        return localPinCache;
+    }
+
+    /** Zero-latency "Your Pins & Locations" matches from the cached pin store, shown while the equivalent network request is still in flight. */
+    function buildInstantLocalSuggestions(query: string): SuggestionResult[] {
+        const q = query.trim().toLowerCase();
+        if (!pinCacheProfileUuid || q.length < 2) return [];
+        const results: SuggestionResult[] = [];
+        for (const pin of getLocalPinCache()) {
+            const nameHit = pin.name.toLowerCase().includes(q);
+            const addressHit = !nameHit && !!pin.address?.toLowerCase().includes(q);
+            const matchedTag = !nameHit && !addressHit ? pin.tags?.find((t) => t.toLowerCase().includes(q)) : undefined;
+            if (!nameHit && !addressHit && !matchedTag) continue;
+            results.push({
+                type: "pin",
+                icon: pin.icon || "push_pin",
+                title: pin.name,
+                subtitle: addressHit ? pin.address! : matchedTag ? `Tagged: ${matchedTag}` : "Your pin",
+                lat: pin.latitude,
+                lng: pin.longitude,
+                zoom: 16,
+                pin_slug: pin.uuid,
+            });
+            if (results.length >= MAX_INSTANT_PIN_SUGGESTIONS) break;
+        }
+        return results;
+    }
+
+    // -- Result-preview caches (query-narrowing while typing) -------------------
+    // The last authoritative response for each network source, kept purely as a
+    // best-effort instant preview: on every keystroke we re-filter it against the
+    // new query text and show the survivors immediately, instead of leaving that
+    // section blank/spinning until the next debounced fetch resolves. This is
+    // never treated as authoritative - the real fetch (still fired on the normal
+    // debounce) always supersedes it, so it's safe to keep showing a stale-but-
+    // plausible preview even across a backspace/edit rather than only a strict
+    // "query got longer" extension.
+    let localResultCache: SuggestionResult[] | null = null;
+    let osmResultCache: SuggestionResult[] | null = null;
+    let placesResultCache: SuggestionResult[] | null = null;
+
+    function suggestionSearchText(r: SuggestionResult): string {
+        return `${r.title} ${r.subtitle ?? ""}`.toLowerCase();
+    }
+
+    /**
+     * Coordinate-based identity key for deduping a cached-pin instant suggestion
+     * against a network one representing the same pin. The two can't be compared
+     * by pin_slug: the localStorage pin cache never stores a pin's slug (only its
+     * uuid - see pin-cache.ts), while the server's AutocompleteResult.pin_slug is
+     * the real slug whenever the pin has one. Coordinates are the one field both
+     * sides agree on.
+     */
+    function coordKey(lat?: number, lng?: number): string | null {
+        if (lat == null || lng == null) return null;
+        return `${lat.toFixed(5)},${lng.toFixed(5)}`;
+    }
+
+    /** Filter a previous response's results down to the ones still consistent with the current query text. */
+    function previewFromCache(cache: SuggestionResult[] | null, query: string, isDuplicate?: (r: SuggestionResult) => boolean): SuggestionResult[] {
+        if (!cache?.length) return [];
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        return cache.filter((r) => !isDuplicate?.(r) && suggestionSearchText(r).includes(q));
+    }
+
     let addrBarTimer: ReturnType<typeof setTimeout> | undefined;
     let historyNavIdx = -1;
     let activeIdx = -1;
@@ -351,6 +440,10 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         searchSeq++;
         activeIdx = -1;
         historyNavIdx = -1;
+        // Start the next search clean rather than previewing leftovers from this one.
+        localResultCache = null;
+        osmResultCache = null;
+        placesResultCache = null;
         if (!wasEmpty) input.focus();
         updateHistoryBtn();
     }
@@ -511,26 +604,41 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         slot: HTMLElement,
         onDone?: (hasResults: boolean) => void,
         fetchOpts?: RequestInit,
+        onResults?: (results: SuggestionResult[]) => void,
     ): Promise<void> {
-        slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
-            <span class="addr-spinner"></span><span class="addr-source-loading-label">${escHtml(label)}...</span>
-        </div>`;
-        suggestions.hidden = false;
+        // If the slot already has instant (e.g. cache-derived, or pruned-preview -
+        // see renderInstantSlots) suggestions, leave them showing instead of
+        // replacing them with a spinner - they'll be upgraded to the authoritative
+        // results below, or left in place as a fallback if this request comes
+        // back empty or fails.
+        const hadInstantContent = slot.childElementCount > 0;
+        if (!hadInstantContent) {
+            slot.innerHTML = `<div class="addr-source-loading" data-seq="${seq}">
+                <span class="addr-spinner"></span><span class="addr-source-loading-label">${escHtml(label)}...</span>
+            </div>`;
+            suggestions.hidden = false;
+        }
         try {
             const resp = await fetch(url, fetchOpts ?? { headers: { "X-Requested-With": "XMLHttpRequest" } });
             if (seq !== searchSeq) return;
-            slot.innerHTML = "";
             if (!resp.ok) {
+                if (!hadInstantContent) slot.innerHTML = "";
                 onDone?.(false);
                 return;
             }
             const raw = await resp.json();
             if (seq !== searchSeq) return;
             const results = parser(raw);
+            // This is the authoritative answer for the current query - record it
+            // (even when empty) so the next keystroke's instant preview reflects
+            // it instead of an older, now-superseded cached result set.
+            onResults?.(results ?? []);
             if (!results?.length) {
+                if (!hadInstantContent) slot.innerHTML = "";
                 onDone?.(false);
                 return;
             }
+            slot.innerHTML = "";
             slot.appendChild(makeCollapsibleHdr(label, sectionKey(label), slot));
             for (const r of results) slot.appendChild(buildSuggestionItem(r));
             suggestions.hidden = false;
@@ -538,7 +646,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             onDone?.(true);
         } catch {
             if (seq === searchSeq) {
-                slot.innerHTML = "";
+                if (!hadInstantContent) slot.innerHTML = "";
                 onDone?.(false);
             }
         }
@@ -621,13 +729,32 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             .catch(() => toast("error", "Geocoding failed - check your connection."));
     }
 
-    function startMultiSearch(query: string): void {
-        onSearchStart?.();
-        const seq = ++searchSeq;
+    interface SearchSlots {
+        seq: number;
+        localSlot: HTMLElement | null;
+        osmSlot: HTMLElement | null;
+        placesSlot: HTMLElement | null;
+        noMsgSlot: HTMLElement;
+        derivedSlot: HTMLElement;
+    }
+
+    // Slots built by the last renderInstantSlots() call, consumed by runNetworkStage()
+    // once its debounce elapses. Kept outside both functions so a keystroke's instant
+    // render and its (later, debounced) network stage can share the same DOM nodes.
+    let pendingSlots: SearchSlots | null = null;
+
+    /**
+     * Synchronously (re)builds the whole suggestion box from purely local
+     * computation: coordinate/Plus Code detection, cached-pin matches (see
+     * buildInstantLocalSuggestions), and the generic "Search Suggestions"
+     * entries. None of this needs a network round trip, so it renders on
+     * every keystroke with zero debounce - the suggestion box updates in
+     * place instead of blanking out until the network sources catch up.
+     */
+    function renderInstantSlots(seq: number, query: string): SearchSlots {
         const box = suggestions;
 
         box.innerHTML = "";
-        box.hidden = true;
         activeIdx = -1;
 
         const coordSlot = makeSlot(box);
@@ -636,15 +763,6 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         const placesSlot = sources.googlePlaces ? makeSlot(box) : null;
         const noMsgSlot = makeSlot(box);
         const derivedSlot = makeSlot(box);
-
-        let pendingSources = [localSlot, osmSlot, placesSlot].filter(Boolean).length;
-        let primaryHits = 0;
-        function onPrimaryDone(hasResults: boolean): void {
-            if (hasResults) primaryHits++;
-            if (--pendingSources === 0 && primaryHits === 0 && !parseCoordinates(query) && !isPlusCode(query)) {
-                noMsgSlot.innerHTML = '<div class="addr-no-results">No exact matches found</div>';
-            }
-        }
 
         const coords = parseCoordinates(query);
         if (coords) {
@@ -694,13 +812,86 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         }
 
         if (localSlot) {
-            fetchSourceIntoSlot(seq, "Your Pins & Locations", `${sources.localPins!.url}?q=${encodeURIComponent(query)}`, (data) => data.results || [], localSlot, onPrimaryDone);
+            // Combine the always-fresh localStorage cache matches with any still-
+            // consistent survivors from the last network response (e.g. wikis, or
+            // pins not present in the browser's pin cache), deduped by pin_slug so
+            // an upgraded/authoritative match isn't shown twice.
+            const instant = buildInstantLocalSuggestions(query);
+            const instantCoords = new Set(instant.map((r) => coordKey(r.lat, r.lng)).filter((k): k is string => k !== null));
+            const preview = previewFromCache(localResultCache, query, (r) => {
+                const key = coordKey(r.lat, r.lng);
+                return key !== null && instantCoords.has(key);
+            });
+            const combined = [...instant, ...preview];
+            if (combined.length) {
+                localSlot.appendChild(makeCollapsibleHdr(LABEL_LOCAL_PINS, sectionKey(LABEL_LOCAL_PINS), localSlot));
+                for (const r of combined) localSlot.appendChild(buildSuggestionItem(r));
+                box.hidden = false;
+            }
+        }
+
+        if (osmSlot) {
+            const preview = previewFromCache(osmResultCache, query);
+            if (preview.length) {
+                osmSlot.appendChild(makeCollapsibleHdr(LABEL_OSM, sectionKey(LABEL_OSM), osmSlot));
+                for (const r of preview) osmSlot.appendChild(buildSuggestionItem(r));
+                box.hidden = false;
+            }
+        }
+
+        if (placesSlot) {
+            const preview = previewFromCache(placesResultCache, query);
+            if (preview.length) {
+                placesSlot.appendChild(makeCollapsibleHdr(LABEL_PLACES, sectionKey(LABEL_PLACES), placesSlot));
+                for (const r of preview) placesSlot.appendChild(buildSuggestionItem(r));
+                box.hidden = false;
+            }
+        }
+
+        const derived = generateDerivedSuggestions(query);
+        derivedSlot.appendChild(makeCollapsibleHdr("Search Suggestions", "suggestions", derivedSlot));
+        for (const r of derived) derivedSlot.appendChild(buildSuggestionItem(r));
+        box.hidden = false;
+
+        const slots: SearchSlots = { seq, localSlot, osmSlot, placesSlot, noMsgSlot, derivedSlot };
+        pendingSlots = slots;
+        return slots;
+    }
+
+    /** Fires the network-backed sources (local pins, Nominatim, Google Places) into the slots renderInstantSlots already built. */
+    function runNetworkStage(seq: number, query: string, slots: SearchSlots): void {
+        if (seq !== searchSeq || pendingSlots !== slots) return;
+        onSearchStart?.();
+        const { localSlot, osmSlot, placesSlot, noMsgSlot, derivedSlot } = slots;
+
+        let pendingSources = [localSlot, osmSlot, placesSlot].filter(Boolean).length;
+        let primaryHits = 0;
+        function onPrimaryDone(hasResults: boolean): void {
+            if (hasResults) primaryHits++;
+            if (--pendingSources === 0 && primaryHits === 0 && !parseCoordinates(query) && !isPlusCode(query)) {
+                noMsgSlot.innerHTML = '<div class="addr-no-results">No exact matches found</div>';
+            }
+        }
+
+        if (localSlot) {
+            fetchSourceIntoSlot(
+                seq,
+                LABEL_LOCAL_PINS,
+                `${sources.localPins!.url}?q=${encodeURIComponent(query)}`,
+                (data) => data.results || [],
+                localSlot,
+                onPrimaryDone,
+                undefined,
+                (results) => {
+                    localResultCache = results;
+                },
+            );
         }
 
         if (osmSlot) {
             fetchSourceIntoSlot(
                 seq,
-                "Places & Addresses",
+                LABEL_OSM,
                 `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
                 (data) =>
                     (data || []).map((r: any) => ({
@@ -715,27 +906,43 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
                 osmSlot,
                 onPrimaryDone,
                 { headers: { Accept: "application/json", "Accept-Language": "en" } },
+                (results) => {
+                    osmResultCache = results;
+                },
             );
         }
 
         if (placesSlot) {
-            fetchSourceIntoSlot(seq, "Google Places", `${sources.googlePlaces!.url}?q=${encodeURIComponent(query)}`, (data) => (data.disabled ? [] : data.results || []), placesSlot, (hasResults) => {
-                onPrimaryDone(hasResults);
-                // Google Places already found the place, so the "Search Google Maps for..."
-                // entry would be redundant - remove it to avoid showing the same result twice.
-                if (hasResults) {
-                    derivedSlot.querySelectorAll(".addr-suggestion--external").forEach((el) => el.remove());
-                    if (!derivedSlot.querySelector(".addr-suggestion")) {
-                        derivedSlot.querySelector(".addr-suggestion-group-hdr")?.remove();
+            fetchSourceIntoSlot(
+                seq,
+                LABEL_PLACES,
+                `${sources.googlePlaces!.url}?q=${encodeURIComponent(query)}`,
+                (data) => (data.disabled ? [] : data.results || []),
+                placesSlot,
+                (hasResults) => {
+                    onPrimaryDone(hasResults);
+                    // Google Places already found the place, so the "Search Google Maps for..."
+                    // entry would be redundant - remove it to avoid showing the same result twice.
+                    if (hasResults) {
+                        derivedSlot.querySelectorAll(".addr-suggestion--external").forEach((el) => el.remove());
+                        if (!derivedSlot.querySelector(".addr-suggestion")) {
+                            derivedSlot.querySelector(".addr-suggestion-group-hdr")?.remove();
+                        }
                     }
-                }
-            });
+                },
+                undefined,
+                (results) => {
+                    placesResultCache = results;
+                },
+            );
         }
+    }
 
-        const derived = generateDerivedSuggestions(query);
-        derivedSlot.appendChild(makeCollapsibleHdr("Search Suggestions", "suggestions", derivedSlot));
-        for (const r of derived) derivedSlot.appendChild(buildSuggestionItem(r));
-        box.hidden = false;
+    /** Full search: renders instant local results immediately, then kicks off the network sources right away (no debounce) - used by direct action triggers (history, arrow-nav) rather than live typing. */
+    function startMultiSearch(query: string): void {
+        const seq = ++searchSeq;
+        const slots = renderInstantSlots(seq, query);
+        runNetworkStage(seq, query, slots);
     }
 
     function showEmptySuggestions(): void {
@@ -869,8 +1076,13 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             showEmptySuggestions();
             return;
         }
-        suggestions.hidden = true;
-        addrBarTimer = setTimeout(() => startMultiSearch(q), 250);
+        // Render everything that doesn't need the network on every keystroke -
+        // no debounce, no blanking the box while waiting. Only the network
+        // sources (local-pin server search, Nominatim, Google Places) are
+        // debounced, since those are the ones worth rate-limiting.
+        const seq = ++searchSeq;
+        const slots = renderInstantSlots(seq, q);
+        addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 250);
     });
 
     input.addEventListener("keydown", function (e) {
