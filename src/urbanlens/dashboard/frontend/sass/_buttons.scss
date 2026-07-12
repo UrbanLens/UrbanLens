@@ -90,9 +90,15 @@
 		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
+	}
 
+	&--danger,
+	&--danger-hover {
+		&:active,
 		&:focus,
 		&:hover {
+			color: $color-red-1300;
+			border-color: $danger-border;
 			background: color.scale($danger-bg, $lightness: -4%);
 
 			i.material-symbols-outlined,

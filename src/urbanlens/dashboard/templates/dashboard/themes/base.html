@@ -46,9 +46,11 @@
     {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
     {% endif %}
 
-    {# Fixed bottom-left tools menu, shared across every page. Currently only surfaces
+    {% comment %}
+    Fixed bottom-left tools menu, shared across every page. Currently only surfaces
        sections the user collapsed on the current page (see the collapsible-sections
-       script below), but it's built to hold other page tools later - see _updateRestoreControls. #}
+       script below), but it's built to hold other page tools later - see _updateRestoreControls.
+    {% endcomment %}
     <div class="tools-fab" id="tools-fab" hidden>
         <div class="tools-fab-menu" id="tools-fab-menu" hidden>
             <div class="tools-fab-group" data-tools-fab-group="collapse-restore" hidden>

@@ -55,7 +55,7 @@
                                 hx-on::after-request="if(event.detail.successful){document.getElementById('markup-map-share-dialog').showModal()}">
                             <i class="material-symbols-outlined">ios_share</i> Share
                         </button>
-                        <button type="button" class="btn btn--ghost btn--sm memories-map-delete-btn"
+                        <button type="button" class="btn btn--ghost btn--sm btn--danger-hover memories-map-delete-btn"
                                 data-delete-url="{% url 'markup_map.delete' card.map.uuid %}"
                                 data-card-id="memories-map-card-{{ card.map.uuid }}"
                                 {% if card.attachment_label %}data-attached="1"{% endif %}>

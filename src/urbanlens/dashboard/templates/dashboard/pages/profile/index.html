@@ -32,7 +32,7 @@
                     <h1 class="profile-full-name">
                         {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
                         {% if profile.user == request.user %}
-                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display note="Your full friends list is never shown to others - only friends you have in common with them" %}
+                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display %}
                         {% endif %}
                     </h1>
                     <p class="profile-username">@{{ profile.username }}</p>
