@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -40,6 +41,11 @@ _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
+_EMPTY_MESSAGES: dict[str, str] = {
+    PhotoImportMode.NEARBY: "No photos found within that distance.",
+    PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
+    PhotoImportMode.ALL: "No photos found in your library.",
+}
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -99,12 +105,19 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
 
 
 class PinImmichSearchView(LoginRequiredMixin, View):
-    """GET pin/<slug>/immich/search/ - photos near this pin's location on the user's Immich server."""
+    """GET pin/<slug>/immich/search/ - photos on the user's Immich server, filtered by mode.
+
+    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on
+    one of the pin's recorded PinVisit dates, or unfiltered (most recent first).
+    """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
         account = ImmichAccount.objects.filter(profile=profile).first()
+        mode = request.GET.get("mode", PhotoImportMode.NEARBY)
+        if mode not in PhotoImportMode.values:
+            mode = PhotoImportMode.NEARBY
         valid_radii = {value for value, _label in _RADIUS_CHOICES_M}
         try:
             radius_m = int(request.GET.get("radius_m", _DEFAULT_RADIUS_M))
@@ -113,28 +126,40 @@ class PinImmichSearchView(LoginRequiredMixin, View):
         if radius_m not in valid_radii:
             radius_m = _DEFAULT_RADIUS_M
 
-        context = {"pin": pin, "account": account, "radius_m": radius_m, "radius_choices_m": _RADIUS_CHOICES_M}
+        context = {
+            "pin": pin,
+            "account": account,
+            "mode": mode,
+            "mode_choices": PhotoImportMode.choices,
+            "radius_m": radius_m,
+            "radius_choices_m": _RADIUS_CHOICES_M,
+        }
         if account is None:
             return render(request, _PICKER_PARTIAL, context)
         if not profile.external_apis_enabled:
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
-        if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
-            return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
 
         gateway = ImmichGateway(account=account)
         try:
-            markers = gateway.get_map_markers()
+            if mode == PhotoImportMode.VISITS:
+                dates = visit_dates_for_pin(pin)
+                if not dates:
+                    return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
+                results = gateway.search_by_dates(dates)
+            elif mode == PhotoImportMode.ALL:
+                results = gateway.list_recent()
+            else:
+                if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
+                    return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
+                pin_point = (float(pin.location.latitude), float(pin.location.longitude))
+                markers = gateway.get_map_markers()
+                results = [marker for marker in markers if _haversine_km(pin_point, (marker.lat, marker.lon)) * 1000 <= radius_m]
         except GatewayRequestError as exc:
             return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
 
-        pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-        nearby = [marker for marker in markers if _haversine_km(pin_point, (marker.lat, marker.lon)) * 1000 <= radius_m]
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
-        assets = [
-            {"id": marker.id, "already_imported": account.asset_web_url(marker.id) in already_imported}
-            for marker in nearby
-        ]
-        return render(request, _PICKER_PARTIAL, {**context, "assets": assets})
+        assets = [{"id": result.id, "already_imported": account.asset_web_url(result.id) in already_imported} for result in results]
+        return render(request, _PICKER_PARTIAL, {**context, "assets": assets, "empty_message": _EMPTY_MESSAGES[mode]})
 
 
 class PinImmichThumbnailView(LoginRequiredMixin, View):

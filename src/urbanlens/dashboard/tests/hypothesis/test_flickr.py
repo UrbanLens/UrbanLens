@@ -5,7 +5,8 @@ Covers:
 - FlickrGateway - per-request OAuth1 signing, geo search (no local distance
   filtering needed - Flickr filters server-side), error mapping.
 - Settings connect/callback/disconnect views.
-- PinFlickrSearchView - radius passthrough and already-imported flagging.
+- PinFlickrSearchView - radius passthrough, "during my visits"/"all photos"
+  mode branching, and already-imported flagging.
 - import_flickr_photos task - new-photo happy path and checksum dedupe.
 
 All HTTP/OAuth calls are mocked; no real network access occurs.
@@ -13,13 +14,15 @@ All HTTP/OAuth calls are mocked; no real network access occurs.
 
 from __future__ import annotations
 
-import hashlib
+import datetime
 from decimal import Decimal
+import hashlib
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -124,16 +127,14 @@ class FlickrGatewayTests(TestCase):
     def test_flickr_error_status_raises(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(json_data={"stat": "fail", "message": "Invalid auth token"})
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
-            with self.assertRaises(GatewayRequestError):
-                gw.search_near(40.0, -74.0, 0.5)
+        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+            gw.search_near(40.0, -74.0, 0.5)
 
     def test_http_error_status_raises(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(ok=False, status_code=500)
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
-            with self.assertRaises(GatewayRequestError):
-                gw.search_near(40.0, -74.0, 0.5)
+        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+            gw.search_near(40.0, -74.0, 0.5)
 
     def test_get_original_uses_fallback_url_without_extra_call(self) -> None:
         gw = self._gateway()
@@ -142,6 +143,32 @@ class FlickrGatewayTests(TestCase):
         self.assertEqual(content, b"jpeg-bytes")
         self.assertEqual(content_type, "image/jpeg")
         gw.session.get.assert_called_once()
+
+    def test_search_by_dates_issues_one_call_per_date_and_dedupes(self) -> None:
+        gw = self._gateway()
+        gw.session.get.side_effect = [
+            _mock_response(json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}}),
+            _mock_response(
+                json_data={
+                    "stat": "ok",
+                    "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}, {"id": "2", "url_s": "https://example.com/2_s.jpg"}]},
+                },
+            ),
+        ]
+        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
+            results = gw.search_by_dates([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)])
+        self.assertEqual(gw.session.get.call_count, 2)
+        self.assertEqual({photo.id for photo in results}, {"1", "2"})
+
+    def test_list_recent_sorts_by_date_taken_desc(self) -> None:
+        gw = self._gateway()
+        gw.session.get.return_value = _mock_response(json_data={"stat": "ok", "photos": {"photo": [{"id": "1", "url_s": "https://example.com/1_s.jpg"}]}})
+        with mock.patch("urbanlens.dashboard.services.apis.flickr.gateway._consumer_credentials", return_value=("key", "secret")):
+            results = gw.list_recent(limit=50)
+        self.assertEqual([photo.id for photo in results], ["1"])
+        _args, kwargs = gw.session.get.call_args
+        self.assertEqual(kwargs["params"]["sort"], "date-taken-desc")
+        self.assertEqual(kwargs["params"]["per_page"], "50")
 
 
 # -- Settings: connect / disconnect -------------------------------------------
@@ -206,6 +233,31 @@ class PinFlickrSearchViewTests(TestCase):
         self.assertIsNone(response.context.get("account"))
         search_near.assert_not_called()
 
+    def test_visits_mode_with_no_recorded_visits_skips_the_gateway(self) -> None:
+        with mock.patch.object(FlickrGateway, "search_by_dates") as search_by_dates:
+            response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]), {"mode": "visits"})
+        self.assertEqual(response.context["assets"], [])
+        self.assertIn("No recorded visits", response.context["empty_message"])
+        search_by_dates.assert_not_called()
+
+    def test_visits_mode_searches_by_recorded_visit_dates(self) -> None:
+        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, 5)))
+        photo = FlickrPhoto(id="v1", thumbnail_url="https://example.com/v1_s.jpg", original_url=None, lat=None, lon=None)
+        with mock.patch.object(FlickrGateway, "search_by_dates", return_value=[photo]) as search_by_dates:
+            response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]), {"mode": "visits"})
+        asset_ids = [a["id"] for a in response.context["assets"]]
+        self.assertEqual(asset_ids, ["v1"])
+        (dates_arg,), _kwargs = search_by_dates.call_args
+        self.assertEqual(list(dates_arg), [datetime.date(2024, 1, 5)])
+
+    def test_all_mode_calls_list_recent(self) -> None:
+        photo = FlickrPhoto(id="r1", thumbnail_url="https://example.com/r1_s.jpg", original_url=None, lat=None, lon=None)
+        with mock.patch.object(FlickrGateway, "list_recent", return_value=[photo]) as list_recent:
+            response = self.client.get(reverse("pin.flickr.search", args=[self.pin.slug]), {"mode": "all"})
+        asset_ids = [a["id"] for a in response.context["assets"]]
+        self.assertEqual(asset_ids, ["r1"])
+        list_recent.assert_called_once()
+
 
 # -- Celery task: import_flickr_photos ----------------------------------------------
 
@@ -221,7 +273,7 @@ class ImportFlickrPhotosTaskTests(TestCase):
         self.account = FlickrAccount.objects.create(profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
 
     def _run(self, photo_ids, downloads):
-        def fake_get_original(self_gw, photo_id):  # noqa: ARG001
+        def fake_get_original(self_gw, photo_id):
             return downloads[photo_id]
 
         with (

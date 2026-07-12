@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, Flic
 from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, finish_authorization, start_authorization
 from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -45,6 +46,11 @@ _PROGRESS_PARTIAL = "dashboard/partials/pins/_flickr_import_progress.html"
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _REQUEST_TOKEN_CACHE_TTL = 600
+_EMPTY_MESSAGES: dict[str, str] = {
+    PhotoImportMode.NEARBY: "No photos found within that distance.",
+    PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
+    PhotoImportMode.ALL: "No photos found in your library.",
+}
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -155,12 +161,19 @@ class FlickrDisconnectView(LoginRequiredMixin, View):
 
 
 class PinFlickrSearchView(LoginRequiredMixin, View):
-    """GET pin/<slug>/flickr/search/ - the user's own photos near this pin's location."""
+    """GET pin/<slug>/flickr/search/ - the user's own photos, filtered by mode.
+
+    Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on
+    one of the pin's recorded PinVisit dates, or unfiltered (most recent first).
+    """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
         account = FlickrAccount.objects.filter(profile=profile).first()
+        mode = request.GET.get("mode", PhotoImportMode.NEARBY)
+        if mode not in PhotoImportMode.values:
+            mode = PhotoImportMode.NEARBY
         try:
             radius_m = int(request.GET.get("radius_m", _DEFAULT_RADIUS_M))
         except (TypeError, ValueError):
@@ -169,32 +182,46 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
         if radius_m not in valid_radii:
             radius_m = _DEFAULT_RADIUS_M
 
-        context = {"pin": pin, "account": account, "radius_m": radius_m, "radius_choices_m": _RADIUS_CHOICES_M}
+        context = {
+            "pin": pin,
+            "account": account,
+            "mode": mode,
+            "mode_choices": PhotoImportMode.choices,
+            "radius_m": radius_m,
+            "radius_choices_m": _RADIUS_CHOICES_M,
+        }
         if account is None:
             return render(request, _PICKER_PARTIAL, context)
         if not profile.external_apis_enabled:
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
-        if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
-            return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
 
         gateway = FlickrGateway(account=account)
         try:
-            photos = gateway.search_near(float(pin.location.latitude), float(pin.location.longitude), radius_m / 1000)
+            if mode == PhotoImportMode.VISITS:
+                dates = visit_dates_for_pin(pin)
+                if not dates:
+                    return render(request, _PICKER_PARTIAL, {**context, "assets": [], "empty_message": "No recorded visits for this pin yet."})
+                photos = gateway.search_by_dates(dates)
+            elif mode == PhotoImportMode.ALL:
+                photos = gateway.list_recent()
+            else:
+                if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
+                    return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
+                photos = gateway.search_near(float(pin.location.latitude), float(pin.location.longitude), radius_m / 1000)
+                # Flickr's radius search is already server-side; re-check distance
+                # locally only for photos that reported coordinates (some may not),
+                # matching the search's own radius rather than trusting it blindly.
+                pin_point = (float(pin.location.latitude), float(pin.location.longitude))
+                photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
         except GatewayRequestError as exc:
             return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
-
-        # Flickr's radius search is already server-side; re-check distance
-        # locally only for photos that reported coordinates (some may not),
-        # matching the search's own radius rather than trusting it blindly.
-        pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-        nearby = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [
             {"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": account.photo_web_url(photo.id) in already_imported}
-            for photo in nearby
+            for photo in photos
         ]
-        return render(request, _PICKER_PARTIAL, {**context, "assets": assets})
+        return render(request, _PICKER_PARTIAL, {**context, "assets": assets, "empty_message": _EMPTY_MESSAGES[mode]})
 
 
 class PinFlickrImportView(LoginRequiredMixin, View):

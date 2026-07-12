@@ -19,6 +19,7 @@ where its convenience methods are the right tool.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import datetime
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -28,6 +29,8 @@ from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredEr
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from urbanlens.dashboard.models.flickr.model import FlickrAccount
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,7 @@ _REQUEST_TIMEOUT = 30
 # uploads. Passing our own user_id already scopes the whole search to one
 # person's library, which satisfies that requirement.
 _SEARCH_EXTRAS = "url_s,url_o,geo,date_taken"
+_DEFAULT_RECENT_LIMIT = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +133,37 @@ class FlickrGateway(Gateway):
         username = user.get("username", {}).get("_content")
         return user["id"], username
 
+    def _search(self, extra_params: dict[str, Any]) -> list[FlickrPhoto]:
+        """Run one ``flickr.photos.search`` query scoped to the connected user.
+
+        Args:
+            extra_params: Method-specific search parameters (geo radius, date
+                range, or sort order) layered onto the shared defaults below.
+
+        Returns:
+            Matching photos, each with thumbnail/original URLs and coordinates
+            when Flickr reports them.
+
+        Raises:
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
+            GatewayRequestError: On a network error or non-2xx/error response.
+        """
+        body = self._call(
+            "flickr.photos.search",
+            extra_params={"user_id": "me", "extras": _SEARCH_EXTRAS, "per_page": "250", **extra_params},
+        )
+        photos = body.get("photos", {}).get("photo", [])
+        return [
+            FlickrPhoto(
+                id=photo["id"],
+                thumbnail_url=photo.get("url_s"),
+                original_url=photo.get("url_o"),
+                lat=float(photo["latitude"]) if photo.get("latitude") not in (None, "0") else None,
+                lon=float(photo["longitude"]) if photo.get("longitude") not in (None, "0") else None,
+            )
+            for photo in photos
+        ]
+
     def search_near(self, lat: float, lon: float, radius_km: float) -> list[FlickrPhoto]:
         """Search the connected user's own photos within a radius of a point.
 
@@ -145,29 +180,48 @@ class FlickrGateway(Gateway):
             FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
             GatewayRequestError: On a network error or non-2xx/error response.
         """
-        body = self._call(
-            "flickr.photos.search",
-            extra_params={
-                "user_id": "me",
-                "lat": f"{lat:.6f}",
-                "lon": f"{lon:.6f}",
-                "radius": f"{min(radius_km, 32):.3f}",
-                "radius_units": "km",
-                "extras": _SEARCH_EXTRAS,
-                "per_page": "250",
-            },
-        )
-        photos = body.get("photos", {}).get("photo", [])
-        return [
-            FlickrPhoto(
-                id=photo["id"],
-                thumbnail_url=photo.get("url_s"),
-                original_url=photo.get("url_o"),
-                lat=float(photo["latitude"]) if photo.get("latitude") not in (None, "0") else None,
-                lon=float(photo["longitude"]) if photo.get("longitude") not in (None, "0") else None,
-            )
-            for photo in photos
-        ]
+        return self._search({"lat": f"{lat:.6f}", "lon": f"{lon:.6f}", "radius": f"{min(radius_km, 32):.3f}", "radius_units": "km"})
+
+    def search_by_dates(self, dates: Sequence[datetime.date]) -> list[FlickrPhoto]:
+        """Return the user's own photos taken on any of the given calendar dates.
+
+        Issues one search per date (Flickr's ``min_taken_date``/``max_taken_date``
+        take a single range, not a set of discrete days) and merges/dedupes the
+        results - callers should keep ``dates`` short (see
+        ``photo_import.MAX_VISIT_DATES``).
+
+        Args:
+            dates: Calendar dates to search, in the account's local time.
+
+        Returns:
+            Matching photos, deduplicated by id.
+
+        Raises:
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
+            GatewayRequestError: On a network error or non-2xx/error response.
+        """
+        seen: dict[str, FlickrPhoto] = {}
+        for day in dates:
+            next_day = day + datetime.timedelta(days=1)
+            for photo in self._search({"min_taken_date": day.isoformat(), "max_taken_date": next_day.isoformat()}):
+                seen.setdefault(photo.id, photo)
+        return list(seen.values())
+
+    def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[FlickrPhoto]:
+        """Return the user's most recently taken photos, with no filter applied.
+
+        Args:
+            limit: Maximum number of photos to return (Flickr caps a single
+                page at 500).
+
+        Returns:
+            Up to ``limit`` photos, most recently taken first.
+
+        Raises:
+            FlickrNotConfiguredError: When the site has no Flickr consumer key/secret.
+            GatewayRequestError: On a network error or non-2xx/error response.
+        """
+        return self._search({"sort": "date-taken-desc", "per_page": str(min(limit, 500))})
 
     def get_original(self, photo_id: str, fallback_url: str | None = None) -> tuple[bytes, str, str]:
         """Download a photo's original file.

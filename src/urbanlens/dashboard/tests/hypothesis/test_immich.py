@@ -7,7 +7,8 @@ Covers:
   failure. All HTTP calls are mocked; no real network access occurs.
 - ImmichSettingsView / ImmichDisconnectView - connect only persists a
   credential that ping() verifies; disconnect removes it.
-- PinImmichSearchView - distance filtering and already-imported flagging.
+- PinImmichSearchView - distance filtering, "during my visits"/"all photos"
+  mode branching, and already-imported flagging.
 - import_immich_photos task - creates Image + PinVisit for a new asset,
   skips a duplicate checksum, skips an over-quota asset, without failing the
   rest of the batch.
@@ -15,14 +16,15 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
+import datetime
 from decimal import Decimal
+import hashlib
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from django.utils import timezone
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -31,7 +33,7 @@ from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker
+from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker, SearchAsset
 
 _db_settings = settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
@@ -81,7 +83,7 @@ class EncryptedTextFieldTests(TestCase):
 
         # Bypass the ORM's from_db_value conversion to see the actual stored bytes.
         with connection.cursor() as cursor:
-            cursor.execute(f"SELECT api_key FROM {ImmichAccount._meta.db_table} WHERE id = %s", [account.pk])  # noqa: SLF001
+            cursor.execute(f"SELECT api_key FROM {ImmichAccount._meta.db_table} WHERE id = %s", [account.pk])
             (raw_value,) = cursor.fetchone()
         self.assertNotEqual(raw_value, "s3cret-key")
 
@@ -143,6 +145,33 @@ class ImmichGatewayTests(TestCase):
         self.assertEqual(content, b"jpegdata")
         self.assertEqual(filename, "photo.jpg")
         self.assertEqual(content_type, "image/jpeg")
+
+    def test_search_by_dates_issues_one_call_per_date_and_dedupes(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.side_effect = [
+            _mock_response(json_data={"assets": {"items": [{"id": "a1", "fileCreatedAt": "2024-01-01T12:00:00+00:00"}]}}),
+            _mock_response(
+                json_data={
+                    "assets": {
+                        "items": [
+                            {"id": "a1", "fileCreatedAt": "2024-01-01T12:00:00+00:00"},
+                            {"id": "a2", "fileCreatedAt": "2024-01-02T09:00:00+00:00"},
+                        ],
+                    },
+                },
+            ),
+        ]
+        results = gw.search_by_dates([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)])
+        self.assertEqual(gw.session.post.call_count, 2)
+        self.assertEqual({asset.id for asset in results}, {"a1", "a2"})
+
+    def test_list_recent_sends_no_date_filter(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={"assets": {"items": [{"id": "a1"}]}})
+        results = gw.list_recent(limit=10)
+        self.assertEqual([asset.id for asset in results], ["a1"])
+        _args, kwargs = gw.session.post.call_args
+        self.assertEqual(kwargs["json"], {"size": 10})
 
 
 # -- Settings: connect / disconnect ------------------------------------------------
@@ -212,6 +241,31 @@ class PinImmichSearchViewTests(TestCase):
         self.assertIsNone(response.context.get("account"))
         get_markers.assert_not_called()
 
+    def test_visits_mode_with_no_recorded_visits_skips_the_gateway(self) -> None:
+        with mock.patch.object(ImmichGateway, "search_by_dates") as search_by_dates:
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"mode": "visits"})
+        self.assertEqual(response.context["assets"], [])
+        self.assertIn("No recorded visits", response.context["empty_message"])
+        search_by_dates.assert_not_called()
+
+    def test_visits_mode_searches_by_recorded_visit_dates(self) -> None:
+        baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, 5)))
+        asset = SearchAsset(id="v1")
+        with mock.patch.object(ImmichGateway, "search_by_dates", return_value=[asset]) as search_by_dates:
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"mode": "visits"})
+        asset_ids = [a["id"] for a in response.context["assets"]]
+        self.assertEqual(asset_ids, ["v1"])
+        (dates_arg,), _kwargs = search_by_dates.call_args
+        self.assertEqual(list(dates_arg), [datetime.date(2024, 1, 5)])
+
+    def test_all_mode_calls_list_recent(self) -> None:
+        asset = SearchAsset(id="r1")
+        with mock.patch.object(ImmichGateway, "list_recent", return_value=[asset]) as list_recent:
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"mode": "all"})
+        asset_ids = [a["id"] for a in response.context["assets"]]
+        self.assertEqual(asset_ids, ["r1"])
+        list_recent.assert_called_once()
+
 
 # -- Celery task: import_immich_photos ----------------------------------------------
 
@@ -229,7 +283,7 @@ class ImportImmichPhotosTaskTests(TestCase):
     def _run(self, asset_ids, downloads):
         """Run the task with get_asset_original mapped per asset id from `downloads`."""
 
-        def fake_get_asset_original(self_gw, asset_id):  # noqa: ARG001
+        def fake_get_asset_original(self_gw, asset_id):
             return downloads[asset_id]
 
         with (

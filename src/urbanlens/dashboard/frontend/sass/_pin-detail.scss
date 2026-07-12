@@ -3808,6 +3808,37 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
+.photo-import-mode-toggle {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    margin-bottom: .9rem;
+    border-radius: 8px;
+    background: var(--ul-grey-1, #f1f1f3);
+}
+
+.photo-import-mode-btn {
+    padding: .35rem .7rem;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    transition: color .15s, background-color .15s;
+
+    &:hover {
+        color: var(--ul-grey-9);
+    }
+
+    &.is-active {
+        background: var(--ul-surface, #fff);
+        color: var(--color-accent, #2563eb);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+    }
+}
+
 .immich-picker-radius {
     display: flex;
     align-items: center;

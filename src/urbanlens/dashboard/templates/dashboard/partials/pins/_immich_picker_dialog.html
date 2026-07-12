@@ -1,5 +1,5 @@
 {# Immich tab body (swapped into #pin-import-photos-body by the Import Photos dialog shell).
-   Context: pin, account, radius_m, radius_choices_m, assets, error #}
+   Context: pin, account, mode, mode_choices, radius_m, radius_choices_m, assets, error, empty_message #}
 {% if not account %}
 <div class="immich-picker-error ul-dialog-body">
     <p>Connect your Immich server to import photos near this pin.</p>
@@ -8,17 +8,32 @@
         Connect Immich in Settings
     </a>
 </div>
-{% elif error %}
-<div class="immich-picker-error ul-dialog-body">
-    <p>{{ error }}</p>
-</div>
 {% else %}
 <div class="ul-dialog-body">
+    <div class="photo-import-mode-toggle" role="tablist">
+        {% for value, label in mode_choices %}
+        <button type="button"
+                role="tab"
+                class="photo-import-mode-btn{% if value == mode %} is-active{% endif %}"
+                aria-selected="{% if value == mode %}true{% else %}false{% endif %}"
+                hx-get="{% url 'pin.immich.search' pin.slug %}?mode={{ value }}{% if value == 'nearby' %}&radius_m={{ radius_m }}{% endif %}"
+                hx-target="#pin-import-photos-body"
+                hx-swap="innerHTML">
+            {{ label }}
+        </button>
+        {% endfor %}
+    </div>
+
+    {% if error %}
+    <p class="immich-picker-error">{{ error }}</p>
+    {% else %}
+    {% if mode == "nearby" %}
     <form class="immich-picker-radius"
           hx-get="{% url 'pin.immich.search' pin.slug %}"
           hx-target="#pin-import-photos-body"
           hx-swap="innerHTML"
           hx-trigger="change">
+        <input type="hidden" name="mode" value="nearby">
         <label for="immich-radius-select">Within</label>
         <select id="immich-radius-select" name="radius_m">
             {% for value, label in radius_choices_m %}
@@ -27,6 +42,7 @@
         </select>
         <span>of this pin</span>
     </form>
+    {% endif %}
 
     <form hx-post="{% url 'pin.immich.import' pin.slug %}"
           hx-target="#pin-import-photos-body"
@@ -51,8 +67,9 @@
             <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
         {% else %}
-        <p class="immich-picker-empty">No photos found within that distance.</p>
+        <p class="immich-picker-empty">{{ empty_message|default:"No photos found." }}</p>
         {% endif %}
     </form>
+    {% endif %}
 </div>
 {% endif %}
