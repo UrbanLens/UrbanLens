@@ -46,6 +46,22 @@
     {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
     {% endif %}
 
+    {# Fixed bottom-left tools menu, shared across every page. Currently only surfaces
+       sections the user collapsed on the current page (see the collapsible-sections
+       script below), but it's built to hold other page tools later - see _updateRestoreControls. #}
+    <div class="tools-fab" id="tools-fab" hidden>
+        <div class="tools-fab-menu" id="tools-fab-menu" hidden>
+            <div class="tools-fab-group" data-tools-fab-group="collapse-restore" hidden>
+                <div class="tools-fab-group-title">Hidden sections</div>
+                <div class="collapse-restore-menu"></div>
+            </div>
+        </div>
+        <button type="button" class="tools-fab-btn" id="tools-fab-btn" aria-haspopup="true" aria-expanded="false" aria-label="Tools">
+            <i class="material-symbols-outlined">menu</i>
+            <span class="tools-fab-badge collapse-restore-count" hidden>0</span>
+        </button>
+    </div>
+
     <!--  Scripts-->
     <script>
         var csrftoken = '{{ csrf_token }}';
@@ -1317,9 +1333,9 @@
     // wiki and trip pages.
     //
     // Because collapsing hides the section entirely, there's no header left to
-    // click to bring it back. Any element with [data-collapse-restore-scope]
-    // is populated with a list of that scope's currently-collapsed sections
-    // (see _updateRestoreControls) so the user can restore them individually.
+    // click to bring it back. The fixed bottom-left #tools-fab (see below in
+    // this template) lists the current page's collapsed sections so the user
+    // can restore them individually (see _updateRestoreControls).
     (function () {
         function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
 
@@ -1401,53 +1417,73 @@
             _applyState(container);
         }
 
-        // Fills in every [data-collapse-restore-scope] control with the list of
-        // currently-collapsed sections sharing its scope, hiding the control
-        // entirely when nothing in that scope is collapsed.
+        // A page only ever uses one collapse scope at a time (pin, wiki, trip, ...),
+        // so the single global tools menu (#tools-fab) can auto-detect which scope
+        // is active instead of every page having to declare its own restore control.
+        function _currentScope() {
+            var el = document.querySelector('[data-collapse-scope]');
+            return el ? el.dataset.collapseScope : null;
+        }
+
+        function _closeToolsFab() {
+            var menu = document.getElementById('tools-fab-menu');
+            var btn = document.getElementById('tools-fab-btn');
+            if (menu) menu.hidden = true;
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+
+        // Fills the "Hidden sections" group of the global tools menu with the
+        // current scope's collapsed sections, hiding that group - and the whole
+        // FAB, since it has nothing else in it yet - when nothing is collapsed.
         function _updateRestoreControls() {
-            document.querySelectorAll('[data-collapse-restore-scope]').forEach(function (control) {
-                var scope = control.dataset.collapseRestoreScope;
-                var hiddenSections = document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed');
-                var menu = control.querySelector('.collapse-restore-menu');
-                var countEl = control.querySelector('.collapse-restore-count');
+            var fab = document.getElementById('tools-fab');
+            var group = fab && fab.querySelector('[data-tools-fab-group="collapse-restore"]');
+            if (!fab || !group) return;
 
-                if (!hiddenSections.length) {
-                    control.hidden = true;
-                    control.classList.remove('is-open');
-                    if (menu) menu.innerHTML = '';
-                    return;
-                }
+            var scope = _currentScope();
+            var hiddenSections = scope
+                ? document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed')
+                : [];
+            var restoreMenu = group.querySelector('.collapse-restore-menu');
+            var countEl = fab.querySelector('.collapse-restore-count');
 
-                control.hidden = false;
-                if (countEl) countEl.textContent = String(hiddenSections.length);
-                if (!menu) return;
+            group.hidden = !hiddenSections.length;
+            fab.hidden = !hiddenSections.length;
+            if (countEl) {
+                countEl.hidden = !hiddenSections.length;
+                countEl.textContent = String(hiddenSections.length);
+            }
+            if (!hiddenSections.length) {
+                _closeToolsFab();
+                if (restoreMenu) restoreMenu.innerHTML = '';
+                return;
+            }
 
-                menu.innerHTML = '';
-                hiddenSections.forEach(function (section) {
-                    var item = document.createElement('button');
-                    item.type = 'button';
-                    item.className = 'collapse-restore-item';
-                    item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
-                    item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
-                    item.addEventListener('click', function () {
-                        section.classList.remove('is-collapsed');
-                        var toggleBtn = section.querySelector('.section-collapse-btn');
-                        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
-                        _setCollapsed(scope, section.dataset.collapseSection, false);
-                        // Section was hidden before its hx-get ever fired (see the
-                        // hx-trigger="load[...]" skip condition) - its content was
-                        // never loaded, so kick off that request now.
-                        if (section.getAttribute('hx-get') && window.htmx) {
-                            htmx.trigger(section, 'ul:unhide');
-                        }
-                        var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
-                        if (innerLoader && window.htmx) {
-                            htmx.trigger(innerLoader, 'ul:unhide');
-                        }
-                        _updateRestoreControls();
-                    });
-                    menu.appendChild(item);
+            restoreMenu.innerHTML = '';
+            hiddenSections.forEach(function (section) {
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'collapse-restore-item';
+                item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
+                item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
+                item.addEventListener('click', function () {
+                    section.classList.remove('is-collapsed');
+                    var toggleBtn = section.querySelector('.section-collapse-btn');
+                    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+                    _setCollapsed(scope, section.dataset.collapseSection, false);
+                    // Section was hidden before its hx-get ever fired (see the
+                    // hx-trigger="load[...]" skip condition) - its content was
+                    // never loaded, so kick off that request now.
+                    if (section.getAttribute('hx-get') && window.htmx) {
+                        htmx.trigger(section, 'ul:unhide');
+                    }
+                    var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
+                    if (innerLoader && window.htmx) {
+                        htmx.trigger(innerLoader, 'ul:unhide');
+                    }
+                    _updateRestoreControls();
                 });
+                restoreMenu.appendChild(item);
             });
         }
 
@@ -1457,10 +1493,12 @@
         }
 
         document.addEventListener('click', function (e) {
-            var restoreToggle = e.target.closest('.collapse-restore-toggle');
-            if (restoreToggle) {
-                var control = restoreToggle.closest('[data-collapse-restore-scope]');
-                if (control) control.classList.toggle('is-open');
+            var fabToggle = e.target.closest('#tools-fab-btn');
+            if (fabToggle) {
+                var menu = document.getElementById('tools-fab-menu');
+                var opening = !!(menu && menu.hidden);
+                if (menu) menu.hidden = !opening;
+                fabToggle.setAttribute('aria-expanded', String(opening));
                 return;
             }
 
@@ -1476,10 +1514,12 @@
                 return;
             }
 
-            // Click outside an open restore menu closes it.
-            document.querySelectorAll('[data-collapse-restore-scope].is-open').forEach(function (control) {
-                if (!control.contains(e.target)) control.classList.remove('is-open');
-            });
+            // Click outside the open tools menu closes it.
+            var fab = document.getElementById('tools-fab');
+            var openMenu = document.getElementById('tools-fab-menu');
+            if (fab && openMenu && !openMenu.hidden && !fab.contains(e.target)) {
+                _closeToolsFab();
+            }
         });
 
         document.addEventListener('DOMContentLoaded', _scanAll);

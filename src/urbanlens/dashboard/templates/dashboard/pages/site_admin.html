@@ -23,13 +23,29 @@
     </div>
     {% endif %}
 
+    <div class="site-admin-settings-grid">
+
     <div class="site-admin-card ul-section card">
         <div class="card-header">
             <i class="material-symbols-outlined">settings_suggest</i>
-            <span>Environment</span>
+            <span>General</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-environment">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-general">
             {% csrf_token %}
+            <div class="form-row">
+                <label for="app-title">App title</label>
+                <p class="form-help">
+                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
+                </p>
+                <input type="text" name="app_title" id="app-title"
+                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
+            </div>
+            <div class="form-row">
+                <label for="max-trip-members">Maximum members per trip</label>
+                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
+                <input type="number" name="max_trip_members" id="max-trip-members"
+                       value="{{ settings.max_trip_members }}" min="1" max="500">
+            </div>
             <div class="form-row">
                 <label for="environment-override">Environment</label>
                 <p class="form-help">
@@ -54,27 +70,6 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">drive_file_rename_outline</i>
-            <span>Branding</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-branding">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="app-title">App title</label>
-                <p class="form-help">
-                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
-                </p>
-                <input type="text" name="app_title" id="app-title"
-                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
                 <span class="admin-autosave-indicator"></span>
             </div>
         </form>
@@ -82,16 +77,39 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-symbols-outlined">group</i>
-            <span>Trip Settings</span>
+            <i class="material-symbols-outlined">lock_clock</i>
+            <span>Registration &amp; Login Security</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
             {% csrf_token %}
             <div class="form-row">
-                <label for="max-trip-members">Maximum members per trip</label>
-                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
-                <input type="number" name="max_trip_members" id="max-trip-members"
-                       value="{{ settings.max_trip_members }}" min="1" max="500">
+                <label for="signup-restricted">Sign-up mode</label>
+                <p class="form-help">
+                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
+                    message unless the visitor arrives via an invitation link from an existing member.
+                </p>
+                <select name="signup_restricted" id="signup-restricted">
+                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
+                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="login-max-attempts">Max failed login attempts</label>
+                <p class="form-help">
+                    How many consecutive failed login attempts are allowed before the account is
+                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
+                </p>
+                <input type="number" name="login_max_attempts" id="login-max-attempts"
+                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
+            </div>
+            <div class="form-row">
+                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
+                <p class="form-help">
+                    How many minutes a locked account must wait before login attempts are accepted
+                    again. Minimum 1 minute.
+                </p>
+                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
+                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
@@ -99,12 +117,12 @@
         </form>
     </div>
 
-    <div class="site-admin-card ul-section card">
+    <div class="site-admin-card ul-section card site-admin-card--wide">
         <div class="card-header">
-            <i class="material-symbols-outlined">search</i>
-            <span>Web Search</span>
+            <i class="material-symbols-outlined">travel_explore</i>
+            <span>Web Search &amp; Place Data</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
             {% csrf_token %}
             <div class="form-row">
                 <label for="search-provider">Search provider</label>
@@ -128,19 +146,14 @@
                 <input type="number" name="external_data_cache_days" id="external-data-cache-days"
                        value="{{ settings.external_data_cache_days }}" min="1" max="365" step="1">
             </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            <div class="form-row">
+                <label for="max-bbox-area">Maximum bounding box area (km²)</label>
+                <p class="form-help">
+                    Largest area a user may draw as a location boundary, in square kilometers.
+                </p>
+                <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
+                       value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
             </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">badge</i>
-            <span>Place Naming</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
-            {% csrf_token %}
             <div class="form-row">
                 <label for="name-source-priority-list">Name source priority</label>
                 <p class="form-help">
@@ -181,7 +194,6 @@
             </div>
         </form>
     </div>
-
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
@@ -284,30 +296,6 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-symbols-outlined">person_add_disabled</i>
-            <span>Registration</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="signup-restricted">Sign-up mode</label>
-                <p class="form-help">
-                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
-                    message unless the visitor arrives via an invitation link from an existing member.
-                </p>
-                <select name="signup_restricted" id="signup-restricted">
-                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
-                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
-                </select>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
             <i class="material-symbols-outlined">outgoing_mail</i>
             <span>Outbound Email Limits</span>
         </div>
@@ -340,56 +328,6 @@
         </form>
     </div>
 
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">lock_clock</i>
-            <span>Login Security</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="login-max-attempts">Max failed login attempts</label>
-                <p class="form-help">
-                    How many consecutive failed login attempts are allowed before the account is
-                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
-                </p>
-                <input type="number" name="login_max_attempts" id="login-max-attempts"
-                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
-            </div>
-            <div class="form-row">
-                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
-                <p class="form-help">
-                    How many minutes a locked account must wait before login attempts are accepted
-                    again. Minimum 1 minute.
-                </p>
-                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
-                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">crop_free</i>
-            <span>Location Bounding Box</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="max-bbox-area">Maximum bounding box area (km²)</label>
-                <p class="form-help">
-                    Largest area a user may draw as a location boundary, in square kilometers.
-                </p>
-                <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
-                       value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
     </div>
 </div>
 {% endblock %}

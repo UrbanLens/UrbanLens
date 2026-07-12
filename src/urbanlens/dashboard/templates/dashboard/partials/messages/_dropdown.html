@@ -1,11 +1,17 @@
 {% comment %}
-Navbar messages dropdown - recent conversations. Context: `conversations`
-(list of dicts from services.direct_messages.conversations_for).
+Navbar messages dropdown - unread conversations only. Opening a thread marks it
+read, so its row disappears from here on the next open (the panel re-fetches on
+every msgOpen event). Context: `conversations` (unread rows from
+services.direct_messages.conversations_for) and `has_conversations` (whether
+the user has any DM history at all - selects the empty-state copy).
 {% endcomment %}
 {% load dashboard_tags %}
 <div class="msg-dropdown" id="msg-dropdown">
   <div class="msg-dropdown__header">
-    <span class="msg-dropdown__title">Messages</span>
+    <span class="msg-dropdown__title">
+      Messages
+      {% if conversations %}<span class="msg-dropdown__count">{{ conversations|length }}</span>{% endif %}
+    </span>
     <a href="{% url 'messages.view' %}" class="msg-dropdown__all-link">See all</a>
   </div>
 
@@ -13,9 +19,8 @@ Navbar messages dropdown - recent conversations. Context: `conversations`
   <ul class="msg-dropdown-list" role="list">
     {% for conv in conversations %}
     <li>
-      <a class="msg-dropdown-item{% if conv.unread_count %} msg-dropdown-item--unread{% endif %}"
-         href="{% url 'messages.conversation' conv.partner.slug %}">
-        <span class="msg-avatar" aria-hidden="true">
+      <a class="msg-dropdown-item" href="{% url 'messages.conversation' conv.partner.slug %}">
+        <span class="msg-avatar msg-dropdown-item__avatar" aria-hidden="true">
           {% if conv.display_avatar_url %}
           <img src="{{ conv.display_avatar_url }}" alt="" class="msg-avatar-img">
           {% else %}
@@ -23,20 +28,28 @@ Navbar messages dropdown - recent conversations. Context: `conversations`
           {% endif %}
         </span>
         <span class="msg-dropdown-item__text">
-          <span class="msg-dropdown-item__name">{{ conv.display_name }}</span>
-          <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% else %}{{ conv.last_message.body|truncatechars:60 }}{% endif %}</span>
-        </span>
-        <span class="msg-dropdown-item__meta">
-          <span class="msg-dropdown-item__time">{{ conv.last_message.created|human_timesince }}</span>
-          {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
+          <span class="msg-dropdown-item__row">
+            <span class="msg-dropdown-item__name">{{ conv.display_name }}</span>
+            <span class="msg-dropdown-item__time">{{ conv.last_message.created|human_timesince }}</span>
+          </span>
+          <span class="msg-dropdown-item__row">
+            <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% elif conv.last_message.body %}{{ conv.last_message.body|truncatechars:60 }}{% elif conv.last_message.markup_map_id %}🗺️ Map{% elif conv.last_message.images.exists %}📷 Photo{% else %}Message{% endif %}</span>
+            <span class="msg-unread-pill">{{ conv.unread_count }}</span>
+          </span>
         </span>
       </a>
     </li>
     {% endfor %}
   </ul>
+  {% elif has_conversations %}
+  <div class="msg-empty msg-empty--caught-up">
+    <span class="msg-empty__icon-wrap"><i class="material-icons msg-empty__icon" aria-hidden="true">mark_chat_read</i></span>
+    <p class="msg-empty__text">You're all caught up</p>
+    <p class="msg-empty__hint">New messages will show up here</p>
+  </div>
   {% else %}
   <div class="msg-empty">
-    <i class="material-icons msg-empty__icon" aria-hidden="true">forum</i>
+    <span class="msg-empty__icon-wrap"><i class="material-icons msg-empty__icon" aria-hidden="true">forum</i></span>
     <p class="msg-empty__text">No messages yet</p>
     <p class="msg-empty__hint">Conversations with other explorers will appear here</p>
   </div>

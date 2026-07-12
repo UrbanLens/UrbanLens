@@ -381,11 +381,28 @@ class DirectMessageEndpointTests(TestCase):
         self.assertContains(response, "1")
 
     def test_dropdown_lists_conversation(self) -> None:
+        # A DM conversation alone grants no profile-view standing, so make the
+        # partner's profile visible - otherwise the row shows "Former contact".
+        Profile.objects.filter(pk=self.partner.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="dropdown preview text")
         response = self.client.get(reverse("messages.dropdown"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.partner.username)
         self.assertContains(response, "dropdown preview")
+
+    def test_dropdown_hides_read_conversations(self) -> None:
+        """A conversation disappears from the dropdown once its messages are read."""
+        message = DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="dropdown preview text")
+        DirectMessage.objects.filter(pk=message.pk).mark_read()
+        response = self.client.get(reverse("messages.dropdown"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "dropdown preview")
+        self.assertContains(response, "caught up")
+
+    def test_dropdown_empty_state_without_any_history(self) -> None:
+        response = self.client.get(reverse("messages.dropdown"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No messages yet")
 
     def test_recipient_search_excludes_blocked(self) -> None:
         _set_dm_visibility(self.partner, VisibilityChoice.NO_ONE)

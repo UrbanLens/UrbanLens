@@ -35,15 +35,6 @@
                 <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
             </div>
             <div class="wiki-banner-actions">
-                {# Lists collapsed sections for this wiki and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
-                <div class="collapse-restore" data-collapse-restore-scope="wiki" hidden>
-                    <button type="button" class="btn btn--secondary btn--sm collapse-restore-toggle" aria-haspopup="true">
-                        <i class="material-symbols-outlined">visibility</i>
-                        Hidden sections
-                        <span class="badge collapse-restore-count">0</span>
-                    </button>
-                    <div class="collapse-restore-menu"></div>
-                </div>
                 <button type="button" class="wiki-edit-btn btn btn--primary"
                         onclick="document.getElementById('wiki-edit-dialog').showModal()">
                     <i class="material-symbols-outlined">edit_note</i>

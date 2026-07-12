@@ -380,8 +380,11 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
 
         defaults = dict(defaults or {})
         # Coordinates live on the Location; drop any legacy coord kwargs.
-        for legacy in ("latitude", "longitude", "point"):
-            defaults.pop(legacy, None)
+        # `profile` is already an explicit argument, but the import parsers
+        # embed it in their pin dicts too - drop it so create() below doesn't
+        # receive it twice.
+        for redundant in ("latitude", "longitude", "point", "profile"):
+            defaults.pop(redundant, None)
 
         # A Pin no longer stores its own coordinates: it references a shared
         # Location (deduped by coordinates). Callers may pass a specific

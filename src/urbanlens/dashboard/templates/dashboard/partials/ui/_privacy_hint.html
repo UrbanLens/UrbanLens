@@ -7,9 +7,10 @@ Usage:
   {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display %}
   {% include "dashboard/partials/ui/_privacy_hint.html" with label="Contact info" value=profile.get_contact_visibility_display %}
   {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+  {% include "dashboard/partials/ui/_privacy_hint.html" with label="Contact info" value=profile.get_contact_visibility_display note="Extra caveat that qualifies the setting above" %}
 {% endcomment %}
 <span class="ul-privacy-hint"
-      data-tooltip="{% if text %}{{ text }}{% else %}{% if label %}{{ label }} - {% endif %}Visible to: {{ value }}{% endif %}"
+      data-tooltip="{% if text %}{{ text }}{% else %}{% if label %}{{ label }} - {% endif %}Visible to: {{ value }}{% endif %}{% if note %} - {{ note }}{% endif %}"
       data-tooltip-pos="{{ pos|default:'right' }}"
       tabindex="0"
       role="note"

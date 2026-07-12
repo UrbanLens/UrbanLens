@@ -38,28 +38,89 @@
 }
 
 // -- Temporary place marker (search jump + right-click context menu) --------
+// The wrap class is shared with the Places-layer markers (which size and
+// colour their own icons), so everything temp-marker-specific lives under the
+// --temp modifier: a big glyph with a white keyline plus a pulsing halo at the
+// anchor point, keeping the marker obvious at every zoom level and on any tile
+// style (the fixed white outline guarantees contrast on dark and light tiles).
 .search-result-marker-wrap {
     background: none !important;
     border: none !important;
+    position: relative;
 
     .search-result-marker-icon {
-        font-size: 36px;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
         display: block;
         cursor: pointer;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
         transition: filter .15s;
 
         &:hover {
             filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)) brightness(1.1);
         }
+    }
+}
+
+.search-result-marker-wrap--temp {
+    .search-result-marker-icon {
+        font-size: 44px;
+        line-height: 1;
+        color: $color-blue-500;
+        filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 2px 5px rgba(0, 0, 0, .5));
+        animation: ul-temp-marker-drop .3s ease-out;
+
+        &:hover {
+            filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 3px 7px rgba(0, 0, 0, .65)) brightness(1.1);
+        }
 
         // Search-result markers use amber to distinguish from permanent pins
+        // and from the blue context-menu marker.
         &--search {
             color: #f59e0b;
-            filter: drop-shadow(0 2px 5px rgba(245, 158, 11, .5));
-            &:hover { filter: drop-shadow(0 3px 7px rgba(245, 158, 11, .7)) brightness(1.1); }
         }
     }
+
+    // Pulsing ring centred on the marker's anchor (the glyph tip).
+    .search-result-marker-halo {
+        position: absolute;
+        left: 22px;
+        top: 48px;
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        border-radius: 50%;
+        background: rgba($color-blue-500, .85);
+        animation: ul-temp-marker-pulse 1.8s ease-out infinite;
+        pointer-events: none;
+
+        &--search {
+            background: rgba(#f59e0b, .85);
+            animation-name: ul-temp-marker-pulse-amber;
+        }
+    }
+}
+
+@keyframes ul-temp-marker-drop {
+    from {
+        transform: translateY(-14px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes ul-temp-marker-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(30, 136, 229, .55); }
+    70% { box-shadow: 0 0 0 20px rgba(30, 136, 229, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(30, 136, 229, 0); }
+}
+
+@keyframes ul-temp-marker-pulse-amber {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .6); }
+    70% { box-shadow: 0 0 0 20px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 
 // Map pin icon (Material Icons rendered via Leaflet divIcon)
@@ -4429,7 +4490,11 @@ div.container .addr-search-bar {
 
 // - Map Dark Mode
 [data-map-style="dark"] {
-    .search-result-marker-icon {
+    // Places-layer markers only. Temporary search/context markers
+    // (.search-result-marker-wrap--temp) keep their own blue/amber colours -
+    // this used to recolour them near-white on dark tiles, which made the
+    // search-jump marker practically invisible.
+    .search-result-marker-wrap:not(.search-result-marker-wrap--temp) .search-result-marker-icon {
         color: var(--ul-grey-8);
 
         &--places-nps {

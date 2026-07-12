@@ -493,15 +493,31 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
+// Cards flow into as many columns as fit at 340px+ each, so the many
+// single/few-field settings cards pack side by side on wide screens instead
+// of each stacking full-width for just one input.
+.site-admin-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    align-items: start;
+    gap: 1rem;
+}
+
 .site-admin-card {
-    margin-bottom: 1.5rem;
+    margin-bottom: 0;
+
+    &--wide {
+        @include up($breakpoint-lg) {
+            grid-column: span 2;
+        }
+    }
 }
 
 .site-admin-form {
-    padding: 1.25rem 1rem;
+    padding: 1rem;
 
     .form-row {
-        margin-bottom: 1.25rem;
+        margin-bottom: 1rem;
     }
 
     label {

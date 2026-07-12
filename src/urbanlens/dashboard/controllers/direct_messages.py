@@ -523,23 +523,32 @@ class ConversationListView(LoginRequiredMixin, View):
 
 
 class MessagesDropdownView(LoginRequiredMixin, View):
-    """GET /messages/dropdown/ - renders the navbar messages dropdown partial."""
+    """GET /messages/dropdown/ - renders the navbar messages dropdown partial.
+
+    The dropdown behaves like a notification tray: it lists only conversations
+    with unread messages. Once a thread is read its row disappears from here
+    (the panel re-fetches on every open); the full history lives on the
+    messages page.
+    """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the dropdown with the most recent conversations.
+        """Render the dropdown with the most recently active unread conversations.
 
         Args:
             request: The incoming request.
 
         Returns:
-            The dropdown partial.
+            The dropdown partial. ``has_conversations`` distinguishes the
+            "all caught up" empty state (some DM history, nothing unread)
+            from "no messages yet" (no DM history at all).
         """
         profile = _get_profile(request)
-        conversations = conversations_for(profile)[:DROPDOWN_CONVERSATION_LIMIT]
+        conversations = conversations_for(profile)
+        unread = [conv for conv in conversations if conv["unread_count"]][:DROPDOWN_CONVERSATION_LIMIT]
         return render(
             request,
             "dashboard/partials/messages/_dropdown.html",
-            {"conversations": conversations},
+            {"conversations": unread, "has_conversations": bool(conversations)},
         )
 
 

@@ -1069,17 +1069,18 @@
 
     // -- Temporary place markers (search jump + right-click context menu) -----
     // isSearch=true uses amber styling so search markers are visually distinct from
-    // permanent pins and from the blue context-menu marker.
+    // permanent pins and from the blue context-menu marker. Both variants get a
+    // pulsing halo at the anchor point so the temporary marker is unmissable at
+    // any zoom level and on any tile style.
     function _createTempPlaceMarker(lat, lng, title = '', isSearch = false) {
-        const iconClass = isSearch
-            ? 'material-icons search-result-marker-icon search-result-marker-icon--search'
-            : 'material-icons search-result-marker-icon';
+        const modifier = isSearch ? ' search-result-marker-icon--search' : '';
+        const haloModifier = isSearch ? ' search-result-marker-halo--search' : '';
         return L.marker([lat, lng], {
             icon: L.divIcon({
-                className: 'search-result-marker-wrap',
-                html: `<i class="${iconClass}">place</i>`,
-                iconSize: [32, 40],
-                iconAnchor: [16, 40],
+                className: 'search-result-marker-wrap search-result-marker-wrap--temp',
+                html: `<span class="search-result-marker-halo${haloModifier}"></span><i class="material-icons search-result-marker-icon${modifier}">place</i>`,
+                iconSize: [44, 52],
+                iconAnchor: [22, 48],
             }),
             zIndexOffset: 2000,
             title,

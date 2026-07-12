@@ -51,6 +51,8 @@
 }
 
 // -- Navbar dropdown ----------------------------------------------------------
+// Unread conversations only - reading a thread removes its row on the next
+// open, so every row here is actionable rather than restyled history.
 
 .msg-dropdown {
     &__header {
@@ -63,10 +65,26 @@
     }
 
     &__title {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
         font-size: .92rem;
         font-weight: 650;
         letter-spacing: -.01em;
         color: var(--ul-grey-8);
+    }
+
+    &__count {
+        min-width: 19px;
+        height: 19px;
+        padding: 0 6px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, $primary-color, $primary-color-dark);
+        color: #fff;
+        font-size: .68rem;
+        font-weight: 700;
+        line-height: 19px;
+        text-align: center;
     }
 
     &__all-link {
@@ -85,30 +103,27 @@
 .msg-dropdown-list {
     list-style: none;
     margin: 0;
-    padding: .35rem 0;
+    padding: .4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .msg-dropdown-item {
     display: flex;
     align-items: center;
     gap: .7rem;
-    padding: .65rem 1rem;
-    border-left: 3px solid transparent;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    padding: .6rem .65rem;
+    border-radius: $radius-sm;
     transition: background .15s ease;
 
     &:hover {
-        background: var(--ul-grey-1a);
+        background: var(--ul-hover-bg-primary);
     }
 
-    &--unread {
-        border-left-color: var(--primary-color);
-
-        .msg-dropdown-item__name,
-        .msg-dropdown-item__preview {
-            font-weight: 700;
-            color: var(--ul-grey-8);
-        }
+    &__avatar {
+        width: 40px;
+        height: 40px;
     }
 
     &__text {
@@ -116,56 +131,82 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: .1rem;
+        gap: .18rem;
+    }
+
+    // Two aligned rows: name + time, then preview + unread pill. Keeps the
+    // meta column from wrapping independently of the text it belongs to.
+    &__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .6rem;
+        min-width: 0;
     }
 
     &__name {
         font-size: .86rem;
-        font-weight: 600;
-        color: var(--ul-grey-8);
+        font-weight: 650;
+        color: var(--ul-grey-9);
+        @include truncate;
     }
 
     &__preview {
         font-size: .78rem;
-        color: var(--ul-grey-6);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    &__meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: .25rem;
+        font-weight: 500;
+        color: var(--ul-grey-7);
+        @include truncate;
     }
 
     &__time {
+        flex-shrink: 0;
         font-size: .68rem;
-        color: var(--ul-grey-6);
+        font-weight: 600;
+        color: var(--primary-color);
         white-space: nowrap;
     }
 }
 
 .msg-empty {
-    padding: 2rem 1rem;
+    padding: 2.1rem 1.25rem 2.4rem;
     text-align: center;
     color: var(--ul-grey-6);
 
+    &__icon-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--ul-grey-1);
+    }
+
     &__icon {
-        font-size: 2rem;
-        opacity: .45;
+        font-size: 1.5rem;
+        color: var(--ul-grey-5);
     }
 
     &__text {
-        margin: .5rem 0 .15rem;
-        font-weight: 600;
-        color: var(--ul-grey-7);
+        margin: .7rem 0 .2rem;
+        font-weight: 650;
+        color: var(--ul-grey-8);
     }
 
     &__hint {
         margin: 0;
         font-size: .8rem;
+    }
+
+    // Translucent green so the accent reads correctly on both themes.
+    &--caught-up {
+        .msg-empty__icon-wrap {
+            background: rgba($color-green-500, .14);
+        }
+
+        .msg-empty__icon {
+            color: $color-green-500;
+        }
     }
 }
 

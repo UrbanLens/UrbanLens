@@ -362,6 +362,12 @@ class DjangoProjectInitializer:
                 check=True,
                 cwd=cwd or ROOT_DIR,
             )  # nosec B603
+            if any("manage.py" in str(part) for part in command):
+                # manage.py prints the startup-environment block once per process
+                # tree (see manage._print_startup_env). The first manage.py child
+                # (collectstatic) prints it; flag it in our environment so later
+                # children (migrate, etc.) inherit the flag and don't repeat it.
+                os.environ["UL_STARTUP_ENV_PRINTED"] = "1"
             return True
 
         except subprocess.CalledProcessError as e:

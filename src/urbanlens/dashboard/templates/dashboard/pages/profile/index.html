@@ -32,7 +32,7 @@
                     <h1 class="profile-full-name">
                         {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
                         {% if profile.user == request.user %}
-                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar, bio & friends" value=profile.get_profile_visibility_display %}
+                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display note="Your full friends list is never shown to others - only friends you have in common with them" %}
                         {% endif %}
                     </h1>
                     <p class="profile-username">@{{ profile.username }}</p>
@@ -352,7 +352,9 @@
     {% endif %}
 
     {% if profile.user == request.user %}
-    <section class="profile-owner-activity-panel profile-annotation-panel" aria-label="Your recent UrbanLens activity">
+    <section class="profile-owner-activity-panel profile-private-zone" aria-label="Your recent UrbanLens activity - only visible to you">
+        <span class="profile-private-zone-cap profile-private-zone-cap--top" role="note"><i class="material-symbols-outlined" aria-hidden="true">lock</i> Only visible to you</span>
+        <p class="profile-private-zone-note">Everything inside this frame is private - other explorers never see it.</p>
         <div class="profile-private-stats" aria-label="Private profile stats">
             {% for stat in profile_private_stats %}
                 {% if stat.value > 0 %}
@@ -370,7 +372,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">emergency_home</i></span>
                 <div><h3>Active emergency check-in</h3><p>Keep this plan current until you're safely checked in.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <a class="profile-feature-card" href="{% url 'safety.checkin.detail' profile_active_checkin.slug %}">
                 <strong>{{ profile_active_checkin.title }}</strong>
@@ -386,7 +387,6 @@
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">photo_library</i></span>
                 <div><h3>Recent photos</h3><p>Your latest uploads from Memories.</p></div>
                 <a href="{% url 'memories.photos' %}" class="profile-strip-link">View all</a>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <ul class="profile-photo-strip photos-grid">
                 {% for img in profile_recent_photos %}
@@ -406,7 +406,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">history</i></span>
                 <div><h3>Recently viewed pins</h3><p>Pins you've opened recently on the map.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip" data-recent-pins></div>
         </section>
@@ -416,7 +415,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">add_location_alt</i></span>
                 <div><h3>Recently created pins</h3><p>Your newest saved places.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for pin in profile_recent_pins %}
@@ -435,7 +433,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon profile-strip-icon--warm"><i class="material-symbols-outlined">priority_high</i></span>
                 <div><h3>High-priority places to visit</h3><p>Your most important unvisited pins.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for pin in profile_priority_unvisited_pins %}
@@ -454,7 +451,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">forum</i></span>
                 <div><h3>Recent comments</h3><p>Conversations you've joined lately.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for comment in profile_recent_comments %}
@@ -475,7 +471,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">menu_book</i></span>
                 <div><h3>Recently viewed wikis</h3><p>Community pages you've opened recently.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip" data-recent-wikis></div>
         </section>
@@ -486,7 +481,6 @@
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">gesture</i></span>
                 <div><h3>Recent markup maps</h3><p>Your newest annotated maps and routes.</p></div>
                 <a href="{% url 'memories.maps' %}" class="profile-strip-link">All maps</a>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for map in profile_recent_markup_maps %}
@@ -506,7 +500,6 @@
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">luggage</i></span>
                 <div><h3>Recent trips</h3><p>Plans with the latest activity.</p></div>
                 <a href="{% url 'trips.list' %}" class="profile-strip-link">All trips</a>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for trip in profile_recent_trips %}
@@ -525,7 +518,6 @@
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">event_upcoming</i></span>
                 <div><h3>Upcoming trips</h3><p>What's next on your calendar.</p></div>
-                <span class="profile-strip-privacy-chip chip"><i class="material-icons">visibility_off</i> Only visible to you</span>
             </div>
             <div class="profile-card-strip">
                 {% for trip in profile_upcoming_trips %}
@@ -539,6 +531,7 @@
         </section>
         {% endif %}
         </div>
+        <span class="profile-private-zone-cap profile-private-zone-cap--bottom" aria-hidden="true"><i class="material-symbols-outlined">lock</i> Only visible to you</span>
     </section>
     {% endif %}
 
