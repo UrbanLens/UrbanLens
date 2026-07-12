@@ -8,17 +8,16 @@
 {% endblock %}
 
 {% block content %}
+<section class="safety-header">
+    <div class="safety-header-inner">
+        <h1 class="safety-title">
+            <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
+            {{ checkin.profile.username }} - {{ checkin.title }}
+        </h1>
+        <p class="safety-subtitle">Expected check-in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
+    </div>
+</section>
 <div class="safety-page page-content">
-
-    <section class="safety-header">
-        <div class="safety-header-inner">
-            <h1 class="safety-title">
-                <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
-                {{ checkin.profile.username }} - {{ checkin.title }}
-            </h1>
-            <p class="safety-subtitle">Expected check-in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
-        </div>
-    </section>
 
     <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
         <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"

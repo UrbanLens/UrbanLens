@@ -1,15 +1,15 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+<section class="safety-header">
+    <div class="safety-header-inner">
+        <h1 class="safety-title">
+            <i class="material-symbols-outlined">check_circle</i>
+            Check in for "{{ checkin.title }}"
+        </h1>
+    </div>
+</section>
 <div class="safety-page page-content safety-checkin-confirm">
-    <section class="safety-header">
-        <div class="safety-header-inner">
-            <h1 class="safety-title">
-                <i class="material-symbols-outlined">check_circle</i>
-                Check in for "{{ checkin.title }}"
-            </h1>
-        </div>
-    </section>
     <p>Confirm you're safe and this check-in is complete.</p>
     <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}">
         {% csrf_token %}

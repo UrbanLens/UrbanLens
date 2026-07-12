@@ -1,18 +1,18 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+<section class="safety-header">
+    <div class="safety-header-inner">
+        <h1 class="safety-title">
+            <i class="material-symbols-outlined">emergency</i>
+            Safety
+            {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
+        </h1>
+        <p class="safety-subtitle">Let people know when to expect you back, and who to alert if you don't check in.</p>
+    </div>
+</section>
 <div class="safety-page page-content">
 
-    <section class="safety-header">
-        <div class="safety-header-inner">
-            <h1 class="safety-title">
-                <i class="material-symbols-outlined">emergency</i>
-                Safety
-                {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
-            </h1>
-            <p class="safety-subtitle">Let people know when to expect you back, and who to alert if you don't check in.</p>
-        </div>
-    </section>
 
     {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, your emergency contacts are sent your plan details and last known location." %}
 

@@ -8,16 +8,16 @@
 {% endblock %}
 
 {% block content %}
+<section class="safety-header">
+    <div class="safety-header-inner">
+        <h1 class="safety-title">
+            <i class="material-symbols-outlined">emergency</i>
+            New Safety Check-in
+        </h1>
+        <p class="safety-subtitle">Pick a check-in time and destination - we'll alert your contacts if you miss it.</p>
+    </div>
+</section>
 <div class="safety-page page-content">
-    <section class="safety-header">
-        <div class="safety-header-inner">
-            <h1 class="safety-title">
-                <i class="material-symbols-outlined">emergency</i>
-                New Safety Check-in
-            </h1>
-            <p class="safety-subtitle">Pick a check-in time and destination - we'll alert your contacts if you miss it.</p>
-        </div>
-    </section>
 
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 
