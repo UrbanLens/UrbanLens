@@ -33,6 +33,12 @@
         <div class="app-nav-right">
             {% if user.is_authenticated %}
 
+            {# -- Global search ------------------------------------------------- #}
+            <button class="nav-notif-btn nav-search-btn" id="nav-search-btn" type="button"
+                    aria-haspopup="dialog" aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)">
+                <i class="material-icons nav-notif-icon">search</i>
+            </button>
+
             {# -- Messages (only once the user has ever used direct messages) --- #}
             {% if show_messages_icon %}
             <div class="nav-notif nav-msg" id="nav-msg">
@@ -152,6 +158,7 @@
 </nav>
 
 {% if user.is_authenticated %}
+{% include 'dashboard/partials/search/_dialog.html' %}
 <div id="safety-active-banner"
      hx-get="{% url 'safety.active_banner' %}"
      hx-trigger="load"

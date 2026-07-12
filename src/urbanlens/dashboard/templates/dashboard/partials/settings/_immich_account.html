@@ -16,7 +16,9 @@
         </button>
     </div>
     {% else %}
-    <p class="settings-help">Connect a self-hosted Immich server to search and import photos near your pins from the pin detail page.</p>
+    <p class="settings-help">
+        Connect a self-hosted <a href="{% url 'faq' %}#faq-immich-what" target="_blank" rel="noopener">Immich</a> server to search and import photos near your pins.
+    </p>
     <form hx-post="{% url 'settings.immich' %}" hx-target="#immich-settings-body" hx-swap="outerHTML" class="settings-form">
         {% csrf_token %}
         {% if form.non_field_errors %}
@@ -30,7 +32,10 @@
         <div class="settings-field">
             <label for="{{ form.api_key.id_for_label }}">API key</label>
             {{ form.api_key }}
-            <span class="settings-help">{{ form.api_key.help_text }}</span>
+            <span class="settings-help">
+                {{ form.api_key.help_text }}
+                <a href="{% url 'faq' %}#faq-immich-api-key" target="_blank" rel="noopener">What's this?</a>
+            </span>
             {% if form.api_key.errors %}<p class="settings-error">{{ form.api_key.errors|join:", " }}</p>{% endif %}
         </div>
         <div class="settings-actions">

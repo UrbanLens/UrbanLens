@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 
@@ -119,6 +120,21 @@ class UrbanLensPlugin:
         Returns:
             Provider gateway instances; empty when the plugin contributes
             no street-level imagery.
+        """
+        return []
+
+    def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
+        """Photo keywording strategies contributed by this plugin.
+
+        Providers run in the background after each photo upload (when the
+        uploader has keyword generation enabled) and store their own
+        ``ImageKeyword`` rows attributed to their slug, making photos
+        text-searchable in global search. Multiple plugins may contribute
+        providers simultaneously; each stores keywords independently.
+
+        Returns:
+            PhotoKeywordProvider instances; empty when the plugin contributes
+            no photo keywording.
         """
         return []
 

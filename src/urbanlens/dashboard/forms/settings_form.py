@@ -499,10 +499,16 @@ class MemoriesSettingsForm(forms.ModelForm):
         label="Live Location",
         help_text="Record visits from your live device location.",
     )
+    generate_photo_keywords = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Photo Keywords",
+        help_text="Automatically generate searchable keywords for photos you upload, so they show up in search. Runs in the background after each upload.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["track_pin_visits", "track_routes", "track_geolocation"]
+        fields = ["track_pin_visits", "track_routes", "track_geolocation", "generate_photo_keywords"]
 
 
 class CommunitySettingsForm(forms.ModelForm):

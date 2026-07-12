@@ -29,7 +29,7 @@ from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_photos import GooglePhotosAccount
 from urbanlens.dashboard.models.google_place import GooglePlace
-from urbanlens.dashboard.models.images import Image, ImageSource, MediaRelevance
+from urbanlens.dashboard.models.images import Image, ImageKeyword, ImageSource, MediaRelevance
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupMapShare, MarkupType, PinMarkup
@@ -53,6 +53,7 @@ from urbanlens.dashboard.models.safety import (
     SafetyPreference,
 )
 from urbanlens.dashboard.models.saved_filter import SavedFilter
+from urbanlens.dashboard.models.search_history import SearchHistory
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription

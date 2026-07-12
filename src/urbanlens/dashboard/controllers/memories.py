@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
+from urbanlens.dashboard.services.memories.journal import get_journal_entries
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
 from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
@@ -655,6 +656,40 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             "attachment_label": label,
             "attachment_url": url,
         }
+
+
+class MemoriesJournalView(LoginRequiredMixin, View):
+    """The "Journal" subpage of Memories - visit notes, ratings, and comments by date.
+
+    Merges every visit the profile added notes to, every pin they've rated,
+    and every comment they've posted (on pins, wikis, or trips) into a single
+    feed sorted newest-first, so a profile's own written history reads like a
+    diary instead of being scattered across pin/wiki/trip pages.
+
+    GET /memories/journal/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the journal page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Journal page listing the profile's visit notes, ratings,
+            and comments, newest first.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(
+            request,
+            "dashboard/pages/memories/journal.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "journal_entries": get_journal_entries(profile),
+                **_unlogged_band_context(profile),
+            },
+        )
 
 
 class MemoriesUnloggedActionView(LoginRequiredMixin, View):

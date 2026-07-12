@@ -1,0 +1,107 @@
+{# Global search dialog body: recent searches + hints when the query is blank, grouped results otherwise. #}
+{% if not query %}
+
+    {% if recent_searches %}
+    <div class="gs-section">
+        <div class="gs-section-head">
+            <i class="material-symbols-outlined">history</i>
+            <span>Recent searches</span>
+            <button type="button" class="gs-clear-all"
+                    hx-post="{% url 'search.history.delete' %}"
+                    hx-vals='{"all": "1"}'
+                    hx-target="#gs-panel"
+                    hx-swap="innerHTML">Clear all</button>
+        </div>
+        <ul class="gs-recent-list">
+            {% for item in recent_searches %}
+            <li class="gs-recent-item">
+                <button type="button" class="gs-recent-run" data-query="{{ item.query }}">
+                    <i class="material-symbols-outlined">search</i>
+                    <span>{{ item.query }}</span>
+                </button>
+                <button type="button" class="gs-recent-delete" aria-label="Remove from history"
+                        hx-post="{% url 'search.history.delete' %}"
+                        hx-vals='{"history_id": "{{ item.pk }}"}'
+                        hx-target="#gs-panel"
+                        hx-swap="innerHTML">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="gs-section">
+        <div class="gs-section-head">
+            <i class="material-symbols-outlined">tips_and_updates</i>
+            <span>Try searching for</span>
+        </div>
+        <div class="gs-hints">
+            {% for hint in search_hints %}
+            <button type="button" class="gs-hint" data-query="{{ hint }}">{{ hint }}</button>
+            {% endfor %}
+        </div>
+        <p class="gs-footnote">Search covers your pins, photos, visits, wikis, trips, messages, maps, and more. Encrypted messages can't be searched.</p>
+    </div>
+
+{% else %}
+
+    {% if filter_chips or response.used_fallback %}
+    <div class="gs-filters">
+        {% if response.used_fallback %}
+        <span class="gs-filter-chip gs-filter-chip--note" title="The structured interpretation matched nothing, so everything was searched as plain text.">Searched everywhere</span>
+        {% else %}
+        {% for chip in filter_chips %}
+        <span class="gs-filter-chip">{{ chip }}</span>
+        {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if response.groups %}
+        {% for group in response.groups %}
+        <div class="gs-section">
+            <div class="gs-section-head">
+                <i class="material-symbols-outlined">{{ group.meta.icon }}</i>
+                <span>{{ group.meta.label }}</span>
+                <span class="gs-count">{{ group.results|length }}</span>
+            </div>
+            <ul class="gs-result-list">
+                {% for result in group.results %}
+                <li>
+                    <a class="gs-result" href="{{ result.url }}">
+                        {% if result.image_url %}
+                        <img class="gs-result-thumb" src="{{ result.image_url }}" alt="" loading="lazy">
+                        {% else %}
+                        <span class="gs-result-icon"><i class="material-symbols-outlined">{{ result.icon }}</i></span>
+                        {% endif %}
+                        <span class="gs-result-body">
+                            <span class="gs-result-title">{{ result.title }}</span>
+                            {% if result.subtitle %}<span class="gs-result-subtitle">{{ result.subtitle }}</span>{% endif %}
+                            {% if result.snippet %}<span class="gs-result-snippet">{{ result.snippet }}</span>{% endif %}
+                        </span>
+                        {% if result.date %}<span class="gs-result-date">{{ result.date|date:"M j, Y" }}</span>{% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="gs-empty">
+        <i class="material-symbols-outlined">search_off</i>
+        <p class="gs-empty-title">No results for &ldquo;{{ query }}&rdquo;</p>
+        <p class="gs-empty-hint">Check the spelling, try fewer words, or search a place like &ldquo;pins in Cincinnati&rdquo;.</p>
+    </div>
+    {% endif %}
+
+    {% if response.errors %}
+    <div class="gs-warnings">
+        {% for error in response.errors %}
+        <div class="gs-warning"><i class="material-symbols-outlined">warning</i>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+{% endif %}

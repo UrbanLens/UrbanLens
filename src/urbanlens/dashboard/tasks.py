@@ -426,8 +426,35 @@ def process_image_upload(self, image_id: int) -> bool:
 
     maybe_suggest_photo_visit(image)
 
+    # Keyword generation runs as its own task so a slow provider (AI vision,
+    # classifiers) never delays the metadata/downscale pipeline above; it also
+    # deliberately runs after the downscale so providers read the final file.
+    from urbanlens.dashboard.services.celery import safely_enqueue_task as _enqueue
+
+    if image.profile is None or image.profile.generate_photo_keywords:
+        _enqueue(generate_image_keywords, image_id)
+
     update_task_progress(self, current=1, total=1, message="Image metadata processed")
     return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def generate_image_keywords(image_id: int) -> dict[str, int]:
+    """Generate searchable keywords for an uploaded photo via keyword plugins.
+
+    Enqueued at the end of ``process_image_upload`` (fully in the background -
+    uploads never wait on it). Each enabled photo-keyword provider stores its
+    own ``ImageKeyword`` rows; see ``services.photo_keywords``.
+
+    Args:
+        image_id: PK of the image to keyword.
+
+    Returns:
+        Mapping of provider slug to keywords stored.
+    """
+    from urbanlens.dashboard.services.photo_keywords import generate_keywords_for_image
+
+    return generate_keywords_for_image(image_id)
 
 
 def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:

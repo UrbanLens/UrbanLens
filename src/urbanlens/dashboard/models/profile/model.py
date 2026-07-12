@@ -281,6 +281,13 @@ class Profile(abstract.PublicDashboardModel):
     ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
+    # Whether photo-keyword plugins run on this user's uploads to make their
+    # photos text-searchable. Applies to every enabled keywording strategy
+    # (embedded metadata tags, AI vision, classifiers); the AI-based providers
+    # additionally require the AI_PHOTO_PROCESSING subscription feature and the
+    # ai_enabled toggle above.
+    generate_photo_keywords = BooleanField(default=True, help_text="Automatically generate searchable keywords for photos you upload.")
+
     # Voluntary downscale cap (longest edge, px) for future photo uploads.
     # Null means "use whatever the site policy entitles me to". A value here can
     # only tighten the site policy (the effective cap is the smaller of the two),

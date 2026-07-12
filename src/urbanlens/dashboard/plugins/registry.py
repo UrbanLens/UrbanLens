@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,15 @@ class PluginRegistry:
             Freshly built provider gateway instances.
         """
         return self._collect("get_satellite_providers")
+
+    def photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
+        """Photo keywording strategies contributed by enabled plugins.
+
+        Returns:
+            PhotoKeywordProvider instances in plugin order; each stores its
+            own keywords per image, so ordering only affects run order.
+        """
+        return self._collect("get_photo_keyword_providers")
 
     def street_view_providers(self) -> list[StreetViewProvider]:
         """The street-level imagery provider chain, in plugin order.

@@ -24,6 +24,7 @@
         <a href="#features" class="faq-jump-link">Features</a>
         <a href="#safety" class="faq-jump-link">Safety</a>
         <a href="#account-data" class="faq-jump-link">Account &amp; data</a>
+        <a href="#external-connections" class="faq-jump-link">External connections</a>
     </div>
 </nav>
 
@@ -442,6 +443,67 @@
                     <p>
                         UrbanLens is built and maintained by one person, not a company. It started as a personal
                         tool for me, then for a small circle of friends, and it's growing from there.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
+{# -- External connections ------------------------------------------------------ #}
+<section class="faq-section faq-section--alt" id="external-connections">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">External connections</div>
+        <h2 class="faq-section-title">Linking other services.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item" id="faq-immich-what">
+                <summary class="faq-item-summary">
+                    <span>What is Immich?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        <a href="https://immich.app/" target="_blank" rel="noopener">Immich</a> is a self-hosted
+                        alternative to Google Photos. It's a free, open source photo and video management app you run yourself, on your own hardware. Like UrbanLens, it's built around the idea that you should own
+                        your own data.
+                    </p>
+                    <p>
+                        If you already run an Immich server, you can connect it under Settings, which will allow you to search and
+                        import photos near a pin straight from that pin's detail page, instead of having to find them by
+                        hand. This will only work if you have location metadata stored in the photos you take. 
+                    </p>
+                    <p>
+                        UrbanLens only talks to your own server using the API key you provide - nothing gets
+                        sent anywhere else.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item" id="faq-immich-api-key">
+                <summary class="faq-item-summary">
+                    <span>How do I get an Immich API key?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        API keys are generated from your own Immich server, not from UrbanLens:
+                    </p>
+                    <ol class="faq-ordered-list">
+                        <li>Log in to your Immich server's web app.</li>
+                        <li>Click your profile picture in the top right, then choose <strong>Account Settings</strong>.</li>
+                        <li>Open the <strong>API Keys</strong> tab.</li>
+                        <li>Click <strong>New API Key</strong>, give it a name (e.g. "UrbanLens"), and save it.</li>
+                        <li>Copy the key right away - Immich only shows it to you once.</li>
+                    </ol>
+                    <p>
+                        Paste that key, along with your server's URL, into the Immich connection form under
+                        Settings. If you ever lose the key, just generate a new one on your Immich server and
+                        reconnect.
+                    </p>
+                    <p>
+                        If you ever want to disconnect your Immich server, go back to Immich and delete the API key,
+                        and UrbanLens will no longer have an ability to access it.
                     </p>
                 </div>
             </details>

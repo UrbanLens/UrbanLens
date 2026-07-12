@@ -19,6 +19,10 @@ class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
     AI = "ai", "AI features"
+    # Deliberately separate from AI: vision calls on every upload cost far more
+    # than the text features AI covers, so admins grant this tier explicitly
+    # (it is not part of the VIP canonical set).
+    AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
 

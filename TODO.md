@@ -298,6 +298,7 @@ Features planned for future releases.
 * "Demolition Alert" feature. I'm not sure if this is practically possible, since regularly searching for every pin is out of the question. Allow subscribed users to set alerts on specific pins. [UL-81]
 * Discord Bot (for known demolition updates? "note: the location you're discussing recently had security updates"? actions: "@bot plan trip")
 * API for CRIS
+* Integrate with instagram (instagram makes this extremely annoying). This would allow, for instance, importing all your instagram photos to jumpstart documenting the places you've been.
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]

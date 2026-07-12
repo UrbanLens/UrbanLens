@@ -44,6 +44,7 @@ from urbanlens.dashboard.controllers import (
     pin_sharing,
     safety,
     saved_filters,
+    search,
     settings,
     setup,
     site_admin,
@@ -1101,6 +1102,16 @@ urlpatterns = [
         ),
     ),
     path(
+        "search/",
+        include(
+            [
+                path("panel/", search.GlobalSearchPanelView.as_view(), name="search.panel"),
+                path("commit/", search.GlobalSearchCommitView.as_view(), name="search.commit"),
+                path("history/delete/", search.GlobalSearchHistoryDeleteView.as_view(), name="search.history.delete"),
+            ],
+        ),
+    ),
+    path(
         "notifications/",
         include(
             [
@@ -1152,6 +1163,7 @@ urlpatterns = [
                 path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
                 path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
                 path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
+                path("journal/", memories.MemoriesJournalView.as_view(), name="memories.journal"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
