@@ -16,6 +16,12 @@ Context:
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+    {% if context_type == "pin" and profile.external_apis_enabled %}
+    <button type="button" class="btn btn--icon-sm gallery-immich-btn" title="Import from Immich"
+            onclick="document.getElementById('pin-immich-dialog').showModal(); htmx.ajax('GET', '{% url "pin.immich.search" pin.slug %}', {target: '#pin-immich-dialog-body', swap: 'innerHTML'});">
+      <i class="material-symbols-outlined">cloud_download</i>
+    </button>
+    {% endif %}
   </div>
 
   {# Hidden file input - triggered by clicking the empty state or the add-photos item #}

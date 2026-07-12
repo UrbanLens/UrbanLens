@@ -444,6 +444,11 @@
 {# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
 <dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
 
+{# -- Import from Immich dialog (content loaded via HTMX when opened) ------ #}
+<dialog id="pin-immich-dialog" class="pin-immich-dialog ul-dialog">
+    <div id="pin-immich-dialog-body"></div>
+</dialog>
+
 {# -- Pin edit dialog ------------------------------------------------------ #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Pin" %}

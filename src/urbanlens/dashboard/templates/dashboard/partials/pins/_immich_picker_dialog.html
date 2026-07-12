@@ -1,0 +1,59 @@
+{# Immich photo picker dialog body. Context: pin, account, radius_m, radius_choices_m, assets, error #}
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Import from Immich" %}
+
+{% if not account %}
+<div class="immich-picker-error ul-dialog-body">
+    <p>Connect your Immich server to import photos near this pin.</p>
+    <a href="{% url 'settings.view' %}#immich-settings-section" class="btn btn--primary">
+        <i class="material-symbols-outlined">link</i>
+        Connect Immich in Settings
+    </a>
+</div>
+{% elif error %}
+<div class="immich-picker-error ul-dialog-body">
+    <p>{{ error }}</p>
+</div>
+{% else %}
+<div class="ul-dialog-body">
+    <form class="immich-picker-radius"
+          hx-get="{% url 'pin.immich.search' pin.slug %}"
+          hx-target="#pin-immich-dialog-body"
+          hx-swap="innerHTML"
+          hx-trigger="change">
+        <label for="immich-radius-select">Within</label>
+        <select id="immich-radius-select" name="radius_m">
+            {% for value, label in radius_choices_m %}
+            <option value="{{ value }}" {% if value == radius_m %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <span>of this pin</span>
+    </form>
+
+    <form hx-post="{% url 'pin.immich.import' pin.slug %}"
+          hx-target="#pin-immich-dialog-body"
+          hx-swap="innerHTML"
+          class="immich-picker-form">
+        {% csrf_token %}
+        {% if assets %}
+        <div class="immich-picker-grid">
+            {% for asset in assets %}
+            <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
+                <input type="checkbox" name="asset_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
+                <img src="{% url 'pin.immich.thumbnail' pin.slug asset.id %}" loading="lazy" alt="">
+                {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit">
+                <i class="material-symbols-outlined">download</i>
+                Import selected
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+        {% else %}
+        <p class="immich-picker-empty">No photos found within that distance.</p>
+        {% endif %}
+    </form>
+</div>
+{% endif %}

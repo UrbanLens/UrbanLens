@@ -456,6 +456,89 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
     return None
 
 
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str]) -> dict[str, int]:
+    """Download selected Immich assets and import them onto a pin.
+
+    Runs the same checksum-dedupe and storage-quota checks as a manual upload
+    (``PinGalleryView.post``), attaches a photo-sourced ``PinVisit`` per new
+    image via ``log_visit_on_pin``, and enqueues ``process_image_upload`` for
+    each so EXIF/downscale post-processing matches every other upload path.
+    An asset already imported to this pin, or one that would exceed the
+    uploader's storage quota, is skipped rather than failing the whole batch.
+
+    Args:
+        pin_id: PK of the pin to import onto.
+        profile_id: PK of the requesting profile (also the pin owner).
+        asset_ids: Immich asset ids selected in the picker dialog.
+
+    Returns:
+        Counts of imported/skipped/failed assets, surfaced to the polling UI.
+    """
+    import io
+
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.immich.model import ImmichAccount
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.apis.immich import ImmichGateway
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.images import compute_checksum
+    from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
+    from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+    counts = {"imported": 0, "skipped": 0, "failed": 0}
+    pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
+    profile = Profile.objects.filter(pk=profile_id).first()
+    account = ImmichAccount.objects.filter(profile_id=profile_id).first()
+    if pin is None or profile is None or account is None:
+        update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Immich connection no longer exists.")
+        return counts
+
+    gateway = ImmichGateway(account=account)
+    total = len(asset_ids)
+    for index, asset_id in enumerate(asset_ids):
+        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
+        try:
+            content, filename, _content_type = gateway.get_asset_original(asset_id)
+        except GatewayRequestError:
+            logger.warning("import_immich_photos: failed to download asset %s for pin %s", asset_id, pin_id, exc_info=True)
+            counts["failed"] += 1
+            continue
+
+        checksum = compute_checksum(io.BytesIO(content))
+        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+            counts["skipped"] += 1
+            continue
+        if quota_error_for_upload(profile, len(content)):
+            counts["failed"] += 1
+            continue
+
+        image = Image.objects.create(
+            image=ContentFile(content, name=filename),
+            pin=pin,
+            location=pin.location,
+            profile=profile,
+            checksum=checksum,
+            file_size=len(content),
+            source_url=account.asset_web_url(asset_id),
+        )
+        log_visit_on_pin(profile, image, pin)
+        safely_enqueue_task(process_image_upload, image.pk)
+        counts["imported"] += 1
+
+    summary = f"Imported {counts['imported']}"
+    if counts["skipped"]:
+        summary += f", skipped {counts['skipped']} duplicate(s)"
+    if counts["failed"]:
+        summary += f", {counts['failed']} failed"
+    update_task_progress(self, current=total, total=total, message=summary + ".")
+    return counts
+
+
 def _run_database_backup(task=None) -> bool:
     """Run database backup and retention cleanup using current site settings."""
     from urbanlens.core.controllers.backups.db import DatabaseBackup

@@ -64,6 +64,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
     secret_key: str = Field(default=get_random_secret_key(), description="The secret key")
+    field_encryption_key: str | None = Field(
+        default=None,
+        description=(
+            "Base64 key used to encrypt sensitive database fields (e.g. Immich API keys) via Fernet. "
+            "When unset, a key is derived from secret_key so existing installs keep working without a new "
+            "required secret - set this explicitly in production so field encryption survives a SECRET_KEY rotation."
+        ),
+    )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")

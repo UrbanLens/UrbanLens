@@ -235,6 +235,18 @@
             </form>
         </div>
 
+        {# -- Immich (subsection) ------------------------------------------------ #}
+        <div class="settings-subsection" id="immich-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">photo_library</i>
+                Immich
+            </h3>
+            <p class="settings-section-desc">Connect a self-hosted Immich server to import photos near your pins.</p>
+            <div hx-get="{% url 'settings.immich' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+
         {# -- Direct Messages (subsection) --------------------------------------- #}
         <div class="settings-subsection" id="direct-message-settings-section">
             <h3 class="settings-subsection-title">

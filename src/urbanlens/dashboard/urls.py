@@ -24,6 +24,7 @@ from urbanlens.dashboard.controllers import (
     e2ee,
     friendship,
     image_gallery,
+    immich,
     location_wiki,
     maps,
     markup,
@@ -431,6 +432,26 @@ urlpatterns = [
                                 image_gallery.PinImageView.as_view(),
                             ),
                             path(
+                                "<slug:pin_slug>/immich/search/",
+                                immich.PinImmichSearchView.as_view(),
+                                name="pin.immich.search",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/thumbnail/<str:asset_id>/",
+                                immich.PinImmichThumbnailView.as_view(),
+                                name="pin.immich.thumbnail",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/import/",
+                                immich.PinImmichImportView.as_view(),
+                                name="pin.immich.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/import/<str:task_id>/progress/",
+                                immich.PinImmichImportProgressView.as_view(),
+                                name="pin.immich.import.progress",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -549,6 +570,8 @@ urlpatterns = [
     path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
     path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),
     path("settings/undo-history/clear/", undo.UndoClearView.as_view(), name="undo.clear"),
+    path("settings/immich/", immich.ImmichSettingsView.as_view(), name="settings.immich"),
+    path("settings/immich/disconnect/", immich.ImmichDisconnectView.as_view(), name="settings.immich.disconnect"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",

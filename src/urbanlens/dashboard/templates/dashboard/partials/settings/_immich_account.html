@@ -1,0 +1,44 @@
+{# Immich settings subsection - loaded via HTMX (ImmichSettingsView). Context: account, form #}
+<div id="immich-settings-body" class="settings-subsection-body">
+    {% if account %}
+    <p class="settings-help">
+        Connected to <strong>{{ account.server_url }}</strong>.
+        {% if account.last_verified %}Verified {{ account.last_verified|date:"M j, Y" }}.{% endif %}
+    </p>
+    <div class="settings-actions">
+        <button type="button" class="btn btn--danger"
+                hx-post="{% url 'settings.immich.disconnect' %}"
+                hx-target="#immich-settings-body"
+                hx-swap="outerHTML"
+                hx-confirm="Disconnect your Immich server? Photos already imported are kept, but the pin-detail import stops working until you reconnect.">
+            <i class="material-symbols-outlined">link_off</i>
+            Disconnect Immich
+        </button>
+    </div>
+    {% else %}
+    <p class="settings-help">Connect a self-hosted Immich server to search and import photos near your pins from the pin detail page.</p>
+    <form hx-post="{% url 'settings.immich' %}" hx-target="#immich-settings-body" hx-swap="outerHTML" class="settings-form">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <p class="settings-error">{{ form.non_field_errors|join:", " }}</p>
+        {% endif %}
+        <div class="settings-field">
+            <label for="{{ form.server_url.id_for_label }}">Server URL</label>
+            {{ form.server_url }}
+            {% if form.server_url.errors %}<p class="settings-error">{{ form.server_url.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="settings-field">
+            <label for="{{ form.api_key.id_for_label }}">API key</label>
+            {{ form.api_key }}
+            <span class="settings-help">{{ form.api_key.help_text }}</span>
+            {% if form.api_key.errors %}<p class="settings-error">{{ form.api_key.errors|join:", " }}</p>{% endif %}
+        </div>
+        <div class="settings-actions">
+            <button type="submit" class="settings-save-btn">
+                <i class="material-symbols-outlined">link</i>
+                Connect Immich
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
