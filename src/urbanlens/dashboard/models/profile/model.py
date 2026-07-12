@@ -25,6 +25,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
 from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
@@ -59,6 +60,9 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "trip_pin_location_visibility",
     "contact_visibility",
     "direct_message_visibility",
+    "online_status_visibility",
+    "read_receipt_visibility",
+    "typing_indicator_visibility",
 )
 
 
@@ -174,6 +178,34 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYTHING_IN_COMMON,
         help_text="Who can send you direct messages.",
+    )
+    online_status_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see when you're online in direct messages.",
+    )
+    read_receipt_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see that you've read their direct messages.",
+    )
+    typing_indicator_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see when you're typing a direct message reply.",
+    )
+    direct_message_delete_after = CharField(
+        max_length=20,
+        choices=MessageRetentionChoice.choices,
+        default=MessageRetentionChoice.NEVER,
+        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+    )
+    allow_friend_recommendations = BooleanField(
+        default=True,
+        help_text="Let other users recommend you as a friend to people they're messaging.",
     )
 
     # Style preferences
@@ -703,7 +735,9 @@ class Profile(abstract.PublicDashboardModel):
             viewer: The profile requesting access, or None for anonymous visitors.
 
         Returns:
-            True when the viewer passes the profile_visibility setting.
+            True when the viewer passes the profile_visibility setting, or
+            holds an active temporary access grant (e.g. from an `@friend`
+            recommendation in chat - see `DirectMessageTemporaryAccess`).
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
@@ -711,7 +745,12 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if viewer is None:
             return False
-        return self.visibility_permits(self.profile_visibility, self, viewer)
+        if self.visibility_permits(self.profile_visibility, self, viewer):
+            return True
+
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+
+        return DirectMessageTemporaryAccess.grants_access(self.pk, viewer.pk)
 
     def __str__(self):
         return self.username

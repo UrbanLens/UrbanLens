@@ -233,11 +233,27 @@
     var composeBtn = document.getElementById('dm-compose-btn');
     var composePanel = document.getElementById('dm-compose');
     if (composeBtn && composePanel) {
-        composeBtn.addEventListener('click', function () {
+        function closeComposePanel() {
+            if (composePanel.hidden) return;
+            composePanel.hidden = true;
+            composeBtn.setAttribute('aria-expanded', 'false');
+        }
+        composeBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
             var open = !composePanel.hidden;
             composePanel.hidden = open;
             composeBtn.setAttribute('aria-expanded', String(!open));
             if (!open) document.getElementById('dm-recipient-input').focus();
+        });
+        // Close on outside click, but not on a click inside the panel itself
+        // (e.g. picking a search result).
+        document.addEventListener('click', function (e) {
+            if (composePanel.hidden) return;
+            if (composePanel.contains(e.target) || composeBtn.contains(e.target)) return;
+            closeComposePanel();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeComposePanel();
         });
     }
 

@@ -61,6 +61,14 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    # The direct message this photo was attached to, if sent as a DM attachment.
+    direct_message = ForeignKey(
+        "dashboard.DirectMessage",
+        on_delete=SET_NULL,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -115,6 +123,7 @@ class Image(abstract.FrontendDashboardModel):
         location_id: int | None
         safety_checkin_id: int | None
         visit_id: int | None
+        direct_message_id: int | None
         profile_id: int | None
 
     objects = ImageManager()

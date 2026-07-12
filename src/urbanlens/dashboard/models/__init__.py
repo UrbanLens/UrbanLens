@@ -13,7 +13,15 @@ from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, Goog
 from urbanlens.dashboard.models.categories import Category
 from urbanlens.dashboard.models.comments import Comment
 from urbanlens.dashboard.models.custom_fields import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
-from urbanlens.dashboard.models.direct_messages import DirectMessage
+from urbanlens.dashboard.models.direct_messages import (
+    DirectMessage,
+    DirectMessageImagePermission,
+    DirectMessageShare,
+    DirectMessageShareKind,
+    DirectMessageTemporaryAccess,
+    ImagePermissionStatus,
+    MessageRetentionChoice,
+)
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation

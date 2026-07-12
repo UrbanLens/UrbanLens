@@ -254,8 +254,19 @@
 
     &__input {
         width: 100%;
+        max-width: 100%;
         box-sizing: border-box;
     }
+}
+
+// Materialize's global `input[type=search]:not(.browser-default)` rule
+// outranks a lone `.dm-compose__input` class on specificity, so the ID is
+// needed here too to reliably win and keep the field inset from the sidebar
+// edge instead of visually touching it.
+#dm-recipient-input.dm-compose__input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .dm-recipient-list {
