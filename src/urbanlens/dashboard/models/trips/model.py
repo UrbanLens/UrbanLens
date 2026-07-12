@@ -287,7 +287,21 @@ class TripMembership(abstract.DashboardModel):
         ("maybe", "Maybe"),
     ]
 
+    # Whether an invited profile has consented to participate in trip planning.
+    # Separate from `rsvp` (are you actually coming?) - this instead gates
+    # whether the member can contribute at all (add/edit activities, comment,
+    # vote, add members). Defaults to "joined" so every pre-existing
+    # membership, and the creator's own row, stay fully functional; invite
+    # flows (TripCreateView, TripMembersView) set "invited" explicitly.
+    STATUS_INVITED = "invited"
+    STATUS_JOINED = "joined"
+    STATUS_CHOICES = [
+        ("invited", "Invited"),
+        ("joined", "Joined"),
+    ]
+
     rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
+    status = CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_JOINED)
     is_organizer = BooleanField(
         default=False,
         help_text="Organizers have the same trip-management rights as the creator.",

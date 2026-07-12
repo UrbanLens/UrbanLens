@@ -439,7 +439,9 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
         if trip.profiles.count() >= max_members:
             skipped.append(f'"{trip.name}" is full ({max_members} members maximum); some invitations were not sent.')
             break
-        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee)
+        _membership, created = TripMembership.objects.get_or_create(
+            trip=trip, profile=invitee, defaults={"status": TripMembership.STATUS_INVITED}
+        )
         if created:
             NotificationLog.objects.create(
                 profile=invitee,

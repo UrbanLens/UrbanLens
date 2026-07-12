@@ -96,6 +96,8 @@
 
         <div class="memories-map-wrap">
             <div id="memories-map"></div>
+            {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+            {% map_toolbar "screenshot" panel_id="memories-map-buttons" %}
             {# Shared layers panel - same component and engine as the main map. #}
             {% map_layers_panel "street,terrain,satellite,borders" panel_id="memories-map-layers" %}
         </div>
@@ -144,6 +146,8 @@
 
     // -- Map setup ------------------------------------------------------------
     var map = L.map('memories-map', { attributionControl: false }).setView([mapLat, mapLng], 6);
+    // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+    window.map = map;
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} above).
     window.MapLayers.create(map, { root: document.getElementById('memories-map-layers') });

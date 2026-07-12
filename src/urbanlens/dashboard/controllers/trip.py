@@ -388,19 +388,65 @@ def _is_organizer(profile: Profile, trip: Trip) -> bool:
     return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
 
 
-def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
-    """Return True if profile is allowed to act at the given permission level.
+def _viewer_has_joined(profile: Profile, trip: Trip) -> bool:
+    """Return True if profile can contribute to the trip - the creator, or a member who has joined.
 
-    Organizers and the creator are always allowed. 'everyone' allows any member.
-    'organizers' requires organizer/creator status. 'none' allows only the creator.
+    An invited member can view the trip (see `_trip_or_403`) but can't
+    contribute (add/edit activities, comment, vote, add members) until they
+    accept the invitation via `TripMembershipJoinView`.
     """
     if trip.creator_id == profile.id:
         return True
+    return TripMembership.objects.filter(trip=trip, profile=profile, status=TripMembership.STATUS_JOINED).exists()
+
+
+def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
+    """Return True if profile is allowed to act at the given permission level.
+
+    Requires the profile to have joined the trip (see `_viewer_has_joined`) -
+    an invited-but-not-yet-joined member can never act, regardless of level.
+    Otherwise: organizers and the creator are always allowed, 'everyone'
+    allows any joined member, 'organizers' requires organizer/creator status,
+    and 'none' allows only the creator.
+    """
+    if trip.creator_id == profile.id:
+        return True
+    if not _viewer_has_joined(profile, trip):
+        return False
     if level == Trip.PERM_EVERYONE:
         return True
     if level == Trip.PERM_ORGANIZERS:
         return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
     return False
+
+
+def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None:
+    """Send an ADDED_TO_TRIP notification, respecting the invitee's delivery preference.
+
+    Args:
+        inviter: The profile who added `invitee` (trip creator or a member
+            with add-members permission).
+        invitee: The newly invited profile.
+        trip: The trip they were invited to.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+    pref = getattr(invitee.notification_preferences, "added_to_trip", DeliveryPreference.SITE)
+    if pref == DeliveryPreference.NONE:
+        return
+    NotificationLog.objects.create(
+        profile=invitee,
+        source_profile=inviter,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.ADDED_TO_TRIP,
+        title="Trip invitation",
+        message=f'{inviter.username} invited you to join "{trip.name}".',
+        url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+    )
 
 
 def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
@@ -458,6 +504,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
         _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
 
     viewer_is_organizer = _is_organizer(profile, trip)
+    viewer_has_joined = _viewer_has_joined(profile, trip)
     activities_with_index = [
         {
             "activity": act,
@@ -465,7 +512,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "vote_up": up_counts.get(act.id, 0),
             "vote_down": down_counts.get(act.id, 0),
             "user_vote": user_votes.get(act.id),
-            "can_manage": (act.added_by_id == profile.id or viewer_is_organizer),
+            "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
         }
         for act in activities
@@ -479,6 +526,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "activities_with_index": activities_with_index,
             "profile": profile,
             "all_activities_completed": all_activities_completed,
+            "viewer_has_joined": viewer_has_joined,
             "oob": oob,
         },
     )
@@ -498,10 +546,17 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
       same as its own initial ``hx-trigger="load"``.
     """
     activities_html = _activities_panel_html(request, trip, profile)
+    viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.filter(trip=trip, profile=profile).first()
     header_html = render_to_string(
         request=request,
         template_name="dashboard/partials/trips/trip_header_partial.html",
-        context={"trip": trip, "profile": profile, "viewer_is_organizer": _is_organizer(profile, trip)},
+        context={
+            "trip": trip,
+            "profile": profile,
+            "viewer_is_organizer": _is_organizer(profile, trip),
+            "viewer_membership": viewer_membership,
+            "viewer_has_joined": trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED),
+        },
     )
     response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>')
     response["HX-Trigger"] = "activityChanged"
@@ -574,7 +629,7 @@ class TripCreateView(LoginRequiredMixin, View):
             end_date=body.get("end_date") or None,
             creator=profile,
         )
-        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
+        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
 
         # Only invite accepted friends - never trust arbitrary submitted profile IDs.
         if invite_ids:
@@ -584,7 +639,11 @@ class TripCreateView(LoginRequiredMixin, View):
                 max_members = SiteSettings.get_current().max_trip_members
                 remaining = max_members - trip.profiles.count()
                 for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
-                    TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
+                    _membership, created = TripMembership.objects.get_or_create(
+                        trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED}
+                    )
+                    if created:
+                        _notify_added_to_trip(profile, friend_profile, trip)
 
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
@@ -615,6 +674,7 @@ class TripDetailView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+        viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.filter(trip=trip, profile=profile).first()
         return render(
             request,
             "dashboard/pages/trips/detail.html",
@@ -623,6 +683,8 @@ class TripDetailView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "trip-detail",
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                "viewer_membership": viewer_membership,
+                "viewer_has_joined": _viewer_has_joined(profile, trip),
                 **calendar_context(profile, trip),
                 **profile.get_map_center_template_context(),
             },
@@ -641,6 +703,9 @@ class TripEditView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _viewer_has_joined(profile, trip):
+            return HttpResponse("Join this trip to edit its details.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -668,6 +733,8 @@ class TripEditView(LoginRequiredMixin, View):
                 "trip": trip,
                 "profile": profile,
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                "viewer_membership": None,
+                "viewer_has_joined": True,
                 **calendar_context(profile, trip),
             },
         )
@@ -844,6 +911,9 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
             return result
         trip = result
 
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         already_completed = activity.status == TripActivity.STATUS_COMPLETED
 
@@ -895,6 +965,9 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
@@ -980,6 +1053,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
             "comment_count": comment_count,
             "profile": profile,
             "allowed_emojis": _ALLOWED_EMOJIS,
+            "viewer_has_joined": _viewer_has_joined(profile, trip),
         },
     )
 
@@ -1108,7 +1182,11 @@ class TripMembersView(LoginRequiredMixin, View):
             )
 
         new_profile, _ = Profile.objects.get_or_create(user=user)
-        TripMembership.objects.get_or_create(trip=trip, profile=new_profile)
+        _membership, created = TripMembership.objects.get_or_create(
+            trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED}
+        )
+        if created:
+            _notify_added_to_trip(profile, new_profile, trip)
 
         return _render_members_panel(request, trip, profile)
 
@@ -1266,6 +1344,10 @@ class TripActivityStatusView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         try:
@@ -1300,6 +1382,10 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         try:
@@ -1325,6 +1411,36 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         activity.save(update_fields=["scheduled_at", "updated"])
 
         return _render_activities_panel(request, trip, profile)
+
+
+class TripMembershipJoinView(LoginRequiredMixin, View):
+    """Accept a trip invitation.
+
+    POST /trips/<uuid>/join/
+
+    Unlocks contribution rights (add/edit activities, comment, vote, add
+    members) for an invited member - separate from RSVP, which only says
+    whether they expect to actually show up. Declining an invitation reuses
+    `TripLeaveView` instead, since a not-yet-joined member has no
+    contributions to lose by leaving.
+    """
+
+    def post(self, request, trip_uuid):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_uuid, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if trip.creator_id != profile.id:
+            TripMembership.objects.filter(trip=trip, profile=profile).update(status=TripMembership.STATUS_JOINED)
+
+        # Joining unlocks contribution across the whole page (activities,
+        # comments, members) - simplest to reload rather than stitch together
+        # OOB swaps for every affected panel for a rare, one-off action.
+        response = HttpResponse("", status=200)
+        response["HX-Refresh"] = "true"
+        return response
 
 
 class TripMemberRSVPView(LoginRequiredMixin, View):
@@ -1361,6 +1477,10 @@ class TripLeaveView(LoginRequiredMixin, View):
     """Leave a trip (non-creator members only).
 
     DELETE /trips/<uuid>/leave/
+
+    Also doubles as "decline invitation" for a member who was invited but
+    never joined (see `TripMembershipJoinView`) - either way the membership
+    row is simply removed.
     """
 
     def delete(self, request, trip_uuid):

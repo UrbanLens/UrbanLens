@@ -36,8 +36,12 @@
             <span class="trip-member-badge trip-member-badge--organizer">organizer</span>
             {% endif %}
 
-            {# RSVP: clickable dropdown for current user, static badge for others #}
-            {% if membership.profile == profile %}
+            {# RSVP: clickable dropdown for current user, static badge for others. #}
+            {# Invited-but-not-joined members skip RSVP entirely - see the invite  #}
+            {# banner in trip_header_partial.html for the join/decline action.    #}
+            {% if membership.status == 'invited' %}
+            <span class="trip-member-rsvp trip-member-rsvp--invited" title="Hasn't joined the trip yet">Invited</span>
+            {% elif membership.profile == profile %}
             <div class="trip-member-rsvp-wrap">
                 <button type="button"
                         class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"

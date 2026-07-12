@@ -39,11 +39,10 @@ so it's always available by the time this script runs - no typeof guard needed.
     {% map_search_bar prefix="safety-map" %}
     {% endif %}
     <div id="safety-map"></div>
+    {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+    {% map_toolbar "screenshot" panel_id="safety-map-buttons" %}
     <div class="map-bottom-controls">
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="safety-map-layers" extra_class="map-layers-panel--inline" %}
-        <button type="button" id="safety-map-download-btn" class="btn btn--ghost map-overlay-btn" title="Download this map as a JPEG">
-            <i class="material-symbols-outlined">download</i> Download
-        </button>
         {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
         {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
         {% endif %}{% endif %}
@@ -68,11 +67,13 @@ so it's always available by the time this script runs - no typeof guard needed.
     // attributionControl: false - attribution renders as static text in the
     // page footer instead (see partials/layout/footer.html's map_attribution).
     var map = L.map('safety-map', { attributionControl: false }).setView([centerLat, centerLng], {{ destination_lat|yesno:"13,4" }});
+    // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+    window.map = map;
 
     // -- Layers: shared engine + panel (same component as the main map) --------
     var _layerMode = '{{ map_layer_mode|default:"street" }}';
     var _showBorders = {{ map_show_borders|yesno:"true,false" }};
-    var _safetyMapLayers = window.MapLayers.create(map, {
+    window.MapLayers.create(map, {
         root: document.getElementById('safety-map-layers'),
         defaultBase: _layerMode,
         initialOverlays: _showBorders ? ['borders'] : [],
@@ -81,18 +82,6 @@ so it's always available by the time this script runs - no typeof guard needed.
             _showBorders = state.borders;
             _saveMapViewSoon();
         },
-    });
-
-    // -- Download current view as JPEG ------------------------------------------
-    // _getSafetyMapShapes is (re)defined below, once whichever markup source
-    // (editable toolbar or readonly viewer) this page uses is set up.
-    var _getSafetyMapShapes = function () { return []; };
-    document.getElementById('safety-map-download-btn').addEventListener('click', function () {
-        window.MapExport.download(map, {
-            layers: _safetyMapLayers,
-            getShapes: _getSafetyMapShapes,
-            filename: 'checkin-route.jpg',
-        });
     });
 
     setTimeout(function () { map.invalidateSize(); }, 300);
@@ -270,19 +259,15 @@ so it's always available by the time this script runs - no typeof guard needed.
     // Read by this file's own map-click handler above (see "Skip while the
     // markup toolbar ... is actively drawing").
     var _drawSession = { isBusy: _markupToolbar.isDrawBusy };
-    _getSafetyMapShapes = _markupToolbar.getShapesForExport;
 </script>
 {% endif %}
 {% elif markup_json_url %}
 {# Readonly (contact portal): view existing markup only, no editing UI. #}
 <script>
     var markupLayer = L.layerGroup().addTo(map);
-    var _safetyReadonlyShapes = [];
-    _getSafetyMapShapes = function () { return _safetyReadonlyShapes; };
     function loadMarkup() {
         fetch('{{ markup_json_url }}').then(function (r) { return r.json(); }).then(function (data) {
             markupLayer.clearLayers();
-            _safetyReadonlyShapes = [];
             (data.markup_items || []).forEach(function (item) {
                 var geom = item.geometry;
                 var shape = { type: item.markup_type, label: item.label, color: item.color,
@@ -297,7 +282,6 @@ so it's always available by the time this script runs - no typeof guard needed.
                     shape.type = 'circle';
                     shape.latlngs = [[center.lat, center.lng], [center.lat, center.lng + dlng]];
                     L.circle(center, { radius: geom.radius, color: shape.color, weight: shape.stroke_width }).addTo(markupLayer);
-                    _safetyReadonlyShapes.push(shape);
                     return;
                 }
                 if (geom.type === 'Point') {
@@ -306,7 +290,6 @@ so it's always available by the time this script runs - no typeof guard needed.
                     shape.latlngs = geom.coordinates.map(function (c) { return [c[1], c[0]]; });
                 }
                 window.MarkupEngine.renderShape(shape, markupLayer, map.getZoom());
-                _safetyReadonlyShapes.push(shape);
             });
         }).catch(function () {});
     }

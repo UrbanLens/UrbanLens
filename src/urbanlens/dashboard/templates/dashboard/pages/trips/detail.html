@@ -20,6 +20,8 @@
     {# -- Activity map ---------------------------------------------------- #}
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
+        {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+        {% map_toolbar "screenshot" panel_id="trip-map-buttons" %}
         {# Shared layers panel - same component and engine as the main map. #}
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
         <div class="trip-map-overlay">
@@ -623,6 +625,8 @@
 
     function _initMap() {
         _map = L.map('trip-map', {contextmenu: false});
+        // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+        window.map = _map;
         // Shared layers engine + panel - the exact same component as the main
         // map (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in this page's map wrapper).
         window.MapLayers.create(_map, {

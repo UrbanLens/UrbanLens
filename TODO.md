@@ -25,28 +25,28 @@ Features planned for this release.
 * Run bandit and AI vulnerability scans; integrate with CI/CD. [UL-31]
 
 ## Bug Fixes
-* During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]
-* UI Bug: Multi-select toolbar in dark mode [UL-151]
-* Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]
+* ~~During import pins, checking "create badge", the badge is created, but the pins aren't added to it. (They are added to already existing badges you select, though) [UL-150]~~ (backend already attached the badge correctly; fixed the actual remaining bug - the "will be created" preview chip didn't disappear when the checkbox was unchecked, `[hidden]` was losing to a same-specificity `display` rule)
+* ~~UI Bug: Multi-select toolbar in dark mode [UL-151]~~ (already uses theme-aware tokens + a dedicated `_dark.scss` contrast pass)
+* ~~Organize Page: Occasionally, after editing or merging badges, the edit button for other rows no longer opens the edit dialog. I'm not sure exactly what circumstances this happens. [UL-197]~~ (root cause: clicking the row's own selection checkbox never updated the in-memory `selected` set, only the native checkbox's visual state, desyncing the bulk toolbar from what was actually checked)
 * ~~Badge Statuses can't be hierarchical?? (I guess they can, it just doesn't show in the organize status page ui) [UL-199]~~
-* Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]
+* ~~Trip Details > Adding Pin: The suggestions are only geocoded, not pin searches. [UL-227]~~ (already fixed - Add/Edit Activity dialogs use the shared LocationSearchEngine with a `localPins` source)
 * Starting map option: Remember doesn't appear to work. [UL-255]
-* Organize: Bulk edit button doesn't open dialog. [UL-269]
+* ~~Organize: Bulk edit button doesn't open dialog. [UL-269]~~ (same root cause as UL-197 above)
 * When filtering the map by rating, I saw a single pin without a rating. [UL-270]
 * I somehow got myself into a filter being active that I couldn't identify? [UL-271]
-* When clearing a formula, it doesn't trigger a pin refresh. [UL-272]
+* ~~When clearing a formula, it doesn't trigger a pin refresh. [UL-272]~~ (clearing the box via backspace, or pressing Enter on an empty box, left the stale filter applied instead of clearing it)
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??) [UL-273]
-* After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?) [UL-274]
+* ~~After going to a suggested jump to point, clicking the temporary marker to create a pin, and submitting, the new pin doesn't show up on the map without a refresh. (maybe this was due to latency, which is a separate TODO item?) [UL-274]~~ (already fixed - `_refreshPinInStore`/`updateCachedPin` correctly add the new pin to the live map)
 * ~~Pin details page: Plus buttons don't look good again. [UL-275]~~
 * ~~On pin details page (+ maybe location wiki), some circumstance with failing API cause latency across the entire site for ~30 seconds. (kartaview?) This is an issue with offloading these tasks to celery / running in background. [UL-276]~~
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
-* In import pins dialog, unchecking "Create category X" does not remove the sample badge.
+* ~~In import pins dialog, unchecking "Create category X" does not remove the sample badge.~~ (same CSS specificity bug as UL-150 above)
 * ~~On the map list: Everything says "United States"~~
 * ~~Badge bulk edit does not update the custom icon. ~~
-* Organize page: Bulk edit bar shows up after selecting just one thing (good). But then clicking "edit" opens the bulk edit dialog, instead of the single edit dialog (not as good).
+* ~~Organize page: Bulk edit bar shows up after selecting just one thing (good). But then clicking "edit" opens the bulk edit dialog, instead of the single edit dialog (not as good).~~ (already fixed - single-selection Edit opens the single-item form via `_orgOpenSingleEdit`)
 * Bulk edit dialog: I'm not certain that shared properties are showing up (i.e. selecting 2 rows with the same icon, the icon should show up in the dialog)
-* Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.
-* Rate limit on google places causes an ugly error page.
+* ~~Editing badges: replacing a custom icon with a symbol icon doesn't appear to be possible.~~ (already fixed on the live Organize page - picking any symbol clears the custom-icon flag)
+* ~~Rate limit on google places causes an ugly error page.~~ (the place-name resolvers only caught `OSError`/`ValueError`/`requests.RequestException`, not the rate limiter's `RequestCancelledError`, so a 429 propagated to an unhandled 500)
 * Wikipedia not showing up for some HRSH buildings.
 * Map caching / loading seems to be less reliable at 8k+ pins.
     [UL] Cache MISS - fetching all pins from server
@@ -60,7 +60,7 @@ Features planned for this release.
 ---
 * Changing badge icon / color in organize doesn't immediately trigger cache update. [UL-279]
 ---
-* Throughout site: tooltips clip (overflow: hidden) [UL-280]
+* ~~Throughout site: tooltips clip (overflow: hidden) [UL-280]~~ (the JS float portal that already escaped `overflow:hidden` was opt-in per-trigger; made it the default for every `[data-tooltip]` instead)
 * Consider again: Pin count while filtering [UL-281]
 
 ## Optimizations / Latency
@@ -84,10 +84,10 @@ Features planned for this release.
 * Discord SSO [UL-11]
 * "Don't leave page" dialog before a settings page is fully saved. [UL-9]
 * Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
-* On the public profile page, when saving a note, the note section is duplicated. [UL-112]
+* ~~On the public profile page, when saving a note, the note section is duplicated. [UL-112]~~ (already fixed - `hx-swap` corrected to `outerHTML`)
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 * When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
-* After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]
+* ~~After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]~~ (already fixed for single and bulk conversion)
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
 * ~~Password Requirements should be reasonably strong. [UL-130]~~
@@ -207,10 +207,10 @@ Features planned for future releases.
 * Friend request pipeline needs UX work. Clicking notification does nothing, and the notification doesn't include an accept/reject button. Going to your profile, you see the accept/reject buttons there... great! clicking accept makes the section go away (great!) but the friends section isn't refreshed to show the new connection, so the user is left confused if it worked or not. Dotted line is distracting. Add label dropdown isn't closed when clicking somewhere else. Hovering over stars doesn't show the filled in stars (this must reuse existing components, not reinvent the wheel). [UL-237]
 * On the public profile page, if "nothing in common yet", then hide the section. Buttons need ui work in dark mode. Private notes section needs stand-out color to distinguish it. [UL-238]
 * When logging out and then logging in as a new user, the cache was reused for that new user's map. That shouldn't happen. The cache needs to be tied to the current user and only used when that user is logged in. [UL-239]
-* After accepting a friend request, mark the friend request notification read. This should probably happen when you view the friend request on your profile page at all. [UL-240]
-* After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]
-* When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]
-* When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]
+* ~~After accepting a friend request, mark the friend request notification read. This should probably happen when you view the friend request on your profile page at all. [UL-240]~~ (accept/reject/ignore already did; added read-marking when the pending request is simply viewed on the profile page)
+* ~~After accepting friend request, the old friend request notification shouldn't have accept or reject buttons anymore. [UL-241]~~ (already fixed - buttons are gated on the friendship still being pending)
+* ~~When all notifications are marked read, the notification counter above the bell doesn't update until page refresh. [UL-242]~~ (already fixed - `HX-Trigger: notifCountRefresh`)
+* ~~When you are friends with a user, the "add friend" button on their profile shouldn't show up. Instead, it should be "remove friend". Implement the remove friend feature for this. [UL-243]~~ (already fully implemented)
 * Loopnet API or Scraping [UL-248]
 * Get pin / location bounding box from external service (i.e. property boundaries), or attempt ML building boundaries detection. [UL-249]
 * ~~Organize Page > Priority Tab: Provide mechanism for shifting an item to a specific position (e.g. "go to position 20")~~p, and allow multi-select before dragging to drag as a group. [UL-250]
@@ -379,7 +379,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Fix satellite view (street view may also be broken?). [UL-336]
 * Fix web results (web results filtering through AI?). [UL-337]
 * Fix boundary markup, security indicators, and section visual separation. [UL-338]
-* When adding tags: the search bar needs padding. [UL-339]
+* ~~When adding tags: the search bar needs padding. [UL-339]~~ (already fixed - `.dialog-search` already has proper padding)
 
 ### UI - Trip Details Page
 * Pin icons (1, 2, ...) should better communicate the idea, rather than looking like grouping blobs from other maps. Also should still use custom icons. [UL-340]
@@ -392,7 +392,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Notify other users when changes.
 * Trip variations (map markup, variation 1/2/3, etc).
 * RSVP per activity.
-* Leaving a trip should take you back to the trip list.
+* ~~Leaving a trip should take you back to the trip list.~~ (already fixed - `TripLeaveView` sends `HX-Redirect` to the trip list)
 * Users can click on the map to add a pin.
 * Ability to drag and drop some pins on the map (especially ones that were added via coordinates or right clicking).
 * Ability to add pins based on coordinate, not just geolookup addresses.
@@ -403,11 +403,11 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Trip settings: fix checkbox bug. Also, each option should have 3 states (no one, organizers, everyone).
 * In activity edit dialog, add delete button.
 * Add some additional descriptor for activities (an icon, or a category? For instance: Camping, Food).
-* Never say "0 minutes ago".
+* ~~Never say "0 minutes ago".~~ (the `human_timesince` filter existed but was only applied in one template - applied everywhere else that rendered raw `|timesince`)
 * When comment has image, must be indication that image will be uploaded after it's selected from user's computer.
 * Reply button beneath replies.
-* Bug: Comment count does not count replies.
-* Bug: After deleting comment, the comment section duplicates itself.
+* ~~Bug: Comment count does not count replies.~~ (already fixed - pin/wiki comment badge now counts the unfiltered queryset; trip comment count already included replies)
+* ~~Bug: After deleting comment, the comment section duplicates itself.~~ (already fixed - delete now re-renders the whole panel with a matching `outerHTML` swap target)
 
 ### APIs
 * Sunrise / sunset for weather. [UL-345]
@@ -416,8 +416,8 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 ### Misc
 * User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc. [UL-346]
 * Clicking on notification should take you to the relevant page. [UL-347]
-* Viewing notifications in the dropdown should mark them read. Not just clicking on them. [UL-348]
-* Hide "(schedule) Never" in pin popup for last visited. This is already implied. [UL-349]
+* ~~Viewing notifications in the dropdown should mark them read. Not just clicking on them. [UL-348]~~ (already fixed - `NotificationDropdownView.get` marks fetched notifications read)
+* ~~Hide "(schedule) Never" in pin popup for last visited. This is already implied. [UL-349]~~ (the `.popup-meta` line is now omitted entirely when there's no last-visited date)
 
 ## To Investigate
 * When creating pin here: 39.15924, -84.68402... place name is "Mack", details ui sections are wonky, street view is black image. [UL-350]

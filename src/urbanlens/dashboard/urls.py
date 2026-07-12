@@ -833,6 +833,8 @@ urlpatterns = [
                 ),
                 path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
                 path("<uuid:trip_uuid>/rsvp", trip.TripMemberRSVPView.as_view()),
+                path("<uuid:trip_uuid>/join/", trip.TripMembershipJoinView.as_view(), name="trips.join"),
+                path("<uuid:trip_uuid>/join", trip.TripMembershipJoinView.as_view()),
                 path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
                 path("<uuid:trip_uuid>/leave", trip.TripLeaveView.as_view()),
                 path("<uuid:trip_uuid>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),

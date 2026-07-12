@@ -927,6 +927,33 @@
             if (_composerSession) _composerSession.deactivate();
         };
 
+        // -- Shared top-right map toolbar -----------------------------------------
+        // Every map on the site (main map, pin detail, wiki, safety check-ins,
+        // trip activity map, memories overview) renders the same toolbar markup
+        // (see map_components.py's map_toolbar()/_map_toolbar.html) so the
+        // screenshot tool behaves identically everywhere: it opens this same
+        // composer dialog, seeded with the calling map's current view.
+        window._openMapToolbarScreenshot = function (map, context) {
+            var opts = { context: context || null };
+            if (map && typeof map.getCenter === 'function') {
+                opts.initialView = { lat: map.getCenter().lat, lng: map.getCenter().lng, zoom: map.getZoom() };
+            }
+            window._openCommentMapComposer(opts);
+        };
+
+        // Collapse/expand toggle, delegated so it works for every toolbar
+        // instance on the page without per-page wiring.
+        document.addEventListener('click', function (e) {
+            var toggle = e.target.closest('.map-toolbar-collapse');
+            if (!toggle) return;
+            var panel = toggle.closest('.map-buttons');
+            if (!panel) return;
+            var collapsed = panel.classList.toggle('collapsed');
+            var icon = toggle.querySelector('i');
+            if (icon) icon.textContent = collapsed ? 'chevron_left' : 'chevron_right';
+            toggle.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+        });
+
         // Current stroke-width slider value (also font-size fallback for text).
         function _composerWidth() {
             var el = document.getElementById('cmc-width');

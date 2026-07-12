@@ -9,10 +9,14 @@
 
 {% block content %}
 <div class="safety-page page-content">
-    <h1 class="safety-title">
-        <i class="material-symbols-outlined">emergency</i>
-        New Safety Check-in
-    </h1>
+    <div class="safety-header">
+        <div class="safety-header-left">
+            <h1 class="safety-title">
+                <i class="material-symbols-outlined">emergency</i>
+                New Safety Check-in
+            </h1>
+        </div>
+    </div>
 
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 

@@ -2,10 +2,14 @@
 
 {% block content %}
 <div class="safety-page page-content safety-checkin-confirm">
-    <h1 class="safety-title">
-        <i class="material-symbols-outlined">notifications_off</i>
-        Opt out of notifications?
-    </h1>
+    <div class="safety-header">
+        <div class="safety-header-left">
+            <h1 class="safety-title">
+                <i class="material-symbols-outlined">notifications_off</i>
+                Opt out of notifications?
+            </h1>
+        </div>
+    </div>
     {% if scope == 'checkin' %}
     <p>You won't get any more updates about "{{ checkin.title }}".</p>
     {% elif scope == 'owner' %}

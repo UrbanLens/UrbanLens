@@ -178,6 +178,19 @@
     }
 }
 
+// UL-280: the CSS-only bubble above is positioned `absolute` on the trigger, so any
+// ancestor with `overflow: hidden`/`auto` (dialogs, scrollable lists, etc.) clips it.
+// The JS float portal (_tooltips_script.html) appends its bubble to <body> with
+// `position: fixed`, so it can never be clipped. Make it the default for every
+// [data-tooltip] trigger - opt out per-trigger with data-tooltip-float="false" for
+// the rare case a CSS-only bubble is actually wanted.
+[data-tooltip]:not([data-tooltip-float='false']) {
+    &::before,
+    &::after {
+        display: none !important;
+    }
+}
+
 // -- Info icon trigger ---------------------------------------------------------
 
 .ul-tooltip-help {

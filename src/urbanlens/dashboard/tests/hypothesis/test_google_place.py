@@ -60,3 +60,17 @@ class GooglePlaceServiceTests(TestCase):
         self.assertEqual(name, "Resolved Mill")
         google_place.refresh_from_db()
         self.assertEqual(google_place.cached_place_name, "Resolved Mill")
+
+    def test_resolve_name_swallows_rate_limit_error_instead_of_raising(self) -> None:
+        """A rate-limited geocoding fallback must degrade to no-name, not surface a 500 to the caller."""
+        from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        # Empty chain so `_resolve_name` falls through to its own geocoding fallback below.
+        service = GooglePlaceService(name_resolver=PlaceNameResolverChain(resolvers=()))
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GoogleGeocodingGateway",
+        ) as gateway:
+            gateway.return_value.get_place_name.side_effect = RateLimitExceededError("google_geocoding")
+            name = service._resolve_name(40.0, -74.0)
+        self.assertIsNone(name)

@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 {% if trips %}
 <div class="trips-view trips-view--list" data-trips-view="list">
 <ul class="trip-card-list">
@@ -14,7 +15,7 @@
                     {% else %}Planning{% endif %}
                 </span>
                 <span class="trip-card-updated" title="Last updated {{ t.updated|date:'M j, Y g:i A' }}">
-                    Updated {{ t.updated|timesince }} ago
+                    Updated {{ t.updated|human_timesince }}
                 </span>
             </div>
 

@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load dashboard_tags %}
 {% block content %}
 <div class="site-admin-page page-content users-admin-page">
   <div class="site-admin-header">
@@ -72,7 +73,7 @@
           <div class="users-list__col users-list__col--login">
             <span class="users-list__label">Last login</span>
             <div class="users-list__value">
-              {% if row.user.last_login %}{{ row.user.last_login|timesince }} ago{% else %}<span class="users-list__muted">Never</span>{% endif %}
+              {% if row.user.last_login %}{{ row.user.last_login|human_timesince }}{% else %}<span class="users-list__muted">Never</span>{% endif %}
             </div>
           </div>
 

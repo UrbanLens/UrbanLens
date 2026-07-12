@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 <div class="notif-dropdown" id="notif-dropdown">
   <div class="notif-dropdown__header">
     <span class="notif-dropdown__title">Notifications</span>
@@ -25,7 +26,7 @@
       <div class="notif-item__body">
         {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
         {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+        <p class="notif-item__time">{{ n.created|human_timesince }}</p>
         {% if n.source_profile_id and n.status == 'unread' %}
         <div class="notif-actions">
           <button type="button" class="btn btn--primary btn--yes"
@@ -75,7 +76,7 @@
       <div class="notif-item__body">
         {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
         {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
-        <p class="notif-item__time">{{ n.created|timesince }} ago</p>
+        <p class="notif-item__time">{{ n.created|human_timesince }}</p>
       </div>
 
       {% if n.status == 'unread' %}<div class="notif-item__dot"></div>{% endif %}

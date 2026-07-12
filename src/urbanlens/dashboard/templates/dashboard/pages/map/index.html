@@ -13,50 +13,8 @@
 
 {% block content %}
 <div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
-    {# -- Map toolbar (tools only) -------------------------------------------- #}
-    <div class="map-buttons" id="map-buttons">
-        <button id="toggle-map-buttons" class="map-toolbar-collapse" aria-label="Toggle map controls"
-                data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
-            <i class="material-symbols-outlined">chevron_right</i>
-        </button>
-        <div class="map-buttons-content">
-            <button id="add-pin-button" class="map-btn-icon"
-                    data-tooltip="Drop a new pin on the map" data-tooltip-float="true"
-                    aria-label="Add pin"
-                    onclick="openAddPinDialog()">
-                <i class="material-symbols-outlined">add_location</i>
-            </button>
-            <button id="import-pins-button" class="map-btn-icon"
-                    data-tooltip="Import pins from Google Takeout" data-tooltip-float="true"
-                    data-tooltip-pos="below"
-                    aria-label="Import pins"
-                    hx-get="{% url 'pin.import.form' %}" hx-target="#importPinsModal" hx-swap="innerHTML">
-                <i class="material-symbols-outlined">upload</i>
-            </button>
-            <button id="search-pins-button" class="map-btn-icon"
-                    data-tooltip="Filter pins by name, rating, visits, badges, and more (F)" data-tooltip-float="true"
-                    data-tooltip-pos="below"
-                    aria-label="Filter and search pins"
-                    onclick="toggleFilterPanel()">
-                <i class="material-symbols-outlined">search</i>
-                <span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>
-            </button>
-            <button id="select-pins-button" class="map-btn-icon"
-                    data-tooltip="Select multiple pins to merge, edit, or delete" data-tooltip-float="true"
-                    data-tooltip-pos="below"
-                    aria-label="Select pins"
-                    onclick="toggleSelectMode()">
-                <i class="material-symbols-outlined">check_box</i>
-            </button>
-            <button id="screenshot-map-button" class="map-btn-icon"
-                    data-tooltip="Take a screenshot of the map" data-tooltip-float="true"
-                    data-tooltip-pos="below"
-                    aria-label="Take a screenshot"
-                    onclick="_openCommentMapComposer({ initialView: window.map ? { lat: window.map.getCenter().lat, lng: window.map.getCenter().lng, zoom: window.map.getZoom() } : null })">
-                <i class="material-symbols-outlined">photo_camera</i>
-            </button>
-        </div>
-    </div>
+    {# -- Map toolbar (tools only; shared component - see map_components.py) -- #}
+    {% map_toolbar "add_pin,import,search,select,screenshot" %}
 
     {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
     {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
@@ -1292,9 +1250,10 @@
                 <div class="popup-title">${_escHtml(pin.name || '')}</div>
                 ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
+                ${pin.last_visited && pin.last_visited !== 'Never' ? `
                 <div class="popup-meta">
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(pin.last_visited || 'Not Visited')}</span>
-                </div>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(pin.last_visited)}</span>
+                </div>` : ''}
                 <div class="popup-stars" data-pin-id="${pin.id || ''}" data-pin-uuid="${pin.uuid}">
                     ${starDisplay}
                     <div class="stars rating-${rating}" style="display:none">${starInputs}</div>
@@ -2955,13 +2914,6 @@
         .finally(function () { btn.disabled = false; btn.innerHTML = saved; });
     });
 
-    document.getElementById('toggle-map-buttons').addEventListener('click', function() {
-        const panel = document.getElementById('map-buttons');
-        const collapsed = panel.classList.toggle('collapsed');
-        this.querySelector('i').textContent = collapsed ? 'chevron_left' : 'chevron_right';
-        this.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
-    });
-
     // -- Keyboard shortcuts (only when map is visible, not in input fields) ------
     document.addEventListener('keydown', function (e) {
         // Skip if focus is inside a text/date input or textarea
@@ -4034,6 +3986,15 @@
         // Groups are NOT applied until Enter - prevents premature chip updates mid-formula.
         function _onFormulaChange() {
             const text = bar.value;
+            // If the user clears the box entirely (backspace/select-all-delete) while a
+            // formula or badge filter is still applied, drop it and refresh the map
+            // instead of leaving the stale filter active until some other trigger.
+            if (!text.trim() && (_formulaGroups !== null || _badgeState.size > 0)) {
+                _clearAllBadgeSelections();
+                sugg.hidden = true;
+                if (errs) errs.hidden = true;
+                return;
+            }
             const cursor = bar.selectionStart ?? text.length;
             const tok = _currentToken(text, cursor);
             _showSuggestions(tok.text);
@@ -4080,6 +4041,14 @@
                     if (activeEl) { _insertSuggestion(activeEl.dataset.label); return; }
                 }
                 const text = bar.value.trim();
+                if (!text) {
+                    // Empty box + Enter should clear any active filter, not add a
+                    // random badge (previously fell through to "simple mode" below).
+                    if (_formulaGroups !== null || _badgeState.size > 0) _clearAllBadgeSelections();
+                    sugg.hidden = true;
+                    if (errs) errs.hidden = true;
+                    return;
+                }
                 const hasOps = /[-\/\+\(\)]/.test(text);
                 if (hasOps) {
                     // Formula mode: parse the full expression and apply it

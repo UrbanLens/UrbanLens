@@ -246,7 +246,17 @@ export class OrgTabManager {
             const target = e.target as HTMLElement;
             const card = target.closest<HTMLElement>(this.cfg.cardSelector);
             if (!card) return;
-            if (target.closest("a,button,input,select,textarea")) return;
+
+            const cb = target.closest<HTMLInputElement>(this.cfg.checkboxSelector);
+            if (cb) {
+                // Prevent the browser's native checkbox toggle so this handler stays
+                // the single source of truth for `this.selected` - otherwise a direct
+                // click on the checkbox flips its visual state without updating
+                // `this.selected`, desyncing the bulk toolbar from what's checked.
+                e.preventDefault();
+            } else if (target.closest("a,button,input,select,textarea")) {
+                return;
+            }
 
             const cards = this.visibleCards();
             const idx = cards.indexOf(card);

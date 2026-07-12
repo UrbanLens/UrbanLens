@@ -12,7 +12,9 @@
     let hideTimer = null;
 
     function usesFloat(el) {
-        return el && el.getAttribute('data-tooltip-float') === 'true';
+        // Floating (JS-positioned, escapes overflow:hidden) is the default for every
+        // [data-tooltip] trigger; opt out per-trigger with data-tooltip-float="false".
+        return !!el && el.getAttribute('data-tooltip-float') !== 'false';
     }
 
     function show(trigger) {

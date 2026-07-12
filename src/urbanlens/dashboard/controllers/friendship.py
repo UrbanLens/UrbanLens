@@ -173,6 +173,27 @@ def _mark_friend_request_notifications_read(viewer_profile: Profile, source_prof
     ).update(status=Status.READ)
 
 
+def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_requests: list[Friendship]) -> None:
+    """Mark "new friend request" notifications read once the owner views the pending requests.
+
+    UL-240: previously only accepting/declining/ignoring a request marked its notification
+    read - simply seeing the pending request listed on your own profile page left the
+    notification (and bell badge count) unread indefinitely.
+
+    Args:
+        viewer_profile: Profile who is viewing their own pending requests.
+        incoming_requests: Pending Friendship rows currently shown to the viewer.
+    """
+    source_ids = [req.from_profile_id for req in incoming_requests]
+    if not source_ids:
+        return
+    NotificationLog.objects.filter(
+        profile=viewer_profile,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile_id__in=source_ids,
+    ).update(status=Status.READ)
+
+
 def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     """Re-render whichever own-profile friend widget triggered this HTMX request.
 
@@ -362,11 +383,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not profile:
             return HttpResponse("")
         viewer = request.user.profile if request.user.is_authenticated else None
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(viewer, profile),
-        )
+        ctx = _friend_list_ctx(viewer, profile)
+        response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+        if viewer and viewer.pk == profile.pk and ctx["incoming_requests"]:
+            _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
+            response = _trigger_badge_refresh(response)
+        return response
 
     def friends_page(self, request: HttpRequest, profile_id: int):
         """Full friends list page - only accessible to the profile owner."""
@@ -378,11 +400,10 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         viewer = request.user.profile if request.user.is_authenticated else None
         if viewer is None or viewer.pk != profile.pk:
             return redirect("profile.view_user", profile_slug=profile.slug or str(profile.uuid))
-        return render(
-            request,
-            "dashboard/pages/profile/friends.html",
-            {**_friend_list_ctx(viewer, profile), "profile": profile},
-        )
+        ctx = _friend_list_ctx(viewer, profile)
+        if ctx["incoming_requests"]:
+            _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
+        return render(request, "dashboard/pages/profile/friends.html", {**ctx, "profile": profile})
 
     def friend_request_respond(self, request: HttpRequest, from_profile_id: int):
         """Accept or decline a friend request from the notification dropdown.

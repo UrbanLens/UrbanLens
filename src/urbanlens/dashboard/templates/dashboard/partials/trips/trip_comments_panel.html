@@ -221,6 +221,9 @@
   {% endif %}
 
   {# -- Compose -- #}
+  {% if not viewer_has_joined %}
+  <p class="trip-panel-empty">Join this trip to leave a comment.</p>
+  {% else %}
   <form class="comment-compose"
         hx-post="{% url 'trips.comments' trip.uuid %}"
         hx-target="#trip-comments-panel"
@@ -266,4 +269,5 @@
       </div>
     </div>
   </form>
+  {% endif %}
 </div>

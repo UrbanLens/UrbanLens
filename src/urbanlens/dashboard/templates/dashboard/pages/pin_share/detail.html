@@ -87,6 +87,8 @@
   <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
     <div id="shared-pin-map-wrap" style="position:relative;height:420px">
       <div id="shared-pin-map" style="height:100%"></div>
+      {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+      {% map_toolbar "screenshot" panel_id="shared-pin-map-buttons" %}
       <div class="map-bottom-controls">
         {% map_layers_panel "street,satellite" panel_id="shared-pin-map-layers" extra_class="map-layers-panel--inline" %}
       </div>
@@ -99,6 +101,8 @@
   const lng = {{ pin.effective_longitude|default:'null' }};
   if (lat === null || lng === null) return;
   const map = L.map('shared-pin-map').setView([lat, lng], 16);
+  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+  window.map = map;
   // Shared layers engine + panel - the exact same component as the main map.
   window.MapLayers.create(map, { root: document.getElementById('shared-pin-map-layers') });
   L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();

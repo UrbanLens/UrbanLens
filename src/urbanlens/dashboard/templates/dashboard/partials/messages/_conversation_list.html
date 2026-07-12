@@ -3,6 +3,7 @@ Conversation list for the messages page sidebar. Context: `conversations`
 (from services.direct_messages.conversations_for), `active_slug` (slug of the
 open conversation, or empty string).
 {% endcomment %}
+{% load dashboard_tags %}
 <div id="dm-conversation-list">
   {% if conversations %}
   <ul class="dm-conv-list" role="list">
@@ -24,7 +25,7 @@ open conversation, or empty string).
         <span class="dm-conv-item__text">
           <span class="dm-conv-item__top">
             <span class="dm-conv-item__name">{{ conv.display_name }}</span>
-            <span class="dm-conv-item__time">{{ conv.last_message.created|timesince }} ago</span>
+            <span class="dm-conv-item__time">{{ conv.last_message.created|human_timesince }}</span>
           </span>
           <span class="dm-conv-item__bottom">
             <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-partner="{{ conv.partner.slug }}"{% endif %}>{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% else %}{{ conv.last_message.body|truncatechars:70 }}{% endif %}</span>

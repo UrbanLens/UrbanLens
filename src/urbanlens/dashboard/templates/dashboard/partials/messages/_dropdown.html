@@ -2,6 +2,7 @@
 Navbar messages dropdown - recent conversations. Context: `conversations`
 (list of dicts from services.direct_messages.conversations_for).
 {% endcomment %}
+{% load dashboard_tags %}
 <div class="msg-dropdown" id="msg-dropdown">
   <div class="msg-dropdown__header">
     <span class="msg-dropdown__title">Messages</span>
@@ -26,7 +27,7 @@ Navbar messages dropdown - recent conversations. Context: `conversations`
           <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% else %}{{ conv.last_message.body|truncatechars:60 }}{% endif %}</span>
         </span>
         <span class="msg-dropdown-item__meta">
-          <span class="msg-dropdown-item__time">{{ conv.last_message.created|timesince }} ago</span>
+          <span class="msg-dropdown-item__time">{{ conv.last_message.created|human_timesince }}</span>
           {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
         </span>
       </a>

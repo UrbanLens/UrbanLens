@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 <div class="comment-avatar {% if is_reply %}comment-avatar--sm{% endif %}">
   {% if comment.profile.avatar %}
   <img src="{{ comment.profile.avatar.url }}" alt="" class="comment-avatar-img">
@@ -9,7 +10,7 @@
 <div class="comment-body">
   <div class="comment-meta">
     <a href="{% url 'profile.view_user' comment.profile.slug %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
-    <span class="comment-date">{{ comment.created|timesince }} ago</span>
+    <span class="comment-date">{{ comment.created|human_timesince }}</span>
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
             {% if context_type == "pin" %}

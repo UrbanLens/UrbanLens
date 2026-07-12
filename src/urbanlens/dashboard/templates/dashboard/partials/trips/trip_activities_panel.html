@@ -27,10 +27,12 @@
                     <i class="material-symbols-outlined">date_range</i>
                 </button>
             </div>
+            {% if viewer_has_joined %}
             <button type="button" class="btn btn--sm btn--primary"
                     onclick="document.getElementById('add-activity-dialog').showModal()">
                 <i class="material-symbols-outlined">add</i>
             </button>
+            {% endif %}
         </div>
     </div>
 
@@ -91,13 +93,20 @@
                 {% endif %}
 
                 <div class="trip-activity-body">
-                    <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
-                        {% if item.effective_location_hidden %}
-                            Secret Location
-                        {% else %}
-                            {{ act.effective_title }}
-                        {% endif %}
-                    </span>
+                    <div class="trip-activity-title-row">
+                        <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
+                            {% if item.effective_location_hidden %}
+                                Secret Location
+                            {% else %}
+                                {{ act.effective_title }}
+                            {% endif %}
+                        </span>
+                        <span class="trip-activity-status-chip trip-activity-status-chip--{{ act.status }}">
+                            {% if act.status == 'proposed' %}Proposed
+                            {% elif act.status == 'confirmed' %}Confirmed
+                            {% else %}Completed{% endif %}
+                        </span>
+                    </div>
                     {% if act.scheduled_at %}
                     <span class="trip-activity-time">
                         <i class="material-symbols-outlined">schedule</i>
@@ -123,8 +132,8 @@
                     <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% else %}<a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a>{% endif %}</span>
                     {% endif %}
 
-                    {# -- Voting (proposed activities only) ------------------ #}
-                    {% if act.status == 'proposed' %}
+                    {# -- Voting (proposed activities only, joined members only) #}
+                    {% if act.status == 'proposed' and viewer_has_joined %}
                     <div class="activity-vote-row">
                         <button type="button"
                                 class="activity-vote-btn{% if item.user_vote == 'up' %} activity-vote-btn--active activity-vote-btn--up{% endif %}"
@@ -162,7 +171,7 @@
                 </div>
 
                 <div class="trip-activity-actions">
-                    {% if act.status != 'completed' %}
+                    {% if act.status != 'completed' and viewer_has_joined %}
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"

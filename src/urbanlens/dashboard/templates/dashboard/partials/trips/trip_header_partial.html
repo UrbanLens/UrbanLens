@@ -1,3 +1,22 @@
+{% if viewer_membership and viewer_membership.status == 'invited' %}
+<div class="trip-invite-banner">
+    <div class="trip-invite-banner-text">
+        <i class="material-symbols-outlined">mail</i>
+        <span>You're invited to this trip. Join to add activities, comment, and vote - or decline if it's not for you.</span>
+    </div>
+    <div class="trip-invite-banner-actions">
+        <button type="button" class="btn btn--primary btn--sm"
+                hx-post="{% url 'trips.join' trip.uuid %}">
+            <i class="material-symbols-outlined">check</i> Join trip
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-delete="{% url 'trips.leave' trip.uuid %}"
+                hx-confirm="Decline this trip invitation?">
+            Decline
+        </button>
+    </div>
+</div>
+{% endif %}
 <div class="trip-detail-header">
     <div class="trip-detail-header-left">
         <a href="{% url 'trips.list' %}" class="trip-back-link">
@@ -23,11 +42,13 @@
             <i class="material-symbols-outlined">settings</i>
         </button>
         {% endif %}
+        {% if viewer_has_joined %}
         <button type="button" class="btn-icon"
                 title="Edit trip"
                 onclick="document.getElementById('edit-trip-dialog').showModal()">
             <i class="material-symbols-outlined">edit</i>
         </button>
+        {% endif %}
         {% if trip.creator == profile %}
         <button type="button" class="btn-icon"
                 title="Delete trip"

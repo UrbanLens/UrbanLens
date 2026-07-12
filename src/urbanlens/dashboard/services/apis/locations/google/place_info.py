@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -213,6 +214,6 @@ class GooglePlaceService:
             return name
         try:
             return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RequestCancelledError) as exc:
             logger.debug("Google place-name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None

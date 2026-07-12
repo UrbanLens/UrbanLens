@@ -83,6 +83,30 @@ class PlaceNameResolverChainTests(TestCase):
             gateway.return_value.get_data.side_effect = ValueError("bad response")
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
 
+    def test_google_places_resolver_handles_rate_limit_errors(self) -> None:
+        """A rate-limited Google Places call must degrade gracefully, not raise into the caller (TODO: "ugly error page")."""
+        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        with (
+            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
+            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+        ):
+            gateway.return_value.get_data.side_effect = RateLimitExceededError("google_places")
+            self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
+
+    def test_google_geocoding_resolver_handles_rate_limit_errors(self) -> None:
+        from urbanlens.dashboard.services.locations.google import GoogleGeocodingNameResolver
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        with (
+            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
+            mock.patch("urbanlens.dashboard.services.locations.google.GoogleGeocodingGateway") as gateway,
+        ):
+            gateway.return_value.get_place_name.side_effect = RateLimitExceededError("google_geocoding")
+            self.assertIsNone(GoogleGeocodingNameResolver().resolve(40.0, -74.0))
+
+
 
 class BoundaryProviderChainTests(TestCase):
     """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
