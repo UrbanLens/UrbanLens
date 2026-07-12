@@ -17,47 +17,9 @@
         background-color: var(--ul-grey-0a);
     }
 
-    .attr-hero {
-        padding: 3.5rem 1.5rem 2.75rem;
-        text-align: center;
-        background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
-        color: var(--ul-grey-4);
-    }
-
-    .attr-hero-inner {
-        max-width: 760px;
-        margin: 0 auto;
-    }
-
-    .attr-eyebrow {
-        font-size: .7rem;
-        font-weight: 700;
-        letter-spacing: .16em;
-        text-transform: uppercase;
-        color: $color-indigo-300;
-        margin: 0 0 1rem;
-    }
-
-    .attr-title {
-        font-size: clamp(2rem, 4vw, 3rem);
-        font-weight: 800;
-        line-height: 1.15;
-        letter-spacing: -.03em;
-        color: var(--ul-grey-9);
-        margin: 0 0 1rem;
-
-        em {
-            font-style: normal;
-            color: var(--ul-text-secondary);
-        }
-    }
-
-    .attr-subtitle {
-        font-size: 1.05rem;
-        color: var(--ul-text-secondary);
-        line-height: 1.7;
-        margin: 0;
-    }
+    // Hero gradient banner now lives in the shared .ul-page-hero component
+    // (_page_hero.scss / partials/ui/_page_hero.html); the --wide modifier
+    // reproduces this page's wider inner column and larger type.
 
     .attr-section {
         padding: 3.5rem 0;

@@ -21,17 +21,29 @@
      data-my-slug="{{ profile.slug }}"
      data-list-url="{% url 'messages.list' %}">
 
-    <div class="dm-layout">
+    <div class="dm-layout" id="dm-layout">
+
+        {# Revealed only once the sidebar is collapsed - brings it back. #}
+        <button type="button" class="dm-sidebar-expand-btn" id="dm-sidebar-expand-btn"
+                title="Show conversations" aria-label="Show conversations" hidden>
+            <i class="material-symbols-outlined">chevron_right</i>
+        </button>
 
         {# -- Left pane: conversations ---------------------------------------- #}
         <aside class="dm-sidebar" id="dm-sidebar">
             <div class="dm-sidebar__header">
                 <h1 class="dm-title"><i class="material-symbols-outlined">forum</i> Messages</h1>
-                <button type="button" class="btn btn--sm btn--primary dm-compose-btn" id="dm-compose-btn"
-                        aria-expanded="false" aria-controls="dm-compose">
-                    <i class="material-symbols-outlined">edit_square</i>
-                    New message
-                </button>
+                <div class="dm-sidebar__header-actions">
+                    <button type="button" class="btn btn--sm btn--primary dm-compose-btn" id="dm-compose-btn"
+                            aria-expanded="false" aria-controls="dm-compose">
+                        <i class="material-symbols-outlined">edit_square</i>
+                        New message
+                    </button>
+                    <button type="button" class="dm-sidebar-collapse-btn" id="dm-sidebar-collapse-btn"
+                            title="Hide conversations" aria-label="Hide conversations">
+                        <i class="material-symbols-outlined">chevron_left</i>
+                    </button>
+                </div>
             </div>
 
             <div class="dm-compose" id="dm-compose" hidden>
@@ -180,6 +192,46 @@
         htmx.trigger(document.body, 'dmListRefresh');
         htmx.trigger(document.body, 'msgCountRefresh');
     }
+
+    // -- Composer textarea: auto-expand, Enter to send / Shift+Enter for a newline --
+    var COMPOSER_MAX_HEIGHT = 160; // px, matches .dm-composer textarea max-height
+    function autoExpandComposer(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT) + 'px';
+    }
+    function resetComposerInput(input) {
+        if (!input) return;
+        input.value = '';
+        autoExpandComposer(input);
+    }
+    document.addEventListener('input', function (e) {
+        if (e.target && e.target.id === 'dm-composer-input') autoExpandComposer(e.target);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (!e.target || e.target.id !== 'dm-composer-input') return;
+
+        // While the @-mention suggestion list is open, arrow keys/Enter/Escape
+        // drive it instead of the composer (navigate, pick, or dismiss).
+        if (mentionState) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); stepMentionActive(1); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); stepMentionActive(-1); return; }
+            if (e.key === 'Escape') { e.preventDefault(); closeMentionMenu(); return; }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                var kind = activeMentionKind();
+                if (kind) pickMentionAction(kind);
+                return;
+            }
+        }
+
+        if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+        e.preventDefault();
+        var form = document.getElementById('dm-composer');
+        if (!form) return;
+        if (form.requestSubmit) form.requestSubmit();
+        else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    });
 
     // Mirrors services.direct_messages.REACTION_PICKER_EMOJIS.
     var REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
@@ -385,15 +437,37 @@
         }
     });
 
+    // Mirrors services.direct_messages.MESSAGE_GROUP_GAP_SECONDS: a live
+    // message continuing the same sender's last bubble (same day, sent soon
+    // after) renders as part of the same visual burst rather than as a fresh,
+    // fully-spaced bubble.
+    var MESSAGE_GROUP_GAP_MS = 5 * 60 * 1000;
+
+    function isGroupedWithPrevious(list, own, createdIso) {
+        var bubbles = list.querySelectorAll('.dm-bubble');
+        if (!bubbles.length) return false;
+        var last = bubbles[bubbles.length - 1];
+        var lastOwn = last.classList.contains('dm-bubble--own');
+        if (lastOwn !== own) return false;
+        var lastTime = new Date(last.dataset.createdAt || '');
+        var thisTime = new Date(createdIso);
+        if (isNaN(lastTime.getTime()) || isNaN(thisTime.getTime())) return false;
+        if (lastTime.toDateString() !== thisTime.toDateString()) return false;
+        var gapMs = thisTime.getTime() - lastTime.getTime();
+        return gapMs >= 0 && gapMs < MESSAGE_GROUP_GAP_MS;
+    }
+
     function appendBubble(msg, own) {
         var list = document.getElementById('dm-messages');
         if (!list) return;
         var empty = document.getElementById('dm-thread-empty');
         if (empty) empty.hidden = true;
 
+        var grouped = isGroupedWithPrevious(list, own, msg.created);
         var li = document.createElement('li');
-        li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them');
+        li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them') + (grouped ? ' dm-bubble--grouped' : '');
         li.dataset.messageId = msg.id;
+        li.dataset.createdAt = msg.created || '';
 
         if (msg.reply_to) {
             var quote = document.createElement('div');
@@ -478,7 +552,8 @@
         if (msg.markup_map_uuid) {
             var thread = activeThread();
             if (thread && thread.dataset.viewUrl && window.htmx) {
-                htmx.ajax('GET', thread.dataset.viewUrl, { target: '#dm-thread-pane', swap: 'innerHTML' });
+                htmx.ajax('GET', thread.dataset.viewUrl, { target: '#dm-thread-pane', swap: 'innerHTML' })
+                    .then(function () { if (window._initThumbs) window._initThumbs(); });
             }
         }
     }
@@ -646,7 +721,7 @@
                     markup_map_uuid: mapUuid,
                     reply_to: replyToId,
                 }));
-                input.value = '';
+                resetComposerInput(input);
                 input.focus();
                 resetAttachments();
                 cancelReply();
@@ -663,7 +738,7 @@
                 formData.set('key_version', String(content.key_version));
             }
             imageIds.forEach(function (id) { formData.append('image_ids', id); });
-            input.value = '';
+            resetComposerInput(input);
             fetch(form.action, { method: 'POST', body: formData })
                 .then(function (resp) {
                     if (resp.ok) {
@@ -671,6 +746,7 @@
                             var pane = document.getElementById('dm-thread-pane');
                             pane.innerHTML = html;
                             htmx.process(pane);
+                            if (window._initThumbs) window._initThumbs();
                             resetAttachments();
                             cancelReply();
                             scrollMessages();
@@ -684,6 +760,7 @@
                 })
                 .catch(function (err) {
                     input.value = body;
+                    autoExpandComposer(input);
                     toast('error', err.message || 'Message failed to send. Please try again.');
                 });
         });
@@ -739,6 +816,32 @@
         }
     });
 
+    // -- Edit a received map and send the adjusted copy back ---------------------
+    document.addEventListener('click', function (e) {
+        var editBtn = e.target.closest('.dm-map-edit-btn');
+        if (!editBtn || !window._openCommentMapComposer) return;
+        var uuid = editBtn.dataset.mapUuid;
+        var thread = activeThread();
+        var template = thread ? thread.dataset.markupSnapshotUrlTemplate : '';
+        if (!uuid || !template) return;
+        var url = template.replace('11111111-1111-1111-1111-111111111111', uuid);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) { toast('error', 'Could not load that map.'); return; }
+                window._openCommentMapComposer({
+                    existingData: data,
+                    onSaved: function (newUuid) {
+                        pendingAttachments.mapUuid = newUuid;
+                        renderAttachmentChips();
+                        var input = document.getElementById('dm-composer-input');
+                        if (input) input.focus();
+                    },
+                });
+            })
+            .catch(function () { toast('error', 'Could not load that map.'); });
+    });
+
     function openExistingMapPicker() {
         fetch('{% url "messages.attach_map.picker" %}', { credentials: 'same-origin' })
             .then(function (r) { return r.text(); })
@@ -764,33 +867,147 @@
         if (dlg) dlg.close();
     });
 
-    // -- @pin / @trip / @friend sharing -------------------------------------------
+    // -- @pin / @trip / @map / @friend actions --------------------------------
+    // Typing "@" opens a filtering suggestion list positioned right under the
+    // "@" (mirrors how other chat apps do inline mention/command menus)
+    // instead of a static menu docked beside the toolbar button. Picking an
+    // action removes the typed "@query" text and hands off to that action's
+    // existing flow (the share dialog for pin/trip/friend, the map composer
+    // for map) exactly as if the toolbar button had been clicked.
+    var MENTION_ACTIONS = [
+        { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
+        { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
+        { kind: 'map', icon: 'map', label: 'Draw a map' },
+        { kind: 'friend', icon: 'person_add', label: 'Recommend a friend' },
+    ];
+
+    // { start, end }: the "@query" text's position in the textarea value.
+    var mentionState = null;
+
     function closeMentionMenu() {
         var menu = document.getElementById('dm-mention-menu');
         if (menu) menu.remove();
+        mentionState = null;
     }
 
-    function openMentionMenu(anchor) {
-        closeEmojiPopovers();
-        closeMentionMenu();
-        var menu = document.createElement('div');
-        menu.id = 'dm-mention-menu';
-        menu.className = 'dm-mention-menu';
-        [
-            { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
-            { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
-            { kind: 'friend', icon: 'person_add', label: 'Recommend a friend' },
-        ].forEach(function (opt) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.innerHTML = '<i class="material-symbols-outlined">' + opt.icon + '</i> ' + opt.label;
-            btn.addEventListener('click', function () {
-                closeMentionMenu();
-                openShareDialog(opt.kind);
-            });
-            menu.appendChild(btn);
+    // Renders an off-screen copy of the textarea (same font/box metrics) to
+    // measure where a given character position actually lands on screen -
+    // textareas expose no native API for this.
+    var MIRROR_PROPS = ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize',
+        'fontWeight', 'lineHeight', 'letterSpacing', 'textTransform', 'wordSpacing', 'whiteSpace', 'wordWrap'];
+
+    function caretCoordinates(textarea, position) {
+        var mirror = document.createElement('div');
+        var style = window.getComputedStyle(textarea);
+        MIRROR_PROPS.forEach(function (prop) { mirror.style[prop] = style[prop]; });
+        mirror.style.position = 'absolute';
+        mirror.style.visibility = 'hidden';
+        mirror.style.whiteSpace = 'pre-wrap';
+        mirror.style.wordWrap = 'break-word';
+        mirror.style.top = '0';
+        mirror.style.left = '-9999px';
+        mirror.style.height = 'auto';
+        document.body.appendChild(mirror);
+        mirror.textContent = textarea.value.slice(0, position);
+        var marker = document.createElement('span');
+        marker.textContent = '​';
+        mirror.appendChild(marker);
+        var coords = { top: marker.offsetTop, left: marker.offsetLeft, lineHeight: parseInt(style.lineHeight, 10) || 20 };
+        document.body.removeChild(mirror);
+        return coords;
+    }
+
+    function matchingMentionActions(query) {
+        var lower = query.toLowerCase();
+        if (!lower) return MENTION_ACTIONS;
+        return MENTION_ACTIONS.filter(function (opt) {
+            return opt.kind.indexOf(lower) === 0 || opt.label.toLowerCase().indexOf(lower) !== -1;
         });
-        anchor.parentNode.insertBefore(menu, anchor.nextSibling);
+    }
+
+    function renderMentionMenu(query) {
+        var input = document.getElementById('dm-composer-input');
+        var composer = document.getElementById('dm-composer');
+        if (!input || !composer || !mentionState) return;
+
+        var matches = matchingMentionActions(query);
+        var menu = document.getElementById('dm-mention-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'dm-mention-menu';
+            menu.className = 'dm-mention-menu';
+            composer.appendChild(menu);
+        }
+        menu.innerHTML = '';
+
+        if (!matches.length) {
+            var empty = document.createElement('div');
+            empty.className = 'dm-mention-menu__empty';
+            empty.textContent = 'No matching actions';
+            menu.appendChild(empty);
+        } else {
+            matches.forEach(function (opt, index) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'dm-mention-menu__item' + (index === 0 ? ' is-active' : '');
+                btn.dataset.kind = opt.kind;
+                var icon = document.createElement('i');
+                icon.className = 'material-symbols-outlined';
+                icon.textContent = opt.icon;
+                btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(opt.label));
+                btn.addEventListener('click', function () { pickMentionAction(opt.kind); });
+                menu.appendChild(btn);
+            });
+        }
+
+        var coords = caretCoordinates(input, mentionState.start);
+        menu.style.left = Math.max(0, input.offsetLeft + coords.left) + 'px';
+        menu.style.top = (input.offsetTop + coords.top + coords.lineHeight) + 'px';
+    }
+
+    function activeMentionKind() {
+        var active = document.querySelector('#dm-mention-menu .dm-mention-menu__item.is-active');
+        return active ? active.dataset.kind : null;
+    }
+
+    function stepMentionActive(delta) {
+        var items = Array.prototype.slice.call(document.querySelectorAll('#dm-mention-menu .dm-mention-menu__item'));
+        if (!items.length) return;
+        var currentIndex = items.findIndex(function (el) { return el.classList.contains('is-active'); });
+        var nextIndex = ((currentIndex === -1 ? 0 : currentIndex) + delta + items.length) % items.length;
+        items.forEach(function (el, i) { el.classList.toggle('is-active', i === nextIndex); });
+    }
+
+    function pickMentionAction(kind) {
+        var input = document.getElementById('dm-composer-input');
+        if (input && mentionState) {
+            // Remove the "@query" text that triggered this menu - the
+            // attachment chip / share card takes its place once sent.
+            var before = input.value.slice(0, mentionState.start);
+            var after = input.value.slice(mentionState.end);
+            var caret = mentionState.start;
+            input.value = before + after;
+            input.focus();
+            input.selectionStart = input.selectionEnd = caret;
+            autoExpandComposer(input);
+        }
+        closeMentionMenu();
+
+        if (kind === 'map') {
+            if (!window._openCommentMapComposer) return;
+            window._openCommentMapComposer({
+                onSaved: function (uuid) {
+                    pendingAttachments.mapUuid = uuid;
+                    renderAttachmentChips();
+                    var composerInput = document.getElementById('dm-composer-input');
+                    if (composerInput) composerInput.focus();
+                },
+            });
+            return;
+        }
+        openShareDialog(kind);
     }
 
     function openShareDialog(kind) {
@@ -823,8 +1040,20 @@
         var mentionBtn = e.target.closest('#dm-mention-btn');
         if (mentionBtn) {
             e.stopPropagation();
-            if (document.getElementById('dm-mention-menu')) { closeMentionMenu(); return; }
-            openMentionMenu(mentionBtn);
+            if (mentionState) { closeMentionMenu(); return; }
+            var input = document.getElementById('dm-composer-input');
+            if (!input) return;
+            var caret = input.selectionStart;
+            var needsSpace = caret > 0 && !/\s/.test(input.value.charAt(caret - 1));
+            var insert = (needsSpace ? ' ' : '') + '@';
+            input.value = input.value.slice(0, caret) + insert + input.value.slice(caret);
+            var newCaret = caret + insert.length;
+            input.focus();
+            input.selectionStart = input.selectionEnd = newCaret;
+            autoExpandComposer(input);
+            closeEmojiPopovers();
+            mentionState = { start: newCaret - 1, end: newCaret };
+            renderMentionMenu('');
             return;
         }
         if (!e.target.closest('#dm-mention-menu')) closeMentionMenu();
@@ -880,6 +1109,7 @@
                             var pane = document.getElementById('dm-thread-pane');
                             pane.innerHTML = html;
                             htmx.process(pane);
+                            if (window._initThumbs) window._initThumbs();
                             scrollMessages();
                             refreshList();
                             dialog.close();
@@ -914,7 +1144,7 @@
                 btn.textContent = emoji;
                 btn.addEventListener('click', function () {
                     var input = document.getElementById('dm-composer-input');
-                    if (input) { input.value += emoji; input.focus(); }
+                    if (input) { input.value += emoji; autoExpandComposer(input); input.focus(); }
                     popover.remove();
                 });
                 popover.appendChild(btn);
@@ -929,14 +1159,25 @@
         }
     });
 
-    // Typing "@" in the composer opens the same share menu as the mention button.
+    // Typing "@" opens the suggestion list right under it; it keeps tracking
+    // and filtering as the query grows, and closes once it no longer looks
+    // like a mention in progress (whitespace typed, or the "@" was deleted).
     document.addEventListener('input', function (e) {
         if (!e.target || e.target.id !== 'dm-composer-input') return;
-        if (e.target.value.slice(-1) === '@') {
-            e.target.value = e.target.value.slice(0, -1);
-            var mentionBtn = document.getElementById('dm-mention-btn');
-            if (mentionBtn) openMentionMenu(mentionBtn);
+        var input = e.target;
+        var caret = input.selectionStart;
+        var value = input.value;
+        var at = value.lastIndexOf('@', caret - 1);
+        if (at !== -1 && (at === 0 || /\s/.test(value.charAt(at - 1)))) {
+            var query = value.slice(at + 1, caret);
+            if (!/\s/.test(query)) {
+                mentionState = { start: at, end: caret };
+                closeEmojiPopovers();
+                renderMentionMenu(query);
+                return;
+            }
         }
+        closeMentionMenu();
     });
 
     // -- Share dialog list filter --------------------------------------------------
@@ -949,6 +1190,28 @@
             item.hidden = !!query && haystack.indexOf(query) === -1;
         });
     };
+
+    // -- Sidebar collapse: more room for the thread pane, remembered per-browser --
+    (function () {
+        var layout = document.getElementById('dm-layout');
+        var collapseBtn = document.getElementById('dm-sidebar-collapse-btn');
+        var expandBtn = document.getElementById('dm-sidebar-expand-btn');
+        if (!layout || !collapseBtn || !expandBtn) return;
+        var STORAGE_KEY = 'ul_dm_sidebar_collapsed';
+
+        function setCollapsed(collapsed) {
+            layout.classList.toggle('dm-layout--sidebar-collapsed', collapsed);
+            expandBtn.hidden = !collapsed;
+            try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch (_) {}
+        }
+
+        collapseBtn.addEventListener('click', function () { setCollapsed(true); });
+        expandBtn.addEventListener('click', function () { setCollapsed(false); });
+
+        var stored = null;
+        try { stored = localStorage.getItem(STORAGE_KEY); } catch (_) {}
+        if (stored === '1') setCollapsed(true);
+    }());
 
     // -- Compose panel toggle ----------------------------------------------------
     var composeBtn = document.getElementById('dm-compose-btn');

@@ -56,6 +56,21 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(recipient=profile, read_at__isnull=True)
 
+    def unread_conversation_count(self, profile: Profile) -> int:
+        """Count distinct conversations with at least one unread message.
+
+        The navbar badge shows this (one badge per conversation needing
+        attention), while each dropdown row still shows its own per-conversation
+        unread message count.
+
+        Args:
+            profile: The recipient profile.
+
+        Returns:
+            The number of distinct senders with an unread message to `profile`.
+        """
+        return self.unread_for(profile).values("sender_id").distinct().count()
+
     def mark_read(self) -> int:
         """Mark every unread message in this queryset as read now.
 

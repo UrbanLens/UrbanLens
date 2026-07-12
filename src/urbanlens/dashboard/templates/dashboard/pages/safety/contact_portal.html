@@ -8,15 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<section class="safety-header">
-    <div class="safety-header-inner">
-        <h1 class="safety-title">
-            <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
-            {{ checkin.profile.username }} - {{ checkin.title }}
-        </h1>
-        <p class="safety-subtitle">Expected check-in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
-    </div>
-</section>
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_contact_portal_hero_body.html" %}
 <div class="safety-page page-content">
 
     <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>

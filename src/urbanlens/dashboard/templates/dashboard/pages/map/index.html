@@ -1301,6 +1301,7 @@
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
+                    ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
@@ -2612,9 +2613,21 @@
         const mergeBtn = document.getElementById('bulk-select-merge-btn');
         const editBtn = document.getElementById('bulk-select-edit-btn');
         const delBtn = document.getElementById('bulk-select-delete-btn');
+        const listBtn = document.getElementById('bulk-select-list-btn');
         if (mergeBtn) mergeBtn.disabled = n < 2;
         if (editBtn) editBtn.disabled = n < 1;
         if (delBtn) delBtn.disabled = n < 1;
+        if (listBtn) listBtn.disabled = n < 1;
+    }
+
+    // Add every currently-selected pin to a list, via the same "Add to a List"
+    // picker the pin popup and the filtered sidebar list use.
+    function _openAddToListForSelection() {
+        const ids = Array.from(_selectedPinUuids)
+            .map((uuid) => _pinStore.get(uuid)?.id)
+            .filter((id) => id != null);
+        if (!ids.length) return;
+        openAddToListDialog(ids);
     }
 
     function _selectedPinName(uuid) {
@@ -3107,8 +3120,15 @@
         if (window.matchMedia('(max-width: 768px)').matches) _togglePinListPanel();
     }
 
-    // -- Add these (filtered) pins to a list ----------------------------------
-    function openAddToListDialog() {
+    // -- Add pins to a list ----------------------------------------------------
+    // Three modes, chosen by what's passed to openAddToListDialog():
+    //  - no args: replay the active filter-form criteria (sidebar's "Add these
+    //    pins to a list" button, over the full unpaginated filtered set)
+    //  - a single pin id (string/number): the pin popup's list icon
+    //  - an array of pin ids: the multi-select toolbar's "Add to List" tool
+    let _addToListPinIds = null;
+    function openAddToListDialog(pinIdOrIds) {
+        _addToListPinIds = pinIdOrIds == null ? null : (Array.isArray(pinIdOrIds) ? pinIdOrIds : [pinIdOrIds]);
         document.getElementById('add-to-list-dialog')?.showModal();
     }
 
@@ -3124,8 +3144,14 @@
     }
 
     function addPinsToList(listUuid, confirmed) {
-        const form = document.getElementById('filter-form');
-        const params = new URLSearchParams(new FormData(form));
+        let params;
+        if (_addToListPinIds) {
+            params = new URLSearchParams();
+            _addToListPinIds.forEach((id) => params.append('pin_ids', id));
+        } else {
+            const form = document.getElementById('filter-form');
+            params = new URLSearchParams(new FormData(form));
+        }
         if (confirmed) params.set('confirmed', 'true');
         const addUrl = "{% url 'lists.items.add' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', listUuid);
         fetch(addUrl, {
@@ -3144,6 +3170,10 @@
                     };
                     dlg.showModal();
                 });
+            }
+            if (!response.ok) {
+                if (typeof toastr !== 'undefined') toastr.error('Could not add pins to that list.');
+                return;
             }
             document.getElementById('add-to-list-dialog')?.close();
             if (typeof toastr !== 'undefined') toastr.success('Pins added to list.');

@@ -34,6 +34,21 @@
         }
     }
 
+    // New-message notifications refresh the *messages* icon instead (see
+    // below) - this refreshes its badge, and re-fetches the messages dropdown
+    // in place if the user currently has it open, so an incoming message
+    // shows up live rather than waiting for the next open or the 60s poll.
+    function refreshMsgBadge() {
+        if (window.htmx) htmx.trigger(document.body, 'msgCountRefresh');
+    }
+
+    function refreshMsgDropdownIfOpen() {
+        var wrap = document.getElementById('nav-msg');
+        if (wrap && wrap.classList.contains('is-open')) {
+            document.body.dispatchEvent(new Event('msgOpen'));
+        }
+    }
+
     function escapeHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
@@ -107,12 +122,16 @@
             var data;
             try { data = JSON.parse(e.data); } catch (_) { return; }
             if (!data || data.type !== 'notification' || !data.notification) return;
+            // New-message notifications only ever count toward the messages
+            // icon's own badge/dropdown (see the navbar) - the general toast/
+            // desktop notification is reserved for everything else.
+            if (data.notification.notification_type === 'message') {
+                refreshMsgBadge();
+                refreshMsgDropdownIfOpen();
+                return;
+            }
             refreshBadge();
             refreshDropdownIfLoaded();
-            // New-message notifications only ever count toward the messages
-            // icon's own badge (see the navbar) - the general toast/desktop
-            // notification is reserved for everything else.
-            if (data.notification.notification_type === 'message') return;
             showToast(data.notification);
             showBrowserNotification(data.notification);
         };

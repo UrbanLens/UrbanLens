@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
+_TEXT_KEYS = ("name",)
 _SCALAR_KEYS = (
     "min_rating",
     "max_rating",
@@ -51,6 +52,10 @@ def serialize_form_criteria(
         dimension", matching ``SearchForm``'s own semantics.
     """
     out: dict[str, Any] = {}
+    for key in _TEXT_KEYS:
+        value = (cleaned_data.get(key) or "").strip()
+        if value:
+            out[key] = value
     for key in _SCALAR_KEYS:
         value = cleaned_data.get(key)
         if value not in (None, ""):

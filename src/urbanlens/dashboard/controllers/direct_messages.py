@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import (
     REACTION_PICKER_EMOJIS,
+    build_thread_timeline,
     can_direct_message,
     clear_email_debounce,
     conversations_for,
@@ -31,6 +32,7 @@ from urbanlens.dashboard.services.direct_messages import (
     display_identity_for,
     is_profile_online,
     is_safe_reaction_emoji,
+    key_change_events_for,
     mark_thread_open,
     reaction_summary,
     toggle_reaction,
@@ -114,7 +116,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
-    thread_messages = (
+    thread_messages = list(
         DirectMessage.objects.between(profile, partner)
         .select_related(
             "sender",
@@ -130,8 +132,9 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
             "share__trip_membership",
             "share__recommended_profile",
         )
-        .prefetch_related("images", "reactions__profile")
+        .prefetch_related("images", "reactions__profile"),
     )
+    timeline = build_thread_timeline(thread_messages, key_change_events_for(profile, partner))
     identity = display_identity_for(profile, partner)
     partner_online = False
     if not identity["is_anonymized"] and Profile.visibility_permits(partner.online_status_visibility, partner, profile):
@@ -139,6 +142,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     return {
         "partner": partner,
         "thread_messages": thread_messages,
+        "timeline": timeline,
         "can_message_partner": can_direct_message(profile, partner),
         "max_message_length": MAX_DIRECT_MESSAGE_LENGTH,
         "my_slug": profile.slug or "",
@@ -590,10 +594,12 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             request: The incoming request.
 
         Returns:
-            The badge partial with the count of unread messages.
+            The badge partial with the count of conversations that have at
+            least one unread message (not the total unread message count -
+            one badge per conversation needing attention).
         """
         profile = _get_profile(request)
-        count = DirectMessage.objects.unread_for(profile).count()
+        count = DirectMessage.objects.unread_conversation_count(profile)
         return render(request, "dashboard/partials/messages/_badge.html", {"unread_count": count})
 
 

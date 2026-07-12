@@ -1,0 +1,91 @@
+@use 'variables' as *;
+
+// Shared gradient hero banner for page tops (safety pages, Organize, Thanks &
+// Credits, ...). See partials/ui/_page_hero.html.
+//
+// The default variant assumes it sits at the top of a `.page-content`-padded
+// container and bleeds out to the edges to match. The --wide modifier (Thanks
+// & Credits) sits inside an already-flush container, so it skips the bleed
+// and widens the inner column instead.
+.ul-page-hero {
+    text-align: center;
+    padding: 2.5rem 1.25rem 2rem;
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    margin: -1.5rem -1.25rem 1.75rem;
+
+    @include up($breakpoint-sm) {
+        padding: 3.5rem 1.5rem 2.75rem;
+        margin: -2rem -2rem 2rem;
+    }
+
+    &--wide {
+        margin: 0;
+    }
+
+    &__inner {
+        max-width: 640px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    &--wide &__inner {
+        max-width: 760px;
+    }
+
+    &__eyebrow {
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: $color-indigo-300;
+        margin: 0 0 .5rem;
+    }
+
+    &__title {
+        font-size: 1.9rem;
+        font-weight: 800;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        color: var(--ul-grey-9);
+
+        @include up($breakpoint-sm) {
+            font-size: 2.4rem;
+        }
+
+        .material-symbols-outlined {
+            font-size: 1.5em;
+            color: $color-red-500;
+        }
+
+        em {
+            font-style: normal;
+            color: var(--ul-text-secondary);
+        }
+    }
+
+    &--wide &__title {
+        font-size: clamp(2rem, 4vw, 3rem);
+        letter-spacing: -.03em;
+        line-height: 1.15;
+    }
+
+    &__subtitle {
+        margin: .1rem 0 0;
+        color: var(--ul-grey-7);
+        font-size: .92rem;
+        max-width: 34rem;
+    }
+
+    &--wide &__subtitle {
+        font-size: 1.05rem;
+        color: var(--ul-text-secondary);
+        line-height: 1.7;
+        max-width: none;
+    }
+}

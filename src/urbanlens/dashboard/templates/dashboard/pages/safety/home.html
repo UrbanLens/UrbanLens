@@ -1,16 +1,7 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
-<section class="safety-header">
-    <div class="safety-header-inner">
-        <h1 class="safety-title">
-            <i class="material-symbols-outlined">emergency</i>
-            Safety
-            {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
-        </h1>
-        <p class="safety-subtitle">Let people know when to expect you back, and who to alert if you don't check in.</p>
-    </div>
-</section>
+{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="safety-explainer" subtitle="Let people know when to expect you back, and who to alert if you don't check in." %}
 <div class="safety-page page-content">
 
 

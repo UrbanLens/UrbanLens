@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load map_components %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -31,51 +32,72 @@
                 <p class="pin-list-detail-count">{{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}</p>
             </div>
             <div class="pin-list-detail-actions">
-                <button type="button" class="btn btn--secondary" onclick="document.getElementById('edit-list-dialog').showModal()">
-                    <i class="material-symbols-outlined">edit</i> Edit
-                </button>
-                <button type="button" class="btn btn--secondary" onclick="document.getElementById('add-pins-dialog').showModal()">
+                <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
                     <i class="material-symbols-outlined">add_location_alt</i> Add Pins
                 </button>
                 <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()">
                     <i class="material-symbols-outlined">draw</i>
                     {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
                 </button>
-                <div class="pin-list-trip-actions">
-                    <button type="button" class="btn btn--secondary" onclick="pinListCreateTrip()">
-                        <i class="material-symbols-outlined">flight_takeoff</i> Create Trip
+                <div class="pin-list-more-menu">
+                    <button type="button" class="btn btn--icon pin-list-more-btn" id="pin-list-more-btn"
+                            aria-haspopup="true" aria-expanded="false" aria-label="More list actions" title="More actions"
+                            onclick="pinListToggleMoreMenu()">
+                        <i class="material-symbols-outlined">more_vert</i>
                     </button>
-                    <button type="button" class="btn btn--secondary" onclick="document.getElementById('add-to-trip-dialog').showModal()">
-                        <i class="material-symbols-outlined">luggage</i> Add to Trip
-                    </button>
+                    <div class="pin-list-more-menu-panel" id="pin-list-more-menu-panel" hidden>
+                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('edit-list-dialog').showModal()">
+                            <i class="material-symbols-outlined">edit</i> Edit list
+                        </button>
+                        <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateTrip()">
+                            <i class="material-symbols-outlined">flight_takeoff</i> Create trip
+                        </button>
+                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('add-to-trip-dialog').showModal()">
+                            <i class="material-symbols-outlined">luggage</i> Add to trip
+                        </button>
+                        <div class="pin-list-more-menu-divider"></div>
+                        <button type="button" class="pin-list-more-menu-danger" onclick="pinListCloseMoreMenu(); pinListDelete()">
+                            <i class="material-symbols-outlined">delete</i> Delete list
+                        </button>
+                    </div>
                 </div>
-                <button type="button" class="btn btn--danger-hover" onclick="pinListDelete()">
-                    <i class="material-symbols-outlined">delete</i> Delete
-                </button>
             </div>
         </div>
     </section>
 
     {# -- Smart list configuration ------------------------------------------- #}
+    {# Starts collapsed once a list already has pins in it - it's configuration
+       most people set up once and don't need to revisit every time. #}
     <section class="pin-list-smart-panel">
         <div class="pin-list-smart-panel-header">
-            <label class="pin-list-smart-toggle">
-                <input type="checkbox" id="pin-list-is-smart" {% if pin_list.is_smart %}checked{% endif %} onchange="pinListToggleSmart(this.checked)">
-                <span>Smart list</span>
-            </label>
+            <button type="button" class="pin-list-smart-panel-toggle" id="pin-list-smart-toggle-btn"
+                    aria-expanded="{% if pin_list.pin_count %}false{% else %}true{% endif %}"
+                    aria-controls="pin-list-smart-body" onclick="pinListToggleSmartPanel()">
+                <i class="material-symbols-outlined pin-list-smart-chevron" id="pin-list-smart-chevron">
+                    {% if pin_list.pin_count %}chevron_right{% else %}expand_more{% endif %}
+                </i>
+                <span class="pin-list-smart-panel-title">Smart list</span>
+                {% if pin_list.is_smart %}<span class="pin-list-card-badge">Active</span>{% endif %}
+            </button>
             {% include "dashboard/partials/ui/_tooltip_help.html" with text="Smart lists auto-include pins matching a saved filter and/or falling inside a boundary you draw. New/edited pins are added or removed automatically; pins you added manually always stay." %}
         </div>
-        <div class="pin-list-smart-panel-body" id="pin-list-smart-body" {% if not pin_list.is_smart %}hidden{% endif %}>
+        <div class="pin-list-smart-panel-body" id="pin-list-smart-body" {% if pin_list.pin_count %}hidden{% endif %}>
             <div class="pin-list-smart-row">
-                <label for="pin-list-saved-filter-select">Match pins from a saved filter</label>
+                <div class="pin-list-boundary-header">
+                    <label for="pin-list-saved-filter-select">Match pins from a saved filter</label>
+                    <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('create-filter-dialog').showModal()">
+                        <i class="material-symbols-outlined">add</i> New filter
+                    </button>
+                </div>
+                {% if saved_filters %}
                 <select id="pin-list-saved-filter-select" onchange="pinListSetSavedFilter(this.value)">
                     <option value="">None</option>
                     {% for filter in saved_filters %}
                     <option value="{{ filter.uuid }}" {% if pin_list.smart_filter == filter.criteria %}selected{% endif %}>{{ filter.name }}</option>
                     {% endfor %}
                 </select>
-                {% if not saved_filters %}
-                <p class="pin-list-smart-hint">You don't have any saved filters yet - save one from the map's filter panel first.</p>
+                {% else %}
+                <p class="pin-list-smart-hint">You don't have any saved filters yet - create one above, or save one from the map's filter panel.</p>
                 {% endif %}
             </div>
             <div class="pin-list-smart-row">
@@ -86,6 +108,12 @@
                     </button>
                 </div>
                 <div id="pin-list-boundary-map" class="pin-list-boundary-map"></div>
+            </div>
+            <div class="pin-list-smart-row" id="pin-list-smart-enable-row" {% if not pin_list.smart_filter and not pin_list.smart_boundary and not pin_list.is_smart %}hidden{% endif %}>
+                <label class="pin-list-smart-toggle">
+                    <input type="checkbox" id="pin-list-is-smart" {% if pin_list.is_smart %}checked{% endif %} onchange="pinListToggleSmart(this.checked)">
+                    <span>Keep this list in sync automatically</span>
+                </label>
             </div>
         </div>
     </section>
@@ -121,10 +149,57 @@
 <dialog id="add-pins-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Pins" %}
     <div class="ul-dialog-body">
-        <div class="form-row">
-            <input type="search" id="add-pins-search" placeholder="Search your pins..." autocomplete="off" oninput="pinListSearchPins(this.value)">
+        <p class="pin-list-smart-hint">Search your pins, or an address, place, or coordinates to add somewhere new.</p>
+        <div class="pin-list-add-pins-search-wrap">
+            {% map_search_bar prefix="add-pins" placeholder="Search your pins, addresses, coordinates..." show_history=False extra_class="addr-search-bar--inline" %}
         </div>
-        <ul class="pin-list-add-results" id="add-pins-results"></ul>
+    </div>
+</dialog>
+
+{# -- Confirm creating a new pin from an Add Pins search result ---------------#}
+<dialog id="add-pins-create-confirm-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a New Pin?" %}
+    <div class="ul-dialog-body">
+        <p id="add-pins-create-confirm-text"></p>
+        <div class="form-row">
+            <label for="add-pins-create-confirm-name">Pin name</label>
+            <input type="text" id="add-pins-create-confirm-name" maxlength="150">
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn--primary" id="add-pins-create-confirm-btn">Create &amp; Add</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </div>
+</dialog>
+
+{# -- Create a saved filter inline (used by the Smart list panel) -------------#}
+<dialog id="create-filter-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a Saved Filter" %}
+    <div class="ul-dialog-body">
+        <form onsubmit="return pinListCreateSavedFilter(event)">
+            <div class="form-row">
+                <label for="create-filter-name">Filter name <span class="required">*</span></label>
+                <input type="text" id="create-filter-name" required maxlength="100" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="create-filter-name-contains">Pin name contains</label>
+                <input type="text" id="create-filter-name-contains" maxlength="150" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="create-filter-min-rating">Minimum rating</label>
+                <select id="create-filter-min-rating">
+                    <option value="">Any</option>
+                    {% for n in "12345" %}
+                    <option value="{{ n }}">{{ n }}+ stars</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <p class="pin-list-smart-hint">Need to filter by badges or visits too? Use the "Save filter" option in the map's filter panel instead.</p>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg">Create Filter</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
     </div>
 </dialog>
 
@@ -171,10 +246,36 @@
     const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.uuid %}";
     const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.uuid %}";
     const MARKUP_MAP_URL = "{% url 'lists.markup_map' pin_list.uuid %}";
+    const SAVED_FILTER_CREATE_URL = "{% url 'saved_filters.create' %}";
+    const PIN_ADD_URL = "{% url 'pin.add' %}";
     const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
     function jsonHeaders() {
         return { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF };
+    }
+
+    function _toastError(message) {
+        const text = String(message || 'Something went wrong.');
+        if (typeof toastr !== 'undefined') toastr.error(text);
+        else console.error(text);
+    }
+
+    function _toastSuccess(message) {
+        if (typeof toastr !== 'undefined') toastr.success(message);
+    }
+
+    // Some endpoints return a JSON error body ({"error": "..."}), others a
+    // plain-text one - normalize both into a rejected promise with a plain
+    // string message so every caller can just `.catch(_toastError)`.
+    function _postJson(url, payload) {
+        return fetch(url, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(payload) }).then((r) =>
+            r.text().then((text) => {
+                let data = {};
+                try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {}; }
+                if (!r.ok) return Promise.reject(data.error || text || 'Something went wrong.');
+                return data;
+            }),
+        );
     }
 
     // -- Sortable item reordering --------------------------------------------
@@ -192,7 +293,8 @@
     }
     function savePinListOrder(list) {
         const items = Array.from(list.querySelectorAll('.pin-list-item[data-id]')).map((el) => ({ id: el.dataset.id }));
-        fetch(list.dataset.saveUrl, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ items }) });
+        fetch(list.dataset.saveUrl, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ items }) })
+            .then((r) => { if (!r.ok) _toastError('Could not save the new order.'); });
     }
     initSortable();
     document.body.addEventListener('htmx:afterSwap', (e) => {
@@ -204,33 +306,75 @@
         event.preventDefault();
         const name = document.getElementById('edit-list-name').value.trim();
         const description = document.getElementById('edit-list-description').value;
-        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ name, description }) })
-            .then((r) => { if (r.ok) window.location.reload(); });
+        _postJson(LIST_EDIT_URL, { name, description })
+            .then(() => window.location.reload())
+            .catch(_toastError);
         return false;
     };
 
     window.pinListDelete = function () {
         if (!confirm('Delete this list? This cannot be undone.')) return;
         fetch(LIST_DELETE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
-            .then(() => { window.location = "{% url 'lists.list' %}"; });
+            .then((r) => {
+                if (!r.ok) return Promise.reject('Could not delete this list.');
+                window.location = "{% url 'lists.list' %}";
+            })
+            .catch(_toastError);
     };
+
+    // -- More-actions overflow menu --------------------------------------------
+    window.pinListToggleMoreMenu = function () {
+        const panel = document.getElementById('pin-list-more-menu-panel');
+        const btn = document.getElementById('pin-list-more-btn');
+        if (!panel || !btn) return;
+        const opening = panel.hidden;
+        panel.hidden = !opening;
+        btn.setAttribute('aria-expanded', String(opening));
+    };
+    window.pinListCloseMoreMenu = function () {
+        const panel = document.getElementById('pin-list-more-menu-panel');
+        document.getElementById('pin-list-more-btn')?.setAttribute('aria-expanded', 'false');
+        if (panel) panel.hidden = true;
+    };
+    document.addEventListener('click', (e) => {
+        const menu = document.querySelector('.pin-list-more-menu');
+        if (menu && !menu.contains(e.target)) window.pinListCloseMoreMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.pinListCloseMoreMenu(); });
+
+    // -- Smart panel collapse ---------------------------------------------------
+    window.pinListToggleSmartPanel = function () {
+        const body = document.getElementById('pin-list-smart-body');
+        const btn = document.getElementById('pin-list-smart-toggle-btn');
+        const chevron = document.getElementById('pin-list-smart-chevron');
+        if (!body) return;
+        const opening = body.hidden;
+        body.hidden = !opening;
+        btn?.setAttribute('aria-expanded', String(opening));
+        if (chevron) chevron.textContent = opening ? 'expand_more' : 'chevron_right';
+    };
+
+    function _revealSmartEnableRow() {
+        const row = document.getElementById('pin-list-smart-enable-row');
+        if (row) row.hidden = false;
+    }
 
     // -- Smart config -----------------------------------------------------
     window.pinListToggleSmart = function (checked) {
-        document.getElementById('pin-list-smart-body').hidden = !checked;
-        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ is_smart: checked }) })
-            .then((r) => r.json()).then(() => refreshItems());
+        _postJson(LIST_EDIT_URL, { is_smart: checked }).then(() => refreshItems()).catch((err) => {
+            _toastError(err);
+            document.getElementById('pin-list-is-smart').checked = !checked;
+        });
     };
 
     window.pinListSetSavedFilter = function (savedFilterUuid) {
-        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ saved_filter_uuid: savedFilterUuid }) })
-            .then((r) => r.json()).then(() => refreshItems());
+        if (savedFilterUuid) _revealSmartEnableRow();
+        _postJson(LIST_EDIT_URL, { saved_filter_uuid: savedFilterUuid }).then(() => refreshItems()).catch(_toastError);
     };
 
     window.pinListClearBoundary = function () {
         _boundaryLayers.clearLayers();
-        fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ smart_boundary: null }) })
-            .then((r) => r.json()).then(() => refreshItems());
+        _postJson(LIST_EDIT_URL, { smart_boundary: null }).then(() => refreshItems()).catch(_toastError);
     };
 
     function refreshItems() {
@@ -240,44 +384,92 @@
         });
     }
 
-    // -- Add pins search ----------------------------------------------------
-    let _pinSearchTimer;
-    window.pinListSearchPins = function (query) {
-        clearTimeout(_pinSearchTimer);
-        const resultsEl = document.getElementById('add-pins-results');
-        if ((query || '').trim().length < 2) { resultsEl.innerHTML = ''; return; }
-        _pinSearchTimer = setTimeout(() => {
-            fetch("{% url 'map.autocomplete.local' %}?q=" + encodeURIComponent(query))
-                .then((r) => r.json())
-                .then((data) => {
-                    const pins = (data.results || []).filter((r) => r.type === 'pin' && r.pin_slug);
-                    resultsEl.innerHTML = pins.map((p) => (
-                        '<li><button type="button" class="pin-list-add-results-item" onclick="pinListAddPinBySlug(\'' + p.pin_slug + '\')">' +
-                        '<i class="material-symbols-outlined">location_on</i> ' + p.title + '</button></li>'
-                    )).join('') || '<li class="pin-list-smart-hint">No matching pins.</li>';
-                });
-        }, 250);
-    };
+    // -- Add pins search --------------------------------------------------------
+    // Reuses the same "jump to location" engine as the main map (LocationSearchEngine)
+    // so users can find their own pins or an address/place/coordinates to add. When
+    // the chosen result isn't one of the user's existing pins, confirm creating one.
+    let _pendingCreatePin = null;
+    const _addPinsSearch = window.LocationSearchEngine.attach('add-pins', {
+        sources: {
+            localPins: { url: '{% url "map.autocomplete.local" %}' },
+            osmNominatim: true,
+            googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
+        },
+        resolvePlaceUrl: '{% url "map.resolve_place" %}',
+        enableMyLocation: false,
+        defaultZoom: 15,
+        onSelect: function (result) {
+            if (result.pinSlug) {
+                window.pinListAddPinBySlug(result.pinSlug);
+                _addPinsSearch.clear();
+                return;
+            }
+            _pendingCreatePin = result;
+            document.getElementById('add-pins-create-confirm-text').textContent =
+                'Create a new pin for "' + result.title + '" and add it to this list?';
+            document.getElementById('add-pins-create-confirm-name').value = result.title || '';
+            document.getElementById('add-pins-create-confirm-dialog').showModal();
+        },
+    });
+
+    document.getElementById('add-pins-create-confirm-btn').addEventListener('click', function () {
+        if (!_pendingCreatePin) return;
+        const name = document.getElementById('add-pins-create-confirm-name').value.trim() || _pendingCreatePin.title || 'New Pin';
+        const body = new FormData();
+        body.append('name', name);
+        body.append('latitude', _pendingCreatePin.lat);
+        body.append('longitude', _pendingCreatePin.lng);
+        const btn = this;
+        btn.disabled = true;
+        fetch(PIN_ADD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
+            .then((r) => (r.ok ? r.json() : r.text().then((t) => Promise.reject(t || 'Failed to create pin.'))))
+            .then((data) => {
+                document.getElementById('add-pins-create-confirm-dialog').close();
+                _pendingCreatePin = null;
+                if (data.pin_slug) window.pinListAddPinBySlug(data.pin_slug);
+                _addPinsSearch.clear();
+            })
+            .catch(_toastError)
+            .finally(() => { btn.disabled = false; });
+    });
 
     window.pinListAddPinBySlug = function (slug) {
         const body = new URLSearchParams();
         body.append('pin_slugs', slug);
         fetch(ITEMS_ADD_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
-            .then((r) => r.text()).then((html) => {
+            .then((r) => (r.ok ? r.text() : Promise.reject('Could not add that pin.')))
+            .then((html) => {
                 document.getElementById('pin-list-items').outerHTML = html;
                 initSortable();
-            });
+                _toastSuccess('Added to list.');
+            })
+            .catch(_toastError);
+    };
+
+    // -- Create a saved filter inline (Smart list panel) -------------------------
+    window.pinListCreateSavedFilter = function (event) {
+        event.preventDefault();
+        const name = document.getElementById('create-filter-name').value.trim();
+        if (!name) return false;
+        const body = new URLSearchParams();
+        body.append('filter_name', name);
+        const nameContains = document.getElementById('create-filter-name-contains').value.trim();
+        if (nameContains) body.append('name', nameContains);
+        const minRating = document.getElementById('create-filter-min-rating').value;
+        if (minRating) body.append('min_rating', minRating);
+        fetch(SAVED_FILTER_CREATE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
+            .then((r) => (r.ok ? window.location.reload() : r.text().then((t) => Promise.reject(t || 'Could not create filter.'))))
+            .catch(_toastError);
+        return false;
     };
 
     // -- Create / add to trip ------------------------------------------------
     window.pinListCreateTrip = function () {
-        fetch(CREATE_TRIP_URL, { method: 'POST', headers: jsonHeaders(), body: '{}' })
-            .then((r) => r.json()).then((data) => { if (data.ok) window.location = data.redirect; });
+        _postJson(CREATE_TRIP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
     window.pinListAddToTrip = function (tripUuid) {
-        fetch(ADD_TO_TRIP_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ trip_uuid: tripUuid }) })
-            .then((r) => r.json()).then((data) => { if (data.ok) window.location = data.redirect; });
+        _postJson(ADD_TO_TRIP_URL, { trip_uuid: tripUuid }).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
     window.pinListFilterTrips = function (query) {
@@ -289,11 +481,7 @@
 
     // -- Markup map -----------------------------------------------------------
     window.pinListCreateMarkupMap = function () {
-        fetch(MARKUP_MAP_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
-            .then((r) => r.json()).then((data) => {
-                if (data.ok) { window.location = data.redirect; }
-                else { alert(data.error || 'Unable to create markup map.'); }
-            });
+        _postJson(MARKUP_MAP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
     // -- Boundary drawing mini-map --------------------------------------------
@@ -326,8 +514,8 @@
         function saveBoundary() {
             const layers = drawnItems.getLayers();
             const geometry = layers.length === 0 ? null : { type: 'MultiPolygon', coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
-            fetch(LIST_EDIT_URL, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ smart_boundary: geometry }) })
-                .then((r) => r.json()).then(() => refreshItems());
+            if (layers.length > 0) _revealSmartEnableRow();
+            _postJson(LIST_EDIT_URL, { smart_boundary: geometry }).then(() => refreshItems()).catch(_toastError);
         }
 
         boundaryMap.on(L.Draw.Event.CREATED, function (e) { drawnItems.addLayer(e.layer); saveBoundary(); });

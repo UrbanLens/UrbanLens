@@ -99,62 +99,9 @@
     }
 }
 
-// Gradient hero header - mirrors the Thanks page's .attr-hero gradient
-// treatment (_thanks.scss) and the same full-bleed technique used by
-// .pin-lists-header (_pin_lists.scss): negative margins cancel out
-// .page-content's own padding so the gradient runs edge-to-edge immediately
-// below the navbar, instead of sitting in a boxed card. Every safety page
-// (list, create, detail, and the contact-facing confirm/portal pages) reads
-// as one consistent "page header" treatment. Purely a title/status banner -
-// no action buttons live here; see .safety-toolbar for those.
-.safety-header {
-    text-align: center;
-    padding: 2.5rem 1.25rem 2rem;
-    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
-    color: var(--ul-grey-8);
-    margin: -1.5rem -1.25rem 1.75rem;
-
-    @include up($breakpoint-sm) {
-        padding: 3.5rem 1.5rem 2.75rem;
-        margin: -2rem -2rem 2rem;
-    }
-}
-
-.safety-header-inner {
-    max-width: 640px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .4rem;
-}
-
-.safety-title {
-    font-size: 1.9rem;
-    font-weight: 800;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .5rem;
-    color: var(--ul-grey-9);
-
-    @include up($breakpoint-sm) {
-        font-size: 2.4rem;
-    }
-
-    .material-symbols-outlined {
-        font-size: 1.5em;
-        color: $color-red-500;
-    }
-}
-
-.safety-subtitle {
-    margin: .1rem 0 0;
-    color: var(--ul-grey-7);
-    font-size: .92rem;
-    max-width: 34rem;
-}
+// Gradient hero header now lives in the shared .ul-page-hero component
+// (_page_hero.scss / partials/ui/_page_hero.html), reused across the safety
+// pages, Organize, and Thanks & Credits.
 
 // Action row below the hero (New check-in, cancel/check-in/delete, mark
 // safe, ...) - kept out of the decorative hero itself, mirroring

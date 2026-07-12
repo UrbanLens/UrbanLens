@@ -21,19 +21,20 @@
   <section class="site-admin-card ul-section card subscription-types-card">
     <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types</span></div>
     <ul class="subscription-types-list">
+      <li class="subscription-types-list__item">
+        <div class="subscription-types-list__heading">
+          <span class="role-pill role-pill--default"><i class="material-symbols-outlined">public</i> No subscription (everyone)</span>
+          <span class="subscription-types-list__description">Baseline features every user gets, subscribed or not.</span>
+        </div>
+        {% include "dashboard/partials/site_admin/_role_feature_chips.html" with chip_id="__default__" feature_labels=site_settings.feature_labels %}
+      </li>
       {% for role in roles %}
       <li class="subscription-types-list__item">
         <div class="subscription-types-list__heading">
           <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
           {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
         </div>
-        <div class="subscription-types-list__features">
-          {% for label in role.feature_labels %}
-          <span class="ul-chip"><i class="material-symbols-outlined">check</i> {{ label }}</span>
-          {% empty %}
-          <span class="subscription-types-list__no-features">No features included.</span>
-          {% endfor %}
-        </div>
+        {% include "dashboard/partials/site_admin/_role_feature_chips.html" with chip_id=role.slug feature_labels=role.feature_labels %}
       </li>
       {% endfor %}
     </ul>
@@ -118,6 +119,60 @@
               <label for="role-email-month-{{ role.slug }}">Month</label>
               <input type="number" id="role-email-month-{{ role.slug }}" name="email_limit_per_month"
                      value="{{ role.email_limit_per_month|default_if_none:'' }}" min="0" step="1" placeholder="Default">
+              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    <section class="site-admin-card ul-section card subscription-features-card">
+      <div class="card-header"><i class="material-symbols-outlined">toggle_on</i><span>Features</span></div>
+      <p class="form-help">
+        Add or remove which features everyone gets by default, and which subscription roles unlock on top of
+        that. Changes save automatically as you toggle them.
+      </p>
+      <div class="subscription-list subscription-list--features">
+        <ul class="subscription-list__items">
+          <li class="subscription-list__item subscription-list__item--features">
+            <form class="inline-sub-form inline-sub-form--features"
+                  data-field-group="default_features" data-role="__default__"
+                  hx-post="{% url 'site_admin_subscriptions' %}"
+                  hx-trigger="change delay:700ms"
+                  hx-swap="none">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="default_features">
+              <span class="role-pill role-pill--default"><i class="material-symbols-outlined">public</i> No subscription (everyone)</span>
+              <div class="feature-toggle-grid">
+                {% for value, label in site_features %}
+                <label class="feature-toggle">
+                  <input type="checkbox" name="features" value="{{ value }}" {% if value in site_settings.feature_set %}checked{% endif %}>
+                  <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+            </form>
+          </li>
+          {% for role in roles %}
+          <li class="subscription-list__item subscription-list__item--features">
+            <form class="inline-sub-form inline-sub-form--features"
+                  data-field-group="role_features" data-role="{{ role.slug }}"
+                  hx-post="{% url 'site_admin_subscriptions' %}"
+                  hx-trigger="change delay:700ms"
+                  hx-swap="none">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_features">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              <div class="feature-toggle-grid">
+                {% for value, label in site_features %}
+                <label class="feature-toggle">
+                  <input type="checkbox" name="features" value="{{ value }}" {% if value in role.feature_set %}checked{% endif %}>
+                  <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
               <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
           </li>

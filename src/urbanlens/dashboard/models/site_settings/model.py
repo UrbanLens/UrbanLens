@@ -22,6 +22,9 @@ from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManage
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.subscriptions.model import SiteFeature
+
 
 class SiteSettings(abstract.FrontendDashboardModel):
     """Singleton model for site-wide configurable settings.
@@ -284,6 +287,18 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
 
+    # --- Subscription features (site-wide default) ---
+    # Features granted to every user, including those with no active subscription
+    # role. Subscription roles can only add features on top of this baseline, never
+    # take one away - see SubscriptionRole.features and user_has_feature().
+
+    default_features = CharField(
+        max_length=500,
+        blank=True,
+        help_text="Comma-separated SiteFeature values granted to every user, including those with no active subscription.",
+        verbose_name="Default features (everyone)",
+    )
+
     # --- Registration ---
 
     signup_restricted = BooleanField(
@@ -318,6 +333,23 @@ class SiteSettings(abstract.FrontendDashboardModel):
     def get_current(cls) -> SiteSettings:
         """Return (and create if missing) the singleton settings record."""
         return cls.objects.get_current()
+
+    @property
+    def feature_set(self) -> set[str]:
+        """The default ``SiteFeature`` values granted to every user."""
+        return {feature.strip() for feature in (self.default_features or "").split(",") if feature.strip()}
+
+    @property
+    def feature_labels(self) -> list[str]:
+        """Human-readable labels for the default features, in declaration order."""
+        from urbanlens.dashboard.models.subscriptions.model import SiteFeature
+
+        feature_set = self.feature_set
+        return [label for value, label in SiteFeature.choices if value in feature_set]
+
+    def grants(self, feature: SiteFeature | str) -> bool:
+        """Return whether the site-wide default grants ``feature`` to every user."""
+        return str(feature) in self.feature_set
 
     @property
     def name_source_priority_list(self) -> list[str]:

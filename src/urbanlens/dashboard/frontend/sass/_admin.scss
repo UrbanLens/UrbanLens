@@ -7,8 +7,9 @@
     display: grid;
     grid-template-columns: minmax(280px, .9fr) 1.4fr;
     grid-template-areas:
-        "grant   quotas"
-        "grants  emails";
+        "grant    quotas"
+        "grants   emails"
+        "features features";
     align-items: start;
     gap: 1rem;
 
@@ -16,6 +17,7 @@
     .subscription-active-grants-card { grid-area: grants; }
     .subscription-quota-card { grid-area: quotas; }
     .subscription-email-limits-card { grid-area: emails; }
+    .subscription-features-card { grid-area: features; }
 
     @media (max-width: 900px) {
         grid-template-columns: 1fr;
@@ -23,7 +25,8 @@
             "grant"
             "grants"
             "quotas"
-            "emails";
+            "emails"
+            "features";
     }
 }
 
@@ -43,6 +46,11 @@
         .material-symbols-outlined,
         .material-icons {
             font-size: .95rem;
+        }
+
+        &--default {
+            background: var(--ul-grey-3);
+            color: var(--ul-grey-8);
         }
     }
 }
@@ -243,6 +251,60 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     label {
         font-size: .8rem;
         color: var(--ul-grey-6);
+    }
+
+    &--features {
+        align-items: flex-start;
+    }
+}
+
+.subscription-list__item--features {
+    grid-template-columns: 1fr;
+}
+
+.feature-toggle-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    flex: 1 1 auto;
+}
+
+.feature-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .7rem;
+    border-radius: $radius-full;
+    border: 1.5px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-7);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s, border-color .15s, color .15s;
+
+    input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    &:hover {
+        border-color: $color-blue-300;
+    }
+
+    &:has(input:checked) {
+        background: linear-gradient(135deg, #ede9fe, #cffafe);
+        border-color: transparent;
+        color: var(--ul-grey-8);
+        font-weight: 700;
+    }
+
+    &:has(input:focus-visible) {
+        outline: 2px solid $color-blue-500;
+        outline-offset: 1px;
     }
 }
 
@@ -1631,6 +1693,21 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     .subscription-admin-page .role-pill {
         background: linear-gradient(135deg, rgba($color-indigo-600, .25), rgba($color-blue-500, .2));
         color: var(--ul-grey-8);
+
+        &--default {
+            background: var(--ul-grey-3);
+        }
+    }
+
+    .feature-toggle {
+        background: var(--ul-grey-1);
+        border-color: var(--ul-grey-3b);
+        color: var(--ul-grey-7);
+
+        &:has(input:checked) {
+            background: linear-gradient(135deg, rgba($color-indigo-600, .3), rgba($color-blue-500, .25));
+            color: var(--ul-grey-8);
+        }
     }
 
     .subscription-list,

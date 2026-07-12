@@ -2792,10 +2792,20 @@ div.container .addr-search-bar {
     color: $ui-link-on-dark-hover;
 }
 
-.popup-actions .edit-pin-button {
+.popup-actions .add-to-list-button {
     @include icon-btn(24px);
     color: rgba(255, 255, 255, .45);
     margin-left: auto;
+
+    &:hover {
+        color: rgba(255, 255, 255, .9);
+        background: rgba(255, 255, 255, .1);
+    }
+}
+
+.popup-actions .edit-pin-button {
+    @include icon-btn(24px);
+    color: rgba(255, 255, 255, .45);
 
     &:hover {
         color: rgba(255, 255, 255, .9);

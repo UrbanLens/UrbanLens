@@ -828,13 +828,18 @@
             _titleInput.value = '';
             _saveBtn.textContent = _standaloneMode ? 'Save map' : 'Attach map';
 
-            // Restore existing map_data if the form already has one
+            // Restore existing map_data if the form already has one, or if the
+            // caller passed a snapshot directly (e.g. "Edit" on a received map:
+            // there is no form, just a fetched MarkupMap.to_snapshot payload
+            // to seed the composer with so the user can adjust and re-send it).
             var existing = null;
             if (form) {
                 var hiddenField = form.querySelector('.comment-map-data-field');
                 if (hiddenField && hiddenField.value) {
                     try { existing = JSON.parse(hiddenField.value); } catch (_) {}
                 }
+            } else if (opts.existingData) {
+                existing = opts.existingData;
             }
 
             _dialog.showModal();
@@ -1284,7 +1289,11 @@
         };
 
         // -- Render thumbnail map inside .comment-map-thumb --------------------
-        // Runs on DOMContentLoaded and after HTMX swaps
+        // Runs on DOMContentLoaded and after HTMX swaps. Also exposed on
+        // window: a couple of call sites replace a pane's innerHTML directly
+        // (fetch-based fallbacks that predate htmx.ajax) and need to re-run
+        // this manually since a raw innerHTML assignment fires no htmx events.
+        window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {

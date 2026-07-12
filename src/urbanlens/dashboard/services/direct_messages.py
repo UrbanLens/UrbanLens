@@ -766,6 +766,89 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
     return conversations
 
 
+#: Consecutive messages from the same sender closer together than this are
+#: visually grouped (tighter spacing, softened corner) instead of rendered as
+#: separate full-weight bubbles - matches the "message burst" treatment other
+#: chat apps use. Also the window Slack uses for its own message grouping.
+MESSAGE_GROUP_GAP_SECONDS = 300
+
+
+def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, Any]]:
+    """Return this pair's encryption-key rotations after their first key.
+
+    The very first ``ConversationKey`` (version 1) is just the conversation
+    getting encrypted for the first time, not a "change" worth flagging;
+    every later version is a reset (recovery-key reset, "forgot my password",
+    etc.) that other E2EE chat apps surface as a system notice, since it means
+    messages from here on are secured under a different key.
+
+    Args:
+        profile: One participant.
+        partner: The other participant.
+
+    Returns:
+        Dicts with ``kind="key_change"``, ``created``, and ``version``, one
+        per rotation, oldest first.
+    """
+    from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey
+
+    low, high = ConversationKey.canonical_pair(profile, partner)
+    rows = ConversationKey.objects.filter(profile_low=low, profile_high=high, version__gt=1).order_by("version")
+    return [{"kind": "key_change", "created": row.created, "version": row.version} for row in rows]
+
+
+def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge messages and key-change notices into one chronological timeline.
+
+    Also annotates each message with ``is_grouped`` (see
+    ``MESSAGE_GROUP_GAP_SECONDS``): True when it directly follows another
+    message from the same sender, on the same day, with no key-change notice
+    between them, *and* that previous message wasn't already read before this
+    one was even sent - the template uses this to render message bursts
+    tighter together instead of as a string of identical, evenly-spaced
+    bubbles. That last condition matters for a burst spanning a "catch up"
+    moment: if the recipient had already read message N in an earlier visit
+    and message N+1 only arrived later, grouping them tightly would hide the
+    fact that N+1 is new since they last looked, so the group breaks there
+    instead. This only runs against the server-rendered history (full loads,
+    conversation switches, the socket-down POST fallback) - live messages
+    appended client-side over the websocket use their own, simpler grouping
+    check (sender + elapsed time only) precisely to avoid this rule firing
+    mid-conversation: with the thread open, an incoming message is marked
+    read almost immediately (see ``is_thread_open``), which would otherwise
+    break apart every live back-and-forth burst as it streams in.
+
+    Args:
+        messages: Thread messages, oldest first (mutated in place: each gets
+            an ``is_grouped`` attribute).
+        key_events: Rows from ``key_change_events_for``.
+
+    Returns:
+        Dicts ordered by ``created``, each either ``{"kind": "message",
+        "created", "message"}`` or a key-change dict from ``key_events``.
+    """
+    items: list[dict[str, Any]] = [{"kind": "message", "created": message.created, "message": message} for message in messages]
+    items.extend(key_events)
+    items.sort(key=lambda item: item["created"])
+
+    previous: DirectMessage | None = None
+    for item in items:
+        if item["kind"] != "message":
+            previous = None
+            continue
+        message = item["message"]
+        already_read_before_sent = bool(previous and previous.read_at and previous.read_at <= message.created)
+        message.is_grouped = bool(
+            previous
+            and previous.sender_id == message.sender_id
+            and previous.created.date() == message.created.date()
+            and (message.created - previous.created).total_seconds() < MESSAGE_GROUP_GAP_SECONDS
+            and not already_read_before_sent,
+        )
+        previous = message
+    return items
+
+
 def has_used_direct_messages(profile: Profile) -> bool:
     """Return True when the profile has ever sent or received a direct message.
 

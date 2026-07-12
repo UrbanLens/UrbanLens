@@ -26,6 +26,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
@@ -497,7 +498,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
     request: HttpRequest
 
     def get(self, request: HttpRequest):
-        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
 
         SubscriptionRole.ensure_defaults()
         grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
@@ -508,6 +510,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 "page_name": "site-admin-subscriptions",
                 "roles": SubscriptionRole.objects.all(),
                 "grants": grants,
+                "site_features": SiteFeature.choices,
+                "site_settings": SiteSettings.get_current(),
                 "saved": request.GET.get("saved"),
                 "error": request.GET.get("error"),
             },
@@ -532,7 +536,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         return response
 
     def post(self, request: HttpRequest):
-        from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription, grant_subscription
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription, grant_subscription
 
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
@@ -611,6 +615,48 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_email_limits", "role": role.slug}})
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
+
+        if action == "role_features":
+            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            if role is None:
+                if is_htmx:
+                    response = HttpResponse(status=404)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
+                    return response
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            valid_features = set(SiteFeature.values)
+            selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
+            SubscriptionRole.objects.filter(pk=role.pk).update(features=",".join(selected))
+            role.features = ",".join(selected)
+            if is_htmx:
+                chips_html = render_to_string(
+                    "dashboard/partials/site_admin/_role_feature_chips.html",
+                    {"chip_id": role.slug, "feature_labels": role.feature_labels, "oob": True},
+                    request=request,
+                )
+                response = HttpResponse(chips_html, status=200)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_features", "role": role.slug}})
+                return response
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "features saved"}))
+
+        if action == "default_features":
+            from urbanlens.dashboard.models.site_settings import SiteSettings
+
+            settings_obj = SiteSettings.get_current()
+            valid_features = set(SiteFeature.values)
+            selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
+            SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=",".join(selected))
+            settings_obj.default_features = ",".join(selected)
+            if is_htmx:
+                chips_html = render_to_string(
+                    "dashboard/partials/site_admin/_role_feature_chips.html",
+                    {"chip_id": "__default__", "feature_labels": settings_obj.feature_labels, "oob": True},
+                    request=request,
+                )
+                response = HttpResponse(chips_html, status=200)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "default_features", "role": "__default__"}})
+                return response
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "default features saved"}))
 
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()

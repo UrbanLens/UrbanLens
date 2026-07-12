@@ -9,15 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<section class="safety-header">
-    <div class="safety-header-inner">
-        <h1 class="safety-title">
-            <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
-            <span id="safety-title-text">{{ checkin.title }}</span>
-        </h1>
-        <p class="safety-subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
-    </div>
-</section>
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_detail_hero_body.html" %}
 <div class="safety-page page-content">
 
 

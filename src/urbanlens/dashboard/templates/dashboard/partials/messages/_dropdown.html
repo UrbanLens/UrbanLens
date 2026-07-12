@@ -8,10 +8,7 @@ the user has any DM history at all - selects the empty-state copy).
 {% load dashboard_tags %}
 <div class="msg-dropdown" id="msg-dropdown">
   <div class="msg-dropdown__header">
-    <span class="msg-dropdown__title">
-      Messages
-      {% if conversations %}<span class="msg-dropdown__count">{{ conversations|length }}</span>{% endif %}
-    </span>
+    <span class="msg-dropdown__title">Messages</span>
     <a href="{% url 'messages.view' %}" class="msg-dropdown__all-link">See all</a>
   </div>
 

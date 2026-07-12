@@ -3,6 +3,19 @@
 {% load static %}
 
 {% block content %}
+{% if standalone_mode %}
+    {% if active_tab == 'tags' %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle %}
+    {% elif active_tab == 'categories' %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle %}
+    {% elif active_tab == 'status' %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle %}
+    {% elif active_tab == 'people' %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle %}
+    {% endif %}
+{% else %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the tags, categories, statuses, and people labels used to organize your pins and locations." %}
+{% endif %}
 <div class="organize-page page-content" data-active-tab="{{ active_tab }}"
      data-rows-url-tag="{% url 'badge.rows' badge_kind='tag' %}"
      data-rows-url-category="{% url 'badge.rows' badge_kind='category' %}"
@@ -12,13 +25,6 @@
          data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
     <div class="organize-page-header">
-        <div>
-            <h1 class="organize-page-title">{% if standalone_mode %}{{ standalone_title }}{% else %}Organize{% endif %}
-            </h1>
-            {% if standalone_mode and standalone_subtitle %}
-            <p class="tag-subtitle organize-page-subtitle">{{ standalone_subtitle }}</p>
-            {% endif %}
-        </div>
         <div class="organize-page-header-actions">
             <div class="btn-group" id="org-header-actions">
                 <div class="tag-view-toggle btn-togl" id="org-view-toggle" role="group" aria-label="View mode">

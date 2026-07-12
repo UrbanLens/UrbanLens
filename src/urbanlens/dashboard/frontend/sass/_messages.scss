@@ -62,8 +62,6 @@
         position: sticky;
         top: 0;
         z-index: 1;
-        padding-top: 0;
-        padding-bottom: 0;
     }
 
     &__title {
@@ -74,19 +72,6 @@
         font-weight: 650;
         letter-spacing: -.01em;
         color: var(--ul-grey-8);
-    }
-
-    &__count {
-        min-width: 19px;
-        height: 19px;
-        padding: 0 6px;
-        border-radius: 10px;
-        background: linear-gradient(135deg, $primary-color, $primary-color-dark);
-        color: #fff;
-        font-size: .68rem;
-        font-weight: 700;
-        line-height: 19px;
-        text-align: center;
     }
 
     &__all-link {
@@ -147,6 +132,7 @@
     }
 
     &__name {
+        min-width: 0;
         font-size: .86rem;
         font-weight: 650;
         color: var(--ul-grey-9);
@@ -154,6 +140,8 @@
     }
 
     &__preview {
+        min-width: 0;
+        flex: 1;
         font-size: .78rem;
         font-weight: 500;
         color: var(--ul-grey-7);
@@ -221,6 +209,7 @@
 }
 
 .dm-layout {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
     gap: 0;
@@ -228,6 +217,18 @@
     min-height: 420px;
     @include surface-elevated;
     border-radius: $radius-md;
+    transition: grid-template-columns .15s ease;
+}
+
+// Collapsing gives the thread pane the full width - the sidebar's own
+// contents are clipped via its `overflow: hidden` rather than unmounted, so
+// re-expanding needs no re-fetch. Desktop only (matches the mobile
+// single-pane breakpoint below): on mobile the sidebar already has its own
+// show/hide behavior via .dm-page--thread-open.
+@media (min-width: 721px) {
+    .dm-layout--sidebar-collapsed {
+        grid-template-columns: 0 1fr;
+    }
 }
 
 // -- Sidebar ------------------------------------------------------------------
@@ -236,6 +237,8 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
     border-right: 1px solid var(--ul-grey-1a);
 
     &__header {
@@ -247,10 +250,54 @@
         border-bottom: 1px solid var(--ul-grey-1a);
     }
 
+    &__header-actions {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        flex-shrink: 0;
+    }
+
     &__list {
         flex: 1;
         min-height: 0;
         overflow-y: auto;
+    }
+}
+
+.dm-sidebar-collapse-btn,
+.dm-sidebar-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex-shrink: 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    padding: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1a);
+    }
+}
+
+// Sits just inside the thread pane's left edge, only shown while collapsed.
+.dm-sidebar-expand-btn {
+    position: absolute;
+    top: .9rem;
+    left: .6rem;
+    z-index: 5;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+
+    &[hidden] {
+        display: none;
     }
 }
 
@@ -569,6 +616,26 @@
     }
 }
 
+.dm-key-change-notice {
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin: .3rem 0;
+    padding: .3rem .75rem;
+    border-radius: $radius-full;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-6);
+    font-size: .72rem;
+    font-weight: 600;
+    text-align: center;
+    max-width: 90%;
+
+    i {
+        font-size: .95rem;
+    }
+}
+
 .dm-bubble {
     position: relative;
     max-width: min(75%, 34rem);
@@ -582,6 +649,15 @@
     display: flex;
     flex-direction: column;
     word-break: break-word;
+
+    // A message that directly continues the previous bubble (same sender,
+    // same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it and
+    // loses the rounded corner on the side that touches it - the "message
+    // burst" look other chat apps use instead of a string of identical,
+    // evenly-spaced bubbles.
+    &--grouped {
+        margin-top: -.35rem;
+    }
 
     &--tombstone {
         opacity: .65;
@@ -679,6 +755,10 @@
         color: var(--ul-grey-8);
         border-bottom-left-radius: 5px;
 
+        &.dm-bubble--grouped {
+            border-top-left-radius: 6px;
+        }
+
         .dm-bubble__menu-btn {
             left: auto;
             right: -1.85rem;
@@ -695,6 +775,10 @@
         background: linear-gradient(135deg, $primary-color, $primary-color-dark);
         color: #fff;
         border-bottom-right-radius: 5px;
+
+        &.dm-bubble--grouped {
+            border-top-right-radius: 6px;
+        }
 
         .dm-bubble__menu-btn {
             right: auto;
@@ -770,8 +854,79 @@
 // .comment-map-preview/.comment-map-thumb pair - which size themselves via
 // percentage widths - has no definite container width to resolve against and
 // collapses toward zero. Give it an explicit width here instead.
-.dm-bubble .comment-map-preview {
+.dm-map-card {
+    position: relative;
     width: min(280px, 60vw);
+
+    .comment-map-preview {
+        width: 100%;
+    }
+
+    // The shared "Expand map" button already claims the bottom-right corner
+    // of the thumbnail; move it aside so the DM-only save/edit actions can
+    // take that corner instead, matching where chat apps put a save affordance.
+    .comment-map-expand-btn {
+        right: auto;
+        left: .5rem;
+    }
+}
+
+.dm-map-card__title-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    margin: .1rem 0 .35rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font-weight: 700;
+    font-size: .85rem;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+
+    i {
+        font-size: 1rem;
+        text-decoration: none;
+    }
+
+    &:hover {
+        opacity: .85;
+    }
+}
+
+.dm-map-card__actions {
+    position: absolute;
+    bottom: .5rem;
+    right: .5rem;
+    z-index: 1;
+    display: flex;
+    gap: .35rem;
+}
+
+.dm-map-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .9);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background .1s;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        background: #fff;
+    }
 }
 
 .dm-composer-attachments {
@@ -876,28 +1031,55 @@
     }
 }
 
+// Floating outside the bubble (overlapping its bottom edge, like the menu
+// button and timestamp) rather than sitting inline in the flow keeps a
+// resting message compact - it only takes up space once revealed on hover,
+// same as most chat apps' reaction trigger.
 .dm-reaction-add-wrap {
-    position: relative;
+    position: absolute;
+    bottom: -1rem;
     display: inline-flex;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .12s ease;
+}
+
+.dm-bubble--them .dm-reaction-add-wrap {
+    left: 0;
+}
+
+.dm-bubble--own .dm-reaction-add-wrap {
+    right: 0;
+}
+
+.dm-bubble:hover .dm-reaction-add-wrap,
+.dm-bubble:focus-within .dm-reaction-add-wrap,
+.dm-bubble--peek .dm-reaction-add-wrap {
+    opacity: .9;
+    pointer-events: auto;
 }
 
 .dm-reaction-add-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: none;
-    background: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    background: var(--ul-grey-1);
     cursor: pointer;
-    opacity: .55;
-    padding: .1rem .3rem;
-    color: inherit;
+    padding: 0;
+    color: var(--ul-grey-7);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    transition: background .12s ease;
 
     &:hover {
-        opacity: 1;
+        background: var(--ul-grey-1a);
     }
 
     i {
-        font-size: 1rem;
+        font-size: .95rem;
     }
 }
 
@@ -1056,22 +1238,23 @@
     }
 }
 
+// Positioned dynamically by JS (top/left set to land just under the "@" the
+// user typed, mirroring the textarea's own text metrics) rather than docked
+// to a fixed corner - .dm-composer is its positioned ancestor.
 .dm-mention-menu {
     position: absolute;
     z-index: 20;
-    bottom: 100%;
-    left: 0;
-    margin-bottom: .3rem;
+    min-width: 200px;
+    max-width: min(280px, 90%);
     display: flex;
     flex-direction: column;
-    min-width: 200px;
     padding: .3rem;
     border-radius: 10px;
     border: 1px solid var(--ul-grey-2);
     background: var(--ul-grey-1);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 
-    button {
+    &__item {
         display: flex;
         align-items: center;
         gap: .5rem;
@@ -1084,9 +1267,21 @@
         font-size: .85rem;
         color: inherit;
 
-        &:hover {
+        &:hover,
+        &.is-active {
             background: var(--ul-grey-1a);
         }
+
+        i {
+            font-size: 1.05rem;
+            color: var(--ul-grey-6);
+        }
+    }
+
+    &__empty {
+        padding: .5rem .6rem;
+        font-size: .8rem;
+        color: var(--ul-grey-6);
     }
 }
 
@@ -1238,15 +1433,41 @@
 .dm-composer {
     position: relative;
     display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .7rem 1rem;
+    flex-direction: column;
+    gap: .35rem;
+    padding: .6rem 1rem .7rem;
     border-top: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
 
-    input {
+    &__input-row {
+        display: flex;
+        align-items: flex-end;
+        gap: .5rem;
+    }
+
+    // Full-width, auto-expanding text box - the attach/mention/emoji icons
+    // live in their own row below (see &__toolbar) so this never has to
+    // share horizontal space with them.
+    textarea {
         flex: 1;
         min-width: 0;
+        resize: none;
+        max-height: 160px;
+        overflow-y: auto;
+        box-sizing: border-box;
+        padding: .5rem .8rem;
+        border: 1px solid var(--ul-grey-1a);
+        border-radius: 18px;
+        background: var(--ul-grey-0a);
+        color: inherit;
+        font-family: inherit;
+        font-size: .92rem;
+        line-height: 1.35;
+
+        &:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
     }
 
     &__send {
@@ -1258,6 +1479,12 @@
         i {
             font-size: 1.15rem;
         }
+    }
+
+    &__toolbar {
+        display: flex;
+        align-items: center;
+        gap: .1rem;
     }
 
     &__attach {
@@ -1295,6 +1522,13 @@
     .dm-layout {
         grid-template-columns: 1fr;
         height: calc(100vh - 9rem);
+    }
+
+    // The collapse toggle only makes sense in the two-pane desktop layout -
+    // mobile already shows one pane at a time via .dm-page--thread-open.
+    .dm-sidebar-collapse-btn,
+    .dm-sidebar-expand-btn {
+        display: none;
     }
 
     .dm-sidebar {
