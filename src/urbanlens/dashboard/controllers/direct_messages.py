@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.direct_messages import (
     delete_message_for_self,
     display_identity_for,
     is_profile_online,
+    is_safe_reaction_emoji,
     mark_thread_open,
     reaction_summary,
     toggle_reaction,
@@ -366,6 +367,8 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
         emoji = request.POST.get("emoji", "").strip()[:10]
         if not emoji:
             return HttpResponseBadRequest("An emoji is required.")
+        if not is_safe_reaction_emoji(emoji):
+            return HttpResponseBadRequest("That is not a valid reaction.")
 
         try:
             toggle_reaction(profile, message, emoji)

@@ -118,6 +118,31 @@ class MapChildPinsJsonTests(TestCase):
         self.assertNotIn("Not Mine", names)
 
 
+class MapSearchExcludesChildPinsTests(TestCase):
+    """POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
+
+    Unlike every other map-data query, this path built its queryset without
+    ``.root_pins()`` before ``get_map_data()`` was called with an explicit
+    (non-None) query - which only applies that filter itself when no query is
+    given. Left unfixed, a search would show a merged/detail pin as a normal
+    top-level marker, the opposite of the "merged pins disappear" symptom.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.root = _make_pin(self.profile, name="Campus")
+        self.child = _make_pin(self.profile, name="Boiler House", parent_pin=self.root)
+
+    def test_search_excludes_child_pins(self) -> None:
+        response = self.client.post(reverse("map.search"), {})
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn(str(self.root.uuid), body)
+        self.assertNotIn(str(self.child.uuid), body)
+
+
 class SearchLocalChildPinTests(TestCase):
     """Jump-to-pin autocomplete must find child pins and mark them as such."""
 
@@ -211,6 +236,57 @@ class DetailPinJsonChildrenTests(TestCase):
         response = self.client.get(reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug}))
         entry = response.json()["detail_pins"][0]
         self.assertIn("/dashboard/map/pin/", entry["url"])
+
+
+class DetailPinCoordinateDedupTests(TestCase):
+    """Detail pins placed near each other must keep distinct coordinates.
+
+    ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup
+    would otherwise snap two nearby detail pins (or a detail pin and its own
+    parent) onto the same Location, collapsing their marker coordinates
+    together - reported after several detail pins placed around a map all
+    ended up stacked on one point.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.root = _make_pin(self.profile, name="Root", location=baker.make(Location, latitude=42.0, longitude=-73.0))
+        self.root.slug = self.root.ensure_slug()
+
+    def _create_detail_pin(self, name: str, latitude: float, longitude: float) -> Pin:
+        response = self.client.post(
+            reverse("pin.detail_pins", kwargs={"pin_slug": self.root.slug}),
+            data=json.dumps({"name": name, "latitude": latitude, "longitude": longitude}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        return Pin.objects.get(uuid=response.json()["uuid"])
+
+    def test_nearby_detail_pins_keep_distinct_coordinates(self) -> None:
+        # ~20m apart - well within get_nearby_or_create's default 50m dedup radius.
+        first = self._create_detail_pin("First", 42.00010, -73.00010)
+        second = self._create_detail_pin("Second", 42.00020, -73.00020)
+        self.assertNotEqual(first.location_id, second.location_id)
+        self.assertNotEqual((first.effective_latitude, first.effective_longitude), (second.effective_latitude, second.effective_longitude))
+
+    def test_detail_pin_near_parent_keeps_its_own_coordinates(self) -> None:
+        child = self._create_detail_pin("Nearby child", 42.00010, -73.00010)
+        self.assertNotEqual(child.location_id, self.root.location_id)
+        self.assertNotEqual((child.effective_latitude, child.effective_longitude), (self.root.effective_latitude, self.root.effective_longitude))
+
+    def test_moving_detail_pin_near_another_keeps_distinct_coordinates(self) -> None:
+        first = self._create_detail_pin("First", 42.00010, -73.00010)
+        second = self._create_detail_pin("Second", 42.01000, -73.01000)
+        response = self.client.post(
+            reverse("pin.detail_pin.edit", kwargs={"pin_slug": self.root.slug, "detail_pin_uuid": second.uuid}),
+            data=json.dumps({"latitude": 42.00011, "longitude": -73.00011}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        second.refresh_from_db()
+        self.assertNotEqual(first.location_id, second.location_id)
 
 
 class VisitHistoryChildrenTests(TestCase):

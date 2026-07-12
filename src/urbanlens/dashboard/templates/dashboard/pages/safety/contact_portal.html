@@ -10,21 +10,22 @@
 {% block content %}
 <div class="safety-page page-content">
 
-    <div class="safety-header">
-        <div class="safety-header-left">
+    <section class="safety-header">
+        <div class="safety-header-inner">
             <h1 class="safety-title">
                 <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
                 {{ checkin.profile.username }} - {{ checkin.title }}
             </h1>
             <p class="safety-subtitle">Expected check-in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
         </div>
-        <div class="safety-header-right" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
-            <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"
-                  onsubmit="return confirm('Mark {{ checkin.profile.username }} as found/safe? Other emergency contacts will be notified.')">
-                {% csrf_token %}
-                <button type="submit" class="btn btn--primary">I found them - mark safe</button>
-            </form>
-        </div>
+    </section>
+
+    <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
+        <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"
+              onsubmit="return confirm('Mark {{ checkin.profile.username }} as found/safe? Other emergency contacts will be notified.')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primary">I found them - mark safe</button>
+        </form>
     </div>
 
     {% if checkin.contact_message %}

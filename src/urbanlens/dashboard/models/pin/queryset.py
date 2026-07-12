@@ -169,7 +169,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
                 min_danger (int), max_danger (int), min_vulnerability (int), max_vulnerability (int),
                 created_after (date), created_before (date),
-                visited_after (date), visited_before (date).
+                visited_after (date), visited_before (date), overlapping_pins (bool).
 
         Returns:
             Filtered QuerySet (distinct).
@@ -238,6 +238,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             qs = qs.filter(created__date__lte=created_before)
         if custom_fields := criteria.get("custom_fields"):
             qs = qs.filter_by_custom_fields(custom_fields)
+        if criteria.get("overlapping_pins"):
+            qs = qs.overlapping()
         return qs.distinct()
 
     def filter_by_custom_fields(self, custom_field_criteria) -> Self:
@@ -275,6 +277,41 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             if len(lookups) > 1:
                 qs = qs.filter(**lookups)
         return qs
+
+    def overlapping(self) -> Self:
+        """Pins whose footprint overlaps another pin's footprint.
+
+        A pin's "footprint" is its effective property boundary - a drawn or
+        API-generated polygon when one exists, else a default circle centered
+        on its coordinates (see ``BoundaryManager.effective_polygon_for_pin``).
+        Every pin resolves to *some* footprint this way, so this doubles as a
+        duplicate/stacked-pin detector (e.g. two pins left at the same
+        coordinates by a bug get identical, fully-overlapping circles) as well
+        as a real drawn-boundary overlap check.
+
+        Both pins in every overlapping pair are included in the result.
+
+        Returns:
+            Pins (from this queryset) that overlap at least one other pin also
+            in this queryset.
+        """
+        from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        # Re-queried via the concrete Pin manager (rather than iterating `self`
+        # directly) so effective_polygon_for_pin, which takes a concrete Pin,
+        # type-checks - `self` here is still the generic PinQuerySet[_ModelT].
+        pins = Pin.objects.filter(pk__in=self.values_list("pk", flat=True)).select_related("location")
+        footprints = [(pin.pk, polygon) for pin in pins if (polygon := Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)) is not None]
+
+        overlapping_ids: set[int] = set()
+        for i, (pk_a, polygon_a) in enumerate(footprints):
+            for pk_b, polygon_b in footprints[i + 1 :]:
+                if polygon_a.intersects(polygon_b):
+                    overlapping_ids.add(pk_a)
+                    overlapping_ids.add(pk_b)
+
+        return self.filter(pk__in=overlapping_ids)
 
     def rated(self, rating) -> Self:
         """

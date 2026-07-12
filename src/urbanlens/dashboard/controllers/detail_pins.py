@@ -30,13 +30,17 @@ def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
 
 
 def _location_for_coords(latitude, longitude) -> Location:
-    """Find-or-create the shared Location a detail pin sits at.
+    """Find-or-create the Location a detail pin sits at.
 
     A detail pin has its own coordinates (distinct from its parent's), and a Pin
     reads its coordinates from its Location, so each detail pin needs its own
-    Location row at its point.
+    Location row at its point. ``get_nearby_or_create``'s default 50m proximity
+    dedup would otherwise snap two detail pins placed within 50m of each other
+    (or of the parent pin itself) onto the same Location, collapsing their
+    coordinates together - so this skips that dedup and only reuses an existing
+    Location on an exact coordinate match, mirroring ``_location_for_child_wiki``.
     """
-    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
+    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude), threshold_meters=0)
     return location
 
 

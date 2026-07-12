@@ -21,8 +21,8 @@ whole check-in.
 {% block content %}
 <div class="safety-page page-content">
 
-    <div class="safety-header">
-        <div class="safety-header-left">
+    <section class="safety-header">
+        <div class="safety-header-inner">
             <h1 class="safety-title">
                 <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
                 {{ checkin.title }}
@@ -32,7 +32,7 @@ whole check-in.
                 was expected to check in {{ checkin.checkin_by|naturaltime }}.
             </p>
         </div>
-    </div>
+    </section>
 
     <div class="card safety-community-notice">
         {% if checkin.is_resolved %}

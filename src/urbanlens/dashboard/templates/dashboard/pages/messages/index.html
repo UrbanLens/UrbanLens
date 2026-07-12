@@ -3,6 +3,19 @@
 
 {% block title %}Messages{% endblock %}
 
+{% block header %}
+{# Leaflet + Leaflet.draw power the "Attach a map" composer (the shared #}
+{# comment-map dialog in base.html, which no-ops without Leaflet). The jump-to #}
+{# search and layer/export engines already ship globally in core.js. #}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
+    integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+{% endblock %}
+
 {% block content %}
 <div class="dm-page page-content{% if active_partner %} dm-page--thread-open{% endif %}" id="dm-page"
      data-my-slug="{{ profile.slug }}"
@@ -65,6 +78,23 @@
     var page = document.getElementById('dm-page');
     if (!page) return;
     var mySlug = page.dataset.mySlug;
+
+    // URL builders that respect the app's /dashboard/ mount prefix. Templates
+    // know the prefix; hardcoded "/messages/..." strings do not (they 404). A
+    // fixed placeholder token is rendered by {% templatetag openblock %} url {% templatetag closeblock %} and swapped for
+    // the real slug/id at call time.
+    var DM_REACT_URL_TEMPLATE = "{% url 'messages.react' 'e2ee-slug-token' 0 %}";
+    var DM_SHARE_URL_TEMPLATE = "{% url 'messages.share.pin' 'e2ee-slug-token' %}";
+    function reactUrlFor(partner, messageId) {
+        return DM_REACT_URL_TEMPLATE
+            .replace('e2ee-slug-token', encodeURIComponent(partner))
+            .replace(/\/react\/0\/$/, '/react/' + encodeURIComponent(messageId) + '/');
+    }
+    function shareUrlFor(partner, kind) {
+        return DM_SHARE_URL_TEMPLATE
+            .replace('e2ee-slug-token', encodeURIComponent(partner))
+            .replace(/\/share\/pin\/$/, '/share/' + encodeURIComponent(kind) + '/');
+    }
 
     // -- End-to-end encryption ---------------------------------------------------
     var E2EE = window.UrbanLensE2EE || null;
@@ -161,31 +191,71 @@
     }
 
     // -- Live reaction updates (rebuilds the reaction bar to match _message_reactions.html) --
+    // Built entirely with DOM APIs (textContent / setAttribute), never string
+    // concatenation into innerHTML: the emoji is attacker-controlled (a peer can
+    // react with any short string), so treating it as data - not markup - is the
+    // only safe way to render it. hx-vals is set via JSON.stringify so a hostile
+    // "emoji" cannot break out of the attribute either.
+    function buildReactHxButton(reactUrl, targetSel, emoji) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.setAttribute('hx-post', reactUrl);
+        btn.setAttribute('hx-vals', JSON.stringify({ emoji: emoji }));
+        btn.setAttribute('hx-target', targetSel);
+        btn.setAttribute('hx-swap', 'outerHTML');
+        return btn;
+    }
+
     function updateReactionBar(messageId, reactions) {
         var container = document.getElementById('dm-reactions-' + messageId);
         if (!container) return;
         var partner = window.dmActiveSlug();
-        var reactUrl = '/messages/' + partner + '/react/' + messageId + '/';
-        var html = reactions.map(function (r) {
+        var reactUrl = reactUrlFor(partner, messageId);
+        var targetSel = '#dm-reactions-' + messageId;
+        container.innerHTML = '';
+
+        reactions.forEach(function (r) {
             var mine = r.slugs.indexOf(mySlug) !== -1;
-            return '<button type="button" class="dm-reaction-pill' + (mine ? ' dm-reaction-pill--mine' : '') + '" ' +
-                'hx-post="' + reactUrl + '" hx-vals=\'{"emoji": "' + r.emoji + '"}\' ' +
-                'hx-target="#dm-reactions-' + messageId + '" hx-swap="outerHTML">' +
-                '<span class="dm-reaction-pill__emoji">' + r.emoji + '</span>' +
-                '<span class="dm-reaction-pill__count">' + r.count + '</span></button>';
-        }).join('');
-        html += '<span class="dm-reaction-add-wrap">' +
-            '<button type="button" class="dm-reaction-add-btn" title="Add a reaction" ' +
-            'onclick="var p=this.nextElementSibling; document.querySelectorAll(\'.dm-emoji-popover\').forEach(function(x){ if (x!==p) x.hidden=true; }); p.hidden = !p.hidden;">' +
-            '<i class="material-symbols-outlined">add_reaction</i></button>' +
-            '<span class="dm-emoji-popover" hidden>' +
-            REACT_EMOJIS.map(function (e) {
-                return '<button type="button" hx-post="' + reactUrl + '" hx-vals=\'{"emoji": "' + e + '"}\' ' +
-                    'hx-target="#dm-reactions-' + messageId + '" hx-swap="outerHTML" ' +
-                    'onclick="this.closest(\'.dm-emoji-popover\').hidden = true;">' + e + '</button>';
-            }).join('') +
-            '</span></span>';
-        container.innerHTML = html;
+            var pill = buildReactHxButton(reactUrl, targetSel, r.emoji);
+            pill.className = 'dm-reaction-pill' + (mine ? ' dm-reaction-pill--mine' : '');
+            var emojiSpan = document.createElement('span');
+            emojiSpan.className = 'dm-reaction-pill__emoji';
+            emojiSpan.textContent = r.emoji;
+            var countSpan = document.createElement('span');
+            countSpan.className = 'dm-reaction-pill__count';
+            countSpan.textContent = r.count;
+            pill.appendChild(emojiSpan);
+            pill.appendChild(countSpan);
+            container.appendChild(pill);
+        });
+
+        var addWrap = document.createElement('span');
+        addWrap.className = 'dm-reaction-add-wrap';
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'dm-reaction-add-btn';
+        addBtn.title = 'Add a reaction';
+        var addIcon = document.createElement('i');
+        addIcon.className = 'material-symbols-outlined';
+        addIcon.textContent = 'add_reaction';
+        addBtn.appendChild(addIcon);
+        var popover = document.createElement('span');
+        popover.className = 'dm-emoji-popover';
+        popover.hidden = true;
+        addBtn.addEventListener('click', function () {
+            document.querySelectorAll('.dm-emoji-popover').forEach(function (x) { if (x !== popover) x.hidden = true; });
+            popover.hidden = !popover.hidden;
+        });
+        REACT_EMOJIS.forEach(function (e) {
+            var b = buildReactHxButton(reactUrl, targetSel, e);
+            b.textContent = e;
+            b.addEventListener('click', function () { popover.hidden = true; });
+            popover.appendChild(b);
+        });
+        addWrap.appendChild(addBtn);
+        addWrap.appendChild(popover);
+        container.appendChild(addWrap);
+
         if (window.htmx) htmx.process(container);
     }
 
@@ -273,6 +343,20 @@
         }
         if (!e.target.closest('.dm-bubble-menu')) {
             document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
+        }
+
+        // Tapping a bubble (but not a control inside it) reveals its action
+        // button + timestamp on touch devices that have no hover state. CSS
+        // handles the hover case; this handles "clicked on".
+        var bubble = e.target.closest('.dm-bubble');
+        if (bubble && !e.target.closest('button, a, .dm-reactions, .dm-bubble-menu, .dm-bubble__image-link')) {
+            var wasPeek = bubble.classList.contains('dm-bubble--peek');
+            document.querySelectorAll('.dm-bubble--peek').forEach(function (b) { b.classList.remove('dm-bubble--peek'); });
+            if (!wasPeek) bubble.classList.add('dm-bubble--peek');
+            return;
+        }
+        if (!e.target.closest('.dm-bubble')) {
+            document.querySelectorAll('.dm-bubble--peek').forEach(function (b) { b.classList.remove('dm-bubble--peek'); });
         }
     });
 
@@ -594,7 +678,12 @@
         files.forEach(function (file) {
             var formData = new FormData();
             formData.append('image', file);
-            fetch('{% url "messages.upload_image" %}', { method: 'POST', body: formData })
+            fetch('{% url "messages.upload_image" %}', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: { 'X-CSRFToken': window.csrftoken || getCsrfToken() },
+            })
                 .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
                 .then(function (result) {
                     if (!result.ok) { toast('error', result.data.error || 'Photo upload failed.'); return; }
@@ -654,8 +743,8 @@
     function openShareDialog(kind) {
         var partner = window.dmActiveSlug();
         if (!partner) return;
-        var url = '/messages/' + partner + '/share/' + kind + '/';
-        fetch(url)
+        var url = shareUrlFor(partner, kind);
+        fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.text(); })
             .then(function (html) {
                 var host = document.getElementById('dm-share-dialog-host');

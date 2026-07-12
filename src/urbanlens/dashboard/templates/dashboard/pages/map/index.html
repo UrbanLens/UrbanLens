@@ -69,6 +69,19 @@
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Search pins..." autocomplete="off">
             </div>
 
+            {# Overlapping pins -- flags pins whose footprint (a drawn/generated #}
+            {# property boundary, or a default circle around its coordinates    #}
+            {# when it has none) overlaps another pin's - useful both for real  #}
+            {# overlapping properties and for spotting pins accidentally left   #}
+            {# stacked on the same spot. #}
+            <div class="fp-section fp-toggle-row">
+                <label class="fp-toggle">
+                    <input type="checkbox" name="overlapping_pins" id="fp-overlapping-pins">
+                    <span>Overlapping pins only</span>
+                </label>
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Shows pins whose boundary (or, for pins without one, the area right around their coordinates) overlaps another pin's - handy for spotting duplicates or pins left stacked on the same spot." pos="right" %}
+            </div>
+
             {# Scores -- all numeric sliders combined -- #}
             <details class="fp-accordion-item" id="fp-acc-scores" data-importance="high">
                 <summary class="fp-accordion-summary">
@@ -2822,10 +2835,18 @@
         .then(function () {
             document.getElementById('bulk-merge-dialog').close();
             exitSelectMode();
-            toastr.success('Pins merged.');
             _refreshAllPins();
-            // The merged sources are child pins now - refresh the Sub Pins layer too.
-            if (_childPinsActive) _loadChildPins();
+            // Merged sources become sub pins of the target and stop appearing as
+            // root-level markers - without this they'd look like they vanished.
+            // Turn the Sub Pins layer on (if it wasn't already) so they're still
+            // visible immediately after the merge.
+            if (_childPinsActive) {
+                _loadChildPins();
+                toastr.success('Pins merged.');
+            } else {
+                _mapLayers.toggleCustom('childpins');
+                toastr.success('Pins merged. They\'re now shown as sub pins on the map (Layers → Sub Pins).');
+            }
         })
         .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
     });

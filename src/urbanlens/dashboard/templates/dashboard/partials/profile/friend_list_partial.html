@@ -3,10 +3,13 @@
 
     {# -- Section header -------------------------------------------------------- #}
     <div class="profile-section-header">
-        <h3 class="profile-section-title">
+        <h3 class="profile-section-title{% if is_own_profile %} ul-privacy-hint-row{% endif %}">
             {% if is_own_profile %}Friends{% else %}Mutual Friends{% endif %}
             {% if is_own_profile and friends %}<span class="profile-section-count">{{ friends|length }}</span>{% endif %}
             {% if not is_own_profile and mutual_friends %}<span class="profile-section-count">{{ mutual_friends|length }}</span>{% endif %}
+            {% if is_own_profile %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=viewer.get_profile_visibility_display %}
+            {% endif %}
         </h3>
         <div class="profile-section-actions">
             {% if is_own_profile %}

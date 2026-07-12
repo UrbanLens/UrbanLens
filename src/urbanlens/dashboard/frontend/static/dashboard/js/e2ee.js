@@ -18144,7 +18144,7 @@ https://github.com/browserify/crypto-browserify`);
 
   // node_modules/libsodium-sumo/dist/modules-sumo-esm/libsodium-sumo.mjs
   async function A(A2 = {}) {
-    var I, g = A2, C = !!globalThis.window, B = !!globalThis.WorkerGlobalScope, Q = (globalThis.process?.versions?.node && globalThis.process, import.meta.url);
+    var I, g = A2, C = !!globalThis.window, B = !!globalThis.WorkerGlobalScope, Q = (globalThis.process?.versions?.node && globalThis.process, "about:blank");
     if (C || B) {
       try {
         new URL(".", Q).href;

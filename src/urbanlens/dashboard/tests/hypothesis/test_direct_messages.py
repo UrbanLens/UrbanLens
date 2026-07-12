@@ -25,10 +25,12 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.direct_messages import (
+    REACTION_PICKER_EMOJIS,
     can_direct_message,
     conversations_for,
     create_direct_message,
     has_used_direct_messages,
+    is_safe_reaction_emoji,
 )
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
@@ -289,6 +291,24 @@ class DirectMessageQuerySetTests(TestCase):
 # -- HTTP endpoints ----------------------------------------------------------------
 
 
+class ReactionEmojiValidationTests(TestCase):
+    """`is_safe_reaction_emoji` accepts genuine emoji, rejects render-unsafe input."""
+
+    def test_picker_emojis_are_all_accepted(self) -> None:
+        for emoji in REACTION_PICKER_EMOJIS:
+            self.assertTrue(is_safe_reaction_emoji(emoji), emoji)
+
+    def test_empty_is_rejected(self) -> None:
+        self.assertFalse(is_safe_reaction_emoji(""))
+
+    @given(payload=st.text(alphabet="<>&\"'`=/\\{}abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=10))
+    @_db_settings
+    def test_any_html_or_alpha_character_is_rejected(self, payload: str) -> None:
+        # Every character in the strategy's alphabet is forbidden, so any
+        # non-empty string drawn from it must be rejected outright.
+        self.assertFalse(is_safe_reaction_emoji(payload))
+
+
 class DirectMessageEndpointTests(TestCase):
     """Auth, privacy enforcement, and read-marking on the messages endpoints."""
 
@@ -379,3 +399,23 @@ class DirectMessageEndpointTests(TestCase):
         DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
         response = self.client.get(reverse("messages.view"))
         self.assertContains(response, 'id="nav-msg"')
+
+    def test_react_with_emoji_succeeds(self) -> None:
+        message = DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
+        response = self.client.post(
+            reverse("messages.react", kwargs={"profile_slug": self.partner.slug, "message_id": message.pk}),
+            {"emoji": "🔥"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(message.reactions.filter(emoji="🔥").exists())
+
+    def test_react_with_html_payload_rejected(self) -> None:
+        """A reaction is broadcast to and rendered by the other party, so an
+        emoji carrying markup/JS must be refused before it is ever stored."""
+        message = DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
+        response = self.client.post(
+            reverse("messages.react", kwargs={"profile_slug": self.partner.slug, "message_id": message.pk}),
+            {"emoji": '<img src>'},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(message.reactions.exists())

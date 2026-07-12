@@ -99,41 +99,79 @@
     }
 }
 
-// Gradient hero header - the same gradient as the Thanks page's .attr-hero
-// (_thanks.scss), so every safety page (list, create, detail, and the
-// contact-facing confirm/portal pages) reads as one consistent "page header"
-// treatment instead of a bare title.
+// Gradient hero header - mirrors the Thanks page's .attr-hero gradient
+// treatment (_thanks.scss) and the same full-bleed technique used by
+// .pin-lists-header (_pin_lists.scss): negative margins cancel out
+// .page-content's own padding so the gradient runs edge-to-edge immediately
+// below the navbar, instead of sitting in a boxed card. Every safety page
+// (list, create, detail, and the contact-facing confirm/portal pages) reads
+// as one consistent "page header" treatment. Purely a title/status banner -
+// no action buttons live here; see .safety-toolbar for those.
 .safety-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    padding: 1.5rem 1.75rem;
-    border-radius: $radius-md;
+    text-align: center;
+    padding: 2.5rem 1.25rem 2rem;
     background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    color: var(--ul-grey-8);
+    margin: -1.5rem -1.25rem 1.75rem;
+
+    @include up($breakpoint-sm) {
+        padding: 3.5rem 1.5rem 2.75rem;
+        margin: -2rem -2rem 2rem;
+    }
+}
+
+.safety-header-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .4rem;
 }
 
 .safety-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin: 0 0 .25rem;
+    font-size: 1.9rem;
+    font-weight: 800;
+    margin: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: .5rem;
     color: var(--ul-grey-9);
 
+    @include up($breakpoint-sm) {
+        font-size: 2.4rem;
+    }
+
     .material-symbols-outlined {
-        font-size: 1.7rem;
+        font-size: 1.5em;
         color: $color-red-500;
     }
 }
 
 .safety-subtitle {
-    margin: 0;
+    margin: .1rem 0 0;
     color: var(--ul-grey-7);
-    font-size: .9rem;
+    font-size: .92rem;
+    max-width: 34rem;
+}
+
+// Action row below the hero (New check-in, cancel/check-in/delete, mark
+// safe, ...) - kept out of the decorative hero itself, mirroring
+// .pin-lists-toolbar.
+.safety-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-bottom: 1.5rem;
+
+    // display:flex overrides the HTML [hidden] attribute - be explicit
+    // (contact_portal.html toggles this element's own [hidden] attribute).
+    &[hidden] {
+        display: none;
+    }
 }
 
 .safety-empty-state {

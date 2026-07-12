@@ -1,0 +1,18 @@
+{% comment %}
+Reusable privacy-setting hint icon: near-invisible until hovered/focused, then
+shows a tooltip naming who can see the data it's placed next to. Wrap the data
++ this icon in an element with class "ul-privacy-hint-row" so hovering the row
+(not just the tiny icon) partially reveals it first.
+Usage:
+  {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display %}
+  {% include "dashboard/partials/ui/_privacy_hint.html" with label="Contact info" value=profile.get_contact_visibility_display %}
+  {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+{% endcomment %}
+<span class="ul-privacy-hint"
+      data-tooltip="{% if text %}{{ text }}{% else %}{% if label %}{{ label }} - {% endif %}Visible to: {{ value }}{% endif %}"
+      data-tooltip-pos="{{ pos|default:'right' }}"
+      tabindex="0"
+      role="note"
+      aria-label="Privacy setting">
+    <i class="material-symbols-outlined" aria-hidden="true">visibility</i>
+</span>

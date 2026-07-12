@@ -28,6 +28,7 @@ _SCALAR_KEYS = (
     "min_vulnerability",
     "max_vulnerability",
     "has_visits",
+    "overlapping_pins",
 )
 _DATE_KEYS = ("visited_after", "visited_before", "created_after", "created_before")
 

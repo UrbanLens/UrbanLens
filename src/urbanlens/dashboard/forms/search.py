@@ -62,6 +62,7 @@ class SearchForm(forms.Form):
     max_vulnerability = forms.IntegerField(required=False, min_value=0)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    overlapping_pins = forms.BooleanField(required=False)
 
     def __init__(self, *args, profile: Profile | None = None, **kwargs) -> None:
         """Build the form, adding one filter field per custom pin field when a profile is given.

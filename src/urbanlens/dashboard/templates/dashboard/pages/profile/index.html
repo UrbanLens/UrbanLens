@@ -28,9 +28,12 @@
 
         <div class="profile-info-col">
             <div class="profile-name-row">
-                <div>
+                <div{% if profile.user == request.user %} class="ul-privacy-hint-row"{% endif %}>
                     <h1 class="profile-full-name">
                         {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
+                        {% if profile.user == request.user %}
+                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar, bio & friends" value=profile.get_profile_visibility_display %}
+                        {% endif %}
                     </h1>
                     <p class="profile-username">@{{ profile.username }}</p>
                 </div>
@@ -180,8 +183,11 @@
                 </span>
                 {% endif %}
                 {% if profile.email and can_view_contact %}
-                <span class="profile-meta-item">
+                <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
                     <i class="material-symbols-outlined">email</i>{{ profile.email }}
+                    {% if profile.user == request.user %}
+                    {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display %}
+                    {% endif %}
                 </span>
                 {% endif %}
                 {% if profile.user == request.user %}
@@ -231,7 +237,12 @@
     {# -- Social links -------------------------------------------------------- #}
     {% if social_links %}
     <div class="profile-section ul-section">
-        <h3 class="profile-section-title">Social</h3>
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            Social
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display %}
+            {% endif %}
+        </h3>
         <div class="social-links">
             {% for link in social_links %}
             {% if link.platform == "website" %}
@@ -260,7 +271,12 @@
     {% with ci=contact_info %}
     {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
     <div class="profile-section ul-section">
-        <h3 class="profile-section-title">Contact</h3>
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            Contact
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display %}
+            {% endif %}
+        </h3>
         <div class="contact-info-list">
             {% if ci.phone_number %}
             <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
@@ -302,6 +318,32 @@
     </div>
     {% endif %}
     {% endwith %}
+    {% endif %}
+
+    {# -- Additional account details (own profile only) - birth date, secondary #}
+    {# emails, and other stored data that has nowhere else to be shown.        #}
+    {% if profile.user == request.user %}
+    {% if profile.birth_date or profile.secondary_emails.exists %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Additional Details</h3>
+        <div class="contact-info-list">
+            {% if profile.birth_date %}
+            <span class="contact-info-item ul-privacy-hint-row">
+                <i class="material-symbols-outlined">cake</i>
+                <span>Birthday: {{ profile.birth_date|date:"F j, Y" }}</span>
+                {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+            </span>
+            {% endif %}
+            {% for secondary_email in profile.secondary_emails.all %}
+            <span class="contact-info-item ul-privacy-hint-row">
+                <i class="material-symbols-outlined">{% if secondary_email.is_verified %}mark_email_read{% else %}mark_email_unread{% endif %}</i>
+                <span>{{ secondary_email.email }}{% if not secondary_email.is_verified %} (unverified){% endif %}</span>
+                {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
     {% endif %}
 
     {# -- Private annotation panel (viewer ≠ profile owner) ------------------- #}

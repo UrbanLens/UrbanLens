@@ -445,7 +445,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
-            query = Pin.objects.filter(profile=profile).filter_by_criteria(criteria)
+            query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 

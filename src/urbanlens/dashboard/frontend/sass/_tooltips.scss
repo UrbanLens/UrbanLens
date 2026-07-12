@@ -248,6 +248,61 @@
     gap: .35rem;
 }
 
+// -- Privacy hint trigger --------------------------------------------------------
+// Marks a piece of data with the privacy setting that governs who else can see
+// it (e.g. "Visible to: Friends Only"). Deliberately near-invisible until
+// hovered/focused - unlike .ul-tooltip-help (a help affordance meant to be
+// noticed), this is a passive annotation that shouldn't compete for attention
+// with the data itself. Wrap the data + icon in .ul-privacy-hint-row so hovering
+// anywhere on the row (not just the tiny icon) partially reveals it first.
+.ul-privacy-hint {
+    @include icon-btn(16px);
+    display: inline-flex;
+    flex-shrink: 0;
+    vertical-align: middle;
+    color: var(--ul-grey-6);
+    border-radius: 50%;
+    opacity: 0.12;
+    transition: opacity .15s, color .15s, background .15s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 13px;
+    }
+
+    &:hover,
+    &:focus-visible,
+    &.is-tooltip-open {
+        color: var(--ul-grey-8);
+        background: var(--ul-hover-bg);
+        cursor: default;
+        opacity: 1;
+    }
+
+    // Default to right-side tooltip, matching .ul-tooltip-help.
+    &[data-tooltip]:not([data-tooltip-pos]) {
+        &::after {
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 9px);
+            --_t-show: translateY(-50%) translateX(0);
+            --_t-hide: translateY(-50%) translateX(-6px);
+            transform: var(--_t-hide);
+        }
+        &::before {
+            @include _arrow(right);
+            bottom: auto;
+            top: 50%;
+            left: calc(100% + 4px);
+            transform: translateY(-50%);
+        }
+    }
+}
+
+.ul-privacy-hint-row:hover .ul-privacy-hint:not(:hover, :focus-visible) {
+    opacity: 0.45;
+}
+
 // -- "Hide tooltips" user preference ------------------------------------------
 // Applied via the html.tooltips-disabled class set from the user's profile setting.
 

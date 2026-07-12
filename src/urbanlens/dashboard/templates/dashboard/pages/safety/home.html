@@ -3,30 +3,32 @@
 {% block content %}
 <div class="safety-page page-content">
 
-    <div class="safety-header">
-        <div class="safety-header-left">
+    <section class="safety-header">
+        <div class="safety-header-inner">
             <h1 class="safety-title">
                 <i class="material-symbols-outlined">emergency</i>
                 Safety
                 {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="safety-explainer" %}
             </h1>
+            <p class="safety-subtitle">Let people know when to expect you back, and who to alert if you don't check in.</p>
         </div>
-        <div class="safety-header-right">
-            {% if active_checkin %}
-            <a href="{% url 'safety.checkin.detail' active_checkin.slug|default:active_checkin.uuid %}" class="btn btn--ghost" title="You already have an active check-in - only one may be active at a time">
-                <i class="material-symbols-outlined">visibility</i>
-                View active check-in
-            </a>
-            {% else %}
-            <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
-                <i class="material-symbols-outlined">add</i>
-                New Check-in
-            </a>
-            {% endif %}
-        </div>
-    </div>
+    </section>
 
     {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, your emergency contacts are sent your plan details and last known location." %}
+
+    <div class="safety-toolbar">
+        {% if active_checkin %}
+        <a href="{% url 'safety.checkin.detail' active_checkin.slug|default:active_checkin.uuid %}" class="btn btn--ghost" title="You already have an active check-in - only one may be active at a time">
+            <i class="material-symbols-outlined">visibility</i>
+            View active check-in
+        </a>
+        {% else %}
+        <a href="{% url 'safety.checkin.create' %}" class="btn btn--primary">
+            <i class="material-symbols-outlined">add</i>
+            New Check-in
+        </a>
+        {% endif %}
+    </div>
 
     {# -- Active/past check-ins --------------------------------------------- #}
     {% if checkins %}

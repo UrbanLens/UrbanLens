@@ -29,6 +29,27 @@ logger = logging.getLogger(__name__)
 #: Common emoji offered by the quick "add a reaction" picker on each message.
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
 
+#: Characters a reaction "emoji" must never contain. Reactions are broadcast
+#: verbatim to the other participant and rendered into their DOM, so a value
+#: carrying HTML/JS metacharacters (or plain letters that spell a tag/handler)
+#: is rejected outright - genuine emoji, including keycap digits like ``#`` and
+#: ``*``, use none of these. Defense in depth: the clients already render the
+#: emoji as text/attributes, never as markup.
+_REACTION_EMOJI_FORBIDDEN = set("<>&\"'`=/\\{}") | set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def is_safe_reaction_emoji(emoji: str) -> bool:
+    """Return True when `emoji` is a plausible, render-safe reaction glyph.
+
+    Args:
+        emoji: The candidate reaction string (already length-capped by the caller).
+
+    Returns:
+        True when it is non-empty and contains no HTML/JS-significant characters
+        or ASCII letters; False otherwise.
+    """
+    return bool(emoji) and not any(character in _REACTION_EMOJI_FORBIDDEN for character in emoji)
+
 
 def _online_cache_key(profile_id: int) -> str:
     return f"dm_online_{profile_id}"

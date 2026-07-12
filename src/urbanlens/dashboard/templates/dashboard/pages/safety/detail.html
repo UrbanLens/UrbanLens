@@ -11,33 +11,34 @@
 {% block content %}
 <div class="safety-page page-content">
 
-    <div class="safety-header">
-        <div class="safety-header-left">
+    <section class="safety-header">
+        <div class="safety-header-inner">
             <h1 class="safety-title">
                 <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
                 <span id="safety-title-text">{{ checkin.title }}</span>
             </h1>
             <p class="safety-subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
         </div>
-        <div class="safety-header-right">
-            <div id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
-            <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline"
-                  onsubmit="window._safetySkipLeaveWarning = true;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn--primary">I'm safe - check in now</button>
-            </form>
-            <form method="post" action="{% url 'safety.checkin.cancel' checkin.uuid %}" style="display:inline"
-                  onsubmit="if (!confirm('Cancel this check-in?')) return false; window._safetySkipLeaveWarning = true;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn--ghost">Cancel</button>
-            </form>
-            </div>
-            <button type="button" class="btn btn--danger btn--sm" id="safety-delete-btn"
-                    data-delete-url="{% url 'safety.checkin.delete' checkin.slug|default:checkin.uuid %}"
-                    data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}">
-                <i class="material-symbols-outlined">delete</i> Delete
-            </button>
+    </section>
+
+    <div class="safety-toolbar">
+        <div id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
+        <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline"
+              onsubmit="window._safetySkipLeaveWarning = true;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primary">I'm safe - check in now</button>
+        </form>
+        <form method="post" action="{% url 'safety.checkin.cancel' checkin.uuid %}" style="display:inline"
+              onsubmit="if (!confirm('Cancel this check-in?')) return false; window._safetySkipLeaveWarning = true;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--ghost">Cancel</button>
+        </form>
         </div>
+        <button type="button" class="btn btn--danger btn--sm" id="safety-delete-btn"
+                data-delete-url="{% url 'safety.checkin.delete' checkin.slug|default:checkin.uuid %}"
+                data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}">
+            <i class="material-symbols-outlined">delete</i> Delete
+        </button>
     </div>
 
     <p class="safety-autosave-status safety-autosave-status--floating is-hidden" id="safety-autosave-status" aria-live="polite"></p>
