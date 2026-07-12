@@ -15,6 +15,7 @@ from urbanlens.dashboard.forms.settings_form import (
     AISettingsForm,
     CommunitySettingsForm,
     ContactSettingsForm,
+    DirectMessageSettingsForm,
     ExternalApiSettingsForm,
     MapCenterForm,
     MapDisplayForm,
@@ -89,6 +90,7 @@ class SettingsView(LoginRequiredMixin, View):
             "memories_form": MemoriesSettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
             "external_api_form": ExternalApiSettingsForm(instance=profile),
+            "direct_message_form": DirectMessageSettingsForm(instance=profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
@@ -119,6 +121,7 @@ class SettingsView(LoginRequiredMixin, View):
         memories_form = MemoriesSettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
         external_api_form = ExternalApiSettingsForm(instance=profile)
+        direct_message_form = DirectMessageSettingsForm(instance=profile)
 
         if section == "places_layer":
             if user_has_feature(request.user, SiteFeature.PLACES):
@@ -214,6 +217,13 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "External API settings saved.")
                 return redirect("settings.view")
 
+        elif section == "direct_messages":
+            direct_message_form = DirectMessageSettingsForm(request.POST, instance=profile)
+            if direct_message_form.is_valid():
+                direct_message_form.save()
+                messages.success(request, "Direct message settings saved.")
+                return redirect("settings.view")
+
         context = {
             "privacy_form": privacy_form,
             "contact_form": contact_form,
@@ -226,6 +236,7 @@ class SettingsView(LoginRequiredMixin, View):
             "memories_form": memories_form,
             "community_form": community_form,
             "external_api_form": external_api_form,
+            "direct_message_form": direct_message_form,
             "preview_zoom": profile.map_default_zoom or 13,
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
@@ -246,6 +257,7 @@ class SettingsView(LoginRequiredMixin, View):
                 memories_form,
                 community_form,
                 external_api_form,
+                direct_message_form,
             )
             errors: dict[str, object] = {}
             for form in bound_forms:

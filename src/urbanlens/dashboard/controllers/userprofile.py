@@ -190,6 +190,13 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["custom_field_rows"] = rows_for_target(my_profile, CustomFieldEntity.PROFILE, profile)
         context["my_profile"] = my_profile
 
+        # Message button: shown if privacy settings permit it, or an existing
+        # conversation already exists (mirrors ConversationView's own gate).
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.services.direct_messages import can_direct_message
+
+        context["can_message"] = can_direct_message(my_profile, profile) or DirectMessage.objects.between(my_profile, profile).exists()
+
 
 class ProfilePreviewStartView(LoginRequiredMixin, View):
     """Start previewing your own profile as a selected type of user.

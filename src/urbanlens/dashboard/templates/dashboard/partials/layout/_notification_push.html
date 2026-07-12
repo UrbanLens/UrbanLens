@@ -109,6 +109,10 @@
             if (!data || data.type !== 'notification' || !data.notification) return;
             refreshBadge();
             refreshDropdownIfLoaded();
+            // New-message notifications only ever count toward the messages
+            // icon's own badge (see the navbar) - the general toast/desktop
+            // notification is reserved for everything else.
+            if (data.notification.notification_type === 'message') return;
             showToast(data.notification);
             showBrowserNotification(data.notification);
         };

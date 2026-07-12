@@ -64,6 +64,7 @@ class MarkupType(TextChoices):
     SQUARE = "square", "Square"
     CIRCLE = "circle", "Circle"
     POLYGON = "polygon", "Polygon"
+    PIN = "pin", "Pin"
 
 
 class SecurityIndicatorType(TextChoices):

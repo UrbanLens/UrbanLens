@@ -119,6 +119,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=500,
         notes="Free, no key required. Be polite - the Archive is a public resource.",
     ),
+    "hibp": ServiceDefaults(
+        display_name="Have I Been Pwned (Pwned Passwords)",
+        calls_per_minute=60,
+        calls_per_day=5000,
+        notes="Free k-anonymity range API. Used when users set or change passwords.",
+    ),
 }
 
 

@@ -17,13 +17,14 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import DatabaseError
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
+from django.views.decorators.http import require_GET
 
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
@@ -33,6 +34,10 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
+
+_PASSPHRASE_RATE_KEY = "passphrase_suggest:{ip}"  # noqa: S105
+_PASSPHRASE_RATE_LIMIT = 30  # suggestion batches per IP per window
+_PASSPHRASE_RATE_WINDOW = 60 * 10  # 10 minutes
 
 
 # -- Login rate limiting helpers ------------------------------------------------
@@ -511,3 +516,43 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
             _apply_pending_invitation(invitation, profile)
     except (AttributeError, DatabaseError):
         logger.exception("Error processing pending invitations for %s", user.email)
+
+
+# -- Passphrase suggestions --------------------------------------------------
+
+
+def _client_ip(request: HttpRequest) -> str:
+    """Best-effort client IP for rate limiting passphrase suggestions.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        A string suitable for use as a cache-key fragment.
+    """
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "unknown"
+    return request.META.get("REMOTE_ADDR") or "unknown"
+
+
+@require_GET
+def suggest_passphrases(request: HttpRequest) -> JsonResponse:
+    """Return five strong passphrase suggestions for signup / password reset.
+
+    Rate-limited per client IP to deter bulk scraping of the wordlist.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        JSON with a ``passphrases`` list, or 429 when the rate limit is hit.
+    """
+    from urbanlens.dashboard.services.passphrases import generate_passphrases
+
+    key = _PASSPHRASE_RATE_KEY.format(ip=_client_ip(request))
+    hits = int(cache.get(key) or 0)
+    if hits >= _PASSPHRASE_RATE_LIMIT:
+        return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
+    cache.set(key, hits + 1, timeout=_PASSPHRASE_RATE_WINDOW)
+    return JsonResponse({"passphrases": generate_passphrases(5)})

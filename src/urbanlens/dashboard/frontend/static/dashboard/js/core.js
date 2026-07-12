@@ -1295,6 +1295,15 @@
           interactive: false
         }).addTo(group);
         break;
+      case "pin": {
+        const sz = 32;
+        const html = `<span class="material-symbols-outlined" style="font-size:${sz}px;color:${color};text-shadow:0 1px 3px rgba(0,0,0,.4)">location_on</span>`;
+        L.marker(L.latLng(s.latlngs[0][0], s.latlngs[0][1]), {
+          icon: L.divIcon({ className: "", html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz] }),
+          interactive: false
+        }).addTo(group);
+        break;
+      }
     }
   }
   function createDrawSession(map, opts) {
@@ -1807,6 +1816,25 @@
         ctx.fillStyle = color;
         ctx.textBaseline = "middle";
         ctx.fillText(label, p.x + paddingX, p.y + boxH / 2);
+        break;
+      }
+      case "pin": {
+        const p = toContainerPoint(map, s.latlngs[0]);
+        const r = 9;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - r, r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 1;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,.35)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p.x - r * 0.5, p.y - r * 0.3);
+        ctx.lineTo(p.x + r * 0.5, p.y - r * 0.3);
+        ctx.lineTo(p.x, p.y);
+        ctx.closePath();
+        ctx.fill();
         break;
       }
     }

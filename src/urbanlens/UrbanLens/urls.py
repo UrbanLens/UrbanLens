@@ -19,6 +19,7 @@ from urbanlens.dashboard.controllers.account import (
     SignupView,
     VerifyEmailSentView,
     VerifyEmailView,
+    suggest_passphrases,
 )
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
@@ -39,6 +40,7 @@ urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),
     # Registration
     path("signup/", SignupView.as_view(), name="signup"),
+    path("accounts/suggest-passphrases/", suggest_passphrases, name="suggest_passphrases"),
     # Email verification
     path("verify-email/sent/", VerifyEmailSentView.as_view(), name="verify_email_sent"),
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),

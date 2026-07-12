@@ -1,4 +1,4 @@
-{% load map_components %}
+{% load map_components dashboard_tags %}
 {% comment %}
 Shared read-only map viewer dialog: the expandable "attached map" dialog used
 by pin/wiki comments, trip comments, visit logs, safety attached maps, and
@@ -38,6 +38,13 @@ or render a custom preview that calls _expandCommentMap('<map_id>').
                 data-map-id="{{ map_id_str }}" title="Download this map as a JPEG">
             <i class="material-symbols-outlined">download</i> Download
         </button>
+        {% with directions_url=map_data|first_pin_directions_url %}
+        {% if directions_url %}
+        <a href="{{ directions_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">
+            <i class="material-symbols-outlined">directions_walk</i> Walking directions
+        </a>
+        {% endif %}
+        {% endwith %}
     </div>
     {% if map_obj %}
     {# Custom fields (viewer's own map fields; 204 keeps the strip empty otherwise). #}

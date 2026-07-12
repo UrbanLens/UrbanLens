@@ -56,6 +56,8 @@
     </div>
 </div>
 
+<div id="dm-share-dialog-host"></div>
+
 <script>
 (function () {
     var page = document.getElementById('dm-page');
@@ -82,6 +84,132 @@
         htmx.trigger(document.body, 'msgCountRefresh');
     }
 
+    // Mirrors services.direct_messages.REACTION_PICKER_EMOJIS.
+    var REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
+    // A broader set for inserting emoji into the message text itself.
+    var INSERT_EMOJIS = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😢', '😮', '😡', '👍', '👎', '🙏',
+        '👋', '🎉', '❤️', '🔥', '⭐', '✅', '❌', '📍', '📷', '🗺️', '🚶', '🏕️', '🌇', '🌙'];
+
+    function closeEmojiPopovers() {
+        document.querySelectorAll('.dm-emoji-popover').forEach(function (p) { p.hidden = true; });
+    }
+
+    // -- Live reaction updates (rebuilds the reaction bar to match _message_reactions.html) --
+    function updateReactionBar(messageId, reactions) {
+        var container = document.getElementById('dm-reactions-' + messageId);
+        if (!container) return;
+        var partner = window.dmActiveSlug();
+        var reactUrl = '/messages/' + partner + '/react/' + messageId + '/';
+        var html = reactions.map(function (r) {
+            var mine = r.slugs.indexOf(mySlug) !== -1;
+            return '<button type="button" class="dm-reaction-pill' + (mine ? ' dm-reaction-pill--mine' : '') + '" ' +
+                'hx-post="' + reactUrl + '" hx-vals=\'{"emoji": "' + r.emoji + '"}\' ' +
+                'hx-target="#dm-reactions-' + messageId + '" hx-swap="outerHTML">' +
+                '<span class="dm-reaction-pill__emoji">' + r.emoji + '</span>' +
+                '<span class="dm-reaction-pill__count">' + r.count + '</span></button>';
+        }).join('');
+        html += '<span class="dm-reaction-add-wrap">' +
+            '<button type="button" class="dm-reaction-add-btn" title="Add a reaction" ' +
+            'onclick="var p=this.nextElementSibling; document.querySelectorAll(\'.dm-emoji-popover\').forEach(function(x){ if (x!==p) x.hidden=true; }); p.hidden = !p.hidden;">' +
+            '<i class="material-symbols-outlined">add_reaction</i></button>' +
+            '<span class="dm-emoji-popover" hidden>' +
+            REACT_EMOJIS.map(function (e) {
+                return '<button type="button" hx-post="' + reactUrl + '" hx-vals=\'{"emoji": "' + e + '"}\' ' +
+                    'hx-target="#dm-reactions-' + messageId + '" hx-swap="outerHTML" ' +
+                    'onclick="this.closest(\'.dm-emoji-popover\').hidden = true;">' + e + '</button>';
+            }).join('') +
+            '</span></span>';
+        container.innerHTML = html;
+        if (window.htmx) htmx.process(container);
+    }
+
+    // -- Pending attachments for the next message to be sent ---------------------
+    var pendingAttachments = { images: [], mapUuid: null };
+
+    function renderAttachmentChips() {
+        var wrap = document.getElementById('dm-composer-image-chips');
+        if (wrap) {
+            wrap.innerHTML = '';
+            pendingAttachments.images.forEach(function (img) {
+                var chip = document.createElement('span');
+                chip.className = 'dm-composer-attachment-chip';
+                var thumb = document.createElement('img');
+                thumb.src = img.url;
+                thumb.alt = '';
+                chip.appendChild(thumb);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.setAttribute('aria-label', 'Remove photo');
+                remove.textContent = '×';
+                remove.addEventListener('click', function () {
+                    pendingAttachments.images = pendingAttachments.images.filter(function (i) { return i.id !== img.id; });
+                    renderAttachmentChips();
+                });
+                chip.appendChild(remove);
+                wrap.appendChild(chip);
+            });
+        }
+        var mapChip = document.getElementById('dm-map-chip');
+        if (mapChip) mapChip.hidden = !pendingAttachments.mapUuid;
+        var mapField = document.getElementById('dm-markup-map-uuid');
+        if (mapField) mapField.value = pendingAttachments.mapUuid || '';
+    }
+
+    function resetAttachments() {
+        pendingAttachments = { images: [], mapUuid: null };
+        renderAttachmentChips();
+    }
+
+    // -- Reply / quote -------------------------------------------------------------
+    function cancelReply() {
+        var preview = document.getElementById('dm-reply-preview');
+        if (preview) preview.hidden = true;
+        var field = document.getElementById('dm-reply-to-id');
+        if (field) field.value = '';
+    }
+
+    window.dmReplyTo = function (messageId, senderName, snippet) {
+        document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
+        var preview = document.getElementById('dm-reply-preview');
+        if (!preview) return;
+        var nameEl = document.getElementById('dm-reply-preview-name');
+        var snippetEl = document.getElementById('dm-reply-preview-snippet');
+        if (nameEl) nameEl.textContent = senderName;
+        if (snippetEl) snippetEl.textContent = snippet;
+        var field = document.getElementById('dm-reply-to-id');
+        if (field) field.value = messageId;
+        preview.hidden = false;
+        var input = document.getElementById('dm-composer-input');
+        if (input) input.focus();
+    };
+
+    // -- Per-message action menu (reply / delete) ---------------------------------
+    document.addEventListener('click', function (e) {
+        var menuBtn = e.target.closest('.dm-bubble__menu-btn');
+        if (menuBtn) {
+            e.stopPropagation();
+            var menu = document.getElementById('dm-bubble-menu-' + menuBtn.dataset.messageId);
+            document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { if (m !== menu) m.hidden = true; });
+            if (menu) menu.hidden = !menu.hidden;
+            return;
+        }
+        var partnerMenuBtn = e.target.closest('#dm-partner-menu-btn');
+        if (partnerMenuBtn) {
+            e.stopPropagation();
+            var partnerMenu = document.getElementById('dm-partner-menu');
+            document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { if (m !== partnerMenu) m.hidden = true; });
+            if (partnerMenu) partnerMenu.hidden = !partnerMenu.hidden;
+            return;
+        }
+        if (e.target.closest('#dm-reply-preview-cancel')) {
+            cancelReply();
+            return;
+        }
+        if (!e.target.closest('.dm-bubble-menu')) {
+            document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
+        }
+    });
+
     function appendBubble(msg, own) {
         var list = document.getElementById('dm-messages');
         if (!list) return;
@@ -90,21 +218,108 @@
 
         var li = document.createElement('li');
         li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them');
+        li.dataset.messageId = msg.id;
 
-        var body = document.createElement('span');
-        body.className = 'dm-bubble__body';
-        body.textContent = msg.body;
+        if (msg.reply_to) {
+            var quote = document.createElement('div');
+            quote.className = 'dm-quote-box';
+            var quoteAuthor = document.createElement('span');
+            quoteAuthor.className = 'dm-quote-box__author';
+            quoteAuthor.textContent = msg.reply_to.sender_name;
+            var quoteSnippet = document.createElement('span');
+            quoteSnippet.className = 'dm-quote-box__snippet';
+            quoteSnippet.textContent = msg.reply_to.preview;
+            quote.appendChild(quoteAuthor);
+            quote.appendChild(quoteSnippet);
+            li.appendChild(quote);
+        }
+
+        if (msg.body) {
+            var body = document.createElement('span');
+            body.className = 'dm-bubble__body';
+            body.textContent = msg.body;
+            li.appendChild(body);
+        }
+
+        if (msg.images && msg.images.length) {
+            var imagesWrap = document.createElement('div');
+            imagesWrap.className = 'dm-bubble__images';
+            msg.images.forEach(function (img) {
+                var link = document.createElement('a');
+                link.href = img.url;
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.className = 'dm-bubble__image-link';
+                var thumb = document.createElement('img');
+                thumb.src = img.url;
+                thumb.alt = '';
+                thumb.className = 'dm-bubble__image';
+                link.appendChild(thumb);
+                imagesWrap.appendChild(link);
+            });
+            li.appendChild(imagesWrap);
+        }
 
         var time = document.createElement('span');
         time.className = 'dm-bubble__time';
         var created = new Date(msg.created);
         time.textContent = isNaN(created.getTime()) ? '' : created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-        li.appendChild(body);
         li.appendChild(time);
+
+        var reactions = document.createElement('div');
+        reactions.className = 'dm-reactions';
+        reactions.id = 'dm-reactions-' + msg.id;
+        li.appendChild(reactions);
+        updateReactionBar(msg.id, []);
+
         list.appendChild(li);
         scrollMessages();
+
+        // A live map attachment needs the server-rendered viewer partial (the
+        // Leaflet init script isn't duplicated client-side) - refresh the whole
+        // thread pane instead of trying to render it from the bare JSON payload.
+        if (msg.markup_map_uuid) {
+            var thread = activeThread();
+            if (thread && thread.dataset.viewUrl && window.htmx) {
+                htmx.ajax('GET', thread.dataset.viewUrl, { target: '#dm-thread-pane', swap: 'innerHTML' });
+            }
+        }
     }
+
+    // -- "Thread open" marker: lets the server skip notifications/emails ---------
+    // for a conversation the recipient is already looking at (see
+    // services.direct_messages.is_thread_open). Resent periodically so a
+    // long-open conversation doesn't age past the server-side TTL.
+    function sendOpenThread() {
+        var partner = window.dmActiveSlug();
+        if (partner && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'open', recipient: partner }));
+        }
+    }
+    setInterval(sendOpenThread, 60000);
+
+    var typingHideTimer = null;
+    function showTypingIndicator() {
+        var el = document.getElementById('dm-partner-typing');
+        if (!el) return;
+        el.hidden = false;
+        clearTimeout(typingHideTimer);
+        typingHideTimer = setTimeout(function () { el.hidden = true; }, 4000);
+    }
+
+    var lastTypingSentAt = 0;
+    function maybeSendTyping() {
+        var now = Date.now();
+        if (now - lastTypingSentAt < 3000) return;
+        lastTypingSentAt = now;
+        var partner = window.dmActiveSlug();
+        if (partner && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'typing', recipient: partner }));
+        }
+    }
+    document.addEventListener('input', function (e) {
+        if (e.target && e.target.id === 'dm-composer-input') maybeSendTyping();
+    });
 
     function markThreadRead() {
         var thread = activeThread();
@@ -142,6 +357,7 @@
             retryCount = 0;
             warnedSlowReconnect = false;
             setConnected(true);
+            sendOpenThread();
         };
         ws.onclose = function (ev) {
             setConnected(false);
@@ -164,6 +380,23 @@
             try { msg = JSON.parse(ev.data); } catch (e) { return; }
             if (msg.type === 'error') {
                 toast('error', msg.detail || "Your message couldn't be sent.");
+                return;
+            }
+            if (msg.type === 'reaction') {
+                updateReactionBar(msg.message_id, msg.reactions || []);
+                return;
+            }
+            if (msg.type === 'message_deleted') {
+                var bubble = document.querySelector('.dm-bubble[data-message-id="' + msg.message_id + '"]');
+                if (bubble && !(msg.scope === 'everyone' && bubble.classList.contains('dm-bubble--own'))) {
+                    var text = msg.scope === 'everyone' ? 'Message deleted' : 'You removed this message';
+                    bubble.classList.add('dm-bubble--tombstone');
+                    bubble.innerHTML = '<span class="dm-bubble__tombstone"><i class="material-symbols-outlined">block</i> ' + text + '</span>';
+                }
+                return;
+            }
+            if (msg.type === 'typing') {
+                if (msg.sender_slug === window.dmActiveSlug()) showTypingIndicator();
                 return;
             }
             if (msg.type !== 'message') return;
@@ -195,18 +428,25 @@
 
         var input = document.getElementById('dm-composer-input');
         var body = input.value.trim();
-        if (!body) return;
+        var imageIds = pendingAttachments.images.map(function (i) { return i.id; });
+        var mapUuid = pendingAttachments.mapUuid;
+        var replyToField = document.getElementById('dm-reply-to-id');
+        var replyToId = replyToField && replyToField.value ? parseInt(replyToField.value, 10) : null;
+        if (!body && !imageIds.length && !mapUuid) return;
 
         if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ recipient: window.dmActiveSlug(), body: body }));
+            ws.send(JSON.stringify({ recipient: window.dmActiveSlug(), body: body, image_ids: imageIds, markup_map_uuid: mapUuid, reply_to: replyToId }));
             input.value = '';
             input.focus();
+            resetAttachments();
+            cancelReply();
             return;
         }
 
         // Socket down: plain POST, then swap in the refreshed thread the server
         // returns. On failure the input is restored so the message isn't lost.
         var formData = new FormData(form);
+        imageIds.forEach(function (id) { formData.append('image_ids', id); });
         input.value = '';
         fetch(form.action, { method: 'POST', body: formData })
             .then(function (resp) {
@@ -215,6 +455,8 @@
                         var pane = document.getElementById('dm-thread-pane');
                         pane.innerHTML = html;
                         htmx.process(pane);
+                        resetAttachments();
+                        cancelReply();
                         scrollMessages();
                         refreshList();
                     });
@@ -228,6 +470,234 @@
                 toast('error', err.message || 'Message failed to send. Please try again.');
             });
     });
+
+    // -- Attach photo ------------------------------------------------------------
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('#dm-attach-photo-btn')) {
+            var fileInput = document.getElementById('dm-attach-photo-input');
+            if (fileInput) fileInput.click();
+        }
+    });
+    document.addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'dm-attach-photo-input') return;
+        var files = Array.prototype.slice.call(e.target.files || []);
+        e.target.value = '';
+        files.forEach(function (file) {
+            var formData = new FormData();
+            formData.append('image', file);
+            fetch('{% url "messages.upload_image" %}', { method: 'POST', body: formData })
+                .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
+                .then(function (result) {
+                    if (!result.ok) { toast('error', result.data.error || 'Photo upload failed.'); return; }
+                    pendingAttachments.images.push({ id: result.data.id, url: result.data.url });
+                    renderAttachmentChips();
+                })
+                .catch(function () { toast('error', 'Photo upload failed.'); });
+        });
+    });
+
+    // -- Attach map ----------------------------------------------------------------
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('#dm-attach-map-btn')) {
+            if (!window._openCommentMapComposer) return;
+            window._openCommentMapComposer({
+                onSaved: function (uuid) {
+                    pendingAttachments.mapUuid = uuid;
+                    renderAttachmentChips();
+                },
+            });
+        }
+        if (e.target.closest('#dm-map-chip-remove')) {
+            pendingAttachments.mapUuid = null;
+            renderAttachmentChips();
+        }
+    });
+
+    // -- @pin / @trip / @friend sharing -------------------------------------------
+    function closeMentionMenu() {
+        var menu = document.getElementById('dm-mention-menu');
+        if (menu) menu.remove();
+    }
+
+    function openMentionMenu(anchor) {
+        closeEmojiPopovers();
+        closeMentionMenu();
+        var menu = document.createElement('div');
+        menu.id = 'dm-mention-menu';
+        menu.className = 'dm-mention-menu';
+        [
+            { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
+            { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
+            { kind: 'friend', icon: 'person_add', label: 'Recommend a friend' },
+        ].forEach(function (opt) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.innerHTML = '<i class="material-symbols-outlined">' + opt.icon + '</i> ' + opt.label;
+            btn.addEventListener('click', function () {
+                closeMentionMenu();
+                openShareDialog(opt.kind);
+            });
+            menu.appendChild(btn);
+        });
+        anchor.parentNode.insertBefore(menu, anchor.nextSibling);
+    }
+
+    function openShareDialog(kind) {
+        var partner = window.dmActiveSlug();
+        if (!partner) return;
+        var url = '/messages/' + partner + '/share/' + kind + '/';
+        fetch(url)
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var host = document.getElementById('dm-share-dialog-host');
+                if (!host) return;
+                host.innerHTML = html;
+                var dlg = host.querySelector('dialog');
+                if (dlg) dlg.showModal();
+            })
+            .catch(function () { toast('error', 'Could not load that dialog. Please try again.'); });
+    }
+
+    window.dmSharePick = function (btn) {
+        var dialog = btn.closest('.dm-share-dialog');
+        if (!dialog) return;
+        dialog.querySelector('.dm-share-step--pick').hidden = true;
+        var confirmStep = dialog.querySelector('.dm-share-step--confirm');
+        confirmStep.hidden = false;
+        confirmStep.dataset.value = btn.dataset.value;
+        confirmStep.querySelector('.dm-share-confirm-label').textContent = btn.dataset.label;
+    };
+
+    document.addEventListener('click', function (e) {
+        var mentionBtn = e.target.closest('#dm-mention-btn');
+        if (mentionBtn) {
+            e.stopPropagation();
+            if (document.getElementById('dm-mention-menu')) { closeMentionMenu(); return; }
+            openMentionMenu(mentionBtn);
+            return;
+        }
+        if (!e.target.closest('#dm-mention-menu')) closeMentionMenu();
+
+        if (e.target.closest('.dm-share-back-btn')) {
+            var dlg1 = e.target.closest('.dm-share-dialog');
+            if (dlg1) {
+                dlg1.querySelector('.dm-share-step--confirm').hidden = true;
+                dlg1.querySelector('.dm-share-step--pick').hidden = false;
+            }
+            return;
+        }
+
+        if (e.target.closest('.dm-share-customize-map-btn')) {
+            if (!window._openCommentMapComposer) return;
+            var dlg2 = e.target.closest('.dm-share-dialog');
+            window._openCommentMapComposer({
+                onSaved: function (uuid) {
+                    dlg2.dataset.mapUuid = uuid;
+                    var chip = dlg2.querySelector('.dm-share-map-chip');
+                    if (chip) chip.hidden = false;
+                },
+            });
+            return;
+        }
+        if (e.target.closest('.dm-share-map-chip-remove')) {
+            var dlg3 = e.target.closest('.dm-share-dialog');
+            if (dlg3) {
+                delete dlg3.dataset.mapUuid;
+                var chip3 = e.target.closest('.dm-share-map-chip');
+                if (chip3) chip3.hidden = true;
+            }
+            return;
+        }
+
+        if (e.target.closest('.dm-share-send-btn')) {
+            var dialog = e.target.closest('.dm-share-dialog');
+            if (!dialog) return;
+            var confirmStep = dialog.querySelector('.dm-share-step--confirm');
+            var value = confirmStep.dataset.value;
+            var message = (confirmStep.querySelector('.dm-share-message') || {}).value || '';
+            var formData = new FormData();
+            formData.append('csrfmiddlewaretoken', getCsrfToken());
+            formData.append(dialog.dataset.fieldName, value);
+            formData.append('body', message);
+            if (dialog.dataset.mapUuid) formData.append('markup_map_uuid', dialog.dataset.mapUuid);
+            var sendBtn = e.target.closest('.dm-share-send-btn');
+            sendBtn.disabled = true;
+            fetch(dialog.dataset.submitUrl, { method: 'POST', body: formData })
+                .then(function (resp) {
+                    if (resp.ok) {
+                        return resp.text().then(function (html) {
+                            var pane = document.getElementById('dm-thread-pane');
+                            pane.innerHTML = html;
+                            htmx.process(pane);
+                            scrollMessages();
+                            refreshList();
+                            dialog.close();
+                        });
+                    }
+                    return resp.text().then(function (text) { throw new Error(text || 'Could not send that share.'); });
+                })
+                .catch(function (err) { toast('error', err.message || 'Could not send that share.'); })
+                .finally(function () { sendBtn.disabled = false; });
+        }
+    });
+
+    function getCsrfToken() {
+        var input = document.querySelector('#dm-composer [name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+
+    // -- Emoji picker (inserts into the message text) ----------------------------
+    document.addEventListener('click', function (e) {
+        var emojiBtn = e.target.closest('#dm-emoji-btn');
+        if (emojiBtn) {
+            e.stopPropagation();
+            var existing = document.getElementById('dm-composer-emoji-popover');
+            if (existing) { existing.remove(); return; }
+            closeEmojiPopovers();
+            var popover = document.createElement('div');
+            popover.id = 'dm-composer-emoji-popover';
+            popover.className = 'dm-emoji-popover dm-emoji-popover--composer';
+            INSERT_EMOJIS.forEach(function (emoji) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = emoji;
+                btn.addEventListener('click', function () {
+                    var input = document.getElementById('dm-composer-input');
+                    if (input) { input.value += emoji; input.focus(); }
+                    popover.remove();
+                });
+                popover.appendChild(btn);
+            });
+            emojiBtn.parentNode.insertBefore(popover, emojiBtn.nextSibling);
+            return;
+        }
+        if (!e.target.closest('.dm-emoji-popover') && !e.target.closest('.dm-reaction-add-btn')) {
+            closeEmojiPopovers();
+            var composerPopover = document.getElementById('dm-composer-emoji-popover');
+            if (composerPopover) composerPopover.remove();
+        }
+    });
+
+    // Typing "@" in the composer opens the same share menu as the mention button.
+    document.addEventListener('input', function (e) {
+        if (!e.target || e.target.id !== 'dm-composer-input') return;
+        if (e.target.value.slice(-1) === '@') {
+            e.target.value = e.target.value.slice(0, -1);
+            var mentionBtn = document.getElementById('dm-mention-btn');
+            if (mentionBtn) openMentionMenu(mentionBtn);
+        }
+    });
+
+    // -- Share dialog list filter --------------------------------------------------
+    window.dmFilterShareList = function (input) {
+        var query = input.value.trim().toLowerCase();
+        var list = input.parentNode.querySelector('.dm-share-list');
+        if (!list) return;
+        list.querySelectorAll('.dm-share-list-item').forEach(function (item) {
+            var haystack = item.dataset.search || '';
+            item.hidden = !!query && haystack.indexOf(query) === -1;
+        });
+    };
 
     // -- Compose panel toggle ----------------------------------------------------
     var composeBtn = document.getElementById('dm-compose-btn');
@@ -262,7 +732,10 @@
     document.body.addEventListener('htmx:afterSwap', function (ev) {
         if (ev.detail.target && ev.detail.target.id === 'dm-thread-pane') {
             page.classList.add('dm-page--thread-open');
+            resetAttachments();
+            cancelReply();
             scrollMessages();
+            sendOpenThread();
             var input = document.getElementById('dm-composer-input');
             if (input) input.focus();
         }

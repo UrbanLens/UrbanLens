@@ -121,8 +121,16 @@ class DirectMessageShare(abstract.DashboardModel):
             if self.trip_membership.rsvp is None:
                 self.trip_membership.delete()
                 self.trip_membership = None
-        elif self.kind == DirectMessageShareKind.FRIEND and self._friend_request_exists():
-            return
+        elif self.kind == DirectMessageShareKind.FRIEND:
+            if self._friend_request_exists():
+                return
+            if self.recommended_profile_id is not None:
+                from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+
+                DirectMessageTemporaryAccess.objects.filter(
+                    profile_id=self.recommended_profile_id,
+                    granted_to=self.message.recipient,
+                ).update(expires_at=timezone.now())
 
         self.revoked_at = timezone.now()
         update_fields = ["revoked_at", "trip_membership"] if self.kind == DirectMessageShareKind.TRIP else ["revoked_at"]

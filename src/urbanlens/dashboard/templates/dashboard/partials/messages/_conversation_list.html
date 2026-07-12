@@ -15,15 +15,15 @@ open conversation, or empty string).
          hx-swap="innerHTML"
          hx-push-url="true">
         <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
-          {% if conv.partner.avatar %}
-          <img src="{{ conv.partner.avatar.url }}" alt="" class="msg-avatar-img">
+          {% if conv.display_avatar_url %}
+          <img src="{{ conv.display_avatar_url }}" alt="" class="msg-avatar-img">
           {% else %}
-          <span class="msg-avatar-initial">{{ conv.partner.username|first|upper }}</span>
+          <span class="msg-avatar-initial">{{ conv.display_name|first|upper }}</span>
           {% endif %}
         </span>
         <span class="dm-conv-item__text">
           <span class="dm-conv-item__top">
-            <span class="dm-conv-item__name">{{ conv.partner.username }}</span>
+            <span class="dm-conv-item__name">{{ conv.display_name }}</span>
             <span class="dm-conv-item__time">{{ conv.last_message.created|timesince }} ago</span>
           </span>
           <span class="dm-conv-item__bottom">

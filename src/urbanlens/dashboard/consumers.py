@@ -116,7 +116,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
     """
 
     async def connect(self):
-        """Authenticate the session and join the profile's direct-message group."""
+        """Authenticate the session, join the profile's direct-message group, and mark them online."""
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
             await self.close(code=4404)
@@ -124,45 +124,74 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
 
         try:
             self.profile_id = await self._get_profile_id()
-            from urbanlens.dashboard.services.direct_messages import direct_message_group_name
+            from urbanlens.dashboard.services.direct_messages import direct_message_group_name, mark_profile_online
 
             self.group_name = direct_message_group_name(self.profile_id)
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
+            await database_sync_to_async(mark_profile_online)(self.profile_id)
         except Exception:
             logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
-        """Leave the direct-message group, if we ever joined one."""
+        """Leave the direct-message group and mark one fewer live connection, if we ever joined."""
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
             except Exception:
                 logger.exception("Direct message socket failed to leave group %s cleanly", self.group_name)
+        if hasattr(self, "profile_id"):
+            from urbanlens.dashboard.services.direct_messages import mark_profile_offline
+
+            try:
+                await database_sync_to_async(mark_profile_offline)(self.profile_id)
+            except Exception:
+                logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
 
     async def receive(self, text_data):
         """Persist an incoming message; the service broadcasts it to both parties.
 
         Args:
-            text_data: JSON string with ``recipient`` (profile slug) and
-                ``body`` fields. Unparseable or blank frames are silently
-                ignored; a frame that fails validation or privacy checks gets
-                an explicit ``{"type": "error", ...}`` reply so the sender
-                always learns their message didn't go through.
+            text_data: JSON string with ``recipient`` (profile slug), ``body``,
+                and optional ``image_ids``/``markup_map_uuid``/``reply_to``
+                fields. Unparseable frames, or frames with no recipient and no
+                body/attachment at all, are silently ignored; a frame that
+                fails validation or privacy checks gets an explicit
+                ``{"type": "error", ...}`` reply so the sender always learns
+                their message didn't go through.
         """
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
             logger.warning("Direct message socket received an unparseable frame from profile %s", self.profile_id)
             return
+
+        if data.get("type") == "typing":
+            recipient_slug = str(data.get("recipient") or "").strip()
+            if recipient_slug:
+                from urbanlens.dashboard.services.direct_messages import broadcast_typing_indicator
+
+                await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
+            return
+
+        if data.get("type") == "open":
+            recipient_slug = str(data.get("recipient") or "").strip()
+            if recipient_slug:
+                await self._mark_thread_open(recipient_slug)
+            return
+
         body = str(data.get("body") or "").strip()
         recipient_slug = str(data.get("recipient") or "").strip()
-        if not body or not recipient_slug:
+        image_ids = [int(v) for v in data.get("image_ids") or [] if isinstance(v, int)]
+        markup_map_uuid = str(data.get("markup_map_uuid") or "").strip() or None
+        reply_to_id = data.get("reply_to")
+        reply_to_id = int(reply_to_id) if isinstance(reply_to_id, int) else None
+        if not recipient_slug or not (body or image_ids or markup_map_uuid):
             return
 
         try:
-            await self._create_message(recipient_slug, body)
+            await self._create_message(recipient_slug, body, image_ids, markup_map_uuid, reply_to_id)
         except (ValueError, PermissionError) as exc:
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
         except Exception:
@@ -177,6 +206,31 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         """
         await self.send(text_data=json.dumps(event["message"]))
 
+    async def dm_reaction(self, event):
+        """Deliver a broadcasted reaction-summary update to this connection.
+
+        Args:
+            event: The group-send event, with a ``message`` dict payload
+                (``{"type": "reaction", "message_id": ..., "reactions": [...]}``).
+        """
+        await self.send(text_data=json.dumps(event["message"]))
+
+    @database_sync_to_async
+    def _mark_thread_open(self, recipient_slug):
+        """Record that this connection currently has the thread with `recipient_slug` open.
+
+        Args:
+            recipient_slug: URL slug of the conversation partner being viewed.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.direct_messages import mark_thread_open
+
+        try:
+            partner = Profile.objects.get(slug=recipient_slug)
+        except Profile.DoesNotExist:
+            return
+        mark_thread_open(self.profile_id, partner.pk)
+
     @database_sync_to_async
     def _get_profile_id(self):
         """Resolve (creating if needed) the session user's profile id.
@@ -190,12 +244,15 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         return profile.pk
 
     @database_sync_to_async
-    def _create_message(self, recipient_slug, body):
+    def _create_message(self, recipient_slug, body, image_ids, markup_map_uuid, reply_to_id):
         """Resolve the recipient and create the message through the shared service.
 
         Args:
             recipient_slug: URL slug of the recipient profile.
             body: Message text.
+            image_ids: PKs of the sender's unattached Image rows to attach.
+            markup_map_uuid: UUID of a MarkupMap owned by the sender to attach.
+            reply_to_id: PK of an earlier message in this conversation to quote.
 
         Raises:
             ValueError: Blank/too-long body, or no such recipient.
@@ -209,7 +266,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             recipient = Profile.objects.select_related("user").get(slug=recipient_slug)
         except Profile.DoesNotExist:
             raise ValueError("That user could not be found.") from None
-        create_direct_message(sender, recipient, body)
+        create_direct_message(sender, recipient, body, image_ids=image_ids, markup_map_uuid=markup_map_uuid, reply_to_id=reply_to_id)
 
 
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):

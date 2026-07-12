@@ -16,7 +16,7 @@ declare const L: typeof import("leaflet");
 export type LatLngTuple = [number, number];
 
 export interface ShapeSpec {
-    type: "line" | "arrow" | "circle" | "rect" | "polygon" | "text";
+    type: "line" | "arrow" | "circle" | "rect" | "polygon" | "text" | "pin";
     latlngs: LatLngTuple[];
     color?: string;
     stroke_width?: number;
@@ -139,6 +139,15 @@ function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
                 interactive: false,
             }).addTo(group);
             break;
+        case "pin": {
+            const sz = 32;
+            const html = `<span class="material-symbols-outlined" style="font-size:${sz}px;color:${color};text-shadow:0 1px 3px rgba(0,0,0,.4)">location_on</span>`;
+            L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
+                icon: L.divIcon({ className: "", html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz] }),
+                interactive: false,
+            }).addTo(group);
+            break;
+        }
     }
 }
 

@@ -82,6 +82,7 @@
         {% if form.password1.errors %}
         <ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>
         {% endif %}
+        {% include "dashboard/partials/auth/_passphrase_suggest.html" with password_input_id="id_password1" confirm_input_id="id_password2" %}
     </div>
 
     <div class="auth-field">

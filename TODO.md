@@ -90,7 +90,7 @@ Features planned for this release.
 * After converting a badge type, then switching tabs, the converted badge doesn't appear in the expected list. [UL-123]
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
 * Properly set up pre-commit hooks for linting, type checking, and security scans. [UL-15]
-* Password Requirements should be reasonably strong. [UL-130]
+* ~~Password Requirements should be reasonably strong. [UL-130]~~
 * User settings don't seem to properly save. [UL-34]
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 * ~~UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]~~
@@ -193,7 +193,7 @@ Features planned for future releases.
 * BUG: When loading main map, it initially loads a different location than the starting point, then after a second it refreshes. [UL-221]
 * "Import from map" feature to load pins from a different service (mapquest, google custom map, etc). Maybe? Does this encourage pin hoarding, or is it just useful? Is it even useful? [UL-222]
 * If task UL-222 is implemented, then we could have a "subscribe to map" feature that would automatically pull updates. [UL-223]
-* Using haveibeenpwned, do not allow the use of compromised passwords. (Is this overreach? Probably not, but maybe. We want to ensure the security of the site and its data as much as possible.) [UL-224]
+* ~~Using haveibeenpwned, do not allow the use of compromised passwords. (Is this overreach? Probably not, but maybe. We want to ensure the security of the site and its data as much as possible.) [UL-224]~~
 * On pin details page, when street view is unavailable, hide the section. [UL-225]
 * Gracefully handle slug changes when the pin (or location) name changes. This is relevant in cases where the slug was created with an incorrect or empty name, and we don't want to have its slug forever be "no-location" or "dropped-pin". [UL-226]
 * Ensure dialogs that are closed have their data cleared (this occurred on the trip details page) [UL-229]

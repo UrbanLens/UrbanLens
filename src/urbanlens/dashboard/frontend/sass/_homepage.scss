@@ -64,6 +64,7 @@ body.page-index {
         font-weight: 700;
         text-decoration: none;
         transition: background .15s, transform .1s, box-shadow .15s;
+        color: var(--ul-grey-9);
 
         &--primary {
             background: var(--ul-grey-0);

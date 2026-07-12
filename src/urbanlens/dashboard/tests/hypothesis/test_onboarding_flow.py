@@ -8,6 +8,8 @@ because the signal had already created the row.
 """
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 from django.urls import reverse
@@ -18,20 +20,24 @@ from urbanlens.dashboard.controllers.account import PostLoginRedirectView
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.model import Profile
 
+_HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
+_STRONG_PASSWORD = "Zebra-quilt-nexus-42!"
+
 
 class SignupProfileSetupCompleteTests(TestCase):
     """create_user_profile (the User post_save signal) sets profile_setup_complete=False."""
 
     def test_email_signup_sets_profile_setup_complete_false(self) -> None:
-        response = self.client.post(
-            reverse("signup"),
-            {
-                "username": "newexplorer",
-                "email": "newexplorer@example.com",
-                "password1": "correct horse battery staple 9",
-                "password2": "correct horse battery staple 9",
-            },
-        )
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self.client.post(
+                reverse("signup"),
+                {
+                    "username": "newexplorer",
+                    "email": "newexplorer@example.com",
+                    "password1": _STRONG_PASSWORD,
+                    "password2": _STRONG_PASSWORD,
+                },
+            )
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(username="newexplorer")
         # The signal already ran synchronously inside form.save() above -
@@ -40,15 +46,16 @@ class SignupProfileSetupCompleteTests(TestCase):
         self.assertFalse(user.profile.profile_setup_complete)
 
     def test_email_signup_sets_welcome_onboarding_complete_false(self) -> None:
-        self.client.post(
-            reverse("signup"),
-            {
-                "username": "anotherexplorer",
-                "email": "anotherexplorer@example.com",
-                "password1": "correct horse battery staple 9",
-                "password2": "correct horse battery staple 9",
-            },
-        )
+        with patch(_HIBP_PATCH, return_value=False):
+            self.client.post(
+                reverse("signup"),
+                {
+                    "username": "anotherexplorer",
+                    "email": "anotherexplorer@example.com",
+                    "password1": _STRONG_PASSWORD,
+                    "password2": _STRONG_PASSWORD,
+                },
+            )
         user = User.objects.get(username="anotherexplorer")
         self.assertFalse(user.profile.welcome_onboarding_complete)
 

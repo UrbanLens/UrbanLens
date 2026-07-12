@@ -370,6 +370,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
                 # Drop the GeoJSON closing point - the client re-closes polygons.
                 points = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
                 shape["latlngs"] = [[c[1], c[0]] for c in points]
+            elif self.markup_type == MarkupType.PIN:
+                shape["latlngs"] = [[coordinates[1], coordinates[0]]]
             else:
                 return None
         except (TypeError, IndexError, ValueError):
@@ -426,6 +428,9 @@ class PinMarkup(abstract.FrontendDashboardModel):
             ring = [[ll[1], ll[0]] for ll in latlngs]
             ring.append(ring[0])
             geometry = {"type": "Polygon", "coordinates": [ring]}
+        elif shape_type == "pin" and latlngs:
+            markup_type = MarkupType.PIN
+            geometry = {"type": "Point", "coordinates": [latlngs[0][1], latlngs[0][0]]}
 
         if markup_type is None or geometry is None:
             return None

@@ -292,3 +292,74 @@ body.page-auth {
         font-weight: 700;
     }
 }
+
+// -- Passphrase suggestions ------------------------------------------------
+.auth-password-help {
+    margin: .15rem 0 .35rem;
+}
+
+.auth-passphrase {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    margin-top: .15rem;
+}
+
+.auth-passphrase-btn {
+    align-self: flex-start;
+    background: transparent;
+    border: 1.5px solid var(--ul-grey-1a);
+    color: $color-indigo-700;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .4rem .7rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover:not(:disabled) {
+        border-color: $color-indigo-400;
+        background: $color-indigo-50;
+    }
+
+    &:disabled {
+        opacity: .6;
+        cursor: wait;
+    }
+}
+
+.auth-passphrase-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.auth-passphrase-option {
+    width: 100%;
+    text-align: left;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    padding: .55rem .75rem;
+    font-size: .85rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+    word-break: break-word;
+
+    &:hover {
+        border-color: $color-indigo-400;
+        background: $color-indigo-50;
+    }
+}
+
+.auth-passphrase-status {
+    margin: 0;
+
+    &--error {
+        color: $color-red-600;
+    }
+}

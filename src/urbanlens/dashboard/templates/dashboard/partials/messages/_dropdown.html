@@ -15,14 +15,14 @@ Navbar messages dropdown - recent conversations. Context: `conversations`
       <a class="msg-dropdown-item{% if conv.unread_count %} msg-dropdown-item--unread{% endif %}"
          href="{% url 'messages.conversation' conv.partner.slug %}">
         <span class="msg-avatar" aria-hidden="true">
-          {% if conv.partner.avatar %}
-          <img src="{{ conv.partner.avatar.url }}" alt="" class="msg-avatar-img">
+          {% if conv.display_avatar_url %}
+          <img src="{{ conv.display_avatar_url }}" alt="" class="msg-avatar-img">
           {% else %}
-          <span class="msg-avatar-initial">{{ conv.partner.username|first|upper }}</span>
+          <span class="msg-avatar-initial">{{ conv.display_name|first|upper }}</span>
           {% endif %}
         </span>
         <span class="msg-dropdown-item__text">
-          <span class="msg-dropdown-item__name">{{ conv.partner.username }}</span>
+          <span class="msg-dropdown-item__name">{{ conv.display_name }}</span>
           <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message.body|truncatechars:60 }}</span>
         </span>
         <span class="msg-dropdown-item__meta">

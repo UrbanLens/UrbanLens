@@ -116,6 +116,30 @@ class DirectMessage(abstract.DashboardModel):
             return False
         return timezone.now() >= self.read_at + delta
 
+    def tombstone_text_for(self, viewer_id: int) -> str | None:
+        """Return placeholder text to show `viewer_id` instead of this message's content.
+
+        The sender always sees their own original message in full, regardless
+        of any delete/expiry state - callers must never hide a message from
+        its own sender (see the module docstring's consent policy).
+
+        Args:
+            viewer_id: Primary key of the profile viewing this message.
+
+        Returns:
+            Tombstone text, or None if the message should render normally for
+            this viewer.
+        """
+        if viewer_id == self.sender_id:
+            return None
+        if self.deleted_by_sender_at is not None:
+            return "Message deleted"
+        if self.deleted_by_recipient_at is not None:
+            return "You removed this message"
+        if self.is_expired_for_recipient:
+            return "This message is no longer available"
+        return None
+
     def partner_for(self, profile: Profile) -> Profile:
         """Return the other participant of this message's conversation.
 

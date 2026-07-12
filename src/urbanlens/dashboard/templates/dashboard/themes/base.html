@@ -594,6 +594,9 @@
           <button type="button" class="cmc-tool-btn" data-tool="polygon" title="Polygon">
             <i class="material-symbols-outlined">pentagon</i>
           </button>
+          <button type="button" class="cmc-tool-btn cmc-locate-btn" id="cmc-pin-location" title="Pin my location">
+            <i class="material-symbols-outlined">my_location</i>
+          </button>
           <span class="cmc-toolbar-sep"></span>
           <button type="button" class="cmc-undo-btn" id="cmc-undo" title="Undo last shape">
             <i class="material-symbols-outlined">undo</i>
@@ -983,13 +986,36 @@
         });
 
         // -- Tool selection ----------------------------------------------------
-        document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
+        document.querySelectorAll('.cmc-tool-btn[data-tool]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 if (!_composerSession) return;
                 var tool = btn.dataset.tool;
                 if (_composerSession.getCurrentTool() === tool) { _composerSession.deactivate(); }
                 else { _composerSession.startTool(tool); }
             });
+        });
+
+        // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
+        document.getElementById('cmc-pin-location').addEventListener('click', function () {
+            if (!navigator.geolocation) {
+                toastr.warning('Geolocation is not available in this browser.');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    _composerShapes.push({
+                        type: 'pin',
+                        latlngs: [[pos.coords.latitude, pos.coords.longitude]],
+                        color: _colorPicker ? _colorPicker.value : '#e74c3c',
+                    });
+                    _redrawMarkup();
+                    if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
+                },
+                function () {
+                    toastr.warning("Couldn't get your location. Check your browser's location permission.");
+                },
+                { enableHighAccuracy: true, timeout: 10000 },
+            );
         });
 
         document.getElementById('cmc-undo').addEventListener('click', function () {

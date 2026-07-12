@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
-_ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text"}
+_ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text", "pin"}
 
 
 def _is_valid_lat(v: object) -> bool:

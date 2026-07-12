@@ -14,13 +14,26 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
+from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import can_direct_message, conversations_for, create_direct_message
+from urbanlens.dashboard.services.direct_messages import (
+    REACTION_PICKER_EMOJIS,
+    can_direct_message,
+    clear_email_debounce,
+    conversations_for,
+    create_direct_message,
+    delete_message_for_everyone,
+    delete_message_for_self,
+    display_identity_for,
+    is_profile_online,
+    mark_thread_open,
+    reaction_summary,
+    toggle_reaction,
+)
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -98,13 +111,59 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         Context dict for ``_thread.html``.
     """
     DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
-    thread_messages = DirectMessage.objects.between(profile, partner).select_related("sender", "sender__user", "recipient", "recipient__user")
+    clear_email_debounce(partner.pk, profile.pk)
+    mark_thread_open(profile.pk, partner.pk)
+    thread_messages = (
+        DirectMessage.objects.between(profile, partner)
+        .select_related(
+            "sender",
+            "sender__user",
+            "recipient",
+            "recipient__user",
+            "reply_to",
+            "reply_to__sender",
+            "share",
+            "share__pin_share",
+            "share__pin_share__pin",
+            "share__trip",
+            "share__trip_membership",
+            "share__recommended_profile",
+        )
+        .prefetch_related("images", "reactions__profile")
+    )
+    identity = display_identity_for(profile, partner)
+    partner_online = False
+    if not identity["is_anonymized"] and Profile.visibility_permits(partner.online_status_visibility, partner, profile):
+        partner_online = is_profile_online(partner)
     return {
         "partner": partner,
         "thread_messages": thread_messages,
         "can_message_partner": can_direct_message(profile, partner),
         "max_message_length": MAX_DIRECT_MESSAGE_LENGTH,
+        "my_slug": profile.slug or "",
+        "viewer_id": profile.pk,
+        "reaction_picker_emojis": REACTION_PICKER_EMOJIS,
+        "partner_online": partner_online,
+        "image_permission_status": _image_permission_status(profile, partner),
+        **identity,
     }
+
+
+def _image_permission_status(viewer: Profile, sender: Profile) -> str:
+    """Return `viewer`'s standing decision on images from `sender` ("pending" if none yet).
+
+    Args:
+        viewer: The profile who would be viewing the images.
+        sender: The profile who sent them.
+
+    Returns:
+        An ``ImagePermissionStatus`` value.
+    """
+    from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+    from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+
+    permission = DirectMessageImagePermission.objects.filter(viewer=viewer, sender=sender).first()
+    return permission.status if permission else ImagePermissionStatus.PENDING
 
 
 class MessagesPageView(LoginRequiredMixin, View):
@@ -192,14 +251,196 @@ class ConversationSendView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
+        image_ids = [int(v) for v in request.POST.getlist("image_ids") if v.isdigit()]
+        reply_to_raw = request.POST.get("reply_to", "")
         try:
-            create_direct_message(profile, partner, request.POST.get("body", ""))
+            create_direct_message(
+                profile,
+                partner,
+                request.POST.get("body", ""),
+                image_ids=image_ids,
+                markup_map_uuid=request.POST.get("markup_map_uuid") or None,
+                reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
+            )
         except ValueError as exc:
             # create_direct_message only raises ValueError with a fixed, developer-authored
             # message (blank/too-long body) - never a stack trace or sensitive data.
             return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
         except PermissionError as exc:
             return HttpResponseForbidden(str(exc))
+        response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
+        return _trigger_msg_badge_refresh(response)
+
+
+class DirectMessageImageUploadView(LoginRequiredMixin, View):
+    """POST /messages/upload-image/ - upload one photo attachment ahead of sending.
+
+    Mirrors ``PhotoUploadView``: creates an unattached ``Image`` (no
+    ``direct_message`` yet) so the client can upload as soon as a file is
+    picked. ``create_direct_message`` attaches it by id once the message is
+    actually sent - an upload with no matching send just leaves a harmless
+    unattached row, the same tradeoff other upload-then-attach flows make.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Create an unattached Image owned by the caller and queue metadata ingestion.
+
+        Args:
+            request: The HTTP request carrying an ``image`` file.
+
+        Returns:
+            JSON with the new image's ``id`` and ``url``, or a 400/413 error.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+        profile = _get_profile(request)
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return JsonResponse({"error": "No image provided."}, status=400)
+        if not (image_file.content_type or "").startswith("image/"):
+            return JsonResponse({"error": "That file is not an image."}, status=400)
+
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
+        checksum = compute_checksum(image_file)
+        image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, image.pk)
+        return JsonResponse({"id": image.pk, "url": image.image.url}, status=201)
+
+
+class MessageReactionToggleView(LoginRequiredMixin, View):
+    """POST /messages/<profile_slug>/react/<message_id>/ - toggle an emoji reaction.
+
+    Args come from the POST body (``emoji``). Broadcasts the message's updated
+    reaction summary to both participants over the WebSocket (see
+    ``services.direct_messages.toggle_reaction``); the response itself is the
+    re-rendered reaction-bar partial, used to update the acting client's own
+    UI immediately without waiting on the WS round-trip.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
+        """Toggle the caller's reaction and return the refreshed reaction bar.
+
+        Args:
+            request: The incoming request. Reads ``emoji``.
+            profile_slug: Slug of the conversation partner (scopes the lookup).
+            message_id: PK of the message being reacted to.
+
+        Returns:
+            The rendered reaction-bar partial, or 400/403/404 on failure.
+        """
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        message = get_object_or_404(DirectMessage.objects.between(profile, partner), pk=message_id)
+
+        emoji = request.POST.get("emoji", "").strip()[:10]
+        if not emoji:
+            return HttpResponseBadRequest("An emoji is required.")
+
+        try:
+            toggle_reaction(profile, message, emoji)
+        except PermissionError as exc:
+            return HttpResponseForbidden(str(exc))
+
+        return render(
+            request,
+            "dashboard/partials/messages/_message_reactions.html",
+            {
+                "message": message,
+                "reactions": reaction_summary(message),
+                "my_slug": profile.slug or "",
+                "partner": partner,
+                "reaction_picker_emojis": REACTION_PICKER_EMOJIS,
+            },
+        )
+
+
+class MessageDeleteView(LoginRequiredMixin, View):
+    """POST /messages/<profile_slug>/delete/<message_id>/ - delete or hide one message.
+
+    ``scope=everyone`` (only valid for the message's sender) tombstones it for
+    the recipient - the sender always keeps their own copy. ``scope=self``
+    (only valid for the message's recipient) hides it from that recipient's
+    own view only, leaving the sender's copy and any pending `@`-mention
+    share completely untouched.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
+        """Apply the requested delete scope and return the refreshed thread.
+
+        Args:
+            request: The incoming request. Reads ``scope`` (``everyone`` or ``self``).
+            profile_slug: Slug of the conversation partner.
+            message_id: PK of the message to delete.
+
+        Returns:
+            The re-rendered thread partial, or 400/403 on failure.
+        """
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        message = get_object_or_404(DirectMessage.objects.between(profile, partner), pk=message_id)
+
+        scope = request.POST.get("scope", "")
+        try:
+            if scope == "everyone":
+                delete_message_for_everyone(message, profile)
+            elif scope == "self":
+                delete_message_for_self(message, profile)
+            else:
+                return HttpResponseBadRequest("Unknown delete scope.")
+        except PermissionError as exc:
+            return HttpResponseForbidden(str(exc))
+
+        response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
+        return _trigger_msg_badge_refresh(response)
+
+
+class MessageImagePermissionView(LoginRequiredMixin, View):
+    """POST /messages/<profile_slug>/image-permission/ - respond to the image-consent prompt.
+
+    ``decision=allow`` and ``decision=reject`` set a standing decision for
+    every future image from that sender. ``decision=allow_once`` (with
+    ``message_id``) reveals just that one message's images without changing
+    the standing decision.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+        """Apply the recipient's image-consent decision and return the refreshed thread.
+
+        Args:
+            request: The incoming request. Reads ``decision`` and, for
+                ``allow_once``, ``message_id``.
+            profile_slug: Slug of the conversation partner (the image sender).
+
+        Returns:
+            The re-rendered thread partial, or 400 for an unknown decision.
+        """
+        from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+        from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        decision = request.POST.get("decision", "")
+
+        if decision == "allow":
+            DirectMessageImagePermission.objects.update_or_create(viewer=profile, sender=partner, defaults={"status": ImagePermissionStatus.ALLOWED})
+        elif decision == "reject":
+            DirectMessageImagePermission.objects.update_or_create(viewer=profile, sender=partner, defaults={"status": ImagePermissionStatus.REJECTED})
+        elif decision == "allow_once":
+            message_id = request.POST.get("message_id", "")
+            if message_id.isdigit():
+                DirectMessage.objects.filter(pk=message_id, sender=partner, recipient=profile).update(images_revealed=True)
+        else:
+            return HttpResponseBadRequest("Unknown decision.")
+
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_badge_refresh(response)
 
@@ -227,6 +468,7 @@ class ConversationReadView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
         DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
+        clear_email_debounce(partner.pk, profile.pk)
         return _trigger_msg_badge_refresh(DjangoHttpResponse(status=204))
 
 

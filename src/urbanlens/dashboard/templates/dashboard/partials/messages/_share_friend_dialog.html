@@ -1,0 +1,42 @@
+{% comment %}
+`@friend` recommendation dialog: pick one of the sender's own friends to
+recommend to the conversation partner. Context: `partner`, `friends`.
+{% endcomment %}
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="friend"
+        data-submit-url="{% url 'messages.share.friend' partner.slug %}" data-field-name="recommended_slug">
+  <div class="dialog-header">
+    <span>Recommend a friend to {{ partner.username }}</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+
+  <div class="dm-share-step dm-share-step--pick">
+    <input type="search" class="dm-share-filter" placeholder="Search your friends..." oninput="window.dmFilterShareList(this)">
+    <ul class="dm-share-list">
+      {% for friend in friends %}
+      <li class="dm-share-list-item" data-search="{{ friend.username|lower }}">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ friend.slug }}" data-label="{{ friend.username }}" onclick="window.dmSharePick(this)">
+          <span class="msg-avatar" aria-hidden="true">
+            {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
+          </span>
+          {{ friend.username }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not friends %}<p class="dm-share-empty">You don't have any friends to recommend yet.</p>{% endif %}
+  </div>
+
+  <div class="dm-share-step dm-share-step--confirm" hidden>
+    <p class="dm-share-confirm-summary">
+      Recommend <strong class="dm-share-confirm-label"></strong> to {{ partner.username }}?
+      Their profile will show under your message, and {{ partner.username }} will be able to view it for a day to decide whether to connect.
+    </p>
+    <textarea class="dm-share-message" placeholder="Add a message (optional)" maxlength="2000"></textarea>
+    <div class="dm-share-confirm-actions">
+      <button type="button" class="btn btn--ghost dm-share-back-btn">Back</button>
+      <button type="button" class="btn btn--primary dm-share-send-btn">Send recommendation</button>
+    </div>
+  </div>
+</dialog>

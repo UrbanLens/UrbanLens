@@ -31,6 +31,91 @@ def in_list(value: Any, collection: Collection[Any]) -> bool:
 
 
 @register.filter
+def reaction_summary(message: Any) -> list[dict[str, Any]]:
+    """Group a DirectMessage's reactions by emoji for template rendering.
+
+    Usage: {{ message|reaction_summary }}
+
+    Relies on the caller having `prefetch_related("reactions__profile")` on
+    the message queryset to avoid N+1 queries across a thread.
+    """
+    from urbanlens.dashboard.services.direct_messages import reaction_summary as _reaction_summary
+
+    return _reaction_summary(message)
+
+
+@register.filter
+def tombstone_text(message: Any, viewer_id: int) -> str | None:
+    """Return tombstone text for `message` as seen by `viewer_id`, or None if it renders normally.
+
+    Usage: {{ message|tombstone_text:viewer_id }}
+    """
+    return message.tombstone_text_for(viewer_id)
+
+
+@register.filter
+def message_preview(message: Any, viewer_id: int) -> str:
+    """Short preview text for a DirectMessage, honoring its tombstone state for `viewer_id`.
+
+    Used for reply-quote boxes so a quoted message that's been deleted or has
+    expired for the viewer shows the same placeholder as the original bubble
+    would, rather than leaking its content through the quote.
+
+    Usage: {{ message|message_preview:viewer_id }}
+    """
+    tombstone = message.tombstone_text_for(viewer_id)
+    if tombstone:
+        return tombstone
+    if message.body:
+        return message.body[:80]
+    if message.images.exists():
+        return "📷 Photo"
+    if message.markup_map_id:
+        return "🗺️ Map"
+    return "Message"
+
+
+@register.filter
+def read_receipt_visible_to(message: Any, viewer_id: int) -> bool:
+    """True if `viewer_id` (as this message's sender) may see that it's been read.
+
+    Usage: {{ message|read_receipt_visible_to:viewer_id }}
+
+    Gated on the *recipient's* `read_receipt_visibility` setting toward the
+    sender - the underlying `read_at` timestamp is always recorded (needed for
+    disappearing-message timing) regardless of whether it's ever shown.
+    """
+    if message.sender_id != viewer_id or message.read_at is None:
+        return False
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    return Profile.visibility_permits(message.recipient.read_receipt_visibility, message.recipient, message.sender)
+
+
+@register.filter
+def first_pin_directions_url(map_data: Any) -> str | None:
+    """Return a Google Maps walking-directions URL for the first "pin" item in a map snapshot.
+
+    Usage: {{ map_data|first_pin_directions_url }}
+
+    Args:
+        map_data: A MarkupMap snapshot dict (see `MarkupMap.to_snapshot`).
+
+    Returns:
+        A `google.com/maps/dir` URL, or None if the snapshot has no pin item.
+    """
+    if not isinstance(map_data, dict):
+        return None
+    for shape in map_data.get("markup") or []:
+        if isinstance(shape, dict) and shape.get("type") == "pin":
+            latlngs = shape.get("latlngs") or []
+            if latlngs and len(latlngs[0]) >= 2:
+                lat, lng = latlngs[0][0], latlngs[0][1]
+                return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=walking"
+    return None
+
+
+@register.filter
 def tag_total_pins(tag: Badge) -> int:
     """Return direct pin count plus all direct children's pin counts.
 

@@ -648,3 +648,30 @@ def fetch_panel_source(source_key: str, pin_id: int) -> None:
         logger.info("fetch_panel_source: pin %s no longer exists", pin_id)
         return
     run_panel_fetch(source_key, pin)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_direct_message_email_if_unread(message_id: int) -> None:
+    """Send the delayed "new message" email, unless it's since been read or already sent.
+
+    Scheduled by ``services.direct_messages._schedule_message_email`` with a
+    countdown, giving a logged-in recipient a chance to read the message
+    organically first. No-ops if the message was read in the meantime, or if
+    an earlier message in the same unread streak already triggered this email
+    (``services.direct_messages.send_message_email_now`` sets that marker).
+
+    Args:
+        message_id: PK of the message to check and possibly email about.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.direct_messages import is_email_debounced, send_message_email_now
+
+    try:
+        message = DirectMessage.objects.select_related("sender", "recipient__user").get(pk=message_id)
+    except DirectMessage.DoesNotExist:
+        return
+    if message.read_at is not None:
+        return
+    if is_email_debounced(message.sender_id, message.recipient_id):
+        return
+    send_message_email_now(message)

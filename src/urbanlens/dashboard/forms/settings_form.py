@@ -2,6 +2,7 @@
 
 from django import forms
 
+from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.profile.model import (
     DistanceUnit,
     GuidanceLevel,
@@ -128,6 +129,58 @@ class PrivacySettingsForm(forms.ModelForm):
         if self.instance is not None and not self.instance.community_enabled:
             for field in self.fields.values():
                 field.disabled = True
+
+
+class DirectMessageSettingsForm(forms.ModelForm):
+    """Controls direct-message presence privacy, disappearing messages, and friend recommendations."""
+
+    online_status_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Online Status",
+        help_text="Who can see when you're online in direct messages.",
+    )
+    read_receipt_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Read Receipts",
+        help_text="Who can see that you've read their direct messages.",
+    )
+    typing_indicator_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Typing Indicator",
+        help_text="Who can see when you're typing a reply.",
+    )
+    direct_message_delete_after = forms.ChoiceField(
+        choices=MessageRetentionChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Delete My Messages After",
+        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+    )
+    allow_friend_recommendations = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Allow Friend Recommendations",
+        help_text="Let other users recommend you as a friend to people they're messaging.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "online_status_visibility",
+            "read_receipt_visibility",
+            "typing_indicator_visibility",
+            "direct_message_delete_after",
+            "allow_friend_recommendations",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        """Disable the visibility fields while Community is off, mirroring PrivacySettingsForm."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for name in ("online_status_visibility", "read_receipt_visibility", "typing_indicator_visibility"):
+                self.fields[name].disabled = True
 
 
 class ContactSettingsForm(forms.Form):

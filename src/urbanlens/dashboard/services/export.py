@@ -32,6 +32,7 @@ VALID_EXPORT_TYPES = frozenset(
         "settings",
         "custom_fields",
         "google_takeout",
+        "direct_messages",
     },
 )
 
@@ -47,6 +48,7 @@ _ORDERED_TYPES = [
     "comments",
     "photos",
     "trips",
+    "direct_messages",
 ]
 
 
@@ -153,6 +155,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         "comments": (_export_comments, "Exporting comments..."),
         "photos": (_export_photos, "Exporting photos..."),
         "trips": (_export_trips, "Exporting trips..."),
+        "direct_messages": (_export_direct_messages, "Exporting direct messages..."),
     }
 
     try:
@@ -281,6 +284,12 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
             "viewer_photo_filter": profile.viewer_photo_filter,
             "trip_pin_location_visibility": profile.trip_pin_location_visibility,
             "contact_visibility": profile.contact_visibility,
+            "direct_message_visibility": profile.direct_message_visibility,
+            "online_status_visibility": profile.online_status_visibility,
+            "read_receipt_visibility": profile.read_receipt_visibility,
+            "typing_indicator_visibility": profile.typing_indicator_visibility,
+            "direct_message_delete_after": profile.direct_message_delete_after,
+            "allow_friend_recommendations": profile.allow_friend_recommendations,
         },
     }
     with open(os.path.join(temp_dir, "settings.json"), "w", encoding="utf-8") as fh:
@@ -478,6 +487,58 @@ def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> N
         )
 
     with open(os.path.join(temp_dir, "connections.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
+
+
+def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export every direct message the user sent or received, one row per message.
+
+    The exporting user's own content (body, attachments, whether they sent or
+    received it) is always included in full - "they should always be able to
+    see their own messages". The conversation partner's identity is passed
+    through `display_identity_for`, the same check the messages page itself
+    uses, so an export never reveals a partner's name/avatar beyond what the
+    user could currently see on screen (e.g. after being blocked or a privacy
+    change). Tombstoned/expired message bodies are also masked per the
+    viewer's own tombstone rules, for the same reason.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.direct_messages import display_identity_for
+
+    messages = (
+        DirectMessage.objects.involving(profile)
+        .select_related("sender", "recipient")
+        .prefetch_related("images")
+        .order_by("created")
+    )
+
+    identity_cache: dict[int, dict[str, Any]] = {}
+
+    def _identity(partner: Any) -> dict[str, Any]:
+        if partner.pk not in identity_cache:
+            identity_cache[partner.pk] = display_identity_for(profile, partner)
+        return identity_cache[partner.pk]
+
+    rows = []
+    for message in messages:
+        is_sender = message.sender_id == profile.pk
+        partner = message.recipient if is_sender else message.sender
+        tombstone = message.tombstone_text_for(profile.pk)
+        rows.append(
+            {
+                "id": message.pk,
+                "direction": "sent" if is_sender else "received",
+                "partner_display_name": _identity(partner)["display_name"],
+                "body": tombstone or message.body,
+                "is_tombstoned": bool(tombstone),
+                "image_count": message.images.count() if not tombstone else 0,
+                "has_map": bool(message.markup_map_id) and not tombstone,
+                "created": str(message.created),
+                "read": message.read_at is not None,
+            },
+        )
+
+    with open(os.path.join(temp_dir, "direct_messages.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 

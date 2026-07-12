@@ -1,0 +1,61 @@
+{% comment %}
+Inline card for an `@pin`/`@trip`/`@friend` share attached to a message.
+Context: `share` (DirectMessageShare), `viewer_id`, `partner`.
+
+Accept/reject/RSVP/friend-request actions reuse the existing full endpoints
+(plain form posts, normal navigation) rather than duplicating their
+accept/deny logic here - this card is a chat-native entry point into flows
+that already exist elsewhere in the app.
+{% endcomment %}
+<div class="dm-share-card">
+  {% if share.kind == "pin" and share.pin_share %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">location_on</i>
+    <span class="dm-share-card__label">{{ share.pin_share.pin.display_label }}</span>
+  </div>
+  {% if share.pin_share.status == "pending" %}
+  {% if share.message.recipient_id == viewer_id %}
+  <form method="post" action="{% url 'pin.share.respond' share.pin_share.id %}" class="dm-share-card__actions">
+    {% csrf_token %}
+    <button type="submit" name="action" value="accept" class="btn btn--primary btn--sm">Accept</button>
+    <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Reject</button>
+  </form>
+  {% else %}
+  <p class="dm-share-card__status">Waiting on {{ share.message.recipient.username }}.</p>
+  {% endif %}
+  {% elif share.pin_share.status == "already_pinned" %}
+  <p class="dm-share-card__status">{{ share.message.recipient.username }} already has this pinned.</p>
+  {% elif share.pin_share.status == "accepted" %}
+  <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to their map.</p>
+  {% elif share.pin_share.status == "rejected" %}
+  <p class="dm-share-card__status">Declined.</p>
+  {% endif %}
+
+  {% elif share.kind == "trip" and share.trip %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">luggage</i>
+    <a class="dm-share-card__label" href="{% url 'trips.detail' share.trip.uuid %}">{{ share.trip.name }}</a>
+  </div>
+  {% if share.trip_membership and share.trip_membership.rsvp is None %}
+  <p class="dm-share-card__status">
+    <a href="{% url 'trips.detail' share.trip.uuid %}" class="btn btn--primary btn--sm">View invite &amp; RSVP</a>
+  </p>
+  {% elif share.trip_membership %}
+  <p class="dm-share-card__status">RSVP: {{ share.trip_membership.get_rsvp_display|default:"No response" }}</p>
+  {% endif %}
+
+  {% elif share.kind == "friend" and share.recommended_profile %}
+  <div class="dm-share-card__row dm-share-card__profile">
+    <span class="msg-avatar" aria-hidden="true">
+      {% if share.recommended_profile.avatar %}<img src="{{ share.recommended_profile.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ share.recommended_profile.username|first|upper }}</span>{% endif %}
+    </span>
+    <a class="dm-share-card__label" href="{% url 'profile.view_user' share.recommended_profile.slug %}">{{ share.recommended_profile.username }}</a>
+  </div>
+  {% if share.message.recipient_id == viewer_id %}
+  <form method="post" action="{% url 'friend.request' share.recommended_profile.id %}" class="dm-share-card__actions">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--primary btn--sm">Add Friend</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</div>
