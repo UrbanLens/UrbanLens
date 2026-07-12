@@ -613,8 +613,9 @@
         strip.hidden = false;
     }
 
-    renderRecentStrip('ul_recent_pins_v1', 'profile-recent-pins-strip', '[data-recent-pins]', 'push_pin', 'Recently viewed');
-    renderRecentStrip('ul_recent_wikis_v1', 'profile-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
+    var recentHistoryProfileId = '{{ profile.id }}';
+    renderRecentStrip('ul_recent_pins_v1_' + recentHistoryProfileId, 'profile-recent-pins-strip', '[data-recent-pins]', 'push_pin', 'Recently viewed');
+    renderRecentStrip('ul_recent_wikis_v1_' + recentHistoryProfileId, 'profile-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
 
 }());
 

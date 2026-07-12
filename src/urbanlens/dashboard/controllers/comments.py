@@ -8,7 +8,8 @@ import re
 from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.db.models import Q
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import NoReverseMatch, reverse
 from django.views import View
@@ -28,6 +29,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki_access import location_visible_to
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
@@ -266,7 +268,17 @@ class CommentReactionView(LoginRequiredMixin, View):
 
     def post(self, request, comment_id):
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id)
+        # Only comments the user can actually see: comments on their own pins,
+        # or on wikis for locations they have pinned themselves. An unscoped
+        # id lookup would let sequential-id probing react to (and read
+        # reaction rows of) comments on private pins or wikis the requester
+        # can't otherwise view.
+        comment = get_object_or_404(
+            Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location"),
+            id=comment_id,
+        )
+        if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
+            raise Http404
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)

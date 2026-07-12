@@ -139,6 +139,23 @@ class CommentReactionScopingTests(TestCase):
         comment = baker.make(Comment, pin=pin, wiki=None, profile=self.other.profile)
         self.assertEqual(self._react(comment.id).status_code, 404)
 
+    def test_can_react_to_wiki_comment_for_pinned_location(self) -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        pin = baker.make(Pin, profile=self.user.profile)
+        wiki = baker.make(Wiki, location=pin.location)
+        comment = baker.make(Comment, pin=None, wiki=wiki, profile=self.other.profile)
+        self.assertEqual(self._react(comment.id).status_code, 200)
+
+    def test_cannot_react_to_wiki_comment_for_unpinned_location(self) -> None:
+        """A wiki comment id must not act as an oracle for un-pinned wikis (matches resolve_visible_wiki)."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        pin = baker.make(Pin, profile=self.other.profile)
+        wiki = baker.make(Wiki, location=pin.location)
+        comment = baker.make(Comment, pin=None, wiki=wiki, profile=self.other.profile)
+        self.assertEqual(self._react(comment.id).status_code, 404)
+
 
 class TripCommentReactionMembershipTests(TestCase):
     """Trip comment reactions require trip membership."""

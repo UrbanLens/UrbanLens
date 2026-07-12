@@ -311,7 +311,7 @@
 <script>
 (function () {
     try {
-        var key = 'ul_recent_wikis_v1';
+        var key = 'ul_recent_wikis_v1_{{ request.user.profile.id }}';
         var entry = {
             slug: '{{ location.slug|escapejs }}',
             title: '{{ wiki.name|escapejs }}',

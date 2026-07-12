@@ -800,8 +800,8 @@
     gap: .2rem;
     padding: .4rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-card-bg, #fff);
+    border: 1px solid var(--ul-grey-2);
+    background: var(--ul-grey-1);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
     width: max-content;
     max-width: 220px;
@@ -837,8 +837,8 @@
     min-width: 150px;
     padding: .25rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-card-bg, #fff);
+    border: 1px solid var(--ul-grey-2);
+    background: var(--ul-grey-1);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 
     &[hidden] {
@@ -950,8 +950,8 @@
     min-width: 200px;
     padding: .3rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-card-bg, #fff);
+    border: 1px solid var(--ul-grey-2);
+    background: var(--ul-grey-1);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 
     button {
