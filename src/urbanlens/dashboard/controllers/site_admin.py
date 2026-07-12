@@ -513,6 +513,24 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             },
         )
 
+    def _grants_list_response(self, request: HttpRequest, *, toast: tuple[str, str] | None = None) -> HttpResponse:
+        """Re-render the "Your active grants" partial, optionally with a toast.
+
+        Args:
+            request: The current request (used for ``request.user`` scoping).
+            toast: Optional (level, message) toast to trigger via HX-Trigger.
+
+        Returns:
+            The rendered grants-list partial.
+        """
+        from urbanlens.dashboard.models.subscriptions import UserSubscription
+
+        grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
+        response = render(request, "dashboard/partials/site_admin/_subscription_grants_list.html", {"grants": grants})
+        if toast:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": toast[0], "message": toast[1]}})
+        return response
+
     def post(self, request: HttpRequest):
         from urbanlens.dashboard.models.subscriptions import SubscriptionRole, UserSubscription, grant_subscription
 
@@ -520,9 +538,13 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseForbidden()
 
         SubscriptionRole.ensure_defaults()
+        is_htmx = bool(request.headers.get("HX-Request"))
         action = request.POST.get("action", "grant")
+
         if action == "revoke":
             UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).update(revoked_at=timezone.now())
+            if is_htmx:
+                return self._grants_list_response(request, toast=("info", "Subscription revoked."))
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
 
         if action == "update":
@@ -530,11 +552,17 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             if sub:
                 sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
                 sub.save(update_fields=["expires_at", "updated"])
+            if is_htmx:
+                return self._grants_list_response(request, toast=("success", "Subscription updated."))
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
 
         if action == "role_quota":
             role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
             if role is None:
+                if is_htmx:
+                    response = HttpResponse(status=404)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
+                    return response
                 return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
             raw_quota = (request.POST.get("storage_quota_gb") or "").strip()
             if raw_quota == "":
@@ -543,13 +571,25 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 try:
                     quota = max(0, int(raw_quota))
                 except (ValueError, TypeError):
+                    if is_htmx:
+                        response = HttpResponse(status=400)
+                        response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Storage quota must be a whole number of GB."}})
+                        return response
                     return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Storage quota must be a whole number of GB."}))
             SubscriptionRole.objects.filter(pk=role.pk).update(storage_quota_gb=quota)
+            if is_htmx:
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_quota", "role": role.slug}})
+                return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
 
         if action == "role_email_limits":
             role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
             if role is None:
+                if is_htmx:
+                    response = HttpResponse(status=404)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
+                    return response
                 return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
             updates: dict[str, int | None] = {}
             for field in ("email_limit_per_hour", "email_limit_per_day", "email_limit_per_month"):
@@ -560,16 +600,30 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 try:
                     updates[field] = max(0, int(raw))
                 except (ValueError, TypeError):
+                    if is_htmx:
+                        response = HttpResponse(status=400)
+                        response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Email limits must be whole numbers."}})
+                        return response
                     return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Email limits must be whole numbers."}))
             SubscriptionRole.objects.filter(pk=role.pk).update(**updates)
+            if is_htmx:
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_email_limits", "role": role.slug}})
+                return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
 
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
         user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
         if not identifier or not role or not user:
+            if is_htmx:
+                response = self._grants_list_response(request, toast=("error", "User or role not found."))
+                response.status_code = 400
+                return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "User or role not found."}))
         grant_subscription(user, role, request.user, _parse_duration_months(request.POST.get("duration_months")))
+        if is_htmx:
+            return self._grants_list_response(request, toast=("success", f"Granted {role.name} to {user.username}."))
         return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=granted")
 
 
