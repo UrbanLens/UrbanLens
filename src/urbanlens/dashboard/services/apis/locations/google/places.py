@@ -92,6 +92,63 @@ class GooglePlacesGateway(Gateway):
         response.raise_for_status()
         return response.json().get("result", {})
 
+    def find_nearest_place_id(self, latitude: float, longitude: float, radius: float = 75) -> str | None:
+        """Find the Google Place id nearest a set of coordinates - never by name.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius: Search radius in metres; kept tight so the match stays
+                tied to the actual pinned building rather than a nearby,
+                unrelated place.
+
+        Returns:
+            The nearest place's id, or None when nothing was found.
+        """
+        results = self.search_nearby(latitude, longitude, radius=radius, max_results=1)
+        return results[0]["id"] if results else None
+
+    def get_place_photo_names(self, place_id: str, max_photos: int = 10) -> list[str]:
+        """Fetch the Places API (New) ``photos[].name`` identifiers for a place.
+
+        Each name is an opaque resource path (e.g. ``places/ChIJ.../photos/AelY...``)
+        used with :meth:`get_photo_media` to fetch the actual image bytes -
+        never expose these URLs directly to the browser since resolving them
+        requires the API key.
+
+        Args:
+            place_id: The Google Place id.
+            max_photos: Maximum number of photo names to return.
+
+        Returns:
+            Up to ``max_photos`` photo resource names; empty when the place
+            has none on file.
+        """
+        url = f"https://places.googleapis.com/v1/places/{place_id}"
+        headers = {"X-Goog-Api-Key": self.api_key, "X-Goog-FieldMask": "photos"}
+        response = self.session.get(url, headers=headers)
+        response.raise_for_status()
+        photos = response.json().get("photos", [])
+        return [p["name"] for p in photos[:max_photos] if p.get("name")]
+
+    def get_photo_media(self, photo_name: str, max_width: int = 1200) -> tuple[bytes, str]:
+        """Fetch the raw bytes of one Places API (New) photo.
+
+        Server-side only - the API key must never reach the browser.
+
+        Args:
+            photo_name: A resource name from :meth:`get_place_photo_names`.
+            max_width: Maximum width in pixels for the returned image.
+
+        Returns:
+            Tuple of (image bytes, Content-Type header value).
+        """
+        url = f"https://places.googleapis.com/v1/{photo_name}/media"
+        params = {"maxWidthPx": max_width, "key": self.api_key}
+        response = self.session.get(url, params=params, stream=True)
+        response.raise_for_status()
+        return response.content, response.headers.get("Content-Type", "image/jpeg")
+
     def get_place_photos(self, photoreference, max_width=None):
         photo_url = "https://maps.googleapis.com/maps/api/place/photo"
         params = {

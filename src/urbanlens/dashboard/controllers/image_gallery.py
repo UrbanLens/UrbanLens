@@ -79,6 +79,10 @@ class PinGalleryView(LoginRequiredMixin, View):
             "context_type": "pin",
             "include_children": include_children,
             "extra_query": "children=1" if include_children else "",
+            "photo_bulk_actions": [
+                {"action": "delete", "icon": "delete", "label": "Delete"},
+                {"action": "wiki", "icon": "public", "label": "Send to wiki"},
+            ],
         }
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -133,6 +137,73 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
                 entry["child_pin_name"] = img.pin.effective_name
             data.append(entry)
         return JsonResponse({"images": data})
+
+
+class PinGalleryBulkView(LoginRequiredMixin, View):
+    """Bulk actions over a pin's own gallery photos: delete, or send to wiki.
+
+    Backs the Photo gallery's multi-select floating toolbar. Only the
+    profile's own uploads on this pin are eligible - selecting someone
+    else's (child-pin, in the ``?children=1`` view) photo id is silently
+    ignored rather than erroring, since the toolbar only ever offers these
+    actions on the viewer's own tiles.
+    """
+
+    def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            data = json.loads(request.body)
+            action = data["action"]
+            image_ids = [int(i) for i in data.get("image_ids", [])]
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        images = Image.objects.filter(pk__in=image_ids, pin=pin, profile=profile)
+
+        if action == "delete":
+            count = 0
+            for img in images:
+                img.image.delete(save=False)
+                img.delete()
+                count += 1
+            return JsonResponse({"deleted": count})
+
+        if action == "send_to_wiki":
+            wiki = _wiki_for_location(pin.location)
+            if wiki is None:
+                return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
+            count = images.exclude(wiki=wiki).update(wiki=wiki)
+            return JsonResponse({"updated": count})
+
+        return JsonResponse({"error": "Unknown action."}, status=400)
+
+
+class PinCoverPhotoView(LoginRequiredMixin, View):
+    """Set or clear a pin's hero-banner cover photo."""
+
+    def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        try:
+            data = json.loads(request.body)
+            image_id = data.get("image_id")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        if image_id is None:
+            pin.cover_photo = None
+            pin.save(update_fields=["cover_photo", "updated"])
+            return JsonResponse({"cover_photo": None})
+
+        # Any image tied to this pin's own gallery, or already associated
+        # with its Location (e.g. a Media-gallery item materialized via
+        # "send to wiki" or a prior cover-photo pick), is eligible.
+        image = get_object_or_404(Image, pk=image_id)
+        if image.pin_id != pin.pk and image.location_id != pin.location_id:
+            raise Http404
+        pin.cover_photo = image
+        pin.save(update_fields=["cover_photo", "updated"])
+        return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
 
 
 class PinImageView(LoginRequiredMixin, View):
@@ -227,6 +298,37 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
+
+
+class WikiCoverPhotoView(LoginRequiredMixin, View):
+    """Set or clear a wiki's hero-banner cover photo.
+
+    Any logged-in user may set it - the wiki is community content editable
+    by everyone, matching the rest of the wiki edit surface (comments,
+    markup, aliases). Each viewer's own ``show_wiki_cover_photos`` preference
+    (see the pin detail template) independently controls whether they see it.
+    """
+
+    def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        location = get_object_or_404(Location, slug=location_slug)
+        wiki = get_object_or_404(Wiki, location=location)
+        try:
+            data = json.loads(request.body)
+            image_id = data.get("image_id")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        if image_id is None:
+            wiki.cover_photo = None
+            wiki.save(update_fields=["cover_photo", "updated"])
+            return JsonResponse({"cover_photo": None})
+
+        image = get_object_or_404(Image, pk=image_id)
+        if image.wiki_id != wiki.pk and image.location_id != location.pk:
+            raise Http404
+        wiki.cover_photo = image
+        wiki.save(update_fields=["cover_photo", "updated"])
+        return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
 
 
 class WikiImageView(LoginRequiredMixin, View):

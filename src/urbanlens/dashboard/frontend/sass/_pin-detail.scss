@@ -3032,6 +3032,10 @@ body.page-location-details .pin-detail-grid {
     }
 
     .media-gallery {
+        .card-header {
+            position: relative;
+        }
+
         .media-gallery-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
@@ -3133,6 +3137,374 @@ body.page-location-details .pin-detail-grid {
             color: var(--ul-grey-7, #475569);
             background: var(--ul-grey-1, #f8fafc);
             border-top: 1px solid var(--ul-grey-1a, #e2e8f0);
+        }
+
+        // The whole tile used to be an <a>; the thumbnail is now a plain
+        // button (click opens the lightbox) so it must reset every default
+        // button style to keep the tile looking identical to before.
+        .media-item-thumb-btn {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 0;
+            border: none;
+            background: none;
+            font: inherit;
+            color: inherit;
+            text-align: inherit;
+            cursor: pointer;
+        }
+
+        // -- Not-relevant / hidden state -------------------------------------
+        .media-item--not-relevant {
+            display: none;
+        }
+        .media-gallery--show-hidden .media-item--not-relevant {
+            display: flex;
+            opacity: .55;
+        }
+        .media-gallery--only-relevant .media-item:not(.media-item--relevant) {
+            display: none;
+        }
+
+        // -- Per-tile hover actions (open source / relevant / not relevant) --
+        .media-item-actions {
+            position: absolute;
+            right: .35rem;
+            bottom: .35rem;
+            z-index: 2;
+            display: flex;
+            gap: .25rem;
+            opacity: 0;
+            transform: translateY(2px);
+            transition: opacity .15s ease, transform .15s ease;
+            pointer-events: none;
+        }
+        .media-item:hover .media-item-actions,
+        .media-item:focus-within .media-item-actions {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .media-item-action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.7rem;
+            height: 1.7rem;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, .72);
+            color: #fff;
+            cursor: pointer;
+            backdrop-filter: blur(2px);
+            transition: background .12s ease, transform .12s ease;
+
+            .material-symbols-outlined {
+                font-size: 1rem;
+            }
+
+            &:hover {
+                background: rgba(15, 23, 42, .9);
+                transform: scale(1.08);
+            }
+
+            &.is-active {
+                background: var(--ul-primary, #2563eb);
+            }
+        }
+        .media-item-not-relevant-btn.is-active {
+            background: var(--ul-danger, #dc2626);
+        }
+
+        // -- Multi-select mode -------------------------------------------------
+        .media-item-select-check {
+            position: absolute;
+            top: .4rem;
+            right: .4rem;
+            z-index: 3;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 1.5rem;
+            height: 1.5rem;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .85);
+            color: var(--ul-grey-4, #94a3b8);
+            cursor: pointer;
+
+            .material-symbols-outlined {
+                font-size: 1.15rem;
+            }
+        }
+        .media-gallery--selecting .media-item-select-check {
+            display: flex;
+        }
+        .media-item.is-selected {
+            outline: 2px solid var(--ul-primary, #2563eb);
+            outline-offset: -2px;
+        }
+        .media-item.is-selected .media-item-select-check {
+            color: var(--ul-primary, #2563eb);
+        }
+
+        // -- Source tabs ---------------------------------------------------------
+        .media-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            padding: 0 .75rem .6rem;
+        }
+        .media-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .3rem .7rem;
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--ul-grey-6, #64748b);
+            background: var(--ul-grey-1, #f1f5f9);
+            border: 1px solid transparent;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background .12s ease, color .12s ease;
+
+            &:hover {
+                background: var(--ul-grey-1a, #e2e8f0);
+            }
+
+            &.active {
+                color: #fff;
+                background: var(--ul-primary, #2563eb);
+            }
+        }
+        .media-tab-count {
+            padding: 0 .4rem;
+            font-size: .68rem;
+            font-weight: 700;
+            color: inherit;
+            background: rgba(0, 0, 0, .1);
+            border-radius: 999px;
+        }
+        .media-tab.active .media-tab-count {
+            background: rgba(255, 255, 255, .25);
+        }
+
+        // -- Header icon buttons (select / settings) --------------------------
+        .media-gallery-header-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.9rem;
+            height: 1.9rem;
+            margin-left: .25rem;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--ul-grey-5, #64748b);
+            cursor: pointer;
+            transition: background .12s ease, color .12s ease;
+
+            .material-symbols-outlined {
+                font-size: 1.15rem;
+            }
+
+            &:hover {
+                background: var(--ul-grey-1, #f1f5f9);
+                color: var(--ul-grey-8, #1e293b);
+            }
+
+            &.is-active {
+                color: var(--ul-primary, #2563eb);
+                background: var(--ul-primary-tint, rgba(37, 99, 235, .12));
+            }
+        }
+        .media-settings-menu {
+            position: absolute;
+            top: 100%;
+            right: .75rem;
+            z-index: 5;
+            min-width: 15rem;
+            padding: .6rem;
+            background: var(--ul-grey-0, #fff);
+            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
+
+            &[hidden] {
+                display: none;
+            }
+        }
+        .media-settings-group {
+            padding: .3rem 0;
+
+            & + .media-settings-group {
+                border-top: 1px solid var(--ul-grey-1a, #e2e8f0);
+            }
+        }
+        .media-settings-label {
+            display: block;
+            padding: .15rem .3rem .3rem;
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--ul-grey-5, #64748b);
+        }
+        .media-settings-option {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            width: 100%;
+            padding: .35rem .4rem;
+            font-size: .82rem;
+            color: inherit;
+            background: none;
+            border: none;
+            border-radius: 6px;
+            text-align: left;
+            cursor: pointer;
+
+            &:hover {
+                background: var(--ul-grey-1, #f1f5f9);
+            }
+
+            &.active {
+                color: var(--ul-primary, #2563eb);
+                font-weight: 600;
+            }
+        }
+    }
+
+    .yelp-info {
+        .card-header {
+            .yelp-rating-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: .15rem;
+                margin-left: auto;
+                padding: .1rem .5rem;
+                font-size: .8rem;
+                font-weight: 700;
+                color: #92400e;
+                background: #fef3c7;
+                border-radius: 999px;
+
+                .material-symbols-outlined {
+                    font-size: .85rem;
+                }
+            }
+        }
+
+        .yelp-summary {
+            display: flex;
+            gap: .85rem;
+        }
+
+        .yelp-thumb {
+            flex: 0 0 84px;
+            width: 84px;
+            height: 84px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .yelp-summary-text {
+            min-width: 0;
+        }
+
+        .yelp-name a {
+            color: inherit;
+            text-decoration: none;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+
+        .yelp-meta-line {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin: .2rem 0;
+            font-size: .82rem;
+            color: var(--ul-grey-6, #64748b);
+
+            .material-symbols-outlined {
+                font-size: .95rem;
+            }
+        }
+
+        .yelp-price {
+            font-weight: 700;
+            color: var(--ul-grey-8, #1e293b);
+        }
+
+        .yelp-closed-badge {
+            color: var(--ul-danger, #dc2626);
+            font-weight: 600;
+        }
+
+        .yelp-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .3rem;
+            margin-top: .3rem;
+        }
+
+        .yelp-category-chip {
+            padding: .1rem .5rem;
+            font-size: .68rem;
+            font-weight: 600;
+            color: var(--ul-grey-6, #64748b);
+            background: var(--ul-grey-1, #f1f5f9);
+            border-radius: 999px;
+        }
+
+        .yelp-review {
+            margin-top: .85rem;
+            padding: .65rem .75rem;
+            background: var(--ul-grey-1, #f8fafc);
+            border-radius: 8px;
+            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+        }
+
+        .yelp-review-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: .75rem;
+            font-weight: 600;
+            color: var(--ul-grey-6, #64748b);
+        }
+
+        .yelp-review-text {
+            margin: .3rem 0 0;
+            font-size: .85rem;
+            font-style: italic;
+            color: var(--ul-grey-7, #475569);
+        }
+
+        .yelp-view-link {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            margin-top: .75rem;
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--ul-primary, #2563eb);
+            text-decoration: none;
+
+            .material-symbols-outlined {
+                font-size: .95rem;
+            }
+
+            &:hover {
+                text-decoration: underline;
+            }
         }
     }
 

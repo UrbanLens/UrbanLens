@@ -292,6 +292,17 @@ class Profile(abstract.PublicDashboardModel):
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
 
+    # When off, wiki pages never render their cover-photo hero banner for this
+    # viewer, regardless of whether the wiki has one set - lets a user opt out
+    # of community-uploaded imagery they haven't vetted themselves. Does not
+    # affect the viewer's own pin pages, which always show their chosen cover.
+    show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
+
+    # Default ordering for the pin detail page's Media gallery. "relevant"
+    # surfaces items this user has explicitly marked relevant first (falling
+    # back to arrival order); "recent" ignores relevance marks entirely.
+    media_gallery_sort = CharField(max_length=20, choices=[("relevant", "Relevant first"), ("recent", "Most recent")], default="relevant")
+
     # Memories preferences. Each independently controls whether a category of
     # visit/location history is ever saved - including from explicit user actions
     # like GPX/Takeout imports, not just passive/background tracking.

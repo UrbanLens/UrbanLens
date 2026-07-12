@@ -143,6 +143,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
+    yelp_api_key: str | None = Field(default=None, description="The Yelp Fusion API key (private key, server-side only)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     nps_api_key: str | None = Field(default=None, description="The national park service api key")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")

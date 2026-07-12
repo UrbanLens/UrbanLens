@@ -514,10 +514,16 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Community Features",
         help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.",
     )
+    show_wiki_cover_photos = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Show Wiki Cover Photos",
+        help_text="Show the community-selected cover photo banner on wiki pages. Turn off if you'd rather not see photos the community has chosen there.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled"]
+        fields = ["community_enabled", "show_wiki_cover_photos"]
 
 
 class ExternalApiSettingsForm(forms.ModelForm):

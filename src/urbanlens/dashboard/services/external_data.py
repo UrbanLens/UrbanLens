@@ -45,6 +45,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.utils import timezone
 
+from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 
 if TYPE_CHECKING:
@@ -182,7 +183,49 @@ class LocationCachePanelSource(PanelSource, ABC):
         return LocationCache.get_fresh(pin.location, self.cache_source) is not None
 
 
-class MediaPanelSource(LocationCachePanelSource):
+class GalleryMediaSource(LocationCachePanelSource, ABC):
+    """Base for anything that can appear as a source tab in the Media gallery.
+
+    The pin detail page's Media gallery combines results from several
+    unrelated providers (archive/media search engines, business directories,
+    imagery APIs, ...) behind one uniform per-source loader/tab. Each
+    provider needs only its own ``fetch`` (writing to its ``LocationCache``
+    row, inherited scheduling/readiness/failure handling from
+    ``LocationCachePanelSource``) and ``media_items`` (turning that row's
+    ``data`` back into displayable items) - the gallery controller and
+    template are otherwise oblivious to which provider it's rendering.
+    """
+
+    @abstractmethod
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Turn this source's cached ``LocationCache.data`` into gallery items.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source
+                (``{}`` when the fetch found nothing).
+
+        Returns:
+            The items to render as ``.media-item`` tiles; may be empty.
+        """
+
+    def gate(self, pin: Pin) -> bool:
+        """Whether this source has enough information to search for ``pin``.
+
+        Called before scheduling a fetch so a source with nothing to search
+        on (e.g. no coordinates, no address, no name) degrades to a quiet
+        204 instead of polling forever. The default always allows the fetch;
+        override when a source needs a precondition beyond "has a Location".
+
+        Args:
+            pin: The pin whose Media gallery tab is being rendered.
+
+        Returns:
+            True when a fetch is worth scheduling.
+        """
+        return True
+
+
+class MediaPanelSource(GalleryMediaSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC).
 
     Instantiated once per provider; ``make_gateway`` builds the concrete
@@ -243,6 +286,19 @@ class MediaPanelSource(LocationCachePanelSource):
             LocationCache.set(pin.location, self.cache_source, {"items": []}, query_key="")
             return
         gateway.get_media(pin.location, terms)
+
+    def gate(self, pin: Pin) -> bool:
+        """USA-only providers and pins with no usable search name are skipped."""
+        from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
+
+        gateway = self.make_gateway()
+        if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
+            return False
+        return bool(self.search_terms(pin, gateway))
+
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``."""
+        return [MediaItem(**item) for item in (data or {}).get("items", [])]
 
 
 class BoundaryPanelSource(PanelSource):

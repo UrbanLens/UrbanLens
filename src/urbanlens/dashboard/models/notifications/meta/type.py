@@ -14,6 +14,7 @@ class NotificationType(TextChoices):
     ADDED_TO_TRIP = "added_to_trip", "Trip Invitation"
     WIKI_UPDATED = "wiki_updated", "Community Wiki Updated"
     PIN_SHARED = "pin_shared", "Pin Shared"
+    MAP_SHARED = "map_shared", "Map Shared"
     VISIT_SUGGESTED = "visit_suggested", "Visit Suggested"
     SAFETY_CHECKIN_DUE = "safety_ci_due", "Safety Check-in Due"
     SAFETY_CHECKIN_FINAL_WARNING = "safety_ci_final_warning", "Safety Check-in Final Warning"

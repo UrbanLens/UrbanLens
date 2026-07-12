@@ -94,6 +94,19 @@
 }());
 </script>
 {% endif %}
+{% if pin.cover_photo_id %}
+{# -- Cover photo hero banner --------------------------------------------- #}
+{{ pin_cover_candidates|json_script:"pin-cover-candidates" }}
+<div class="cover-hero" id="pin-cover-hero" style="background-image:url('{{ pin.cover_photo.image.url }}')">
+    <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('pin', -1)" title="Previous photo">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    <button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav('pin', 1)" title="Next photo">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+</div>
+<script src="{% static 'js/cover-hero.js' %}"></script>
+{% endif %}
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
@@ -240,11 +253,34 @@
     {# removed at runtime when their HTMX request returns 204 - see the ------ #}
     {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
     <div class="pin-aux-grid">
-        <div id="media-gallery-section" class="media-gallery card card--secondary" hidden>
+        <div id="media-gallery-section" class="media-gallery card card--secondary" hidden
+             data-media-sort="{{ profile.media_gallery_sort }}">
             <div class="card-header">
                 <i class="material-symbols-outlined">collections</i>
                 <h3>Media</h3>
+                <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select photos"
+                        onclick="window.mediaToggleSelectMode()" style="margin-left:auto">
+                    <i class="material-symbols-outlined">checklist</i>
+                </button>
+                <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
+                        onclick="window.mediaToggleSettingsMenu()">
+                    <i class="material-symbols-outlined">tune</i>
+                </button>
+                <div class="media-settings-menu" id="media-settings-menu" hidden>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Visibility</span>
+                        <button type="button" class="media-settings-option" data-media-visibility="default">Hide not-relevant photos</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="show-hidden">Temporarily show all</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="only-relevant">Show only relevant</button>
+                    </div>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Order</span>
+                        <button type="button" class="media-settings-option" data-media-sort="relevant">Relevant first</button>
+                        <button type="button" class="media-settings-option" data-media-sort="recent">Most recent</button>
+                    </div>
+                </div>
             </div>
+            <div class="media-tabs" id="media-tabs" hidden></div>
             <div class="view-loading" id="media-gallery-loading">
                 <i class="material-icons spin">autorenew</i>
                 Loading...
@@ -274,6 +310,27 @@
             hidden></div>
         <div class="media-provider-loader" id="media-loader-loc"
             hx-get="{% url 'pin.media' pin.slug 'loc' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-yelp"
+            hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_images"
+            hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_maps"
+            hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
             hx-swap="beforeend"
@@ -319,6 +376,18 @@
             <div class="card-header">
                 <i class="material-symbols-outlined">map</i>
                 <h3>OpenStreetMap</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        <div id="yelp-section" class="card card--secondary"
+            hx-get="{% url 'pin.yelp' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','yelp')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="yelp">
+            <div class="card-header">
+                <i class="material-symbols-outlined">storefront</i>
+                <h3>Yelp</h3>
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
@@ -435,6 +504,10 @@
 }());
 </script>
 {% endif %}
+
+{# -- Media gallery multi-select floating toolbar --------------------------- #}
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="media" actions=media_bulk_actions %}
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>
 
 {# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
 <dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
@@ -723,7 +796,14 @@
     // -- Adaptive client-side pagination for variable-height external panels ---
     (function () {
         function getItems(card) {
-            return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]'));
+            // Items excluded by the Media gallery's active source tab (see the
+            // media-gallery IIFE below) are not candidates for the current
+            // page - excluding them here is what makes "pagination keeps
+            // working in every tab" free: each tab just re-triggers a forced
+            // reinit over whatever is/isn't excluded right now.
+            return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]')).filter(function (el) {
+                return !el.classList.contains('media-tab-excluded');
+            });
         }
 
         function getAvailableListHeight(card, list) {
@@ -868,7 +948,7 @@
     // -- External-data panels: handle 204 (no data) and request errors --------
     (function () {
         var _extSections = new Set([
-            'wikipedia-section', 'nominatim-section', 'nps-section',
+            'wikipedia-section', 'nominatim-section', 'nps-section', 'yelp-section',
             'loopnet-section', 'usgs-topo-section',
             'web-search-section',
             'satellite-view-section', 'street-view-section',
@@ -1053,35 +1133,107 @@
         var loaders = document.querySelectorAll('.media-provider-loader');
         if (!loaders.length) return;
         var pending = loaders.length;
+        var CSRF_TOKEN = '{{ csrf_token }}';
+        var activeTab = 'all';
+        var selecting = false;
+        var selectedKeys = new Set();
 
         function isMediaLoader(el) {
             return !!(el && el.classList && el.classList.contains('media-provider-loader'));
         }
 
+        function section() { return document.getElementById('media-gallery-section'); }
+        function grid() { return document.getElementById('media-gallery-grid'); }
+
         // Items with a real thumbnail image are more useful at a glance than
         // text-only records (e.g. LOC book/survey entries) - move them first.
-        // Stable within each group: relative arrival order from each provider
-        // is otherwise preserved.
-        function sortMediaGalleryByThumbnail(grid) {
-            var items = Array.prototype.slice.call(grid.querySelectorAll('.media-item'));
-            var withImage = items.filter(function (item) { return !!item.querySelector('img.media-item-thumb'); });
-            var withoutImage = items.filter(function (item) { return !item.querySelector('img.media-item-thumb'); });
-            withImage.concat(withoutImage).forEach(function (item) { grid.appendChild(item); });
+        // Under "Relevant first" (the default), explicitly-marked-relevant
+        // items win the tiebreak first. Stable within each group: relative
+        // arrival order from each provider is otherwise preserved.
+        function sortMediaGallery(g) {
+            var sortMode = section() ? (section().dataset.mediaSort || 'relevant') : 'relevant';
+            var items = Array.prototype.slice.call(g.querySelectorAll('.media-item'));
+            function isRelevant(item) { return sortMode === 'relevant' && item.classList.contains('media-item--relevant'); }
+            function hasImage(item) { return !!item.querySelector('img.media-item-thumb'); }
+            var groups = [[], [], [], []]; // relevant+image, relevant, image, neither
+            items.forEach(function (item) {
+                var r = isRelevant(item), i = hasImage(item);
+                if (r && i) groups[0].push(item);
+                else if (r) groups[1].push(item);
+                else if (i) groups[2].push(item);
+                else groups[3].push(item);
+            });
+            groups.flat().forEach(function (item) { g.appendChild(item); });
         }
 
+        // -- Source tabs -------------------------------------------------------
+        var TAB_LABELS = {
+            smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', loc: 'Library of Congress',
+            yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
+        };
+
+        function rebuildMediaTabs() {
+            var g = grid();
+            var tabsEl = document.getElementById('media-tabs');
+            if (!g || !tabsEl) return;
+            var counts = {};
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                var src = item.dataset.mediaSource;
+                if (!src) return;
+                counts[src] = (counts[src] || 0) + 1;
+            });
+            var sources = Object.keys(counts);
+            if (sources.length < 2) {
+                tabsEl.hidden = true;
+                tabsEl.innerHTML = '';
+                return;
+            }
+            if (!sources.includes(activeTab)) activeTab = 'all';
+            var total = sources.reduce(function (sum, s) { return sum + counts[s]; }, 0);
+            var html = '<button type="button" class="media-tab' + (activeTab === 'all' ? ' active' : '') +
+                '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
+            sources.sort().forEach(function (src) {
+                var label = TAB_LABELS[src] || src;
+                html += '<button type="button" class="media-tab' + (activeTab === src ? ' active' : '') +
+                    '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+            });
+            tabsEl.innerHTML = html;
+            tabsEl.hidden = false;
+            tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
+                btn.addEventListener('click', function () { window.mediaSetTab(btn.dataset.tab); });
+            });
+        }
+
+        window.mediaSetTab = function (tab) {
+            activeTab = tab;
+            var g = grid();
+            if (!g) return;
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                item.classList.toggle('media-tab-excluded', tab !== 'all' && item.dataset.mediaSource !== tab);
+            });
+            document.querySelectorAll('#media-tabs .media-tab').forEach(function (btn) {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            var card = g.closest('.card');
+            if (card) card.dataset.adaptivePaginationCurrentPage = '1';
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+        };
+
         function refreshMediaGallery() {
-            var grid = document.getElementById('media-gallery-grid');
-            if (!grid || !grid.querySelectorAll('.media-item').length) return;
-            var card = grid.closest('.card');
+            var g = grid();
+            if (!g || !g.querySelectorAll('.media-item').length) return;
+            var card = g.closest('.card');
             var userPaginated = !!(card && card.dataset.userPaginated === '1');
             if (!userPaginated) {
-                sortMediaGalleryByThumbnail(grid);
+                sortMediaGallery(g);
             }
             // New items (from this or a later provider) join pagination too;
             // already-marked items are unaffected by re-setting the attribute.
-            grid.querySelectorAll('.media-item').forEach(function (item) {
+            g.querySelectorAll('.media-item').forEach(function (item) {
                 item.setAttribute('data-adaptive-pagination-item', '');
             });
+            rebuildMediaTabs();
+            if (activeTab !== 'all') window.mediaSetTab(activeTab);
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 
@@ -1091,14 +1243,14 @@
             if (pending > 0) return;
             var loading = document.getElementById('media-gallery-loading');
             if (loading) loading.remove();
-            var grid = document.getElementById('media-gallery-grid');
-            var section = document.getElementById('media-gallery-section');
+            var g = grid();
+            var sec = section();
             // Count actual media tiles, not the hidden debug-marker spans each
             // provider response also appends (even when it found nothing, so
             // its query still shows up in the admin debug overlay) - otherwise
             // an all-providers-empty pin would leave a header-only empty card.
-            if (!grid || !grid.querySelectorAll('.media-item').length) {
-                if (section) section.remove();
+            if (!g || !g.querySelectorAll('.media-item').length) {
+                if (sec) sec.remove();
             }
         }
 
@@ -1111,8 +1263,8 @@
             // don't count it as finished or touch the gallery.
             if (evt.detail.xhr.getResponseHeader('UL-Panel-Pending') === '1') return;
             if (evt.detail.xhr.status === 200) {
-                var section = document.getElementById('media-gallery-section');
-                if (section) section.hidden = false;
+                var sec = section();
+                if (sec) sec.hidden = false;
                 refreshMediaGallery();
             }
             finishLoader(el);
@@ -1135,6 +1287,166 @@
             evt.stopImmediatePropagation();
             finishLoader(el);
         }, true);
+
+        // -- Settings menu: visibility filter + sort order ----------------------
+        window.mediaToggleSettingsMenu = function () {
+            var menu = document.getElementById('media-settings-menu');
+            var btn = document.getElementById('media-settings-btn');
+            if (!menu) return;
+            menu.hidden = !menu.hidden;
+            if (btn) btn.classList.toggle('is-active', !menu.hidden);
+        };
+        document.addEventListener('click', function (e) {
+            var menu = document.getElementById('media-settings-menu');
+            var btn = document.getElementById('media-settings-btn');
+            if (!menu || menu.hidden) return;
+            if (menu.contains(e.target) || (btn && btn.contains(e.target))) return;
+            menu.hidden = true;
+            if (btn) btn.classList.remove('is-active');
+        });
+        document.body.addEventListener('click', function (e) {
+            var visBtn = e.target.closest('[data-media-visibility]');
+            if (visBtn) {
+                var sec = section();
+                if (sec) {
+                    sec.classList.remove('media-gallery--show-hidden', 'media-gallery--only-relevant');
+                    var mode = visBtn.dataset.mediaVisibility;
+                    if (mode === 'show-hidden') sec.classList.add('media-gallery--show-hidden');
+                    if (mode === 'only-relevant') sec.classList.add('media-gallery--only-relevant');
+                    document.querySelectorAll('[data-media-visibility]').forEach(function (b) { b.classList.toggle('active', b === visBtn); });
+                    if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+                }
+                return;
+            }
+            var sortBtn = e.target.closest('[data-media-sort]');
+            if (sortBtn) {
+                var sec2 = section();
+                var sort = sortBtn.dataset.mediaSort;
+                if (sec2) sec2.dataset.mediaSort = sort;
+                document.querySelectorAll('[data-media-sort]').forEach(function (b) { b.classList.toggle('active', b === sortBtn); });
+                var g2 = grid();
+                if (g2) { sortMediaGallery(g2); if (window.initAdaptivePagination) window.initAdaptivePagination(document, true); }
+                fetch('{% url "pin.media.sort" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                    body: JSON.stringify({ sort: sort }),
+                });
+            }
+        });
+        document.querySelectorAll('[data-media-sort]').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.mediaSort === (section() ? section().dataset.mediaSort : 'relevant'));
+        });
+        document.querySelector('[data-media-visibility="default"]').classList.add('active');
+
+        // -- Relevance marking ---------------------------------------------------
+        window.mediaSetRelevance = function (itemEl, isRelevant) {
+            if (!itemEl) return;
+            var source = itemEl.dataset.mediaSource;
+            var key = itemEl.dataset.mediaKey;
+            var url = itemEl.dataset.mediaUrl;
+            var wasRelevant = itemEl.dataset.mediaRelevant === 'true';
+            var wasNotRelevant = itemEl.dataset.mediaRelevant === 'false';
+            var nextRelevant = isRelevant && wasRelevant ? null : (!isRelevant && wasNotRelevant ? null : isRelevant);
+            applyRelevanceState(itemEl, nextRelevant);
+            fetch('{% url "pin.media.relevance" pin.slug %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                body: JSON.stringify({ source: source, item_key: key, url: url, is_relevant: nextRelevant }),
+            }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+        };
+
+        function applyRelevanceState(itemEl, value) {
+            itemEl.dataset.mediaRelevant = value === true ? 'true' : (value === false ? 'false' : '');
+            itemEl.classList.toggle('media-item--relevant', value === true);
+            itemEl.classList.toggle('media-item--not-relevant', value === false);
+            var upBtn = itemEl.querySelector('.media-item-relevant-btn');
+            var downBtn = itemEl.querySelector('.media-item-not-relevant-btn');
+            if (upBtn) upBtn.classList.toggle('is-active', value === true);
+            if (downBtn) downBtn.classList.toggle('is-active', value === false);
+        }
+        window._mediaApplyRelevanceState = applyRelevanceState;
+
+        // -- Multi-select mode ----------------------------------------------------
+        window.mediaToggleSelectMode = function () {
+            selecting = !selecting;
+            selectedKeys.clear();
+            var sec = section();
+            var btn = document.getElementById('media-select-btn');
+            if (sec) sec.classList.toggle('media-gallery--selecting', selecting);
+            if (btn) btn.classList.toggle('is-active', selecting);
+            document.querySelectorAll('#media-gallery-grid .media-item').forEach(function (item) {
+                item.classList.remove('is-selected');
+                var check = item.querySelector('.media-item-select-check');
+                if (check) check.hidden = !selecting;
+            });
+            if (window.ulBulkToolbar) window.ulBulkToolbar.clear('media');
+        };
+
+        window.mediaToggleSelect = function (evt, checkEl) {
+            evt.stopPropagation();
+            var item = checkEl.closest('.media-item');
+            if (!item) return;
+            var key = item.dataset.mediaSource + ':' + item.dataset.mediaKey;
+            var nowSelected = !item.classList.contains('is-selected');
+            item.classList.toggle('is-selected', nowSelected);
+            if (nowSelected) selectedKeys.add(key); else selectedKeys.delete(key);
+            if (window.ulBulkToolbar) {
+                window.ulBulkToolbar.sync('media', selectedKeys.size, {
+                    relevant: function () { window.mediaBulkSetRelevance(true); },
+                    not_relevant: function () { window.mediaBulkSetRelevance(false); },
+                    wiki: function () { window.mediaBulkSendToWiki(); },
+                    deselect: function () { window.mediaToggleSelectMode(); },
+                });
+            }
+        };
+
+        function selectedMediaItems() {
+            return Array.prototype.slice.call(document.querySelectorAll('#media-gallery-grid .media-item.is-selected'));
+        }
+
+        window.mediaBulkSetRelevance = function (isRelevant) {
+            selectedMediaItems().forEach(function (item) { window.mediaSetRelevance(item, isRelevant); });
+        };
+
+        window.mediaBulkSendToWiki = function () {
+            var items = selectedMediaItems();
+            if (!items.length) return;
+            if (!confirm('Send ' + items.length + ' photo' + (items.length === 1 ? '' : 's') + ' to the community wiki for this location?')) return;
+            var payload = items.map(function (item) {
+                return { source: item.dataset.mediaSource, url: item.dataset.mediaUrl, page_url: item.dataset.mediaPageUrl, caption: item.dataset.mediaCaption };
+            });
+            fetch('{% url "pin.media.send_to_wiki" pin.slug %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                body: JSON.stringify({ items: payload }),
+            }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
+                if (window.toastr) toastr.success((data.created || items.length) + ' photo(s) sent to the wiki.');
+                window.mediaToggleSelectMode();
+            }).catch(function () { if (window.toastr) toastr.error('Failed to send photos to the wiki.'); });
+        };
+
+        // -- Lightbox --------------------------------------------------------------
+        window.mediaOpenLightbox = function (thumbBtn) {
+            var itemEl = thumbBtn.closest('.media-item');
+            if (!itemEl) return;
+            var visible = Array.prototype.slice.call(document.querySelectorAll('#media-gallery-grid .media-item'))
+                .filter(function (el) { return !el.classList.contains('media-tab-excluded'); });
+            var list = visible.map(function (el) {
+                var relevant = el.dataset.mediaRelevant === 'true' ? true : (el.dataset.mediaRelevant === 'false' ? false : null);
+                return {
+                    url: el.dataset.mediaUrl,
+                    caption: el.dataset.mediaCaption || '',
+                    sourceUrl: el.dataset.mediaPageUrl || el.dataset.mediaUrl,
+                    sourceName: el.dataset.mediaSourceName || '',
+                    mediaSource: el.dataset.mediaSource,
+                    mediaKey: el.dataset.mediaKey,
+                    relevant: relevant,
+                    canRelevance: true,
+                };
+            });
+            var idx = visible.indexOf(itemEl);
+            if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
+        };
     }());
 </script>
 {% endblock %}

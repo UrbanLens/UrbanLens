@@ -339,6 +339,34 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         return JsonResponse({"id": image.pk, "url": image.image.url}, status=201)
 
 
+class DirectMessageMapPickerView(LoginRequiredMixin, View):
+    """GET /messages/attach-map/picker/ - list the caller's own maps to attach.
+
+    Companion to the draw-a-new-map composer flow (``#dm-attach-map-btn``):
+    lets the sender attach one of their existing maps instead - the only way
+    a previously-cloned ("Add to my maps") map can be forwarded on, since
+    ``create_direct_message`` only accepts maps the sender already owns.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the picker list of the caller's own MarkupMaps.
+
+        Args:
+            request: The HTTP request, optionally carrying a ``q`` search term.
+
+        Returns:
+            Rendered HTML fragment listing matching maps.
+        """
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        profile = _get_profile(request)
+        query = (request.GET.get("q") or "").strip()
+        candidates = MarkupMap.objects.for_profile(profile).select_related("shared_by__user").order_by("-updated")
+        if query:
+            candidates = candidates.filter(title__icontains=query)
+        return render(request, "dashboard/partials/messages/_map_picker.html", {"candidates": candidates[:50], "query": query})
+
+
 class MessageReactionToggleView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/react/<message_id>/ - toggle an emoji reaction.
 

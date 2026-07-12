@@ -143,6 +143,18 @@
                     <p class="settings-error">{{ community_form.community_enabled.errors|join:", " }}</p>
                     {% endif %}
                 </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ community_form.show_wiki_cover_photos }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ community_form.show_wiki_cover_photos.label }}</strong>
+                            <span class="settings-help">{{ community_form.show_wiki_cover_photos.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if community_form.show_wiki_cover_photos.errors %}
+                    <p class="settings-error">{{ community_form.show_wiki_cover_photos.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
                 {% if not community_form.instance.community_enabled %}
                 <p class="settings-help">All of your pins are private and your privacy settings above are locked to the most restrictive option while this is off.</p>
                 {% endif %}

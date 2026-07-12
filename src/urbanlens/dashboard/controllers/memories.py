@@ -607,7 +607,7 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Rendered Maps page listing every markup map the user created.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        maps = MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-updated")
+        maps = MarkupMap.objects.for_profile(profile).select_related("shared_by__user").prefetch_related("items").order_by("-updated")
         return render(
             request,
             "dashboard/pages/memories/maps.html",

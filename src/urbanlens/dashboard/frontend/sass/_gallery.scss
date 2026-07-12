@@ -217,11 +217,52 @@
   }
 }
 
+// -- Multi-select mode (select icon in header, checkboxes on own photos) -------
+.gallery-select-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 3;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .85);
+  color: var(--ul-grey-4, #94a3b8);
+  cursor: pointer;
+
+  .material-symbols-outlined {
+    font-size: 1.05rem;
+  }
+}
+
+.photo-gallery--selecting .gallery-select-check {
+  display: flex;
+}
+
+.gallery-item.is-selected {
+  outline: 2px solid var(--color-accent, #2563eb);
+  outline-offset: -2px;
+}
+
+.gallery-item.is-selected .gallery-select-check {
+  color: var(--color-accent, #2563eb);
+}
+
+.gallery-import-photos-btn.is-active {
+  color: var(--color-accent, #2563eb);
+  background: rgba(37, 99, 235, .12);
+}
+
 // Lightbox
 .gallery-lightbox {
   max-width: 95vw;
   max-height: 95vh;
-  width: 900px;
+  width: 1080px;
   background: var(--ul-black);
   border: none;
   border-radius: 8px;
@@ -234,22 +275,60 @@
 .lightbox-inner {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  min-height: 60vh;
+  max-height: 95vh;
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+    max-height: none;
+    overflow-y: auto;
+  }
+}
+
+.lightbox-media-area {
+  position: relative;
+  flex: 1 1 68%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
+  min-width: 0;
+  min-height: 50vh;
+  background: #000;
+}
+
+.lightbox-side-panel {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: 1rem 1.1rem;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, .04);
+  border-left: 1px solid rgba(255, 255, 255, .08);
+
+  @media (max-width: 720px) {
+    flex: 0 0 auto;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+  }
 }
 
 .lightbox-img {
   max-width: 100%;
-  max-height: 80vh;
+  max-height: 90vh;
   object-fit: contain;
+
+  @media (max-width: 720px) {
+    max-height: 60vh;
+  }
 }
 
 .lightbox-close {
   position: absolute;
   top: .6rem;
   right: .6rem;
+  z-index: 2;
   background: rgba(0,0,0,.5);
   border: none;
   border-radius: 50%;
@@ -270,6 +349,7 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 2;
   background: rgba(255,255,255,.1);
   border: none;
   border-radius: 50%;
@@ -290,34 +370,256 @@
 }
 
 .lightbox-caption {
-  color: rgba(255,255,255,.7);
-  font-size: .85rem;
-  padding: .5rem 1rem;
-  text-align: center;
-  min-height: 2rem;
+  color: rgba(255,255,255,.85);
+  font-size: .9rem;
+  font-weight: 500;
+  padding: 0;
+  margin: 0;
+  min-height: 1.2rem;
 }
 
 .lightbox-meta {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: .25rem 1rem;
-  padding: 0 1rem .75rem;
+  flex-direction: column;
+  gap: .3rem;
+  padding: 0;
 }
 
 .lightbox-meta-line {
   color: rgba(255,255,255,.55);
-  font-size: .75rem;
+  font-size: .78rem;
   margin: 0;
 
   &[hidden] { display: none; }
 }
 
 .lightbox-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
   color: var(--color-accent, #60a5fa);
-  text-decoration: underline;
+  text-decoration: none;
   cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-relevance-actions {
+  display: flex;
+  gap: .5rem;
+  padding-top: .4rem;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+
+  &[hidden] { display: none; }
+
+  .btn {
+    color: rgba(255, 255, 255, .8);
+    border-color: rgba(255, 255, 255, .25);
+  }
+
+  .btn.is-active {
+    color: #fff;
+    background: var(--color-accent, #2563eb);
+    border-color: var(--color-accent, #2563eb);
+  }
+}
+
+// -- Shared floating multi-select toolbar ---------------------------------------
+// Generic version of the organize page's .org-bulk-bar (see _tags.scss) for any
+// page that isn't on the TS/bun bundle - paired with frontend/static/js/bulk-toolbar.js.
+.ul-bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 5rem;
+  transform: translateX(-50%) translateY(calc(100% + 2rem));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  background: color-mix(in srgb, var(--ul-grey-0) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  border: 1px solid var(--ul-grey-1a);
+  border-radius: 999px;
+  box-shadow:
+    0 10px 40px rgba(15, 23, 42, .14),
+    0 2px 8px rgba(15, 23, 42, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .55);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease, box-shadow .2s ease;
+  white-space: nowrap;
+  max-width: calc(100vw - 40px);
+
+  &.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+    box-shadow:
+      0 14px 48px rgba(15, 23, 42, .18),
+      0 4px 12px rgba(15, 23, 42, .1),
+      inset 0 1px 0 rgba(255, 255, 255, .55);
+  }
+}
+
+.ul-bulk-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--color-accent, #2563eb);
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--color-accent, #2563eb) 12%, transparent);
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--color-accent, #2563eb) 28%, transparent);
+  letter-spacing: -.01em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.ul-bulk-sep {
+  width: 1px;
+  height: 24px;
+  align-self: center;
+  background: var(--ul-grey-1a);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.ul-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 600;
+  border: 1px solid var(--ul-grey-1a);
+  background: var(--ul-grey-0a, transparent);
+  color: inherit;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+
+  .material-symbols-outlined,
+  .material-icons {
+    font-size: .95rem;
+  }
+
+  &[hidden] {
+    display: none;
+  }
+
+  &:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+  }
+}
+
+.ul-bulk-btn--deselect {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: transparent;
+  background: transparent;
+
+  span {
+    display: none;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, $color-red-500 12%, transparent);
+    border-color: color-mix(in srgb, $color-red-500 24%, transparent);
+    color: $color-red-600;
+  }
+}
+
+.ul-bulk-btn--delete {
+  color: $color-red-500;
+  border-color: color-mix(in srgb, $color-red-500 20%, transparent);
+
+  &:hover {
+    background: color-mix(in srgb, $color-red-500 10%, var(--ul-grey-0a));
+    border-color: color-mix(in srgb, $color-red-500 35%, transparent);
+    color: $color-red-600;
+  }
+}
+
+.ul-bulk-btn--wiki,
+.ul-bulk-btn--relevant {
+  &:hover {
+    background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--ul-grey-0a));
+    border-color: color-mix(in srgb, var(--color-accent, #2563eb) 35%, transparent);
+    color: var(--color-accent, #2563eb);
+  }
+}
+
+// -- Cover photo hero banner -----------------------------------------------------
+// Used on both the pin detail page and the wiki page (see cover-hero.js for the
+// hover prev/next cycling). Absent entirely unless a cover photo is set, so a
+// pin/wiki without one renders exactly as before.
+.cover-hero {
+  position: relative;
+  height: clamp(140px, 22vw, 260px);
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--ul-grey-1, #f1f5f9);
+  background-size: cover;
+  background-position: center;
+  transition: background-image .25s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, .45) 100%);
+    pointer-events: none;
+  }
+}
+
+.cover-hero-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .45);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+
+  .material-symbols-outlined {
+    font-size: 1.4rem;
+  }
+
+  &.cover-hero-prev {
+    left: .75rem;
+  }
+  &.cover-hero-next {
+    right: .75rem;
+  }
+
+  &:hover {
+    background: rgba(15, 23, 42, .7);
+  }
+}
+
+.cover-hero:hover .cover-hero-nav {
+  opacity: 1;
 }
 
 // Photo map marker

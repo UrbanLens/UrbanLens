@@ -12,11 +12,69 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.external_data import GalleryMediaSource
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.assets.base import MediaItem
+    from urbanlens.dashboard.services.external_data import PanelSource
+
+
+class GoogleMapsPhotosPanelSource(GalleryMediaSource):
+    """Photos users have uploaded to Google Maps for a pin's location.
+
+    Found by coordinates only, via Places API (New) Nearby Search - never by
+    the pin/wiki's user-given name. Photo bytes are proxied server-side (see
+    ``controllers.media_proxy.GoogleMapsPhotoProxyView``) since resolving a
+    Places API (New) photo name requires the API key.
+    """
+
+    key = "google_maps"
+    cache_source = "google_maps_photos"
+    icon = "photo_camera"
+    title = "Google Maps"
+
+    def gate(self, pin: Pin) -> bool:
+        """Requires a configured API key and coordinates."""
+        from urbanlens.UrbanLens.settings.app import settings
+
+        return bool(settings.google_unrestricted_api_key) and bool(pin.effective_latitude and pin.effective_longitude)
+
+    def fetch(self, pin: Pin) -> None:
+        """Find the nearest place by coordinates and cache its photo names."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+        from urbanlens.UrbanLens.settings.app import settings
+
+        gateway = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key or "")
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        place_id = gateway.find_nearest_place_id(lat, lng)
+        photo_names = gateway.get_place_photo_names(place_id, max_photos=10) if place_id else []
+        LocationCache.set(
+            pin.location,
+            self.cache_source,
+            {"place_id": place_id, "photo_names": photo_names},
+            query_key=f"{lat},{lng}",
+        )
+
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Build proxied media items from the cached photo names."""
+        from urllib.parse import quote
+
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.apis.assets.base import MediaItem
+
+        place_id = (data or {}).get("place_id") or ""
+        page_url = f"https://www.google.com/maps/place/?q=place_id:{place_id}" if place_id else ""
+        items = []
+        for photo_name in (data or {}).get("photo_names") or []:
+            proxy_url = reverse("media.google_maps_photo", args=[quote(photo_name, safe="")])
+            items.append(MediaItem(url=proxy_url, thumb_url=proxy_url, caption="", source="Google Maps", page_url=page_url or proxy_url))
+        return items
 
 
 class GooglePlacesNameProvider(NameProvider):
@@ -68,3 +126,7 @@ class GooglePlacesPlugin(UrbanLensPlugin):
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute Google place names as place-name candidates."""
         return [GooglePlacesNameProvider()]
+
+    def get_panel_sources(self) -> list[PanelSource]:
+        """Contribute the Google Maps Media-gallery photos provider."""
+        return [GoogleMapsPhotosPanelSource()]

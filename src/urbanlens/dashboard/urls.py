@@ -28,8 +28,10 @@ from urbanlens.dashboard.controllers import (
     image_gallery,
     immich,
     location_wiki,
+    map_sharing,
     maps,
     markup,
+    media_proxy,
     memories,
     notifications,
     onboarding,
@@ -193,6 +195,11 @@ urlpatterns = [
                     name="map.places.nearby",
                 ),
                 path(
+                    "media-photo/google-maps/<path:photo_name>/",
+                    media_proxy.GoogleMapsPhotoProxyView.as_view(),
+                    name="media.google_maps_photo",
+                ),
+                path(
                     "places/details/",
                     maps.MapController.as_view({"get": "place_details"}),
                     name="map.places.details",
@@ -231,6 +238,31 @@ urlpatterns = [
                                 "<slug:pin_slug>/media/<str:source>/",
                                 pin.PinController.as_view({"get": "media_provider"}),
                                 name="pin.media",
+                            ),
+                            path(
+                                "<slug:pin_slug>/media/relevance/",
+                                pin.PinController.as_view({"post": "media_relevance"}),
+                                name="pin.media.relevance",
+                            ),
+                            path(
+                                "<slug:pin_slug>/media/send-to-wiki/",
+                                pin.PinController.as_view({"post": "media_send_to_wiki"}),
+                                name="pin.media.send_to_wiki",
+                            ),
+                            path(
+                                "media/sort/",
+                                pin.PinController.as_view({"post": "set_media_sort"}),
+                                name="pin.media.sort",
+                            ),
+                            path(
+                                "<slug:pin_slug>/cover-photo/",
+                                image_gallery.PinCoverPhotoView.as_view(),
+                                name="pin.cover_photo",
+                            ),
+                            path(
+                                "<slug:pin_slug>/gallery/bulk/",
+                                image_gallery.PinGalleryBulkView.as_view(),
+                                name="pin.gallery.bulk",
                             ),
                             path(
                                 "<slug:pin_slug>/google/",
@@ -396,6 +428,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/nps/",
                                 pin.PinController.as_view({"get": "nps_info"}),
                                 name="pin.nps",
+                            ),
+                            path(
+                                "<slug:pin_slug>/yelp/",
+                                pin.PinController.as_view({"get": "yelp_info"}),
+                                name="pin.yelp",
                             ),
                             path(
                                 "<slug:pin_slug>/nominatim/",
@@ -849,6 +886,11 @@ urlpatterns = [
                     name="location.wiki.gallery.image",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/cover-photo/",
+                    image_gallery.WikiCoverPhotoView.as_view(),
+                    name="location.wiki.cover_photo",
+                ),
+                path(
                     "<slug:location_slug>/wiki/stat/<str:field>/vote/",
                     location_wiki.WikiStatVoteView.as_view(),
                     name="location.wiki.stat_vote",
@@ -989,6 +1031,9 @@ urlpatterns = [
                 path("<uuid:map_uuid>/json/", markup.MarkupJsonView.as_view(), name="markup_map.json"),
                 path("<uuid:map_uuid>/view/", markup.MarkupMapViewStateView.as_view(), name="markup_map.view_state"),
                 path("<uuid:map_uuid>/delete/", markup.MarkupMapDeleteView.as_view(), name="markup_map.delete"),
+                path("<uuid:map_uuid>/clone/", markup.MarkupMapCloneView.as_view(), name="markup_map.clone"),
+                path("<uuid:map_uuid>/share/", map_sharing.MarkupMapShareDialogView.as_view(), name="markup_map.share.dialog"),
+                path("<uuid:map_uuid>/share/send/", map_sharing.MarkupMapShareCreateView.as_view(), name="markup_map.share.send"),
                 path("<uuid:map_uuid>/markup/", markup.MarkupView.as_view(), name="markup_map.markup"),
                 path("<uuid:map_uuid>/markup/<uuid:markup_uuid>/", markup.MarkupEditView.as_view(), name="markup_map.markup.edit"),
             ],
@@ -1015,6 +1060,7 @@ urlpatterns = [
     ),
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
+    path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path(
         "messages/",
@@ -1025,6 +1071,7 @@ urlpatterns = [
                 path("unread-count/", direct_messages.MessagesUnreadCountView.as_view(), name="messages.unread_count"),
                 path("recipients/", direct_messages.RecipientSearchView.as_view(), name="messages.recipients"),
                 path("upload-image/", direct_messages.DirectMessageImageUploadView.as_view(), name="messages.upload_image"),
+                path("attach-map/picker/", direct_messages.DirectMessageMapPickerView.as_view(), name="messages.attach_map.picker"),
                 path("list/", direct_messages.ConversationListView.as_view(), name="messages.list"),
                 path("<slug:profile_slug>/", direct_messages.ConversationView.as_view(), name="messages.conversation"),
                 path("<slug:profile_slug>/send/", direct_messages.ConversationSendView.as_view(), name="messages.send"),

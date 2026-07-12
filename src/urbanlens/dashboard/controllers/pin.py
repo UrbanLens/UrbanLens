@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timedelta
+import json
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -110,11 +111,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin_lists = list(PinList.objects.filter(profile=profile).order_by("name"))
 
+        pin_cover_candidates: list[dict] = []
+        if pin.cover_photo_id:
+            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
+
         return render(
             request,
             "dashboard/pages/location/index.html",
             {
                 "pin": pin,
+                "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),
                 "include_children": include_children,
@@ -135,6 +141,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "min_date": min_date.isoformat(),
                 "security_level_choices": SecurityLevel.choices,
                 "pin_lists": pin_lists,
+                "pin_cover_candidates": pin_cover_candidates,
+                "media_bulk_actions": [
+                    {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
+                    {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},
+                    {"action": "wiki", "icon": "public", "label": "Send to wiki"},
+                ],
                 "pin_security_values": [
                     ("fences", "Fences", pin.fences),
                     ("alarms", "Alarms", pin.alarms),
@@ -317,18 +329,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         HTMX partial: captioned media items for the pin's location from a single provider.
 
         Backs the combined "Media" section on the pin detail page. Each provider
-        (Smithsonian, Wikimedia Commons, Library of Congress, ...) is fetched via
-        its own HTMX request targeting the shared gallery grid (see
-        ``media-gallery-section`` in the pin detail template), so a slow
-        provider never blocks the others from appearing.
+        (Smithsonian, Wikimedia Commons, Library of Congress, Yelp, Google
+        Images, Google Maps, ...) is fetched via its own HTMX request targeting
+        the shared gallery grid (see ``media-gallery-section`` in the pin detail
+        template), so a slow provider never blocks the others from appearing.
+        Every provider is a ``GalleryMediaSource``, so this view is oblivious to
+        which one it's rendering.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.assets.base import MediaItem
-        from urbanlens.dashboard.services.external_data import MediaPanelSource, get_panel_source
-        from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
+        from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.services.external_data import GalleryMediaSource, get_panel_source
 
         panel = get_panel_source(source)
-        if not isinstance(panel, MediaPanelSource):
+        if not isinstance(panel, GalleryMediaSource):
             return HttpResponse(status=404)
 
         try:
@@ -340,16 +353,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not location:
             return HttpResponse(status=204)
 
-        gateway = panel.make_gateway()
-        if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
-            return HttpResponse(status=204)
-        if not panel.search_terms(pin, gateway):
+        if not panel.gate(pin):
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)
         if cached is None:
             return self._pending_media(request, pin, source)
-        items = [MediaItem(**item) for item in (cached.data or {}).get("items", [])]
+        items = panel.media_items(cached.data or {})
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        relevance = dict(
+            MediaRelevance.objects.filter(profile=profile, location=location, source=source).values_list("item_key", "is_relevant"),
+        )
+        rendered_items = [{"item": item, "key": media_item_key(item.url), "is_relevant": relevance.get(media_item_key(item.url))} for item in items]
 
         # Render even when a provider found nothing, so admins can see what was
         # searched (including every candidate query tried) in the debug overlay
@@ -358,8 +374,110 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # that case, so it's a no-op for regular users and doesn't add a visible
         # empty tile to the gallery (see the media-item-count check that hides
         # the whole section when no provider found anything, in index.html).
-        context = {"items": items, "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items))}
+        context = {
+            "rendered_items": rendered_items,
+            "source_key": source,
+            "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items)),
+        }
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
+
+    @action(detail=True, methods=["post"])
+    def media_relevance(self, request: HttpRequest, pin_slug: str):
+        """Set (or clear) the requesting user's relevance mark on one Media gallery item."""
+        from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "Pin not found."}, status=404)
+        if not pin.location:
+            return JsonResponse({"error": "Pin has no location."}, status=400)
+
+        try:
+            data = json.loads(request.body)
+            source = str(data["source"])[:30]
+            url = str(data["url"])
+            is_relevant = data.get("is_relevant")
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        item_key = data.get("item_key") or media_item_key(url)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if is_relevant is None:
+            MediaRelevance.objects.filter(profile=profile, location=pin.location, source=source, item_key=item_key).delete()
+            return JsonResponse({"is_relevant": None})
+
+        MediaRelevance.objects.update_or_create(
+            profile=profile,
+            location=pin.location,
+            source=source,
+            item_key=item_key,
+            defaults={"is_relevant": bool(is_relevant)},
+        )
+        return JsonResponse({"is_relevant": bool(is_relevant)})
+
+    @action(detail=True, methods=["post"])
+    def media_send_to_wiki(self, request: HttpRequest, pin_slug: str):
+        """Materialize selected Media gallery items and attach them to this location's wiki."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "Pin not found."}, status=404)
+        if not pin.location:
+            return JsonResponse({"error": "Pin has no location."}, status=400)
+
+        wiki = Wiki.objects.get_for_location(pin.location)
+        if wiki is None:
+            return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
+
+        try:
+            data = json.loads(request.body)
+            items = data["items"]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        created = 0
+        errors: list[str] = []
+        for entry in items[:20]:
+            try:
+                materialize_media_item(
+                    location=pin.location,
+                    profile=profile,
+                    source=str(entry.get("source", ""))[:30],
+                    url=str(entry["url"]),
+                    page_url=str(entry.get("page_url") or ""),
+                    caption=str(entry.get("caption") or ""),
+                    wiki=wiki,
+                )
+                created += 1
+            except MaterializeError as exc:
+                logger.warning("media_send_to_wiki: failed to materialize %s: %s", entry.get("url"), exc)
+                errors.append(str(exc))
+            except (KeyError, TypeError, ValueError):
+                logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
+
+        return JsonResponse({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def set_media_sort(self, request: HttpRequest):
+        """Persist the requesting user's Media gallery sort-order preference."""
+        try:
+            data = json.loads(request.body)
+            sort = data.get("sort")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+        if sort not in ("relevant", "recent"):
+            return JsonResponse({"error": "Invalid sort value."}, status=400)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.media_gallery_sort = sort
+        profile.save(update_fields=["media_gallery_sort", "updated"])
+        return JsonResponse({"sort": sort})
 
     def web_search(self, request: HttpRequest, pin_slug):
         """
@@ -886,6 +1004,47 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "debug": self._debug_entry(request, "loopnet", cached.query_key, from_cache=True, count=len(data.get("listings") or [])),
         }
         return render(request, "dashboard/partials/pins/pin_loopnet.html", context)
+
+    def yelp_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: Yelp business details (rating, price, hours, most recent
+        review) for the pin's location, found by coordinates/address only.
+
+        Requires a Yelp Fusion API key. Shares its LocationCache row with the
+        Media gallery's "yelp" photo tab (see plugins.builtin.yelp.YelpPanelSource) -
+        whichever loads first populates it for both.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.yelp import YelpPanelSource
+
+        panel = YelpPanelSource()
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            return HttpResponse(status=204)
+        if not panel.gate(pin):
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, panel.cache_source)
+        if cached is None:
+            return self._pending_panel(request, pin, "yelp")
+        data = cached.data or None
+        business = (data or {}).get("business")
+        if not business:
+            return HttpResponse(status=204)
+
+        reviews = (data or {}).get("reviews") or []
+        context = {
+            "business": business,
+            "latest_review": reviews[0] if reviews else None,
+            "debug": self._debug_entry(request, "yelp", cached.query_key, from_cache=True, count=1),
+        }
+        return render(request, "dashboard/partials/pins/pin_yelp.html", context)
 
     def nps_info(self, request: HttpRequest, pin_slug: str):
         """

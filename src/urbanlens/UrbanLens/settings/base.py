@@ -216,6 +216,14 @@ UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
+# Leaflet zoom level at/above which a saved MarkupMap viewport is considered
+# "zoomed in" for pin-share detection purposes (see
+# services.map_pin_share_detection.is_zoomed_in): every one of the sender's
+# pins visible in frame counts as shared, regardless of markup content. Below
+# this, only pins specifically called out by markup (in-boundary marker,
+# arrow pointing toward, or shape overlap) count.
+UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
+
 CELERY_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",

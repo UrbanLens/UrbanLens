@@ -9,11 +9,25 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+<script src="{% static 'js/cover-hero.js' %}"></script>
 {% endblock %}
 
 {% block content %}
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
+
+    {% if show_wiki_cover_photo %}
+    {# -- Cover photo hero banner --------------------------------------------- #}
+    {{ wiki_cover_candidates|json_script:"wiki-cover-candidates" }}
+    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.image.url }}')">
+        <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('wiki', -1)" title="Previous photo">
+            <i class="material-symbols-outlined">chevron_left</i>
+        </button>
+        <button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav('wiki', 1)" title="Next photo">
+            <i class="material-symbols-outlined">chevron_right</i>
+        </button>
+    </div>
+    {% endif %}
 
     {# -- Wiki identity banner ---------------------------------------------- #}
     <div class="wiki-banner">

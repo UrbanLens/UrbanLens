@@ -9,7 +9,7 @@ from django.db import models
 from django.db.models import Index, ManyToManyField, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
+from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
 
@@ -24,6 +24,30 @@ class PinShare(abstract.DashboardModel):
     """
 
     status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
+    # How this share came to exist - an explicit share-a-pin action, or
+    # auto-detected because a MarkupMap sent to `to_profile` revealed this
+    # pin (see services.map_pin_share_detection.detect_shared_pins).
+    origin = models.CharField(max_length=20, choices=PinShareOrigin.choices, default=PinShareOrigin.EXPLICIT)
+    # The MarkupMap whose detection produced this share, when origin is
+    # MAP_DETECTED. Distinct from `markup_map` below.
+    detected_via_map = models.ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=models.SET_NULL,
+        related_name="detected_pin_shares",
+        null=True,
+        blank=True,
+    )
+    # An optional map the sharer chose to attach when explicitly sharing this
+    # pin (mirrors DirectMessage.markup_map). Distinct from `detected_via_map`
+    # above, which records the map that triggered auto-detection rather than
+    # one deliberately attached to this share.
+    markup_map = models.ForeignKey(
+        "dashboard.MarkupMap",
+        on_delete=models.SET_NULL,
+        related_name="pin_share_attachments",
+        null=True,
+        blank=True,
+    )
 
     pin = models.ForeignKey("dashboard.Pin", on_delete=models.CASCADE, related_name="shares")
     from_profile = models.ForeignKey("dashboard.Profile", on_delete=models.CASCADE, related_name="sent_pin_shares")
@@ -80,6 +104,8 @@ class PinShare(abstract.DashboardModel):
         parent_share_id: int | None
         bundled_with_id: int | None
         notification_id: int | None
+        detected_via_map_id: int | None
+        markup_map_id: int | None
 
     @property
     def is_actionable(self) -> bool:
@@ -118,5 +144,13 @@ class PinShare(abstract.DashboardModel):
                 fields=["pin", "to_profile"],
                 condition=Q(status="pending"),
                 name="db_pinshare_one_pending_per_pin_user",
+            ),
+            # Race-safety backstop for the application-level dedup check in
+            # services.map_sharing._record_detected_share - at most one
+            # MAP_DETECTED share per (pin, recipient) pair.
+            UniqueConstraint(
+                fields=["pin", "to_profile"],
+                condition=Q(origin="map_detected"),
+                name="db_pinshare_one_detected_per_pin_user",
             ),
         ]

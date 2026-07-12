@@ -122,11 +122,24 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # wiki page (see LocationWikiView.get). Once true, the wiki is community
     # content and its creator can no longer unilaterally delete it.
     viewed_by_other = BooleanField(default=False)
+    # Hero banner photo for the wiki page. Any Image tied to this wiki
+    # (community gallery uploads, or a materialized Media-gallery item, see
+    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # just drops the banner rather than the wiki. Display is further gated by
+    # each viewer's own Profile.show_wiki_cover_photos preference.
+    cover_photo = ForeignKey(
+        "dashboard.Image",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wiki_covers",
+    )
 
     if TYPE_CHECKING:
         location_id: int
         parent_wiki_id: int | None
         created_by_id: int | None
+        cover_photo_id: int | None
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
 

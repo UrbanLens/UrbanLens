@@ -1,0 +1,26 @@
+{% comment %}
+Results fragment for the DM composer's "attach an existing map" dialog -
+rendered by DirectMessageMapPickerView. Items are plain buttons (not
+hx-post, unlike the safety check-in picker) because attaching here just
+records the uuid client-side (see #dm-attach-existing-map-btn's JS handler)
+until the message is actually sent.
+
+Expects: candidates (queryset of MarkupMap, owned by the caller), query (str).
+{% endcomment %}
+{% if candidates %}
+<ul class="dm-map-picker-list">
+    {% for candidate in candidates %}
+    <li>
+        <button type="button" class="dm-map-picker-item" data-map-uuid="{{ candidate.uuid }}">
+            <span class="dm-map-picker-item-title">{{ candidate.title|default:"Untitled map" }}</span>
+            {% include "dashboard/partials/map/_markup_map_from_badge.html" with map=candidate %}
+            <span class="dm-map-picker-item-meta">updated {{ candidate.updated|date:"M j, Y" }}</span>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="form-hint">
+    {% if query %}No maps match "{{ query }}".{% else %}You don't have any maps yet - draw one instead, or add one to your maps from a map a friend shared with you.{% endif %}
+</p>
+{% endif %}

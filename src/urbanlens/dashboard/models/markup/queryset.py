@@ -41,6 +41,10 @@ class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet):
         """All markup maps owned by a specific profile."""
         return self.filter(profile=profile)
 
+    def cloned_from(self, source) -> Self:
+        """Clones of a specific source map (used to check for an existing clone)."""
+        return self.filter(cloned_from=source)
+
     def unattached(self) -> Self:
         """Maps not linked from any host model (drafts / leftovers).
 

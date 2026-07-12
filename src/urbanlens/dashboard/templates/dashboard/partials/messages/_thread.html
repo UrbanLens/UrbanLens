@@ -139,6 +139,14 @@ live messages and fall back to the plain POST endpoint when the socket is down.
       {% with map_id="dm-"|add:message.id %}
       {% include "dashboard/partials/map/_map_view_preview.html" with map_id=map_id %}
       {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=map_id map_data=message.markup_map.to_snapshot title="Shared map" map_obj=message.markup_map %}
+      {% if message.sender_id != viewer_id %}
+      <form method="post" action="{% url 'markup_map.clone' message.markup_map.uuid %}" class="dm-map-add-to-mine">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--ghost btn--sm">
+          <i class="material-symbols-outlined">add_location_alt</i> Add to my maps
+        </button>
+      </form>
+      {% endif %}
       {% endwith %}
       {% endif %}
       {% if message.share %}
@@ -213,8 +221,11 @@ live messages and fall back to the plain POST endpoint when the socket is down.
       <i class="material-symbols-outlined">add_photo_alternate</i>
     </button>
     <input type="file" id="dm-attach-photo-input" accept="image/*" multiple hidden>
-    <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-attach-map-btn" title="Attach a map">
+    <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-attach-map-btn" title="Draw a new map">
       <i class="material-symbols-outlined">map</i>
+    </button>
+    <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-attach-existing-map-btn" title="Attach one of your existing maps">
+      <i class="material-symbols-outlined">folder_shared</i>
     </button>
     <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-mention-btn" title="Share a pin, trip, or friend (type @)">
       <i class="material-symbols-outlined">alternate_email</i>

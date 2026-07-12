@@ -78,12 +78,30 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
+                    <span>Is the site as reliable as Google Maps?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        It depends on what you mean by "reliable". But, no.
+                    </p>
+                    <p>
+                        UrbanLens is still in beta, and I'm still working on it. I wrote the code all from scratch, and it's hosted on my own server that I built myself in my basement. I can't stress enough that I'm just one person.
+                    </p>
+                    <p>
+                        I promise to do my best to keep the site up and protect any data you store on it. But you should not store anything on this site that you don't have another copy of somewhere else, and you shouldn't give up any other tools you're currently using quite yet.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
                     <span>How can I be anonymous?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to opt in to being more public. But if you want even more anonymity, you have three options:
+                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to be more public. If you want even more anonymity, you have three options:
                     </p>
                     <ol class="faq-ordered-list">
                         <li>You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.</li>
@@ -314,7 +332,7 @@
 <section class="faq-section" id="account-data">
     <div class="faq-section-inner">
         <div class="faq-section-label">Account &amp; data</div>
-        <h2 class="faq-section-title">Your data, your rules.</h2>
+        <h2 class="faq-section-title">How we handle your data.</h2>
 
         <div class="faq-list">
             <details class="faq-item">
@@ -332,6 +350,27 @@
                     </p>
                     <p>
                         UrbanLens relies on services from other open source software, too, like a web server to handle your web traffic, a caching layer to make the site fast, and more. Some of those services see details about you, like your ip address, just because of the nature of web traffic. Sometimes those details are put into log files. I rotate those log files regularly, and no one without access to my server could ever see them in the first place... but, that's no reason not to use a VPN. They cost like $3 a month.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What are you doing to protect my data?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        The site data is stored on a RAID 10 array, so multiple drives need to fail before any data is lost. It's backed up as reasonably close to 3-2-1 as I can currently manage. The drives are encrypted on the server at rest, and only decrypted when the server is online. Any sensitive data in the database is also encrypted at rest on top of that. HTTPs also encrypts your data in transit, and direct messages are end-to-end encrypted on top of everything above.
+                    </p>
+                    <p>
+                        Regular database backups are run automatically and kept for a long time. Cloudflare, and other infrastructure, provide several additional protections for site reliability. The codebase has a rigorous CI/CD process that tests it for vulnerabilities every time it's changed, and it's automatically run through an AI that tries to identify any issues that managed to sneak in.
+                    </p>
+                    <p>
+                        There's also an export tool, so you can make your own backups and import them somewhere else any time you'd like.
+                    </p>
+                    <p>
+                        I could go on. I'm proud of it... but you still shouldn't count on it to store anything you can't bear to lose.
                     </p>
                 </div>
             </details>
@@ -362,19 +401,19 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Your direct messages are end-to-end encrypted. That's a fancy way of saying: they're scrambled on your device before they're sent, and only you and the person you're talking to can unscramble them. Not other users, not site admins, not me. I genuinely can't read your messages, even if I wanted to.
+                        Your direct messages are end-to-end encrypted. That's a fancy way of saying: they're scrambled on your device before they're sent, and only you and the person you're talking to can unscramble them. Even if someone hacked into the site and stole every piece of data in the database, they wouldn't be able to read your messages.
                     </p>
                     <p>
                         To make that work, your browser generates a secret key for you the first time you log in. That key is what actually unlocks your messages. Normally you never think about it - your password unlocks it automatically, on any device, every time you log in.
                     </p>
                     <p>
-                        The recovery key is a backup plan for the one situation your password can't cover: if you ever reset your password using the "forgot password" email link, the site never actually sees your old password, so it can't use it to unlock your old key the normal way. Same thing if you signed up with Google or Discord and never set a password at all, and you're logging in from a brand new device. In both of those cases, the recovery key is what lets you keep reading your old encrypted messages instead of losing access to them.
+                        The recovery key is a backup plan for the one situation your password can't cover: if you ever reset your password using the "forgot password" email link, the site can't use it to unlock your old key the normal way. Same thing if you signed up with Google or Discord and never set a password at all, and you're logging in from a brand new device. In both of those cases, the recovery key is what lets you keep reading your old encrypted messages instead of losing access to them.
                     </p>
                     <p>
-                        So: save it somewhere safe (a password manager is perfect for this) when the site shows it to you. If you ever lose both your password-based access <em>and</em> your recovery key, there's genuinely no way for anyone, including me, to get your old encrypted messages back - that's the tradeoff for me not being able to read them either. You can always start fresh with a new key from Settings, you'll just lose access to messages sent before that point.
+                        So... save it somewhere safe when the site shows it to you. A password manager is perfect for this. If you ever lose both your password-based access <em>and</em> your recovery key, there's genuinely no way for anyone, including me, to get your old encrypted messages back - that's the tradeoff for that level of privacy. You can always start fresh with a new key from Settings, you'll just lose access to messages sent before that point.
                     </p>
                     <p>
-                        One honest caveat: attachments like photos and shared maps in direct messages aren't encrypted yet, just the text of the messages themselves. And this only protects against someone getting a copy of the database - it doesn't protect against a compromised device that's already logged in and unlocked.
+                        One caveat: attachments like photos and shared maps in direct messages aren't encrypted yet, just the text of the messages themselves. This only protects against someone getting a copy of the database - it doesn't protect you if someone in the real world steals your unlocked phone. Obviously.
                     </p>
                 </div>
             </details>

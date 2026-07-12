@@ -16,8 +16,8 @@ import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.map_sharing import clone_markup_map
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
@@ -405,6 +406,62 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
             Empty 200 response on success.
         """
         return self.post(request, map_uuid)
+
+
+def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
+    """Return whoever sent ``markup_map`` to ``profile`` through a legitimate channel, if any.
+
+    Checks the three ways a map can become visible to someone other than its
+    owner: a DM attachment, a standalone :class:`MarkupMapShare`, or an
+    attachment on an explicit :class:`PinShare`.
+
+    Args:
+        profile: The prospective recipient.
+        markup_map: The map to check.
+
+    Returns:
+        The immediate sender if any channel grants ``profile`` access, else None.
+    """
+    dm = markup_map.direct_messages.filter(recipient=profile).select_related("sender").first()
+    if dm is not None:
+        return dm.sender
+    map_share = markup_map.shares.filter(to_profile=profile).select_related("from_profile").first()
+    if map_share is not None:
+        return map_share.from_profile
+    pin_share = markup_map.pin_share_attachments.filter(to_profile=profile).select_related("from_profile").first()
+    if pin_share is not None:
+        return pin_share.from_profile
+    return None
+
+
+class MarkupMapCloneView(LoginRequiredMixin, View):
+    """"Add to my maps": clone someone else's shared map into the caller's own maps.
+
+    POST /markup-maps/<map_uuid>/clone/
+    """
+
+    def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Clone ``map_uuid`` into the caller's own Memories > Maps.
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to clone.
+
+        Returns:
+            Redirect to Memories > Maps on success, 400 if the caller already
+            owns the map, or 404 if it was never shared with them.
+        """
+        recipient, _ = Profile.objects.get_or_create(user=request.user)
+        source = get_object_or_404(MarkupMap, uuid=map_uuid)
+        if source.profile_id == recipient.pk:
+            return HttpResponse("This is already your own map.", status=400)
+        sender = _map_visible_to(recipient, source)
+        if sender is None:
+            raise Http404
+        existing = MarkupMap.objects.filter(profile=recipient, cloned_from=source).first()
+        if existing is None:
+            clone_markup_map(source, recipient, sender=sender)
+        return redirect("memories.maps")
 
 
 class MarkupView(LoginRequiredMixin, View):

@@ -32,6 +32,7 @@
                 {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
                 <div class="memories-map-card-body">
                     <h3 class="memories-map-card-title">{{ card.map.title|default:"Untitled map" }}</h3>
+                    {% include "dashboard/partials/map/_markup_map_from_badge.html" with map=card.map %}
                     <p class="memories-map-card-meta">
                         {{ card.item_count }} annotation{{ card.item_count|pluralize }} ·
                         updated {{ card.map.updated|date:"M j, Y" }}
@@ -48,6 +49,12 @@
                     </p>
                     {% endif %}
                     <div class="memories-map-card-actions">
+                        <button type="button" class="btn btn--ghost btn--sm"
+                                hx-get="{% url 'markup_map.share.dialog' card.map.uuid %}"
+                                hx-target="#markup-map-share-dialog" hx-swap="innerHTML"
+                                hx-on::after-request="if(event.detail.successful){document.getElementById('markup-map-share-dialog').showModal()}">
+                            <i class="material-symbols-outlined">ios_share</i> Share
+                        </button>
                         <button type="button" class="btn btn--ghost btn--sm memories-map-delete-btn"
                                 data-delete-url="{% url 'markup_map.delete' card.map.uuid %}"
                                 data-card-id="memories-map-card-{{ card.map.uuid }}"
@@ -82,6 +89,9 @@
         {% endif %}
     </div>
 </div>
+
+{# -- Share map dialog (content loaded via HTMX from markup_map.share.dialog) -- #}
+<dialog id="markup-map-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
 
 <script>
 // Delete buttons: confirm (extra warning when the map is attached to

@@ -7,20 +7,49 @@
       data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
       data-debug-count="{{ debug.count }}"></span>
 {% endif %}
-{% for item in items %}
-<a class="media-item" href="{{ item.page_url|default:item.url }}" target="_blank" rel="noopener noreferrer"
-   title="{{ item.caption }}">
-    <span class="media-item-source">{{ item.source }}</span>
-    {% if item.thumb_url %}
-    <img class="media-item-thumb" src="{{ item.thumb_url }}" alt="{{ item.caption }}" loading="lazy"
-         onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
-    {% else %}
-    <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">
-        <i class="material-symbols-outlined">description</i>
-    </span>
-    {% endif %}
-    {% if item.caption %}
-    <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
-    {% endif %}
-</a>
+{% for entry in rendered_items %}
+{% with item=entry.item %}
+<div class="media-item{% if entry.is_relevant == False %} media-item--not-relevant{% elif entry.is_relevant == True %} media-item--relevant{% endif %}"
+     data-media-source="{{ source_key }}"
+     data-media-source-name="{{ item.source }}"
+     data-media-key="{{ entry.key }}"
+     data-media-url="{{ item.url }}"
+     data-media-thumb="{{ item.thumb_url }}"
+     data-media-page-url="{{ item.page_url|default:item.url }}"
+     data-media-caption="{{ item.caption }}"
+     data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
+     title="{{ item.caption }}">
+    <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
+        <i class="material-symbols-outlined">check_circle</i>
+    </button>
+    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)">
+        <span class="media-item-source">{{ item.source }}</span>
+        {% if item.thumb_url %}
+        <img class="media-item-thumb" src="{{ item.thumb_url }}" alt="{{ item.caption }}" loading="lazy"
+             onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
+        {% else %}
+        <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">
+            <i class="material-symbols-outlined">description</i>
+        </span>
+        {% endif %}
+        {% if item.caption %}
+        <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
+        {% endif %}
+    </button>
+    <div class="media-item-actions">
+        <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
+           target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
+            <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+        <button type="button" class="media-item-action-btn media-item-relevant-btn{% if entry.is_relevant == True %} is-active{% endif %}"
+                title="Mark relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), true)">
+            <i class="material-symbols-outlined">thumb_up</i>
+        </button>
+        <button type="button" class="media-item-action-btn media-item-not-relevant-btn{% if entry.is_relevant == False %} is-active{% endif %}"
+                title="Mark not relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), false)">
+            <i class="material-symbols-outlined">thumb_down</i>
+        </button>
+    </div>
+</div>
+{% endwith %}
 {% endfor %}

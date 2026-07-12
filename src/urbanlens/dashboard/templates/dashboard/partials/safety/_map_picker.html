@@ -16,6 +16,7 @@ map and anything already attached), query (str, the current search term).
                 hx-target="#safety-attached-maps" hx-swap="outerHTML"
                 hx-on::after-request="if(event.detail.successful) this.closest('dialog').close()">
             <span class="safety-map-picker-item-title">{{ candidate.title|default:"Untitled map" }}</span>
+            {% include "dashboard/partials/map/_markup_map_from_badge.html" with map=candidate %}
             <span class="safety-map-picker-item-meta">updated {{ candidate.updated|date:"M j, Y" }}</span>
         </button>
     </li>

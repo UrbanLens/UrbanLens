@@ -834,7 +834,7 @@ class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
         excluded_ids = list(checkin.markup_maps.values_list("pk", flat=True))
         if checkin.markup_map_id:
             excluded_ids.append(checkin.markup_map_id)
-        candidates = MarkupMap.objects.filter(profile=profile).exclude(pk__in=excluded_ids)
+        candidates = MarkupMap.objects.filter(profile=profile).select_related("shared_by__user").exclude(pk__in=excluded_ids)
         query = request.GET.get("q", "").strip()
         if query:
             candidates = candidates.filter(title__icontains=query)

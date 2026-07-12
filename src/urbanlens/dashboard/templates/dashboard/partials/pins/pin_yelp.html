@@ -1,0 +1,57 @@
+<div class="yelp-info card" id="yelp-section"
+     data-collapse-scope="pin" data-collapse-section="yelp">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">storefront</i>
+        <h3>Yelp</h3>
+        {% if business.rating %}<span class="yelp-rating-badge">{{ business.rating }} <i class="material-symbols-outlined">star</i></span>{% endif %}
+    </div>
+
+    <div class="card__body">
+        <div class="yelp-summary">
+            {% if business.image_url %}
+            <img class="yelp-thumb" src="{{ business.image_url }}" alt="{{ business.name }}" loading="lazy">
+            {% endif %}
+            <div class="yelp-summary-text">
+                <h4 class="yelp-name">
+                    <a href="{{ business.url }}" target="_blank" rel="noopener noreferrer">{{ business.name }}</a>
+                </h4>
+                <p class="yelp-meta-line">
+                    {% if business.price %}<span class="yelp-price">{{ business.price }}</span>{% endif %}
+                    {% if business.review_count %}<span class="yelp-review-count">{{ business.review_count }} review{{ business.review_count|pluralize }}</span>{% endif %}
+                    {% if business.is_closed %}<span class="yelp-closed-badge">Permanently closed</span>{% endif %}
+                </p>
+                {% if business.categories %}
+                <div class="yelp-categories">
+                    {% for cat in business.categories|slice:":5" %}
+                    <span class="yelp-category-chip">{{ cat.title }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if business.display_phone %}
+                <p class="yelp-meta-line"><i class="material-symbols-outlined">call</i> {{ business.display_phone }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if latest_review %}
+        <div class="yelp-review">
+            <div class="yelp-review-header">
+                <span class="yelp-review-author">{{ latest_review.user.name|default:"A Yelp user" }}</span>
+                <span class="yelp-review-date">{{ latest_review.time_created|slice:":10" }}</span>
+            </div>
+            <p class="yelp-review-text">{{ latest_review.text|truncatechars:400 }}</p>
+        </div>
+        {% endif %}
+
+        <a class="yelp-view-link" href="{{ business.url }}" target="_blank" rel="noopener noreferrer">
+            View on Yelp <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+    </div>
+</div>

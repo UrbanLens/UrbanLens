@@ -12,12 +12,14 @@ from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.connections import are_connections, get_connections
+from urbanlens.dashboard.services.map_sharing import infer_source_share_for_pin, share_markup_map_with_profile
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
 
 
@@ -107,6 +109,7 @@ class PinShareDialogView(LoginRequiredMixin, View):
                 "aliases": pin.aliases.all(),
                 "photos": pin.images.all(),
                 "child_pin_count": pin.descendants().count(),
+                "maps": MarkupMap.objects.for_profile(request.user.profile).order_by("-updated"),
             },
         )
 
@@ -151,19 +154,37 @@ class PinShareCreateView(LoginRequiredMixin, View):
         image_ids = request.POST.getlist("image_ids")
         selected_images = pin.images.filter(id__in=image_ids) if image_ids else Image.objects.none()
 
+        attached_map = None
+        if map_uuid := request.POST.get("markup_map_uuid"):
+            attached_map = MarkupMap.objects.filter(uuid=map_uuid, profile=sender).first()
+
+        # If this pin itself arrived via a share, record the lineage so reshare
+        # chains can be counted (see PinShare.chain_share_count). Pins the
+        # owner created themselves (no source_share) get a best-effort
+        # heuristic link to a prior map-detected share instead, so the chain
+        # doesn't silently break when someone learned about a place from a
+        # shared map and then pinned + shared it themselves.
+        if pin.source_share_id is None and pin.inferred_source_share_id is None:
+            inferred = infer_source_share_for_pin(pin)
+            if inferred is not None:
+                pin.inferred_source_share = inferred
+                pin.save(update_fields=["inferred_source_share", "updated"])
+
         already_pinned = _recipient_existing_pin(recipient, pin) is not None
         share = PinShare.objects.create(
             pin=pin,
             from_profile=sender,
             to_profile=recipient,
-            # If this pin itself arrived via a share, record the lineage so
-            # reshare chains can be counted (see PinShare.chain_share_count).
-            parent_share_id=pin.source_share_id,
+            parent_share_id=pin.source_share_id or pin.inferred_source_share_id,
             status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
             message=message,
             shared_name=shared_name,
+            markup_map=attached_map,
         )
         share.images.set(selected_images)
+
+        if attached_map is not None:
+            share_markup_map_with_profile(sender, recipient, attached_map)
 
         # Bundle the pin's sub pins: each child pin gets its own share row
         # (counting as a share of that pin), tied to the root share. Children

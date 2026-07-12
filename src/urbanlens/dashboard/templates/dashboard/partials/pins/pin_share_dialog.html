@@ -61,6 +61,21 @@
         </div>
       </section>
 
+      {% if maps %}
+      <section class="pin-share-section">
+        <h3 class="pin-share-section-title"><i class="material-symbols-outlined">map</i> Map</h3>
+        <div class="form-row">
+          <select name="markup_map_uuid">
+            <option value="">No map attached</option>
+            {% for candidate in maps %}
+            <option value="{{ candidate.uuid }}">{{ candidate.title|default:"Untitled map" }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <p class="pin-share-section-hint">Optionally attach one of your maps so your friend can see it alongside this pin.</p>
+      </section>
+      {% endif %}
+
       {% if photos %}
       <section class="pin-share-section">
         <h3 class="pin-share-section-title"><i class="material-symbols-outlined">photo_library</i> Photos</h3>

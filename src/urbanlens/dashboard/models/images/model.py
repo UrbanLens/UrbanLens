@@ -8,16 +8,43 @@ from uuid import uuid4
 from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 if TYPE_CHECKING:
     from decimal import Decimal
 
 
+class ImageSource(TextChoices):
+    """Where a photo originated - drives the Media section's per-source tabs.
+
+    ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
+    The external values are set only on rows materialized from the Media
+    gallery's transient provider results (see ``services.external_data`` and
+    ``services.media_materialize``) when a user sends one to a wiki or sets it
+    as a cover photo - the Media gallery itself renders straight from each
+    provider's live results without persisting an ``Image`` row per item.
+    """
+
+    UPLOAD = "upload", "Upload"
+    YELP = "yelp", "Yelp"
+    GOOGLE_IMAGES = "google_images", "Google Images"
+    GOOGLE_MAPS = "google_maps", "Google Maps"
+    WIKIMEDIA = "wikimedia", "Wikimedia Commons"
+    SMITHSONIAN = "smithsonian", "Smithsonian Open Access"
+    LIBRARY_OF_CONGRESS = "library_of_congress", "Library of Congress"
+    IMMICH = "immich", "Immich"
+    FLICKR = "flickr", "Flickr"
+    GOOGLE_PHOTOS = "google_photos", "Google Photos"
+
+
 class Image(abstract.FrontendDashboardModel):
     """A photo uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to="pin_images/")
+    # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
+    # meaningful once a row exists; almost every Image row is a plain upload.
+    source = CharField(max_length=30, choices=ImageSource.choices, default=ImageSource.UPLOAD)
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,

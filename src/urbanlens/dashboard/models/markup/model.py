@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
+    SET_NULL,
     BooleanField,
     CharField,
     FloatField,
@@ -95,17 +96,43 @@ class MarkupMap(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="markup_maps",
     )
+    # The map this one was cloned from via "Add to my maps", if any. SET_NULL
+    # so a clone's provenance badge can fall back to `shared_by` even after
+    # the original map is deleted.
+    cloned_from = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clones",
+    )
+    # The profile who most recently sent this map to its current owner (via a
+    # DM attachment, a standalone map share, or a pin-share attachment) at the
+    # time it was cloned. Denormalized from the share event rather than
+    # derived from `cloned_from.profile` so the "From X" badge survives even
+    # if the source map is later deleted, and so a forwarded chain always
+    # shows the immediate sender rather than the original creator.
+    shared_by = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     objects = MarkupMapManager()
 
     if TYPE_CHECKING:
         profile_id: int
+        cloned_from_id: int | None
+        shared_by_id: int | None
         items: QuerySet[PinMarkup]
         safety_checkins: QuerySet[SafetyCheckin]
         attached_safety_checkins: QuerySet[SafetyCheckin]
         comments: QuerySet[Comment]
         trip_comments: QuerySet[TripComment]
         visits: QuerySet[PinVisit]
+        clones: QuerySet[MarkupMap]
 
     @property
     def attachment(self) -> tuple[str, Any] | None:
@@ -208,6 +235,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         indexes = [
             Index(fields=["uuid"], name="idxdb_mm_uuid"),
             Index(fields=["profile"], name="idxdb_mm_profile"),
+            Index(fields=["profile", "cloned_from"], name="idxdb_mm_profile_clonedfrom"),
         ]
 
 

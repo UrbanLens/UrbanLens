@@ -141,12 +141,40 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="pins_created",
     )
+    # Best-effort, heuristic link to a map-detected share that plausibly
+    # explains how the owner learned about this location, for pins the owner
+    # created themselves rather than by accepting a share. Populated lazily
+    # (see services.map_sharing.infer_source_share_for_pin) only when the
+    # owner explicitly shares this pin onward, so reshare chains still credit
+    # the map that originally revealed it. Never set by _create_pin_from_share
+    # - source_share covers that case exactly, and the two are never both
+    # meaningful for the same pin.
+    inferred_source_share = ForeignKey(
+        "dashboard.PinShare",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pins_inferred",
+    )
+    # Hero banner photo for the pin detail page. Any Image tied to this pin
+    # (its own gallery uploads or a materialized Media-gallery item, see
+    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # just drops the banner rather than the pin.
+    cover_photo = ForeignKey(
+        "dashboard.Image",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pin_covers",
+    )
 
     if TYPE_CHECKING:
         profile_id: int
         location_id: int | None
         parent_pin_id: int | None
         source_share_id: int | None
+        inferred_source_share_id: int | None
+        cover_photo_id: int | None
         reviews: ReviewManager
         notes: DjangoManager[PinNote]
         markup_items: DjangoManager[PinMarkup]

@@ -71,6 +71,7 @@
 </div>
 
 <div id="dm-share-dialog-host"></div>
+<div id="dm-map-picker-dialog-host"></div>
 
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script>
@@ -705,10 +706,38 @@
                 },
             });
         }
+        if (e.target.closest('#dm-attach-existing-map-btn')) {
+            openExistingMapPicker();
+        }
         if (e.target.closest('#dm-map-chip-remove')) {
             pendingAttachments.mapUuid = null;
             renderAttachmentChips();
         }
+    });
+
+    function openExistingMapPicker() {
+        fetch('{% url "messages.attach_map.picker" %}', { credentials: 'same-origin' })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var host = document.getElementById('dm-map-picker-dialog-host');
+                if (!host) return;
+                host.innerHTML =
+                    '<dialog class="dm-map-picker-dialog"><form method="dialog"><h3>Attach an existing map</h3><div class="dm-map-picker-body">' +
+                    html +
+                    '</div><button type="submit" class="btn btn--ghost">Cancel</button></form></dialog>';
+                var dlg = host.querySelector('dialog');
+                if (dlg) dlg.showModal();
+            })
+            .catch(function () { toast('error', 'Could not load your maps. Please try again.'); });
+    }
+
+    document.addEventListener('click', function (e) {
+        var item = e.target.closest('.dm-map-picker-item');
+        if (!item) return;
+        pendingAttachments.mapUuid = item.dataset.mapUuid;
+        renderAttachmentChips();
+        var dlg = item.closest('dialog');
+        if (dlg) dlg.close();
     });
 
     // -- @pin / @trip / @friend sharing -------------------------------------------

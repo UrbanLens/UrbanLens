@@ -156,12 +156,26 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
+        show_wiki_cover_photo = bool(profile.show_wiki_cover_photos and wiki.cover_photo_id)
+        wiki_cover_candidates: list[dict] = []
+        if show_wiki_cover_photo:
+            from urbanlens.dashboard.models.images.model import Image
+
+            wiki_cover_candidates = [
+                {"id": img.pk, "url": img.image.url}
+                for img in Image.objects.filter(wiki=wiki).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20]
+                if img.image
+            ]
+
         return render(
             request,
             "dashboard/pages/location/wiki.html",
             {
                 "wiki": wiki,
                 "location": location,
+                "profile": profile,
+                "show_wiki_cover_photo": show_wiki_cover_photo,
+                "wiki_cover_candidates": wiki_cover_candidates,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,

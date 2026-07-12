@@ -507,6 +507,11 @@ def create_direct_message(
             # images just read whatever standing decision this row holds.
             DirectMessageImagePermission.objects.get_or_create(viewer=recipient, sender=sender)
 
+    if markup_map is not None:
+        from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
+
+        share_markup_map_with_profile(sender, recipient, markup_map)
+
     logger.info("Direct message %s: profile %s -> profile %s", message.pk, sender.pk, recipient.pk)
 
     if is_thread_open(recipient.pk, sender.pk):

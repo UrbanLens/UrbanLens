@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.
 
@@ -22,6 +23,12 @@ Context:
       <i class="material-symbols-outlined">add_photo_alternate</i>
     </button>
     {% endif %}
+    {% if context_type == "pin" %}
+    <button type="button" class="gallery-import-photos-btn" id="photos-select-btn" title="Select photos"
+            onclick="window.photosToggleSelectMode()">
+      <i class="material-symbols-outlined">checklist</i>
+    </button>
+    {% endif %}
   </div>
 
   {# Hidden file input - triggered by clicking the empty state or the add-photos item #}
@@ -43,6 +50,11 @@ Context:
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
+      {% if img.profile == profile %}
+      <button type="button" class="gallery-select-check" title="Select photo" onclick="window.photosToggleSelect(event, this)" hidden>
+        <i class="material-symbols-outlined">check_circle</i>
+      </button>
+      {% endif %}
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
         {% if include_children and img.pin_id != pin.id %}
@@ -92,28 +104,56 @@ Context:
   {% include "dashboard/partials/ui/_pagination_controls.html" %}
 </div>
 
+{% if context_type == "pin" %}
+{# -- Photo gallery multi-select floating toolbar --------------------------- #}
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="photos" actions=photo_bulk_actions %}
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>
+{% endif %}
+
 {# -- Lightbox ----------------------------------------------------------------- #}
 <dialog id="gallery-lightbox" class="gallery-lightbox ul-dialog">
   <div class="lightbox-inner">
     <button type="button" class="lightbox-close" onclick="document.getElementById('gallery-lightbox').close()">
       <i class="material-symbols-outlined">close</i>
     </button>
-    <button type="button" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
-      <i class="material-symbols-outlined">chevron_left</i>
-    </button>
-    <img id="lightbox-img" src="" alt="" class="lightbox-img">
-    <button type="button" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
-      <i class="material-symbols-outlined">chevron_right</i>
-    </button>
-    <p id="lightbox-caption" class="lightbox-caption"></p>
-    <div id="lightbox-meta" class="lightbox-meta">
-      <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
-      <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
-      <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
-      <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
+    <div class="lightbox-media-area">
+      <button type="button" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
+        <i class="material-symbols-outlined">chevron_left</i>
+      </button>
+      <img id="lightbox-img" src="" alt="" class="lightbox-img">
+      <button type="button" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
+        <i class="material-symbols-outlined">chevron_right</i>
+      </button>
     </div>
-    {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
-    <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+    <div class="lightbox-side-panel">
+      <p id="lightbox-caption" class="lightbox-caption"></p>
+      <div id="lightbox-meta" class="lightbox-meta">
+        <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
+        <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden>
+          <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
+        </a>
+      </div>
+      <div id="lightbox-relevance-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(true)">
+          <i class="material-symbols-outlined">thumb_up</i> Relevant
+        </button>
+        <button type="button" id="lightbox-not-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(false)">
+          <i class="material-symbols-outlined">thumb_down</i> Not relevant
+        </button>
+      </div>
+      {% if context_type == "pin" or context_type == "wiki" %}
+      <div id="lightbox-cover-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
+          <i class="material-symbols-outlined">wallpaper</i> Set as cover photo
+        </button>
+      </div>
+      {% endif %}
+      {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
+      <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+    </div>
   </div>
 </dialog>
 
@@ -136,6 +176,8 @@ Context:
   var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
+  var PIN_MEDIA_RELEVANCE_URL = '{% if context_type == "pin" %}{% url "pin.media.relevance" pin.slug %}{% endif %}';
+  var COVER_PHOTO_URL = '{% if context_type == "pin" %}{% url "pin.cover_photo" pin.slug %}{% elif context_type == "wiki" %}{% url "location.wiki.cover_photo" location.slug %}{% endif %}';
 
   // Build an ordered list of image ids for lightbox navigation.
   var _items = Array.from(document.querySelectorAll('.gallery-item')).map(function (el) {
@@ -151,6 +193,10 @@ Context:
       takenAt: el.dataset.takenAt || '',
     };
   });
+  // Generalized lightbox state: an ordered list of normalized items (photo
+  // gallery photos OR pin detail Media gallery items - see
+  // window.galleryOpenLightboxItem) plus the index currently shown.
+  var _lightboxList = [];
   var _lightboxIdx = 0;
 
   // -- Page-level drag-to-upload detection ------------------------------------
@@ -346,36 +392,52 @@ Context:
   // `fallback` ({url, caption}) covers photos not on the currently rendered
   // (paginated) gallery page - e.g. opened from a map thumbnail marker.
   window.galleryOpenLightbox = function (imgId, fallback) {
-    _lightboxIdx = _items.findIndex(function (i) { return i.id === imgId; });
-    if (_lightboxIdx < 0) {
-      _lightboxIdx = 0;
-      if (fallback && fallback.url) {
-        document.getElementById('lightbox-img').src = fallback.url;
-        document.getElementById('lightbox-caption').textContent = fallback.caption || '';
-        _setLightboxMeta({});
-        _loadLightboxCustomFields(null);
-        document.getElementById('gallery-lightbox').showModal();
-        return;
-      }
+    _lightboxList = _items.map(function (i) {
+      return {
+        url: i.url, caption: '', author: i.author, copyright: i.copyright,
+        sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
+        imageId: i.id, canRelevance: false, relevant: null,
+      };
+    });
+    var idx = _items.findIndex(function (i) { return i.id === imgId; });
+    if (idx < 0 && fallback && fallback.url) {
+      _lightboxList = [{ url: fallback.url, caption: fallback.caption || '', author: '', copyright: '', sourceUrl: '', sourceName: '', takenAt: '', imageId: null, canRelevance: false, relevant: null }];
+      idx = 0;
     }
+    _lightboxIdx = Math.max(idx, 0);
+    _showLightbox();
+    document.getElementById('gallery-lightbox').showModal();
+  };
+
+  // Generalized opener: `list` is an array of normalized items (see the
+  // Media gallery's window.mediaOpenLightbox for the shape), `idx` the one
+  // to show first. Used by any gallery of photos that isn't the DOM-resident
+  // `.gallery-item` grid above (e.g. the pin detail page's Media section).
+  window.galleryOpenLightboxItem = function (list, idx) {
+    _lightboxList = list || [];
+    _lightboxIdx = idx || 0;
     _showLightbox();
     document.getElementById('gallery-lightbox').showModal();
   };
 
   window.galleryLightboxNav = function (dir) {
-    _lightboxIdx = (_lightboxIdx + dir + _items.length) % _items.length;
+    if (!_lightboxList.length) return;
+    _lightboxIdx = (_lightboxIdx + dir + _lightboxList.length) % _lightboxList.length;
     _showLightbox();
   };
 
   function _showLightbox() {
-    var item = _items[_lightboxIdx];
+    var item = _lightboxList[_lightboxIdx];
     if (!item) return;
     document.getElementById('lightbox-img').src = item.url;
-    var el = document.getElementById('gallery-item-' + item.id);
-    var caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
-    document.getElementById('lightbox-caption').textContent = caption;
+    var caption = item.caption;
+    if (!caption && item.imageId) {
+      var el = document.getElementById('gallery-item-' + item.imageId);
+      caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
+    }
+    document.getElementById('lightbox-caption').textContent = caption || '';
     _setLightboxMeta(item);
-    _loadLightboxCustomFields(item.id);
+    _loadLightboxCustomFields(item.imageId);
   }
 
   // Load the viewer's custom-field strip for the current photo. The endpoint
@@ -391,10 +453,13 @@ Context:
   }
 
   function _setLightboxMeta(item) {
+    var sourceNameEl = document.getElementById('lightbox-source-name');
     var authorEl = document.getElementById('lightbox-author');
     var takenEl = document.getElementById('lightbox-taken-at');
     var copyrightEl = document.getElementById('lightbox-copyright');
     var sourceEl = document.getElementById('lightbox-source-link');
+    var relevanceEl = document.getElementById('lightbox-relevance-actions');
+    if (sourceNameEl) { sourceNameEl.textContent = item.sourceName ? 'Source: ' + item.sourceName : ''; sourceNameEl.hidden = !item.sourceName; }
     if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
     if (takenEl) {
       var takenText = '';
@@ -404,10 +469,62 @@ Context:
     }
     if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
     if (sourceEl) {
-      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
-      else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
+      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.hidden = false; }
+      else { sourceEl.removeAttribute('href'); sourceEl.hidden = true; }
     }
+    if (relevanceEl) {
+      relevanceEl.hidden = !item.canRelevance;
+      var upBtn = document.getElementById('lightbox-relevant-btn');
+      var downBtn = document.getElementById('lightbox-not-relevant-btn');
+      if (upBtn) upBtn.classList.toggle('is-active', item.relevant === true);
+      if (downBtn) downBtn.classList.toggle('is-active', item.relevant === false);
+    }
+    var coverEl = document.getElementById('lightbox-cover-actions');
+    if (coverEl) coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
   }
+
+  // Only offered for real, persisted photos (personal uploads, or Media
+  // gallery items already sent to the wiki) - a still-transient Media item
+  // has no imageId to set as a cover.
+  window._lightboxSetCover = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId || !COVER_PHOTO_URL) return;
+    fetch(COVER_PHOTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ image_id: item.imageId }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function () {
+      if (window.toastr) toastr.success('Cover photo updated. Reload the page to see it.');
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Failed to set cover photo.');
+    });
+  };
+
+  // Called from the lightbox's Relevant/Not relevant buttons (only shown for
+  // Media-gallery items, see canRelevance). Persists the mark, updates the
+  // lightbox's own button state, and syncs the corresponding grid tile back
+  // on the pin detail page's Media section (if that tile is present).
+  window._lightboxSetRelevance = function (isRelevant) {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.canRelevance || !PIN_MEDIA_RELEVANCE_URL) return;
+    var wasRelevant = item.relevant === true;
+    var wasNotRelevant = item.relevant === false;
+    var next = (isRelevant && wasRelevant) || (!isRelevant && wasNotRelevant) ? null : isRelevant;
+    item.relevant = next;
+    _setLightboxMeta(item);
+    var gridItem = document.querySelector('#media-gallery-grid .media-item[data-media-source="' + item.mediaSource + '"][data-media-key="' + item.mediaKey + '"]');
+    if (gridItem && window._mediaApplyRelevanceState) window._mediaApplyRelevanceState(gridItem, next);
+    fetch(PIN_MEDIA_RELEVANCE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next }),
+    }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+  };
 
   // -- Map hover sync ---------------------------------------------------------
   window.galleryHover = function (imgId, on) {
@@ -449,6 +566,79 @@ Context:
     }).catch(function (err) {
       if (window.toastr) toastr.error('Failed to reposition photo: ' + (err.message || 'unknown error'));
       if (typeof onError === 'function') onError();
+    });
+  };
+
+  // -- Multi-select mode (own photos only: delete / send to wiki) -------------
+  var BULK_URL = '{% if context_type == "pin" %}{% url "pin.gallery.bulk" pin.slug %}{% endif %}';
+  var photosSelecting = false;
+  var photosSelected = new Set();
+
+  window.photosToggleSelectMode = function () {
+    photosSelecting = !photosSelecting;
+    photosSelected.clear();
+    var gallery = document.getElementById('photo-gallery');
+    var btn = document.getElementById('photos-select-btn');
+    if (gallery) gallery.classList.toggle('photo-gallery--selecting', photosSelecting);
+    if (btn) btn.classList.toggle('is-active', photosSelecting);
+    document.querySelectorAll('#gallery-grid .gallery-item').forEach(function (item) { item.classList.remove('is-selected'); });
+    if (window.ulBulkToolbar) window.ulBulkToolbar.clear('photos');
+  };
+
+  window.photosToggleSelect = function (evt, checkEl) {
+    evt.stopPropagation();
+    var item = checkEl.closest('.gallery-item');
+    if (!item) return;
+    var id = parseInt(item.dataset.id, 10);
+    var nowSelected = !item.classList.contains('is-selected');
+    item.classList.toggle('is-selected', nowSelected);
+    if (nowSelected) photosSelected.add(id); else photosSelected.delete(id);
+    if (window.ulBulkToolbar) {
+      window.ulBulkToolbar.sync('photos', photosSelected.size, {
+        delete: function () { window.photosBulkDelete(); },
+        wiki: function () { window.photosBulkSendToWiki(); },
+        deselect: function () { window.photosToggleSelectMode(); },
+      });
+    }
+  };
+
+  window.photosBulkDelete = function () {
+    var ids = Array.from(photosSelected);
+    if (!ids.length) return;
+    if (!confirm('Delete ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
+    fetch(BULK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ action: 'delete', image_ids: ids }),
+    }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function () {
+      ids.forEach(function (id) {
+        var el = document.getElementById('gallery-item-' + id);
+        if (el) el.remove();
+      });
+      _items = _items.filter(function (i) { return ids.indexOf(i.id) === -1; });
+      if (window.toastr) toastr.success('Deleted ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '.');
+      window.photosToggleSelectMode();
+    }).catch(function () { if (window.toastr) toastr.error('Failed to delete photos.'); });
+  };
+
+  window.photosBulkSendToWiki = function () {
+    var ids = Array.from(photosSelected);
+    if (!ids.length) return;
+    if (!confirm('Send ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + ' to the community wiki for this location? This makes them visible to everyone.')) return;
+    fetch(BULK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ action: 'send_to_wiki', image_ids: ids }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function () {
+      if (window.toastr) toastr.success('Sent ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + ' to the wiki.');
+      window.photosToggleSelectMode();
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Failed to send photos to the wiki.');
     });
   };
 })();

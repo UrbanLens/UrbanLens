@@ -1,0 +1,25 @@
+{% comment %}
+Reusable floating multi-select action bar. Pair with frontend/static/js/bulk-toolbar.js
+(window.ulBulkToolbar.sync/clear) - the page's own JS owns entering/exiting
+select mode and per-item checkboxes; this only renders the bar and wires its
+buttons to whatever callbacks the caller supplies via `sync`.
+
+Context:
+  namespace - unique key (e.g. "media", "photos") matching the sync() calls
+  actions   - list of {action, icon, label} dicts, one per possible button;
+              a button only appears when the caller's sync() supplies a
+              callback for its `action` key
+{% endcomment %}
+<div class="ul-bulk-bar" id="ul-bulk-bar-{{ namespace }}" aria-live="polite">
+    <span class="ul-bulk-count"></span>
+    <span class="ul-bulk-sep"></span>
+    {% for item in actions %}
+    <button type="button" class="ul-bulk-btn ul-bulk-btn--{{ item.action }}" data-bulk-action="{{ item.action }}" title="{{ item.label }}" hidden>
+        <i class="material-symbols-outlined">{{ item.icon }}</i>
+        <span>{{ item.label }}</span>
+    </button>
+    {% endfor %}
+    <button type="button" class="ul-bulk-btn ul-bulk-btn--deselect" data-bulk-action="deselect" title="Deselect all" hidden>
+        <i class="material-symbols-outlined">close</i>
+    </button>
+</div>
