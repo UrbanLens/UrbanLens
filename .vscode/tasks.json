@@ -141,6 +141,22 @@
             "problemMatcher": ["$tsc"]
         },
         {
+            "label": "Test: bun (typescript)",
+            "type": "shell",
+            "command": "${userHome}\\.bun\\bin\\bun.exe",
+            "args": ["run", "test:ts"],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Frontend: build all (sass + ts)",
             "dependsOn": ["Sass: compile", "TypeScript: build"],
             "dependsOrder": "parallel",

@@ -13,6 +13,7 @@
         "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --define \"import.meta.url='about:blank'\"",
         "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --minify --define \"import.meta.url='about:blank'\"",
         "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test:ts": "bun test src/urbanlens/dashboard/frontend/ts",
         "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
         "lint": "pyright src/urbanlens",

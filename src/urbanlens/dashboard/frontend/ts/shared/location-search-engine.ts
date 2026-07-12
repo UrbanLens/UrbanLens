@@ -102,7 +102,7 @@ function escHtml(s: string): string {
 // Matches full Plus Codes (XXXXXXXX+XX) and shortened codes (XXXX+XX City)
 const PLUS_CODE_RE = /^([23456789CFGHJMPQRVWXcfghjmpqrvwx]{4,8}\+[23456789CFGHJMPQRVWXcfghjmpqrvwx]{0,2})([\s,].*)?$/;
 
-function isPlusCode(q: string): boolean {
+export function isPlusCode(q: string): boolean {
     return PLUS_CODE_RE.test((q || "").trim());
 }
 
@@ -134,7 +134,7 @@ async function resolvePlusCode(q: string): Promise<{ lat: number; lng: number } 
     return null;
 }
 
-function parseCoordinates(q: string): { lat: number; lng: number } | null {
+export function parseCoordinates(q: string): { lat: number; lng: number } | null {
     const m1 = q.trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*[,\s]\s*(-?\d{1,3}(?:\.\d+)?)$/);
     if (m1) {
         const a = Number.parseFloat(m1[1]!);

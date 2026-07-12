@@ -29,22 +29,22 @@ export interface ShapeSpec {
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
-function safeColor(v: unknown, fallback = "#e74c3c"): string {
+export function safeColor(v: unknown, fallback = "#e74c3c"): string {
     return typeof v === "string" && HEX_COLOR_RE.test(v) ? v : fallback;
 }
 
-function safeOptionalColor(v: unknown, fallback = "#e74c3c"): string {
+export function safeOptionalColor(v: unknown, fallback = "#e74c3c"): string {
     if (v === "none") return "none";
     return safeColor(v, fallback);
 }
 
-function safeNumber(v: unknown, lo: number, hi: number, def: number): number {
+export function safeNumber(v: unknown, lo: number, hi: number, def: number): number {
     const n = Number.parseFloat(v as string);
     if (Number.isNaN(n)) return def;
     return Math.max(lo, Math.min(hi, n));
 }
 
-function bearing(from: LatLngTuple | { lat: number; lng: number }, to: LatLngTuple | { lat: number; lng: number }): number {
+export function bearing(from: LatLngTuple | { lat: number; lng: number }, to: LatLngTuple | { lat: number; lng: number }): number {
     const flat = Array.isArray(from) ? from[0] : from.lat;
     const flng = Array.isArray(from) ? from[1] : from.lng;
     const tlat = Array.isArray(to) ? to[0] : to.lat;
@@ -67,7 +67,7 @@ function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | nul
     );
 }
 
-function arrowheadSize(zoom?: number | null): number {
+export function arrowheadSize(zoom?: number | null): number {
     if (zoom == null || zoom >= 16) return 28;
     if (zoom >= 13) return 20;
     if (zoom >= 10) return 14;

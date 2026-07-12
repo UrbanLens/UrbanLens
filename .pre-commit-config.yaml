@@ -47,3 +47,9 @@ repos:
         language: system
         files: '\.tsx?$'
         pass_filenames: false
+      - id: bun-test
+        name: bun test (typescript unit tests)
+        entry: bun run test:ts
+        language: system
+        files: '\.tsx?$'
+        pass_filenames: false
