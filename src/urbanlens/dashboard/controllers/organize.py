@@ -79,6 +79,33 @@ class OrganizeIndexView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/organize/index.html", build_organize_page_context(request, tab))
 
 
+class OrganizePriorityListView(LoginRequiredMixin, View):
+    """Re-render the Display Order tab's priority list.
+
+    GET /organize/priority/list/
+
+    The initial page load renders this list once; any badge create/edit/delete/
+    merge/bulk-edit/convert elsewhere on the Organize page fires a `refreshPriority`
+    client-side event (see organize.ts) that re-fetches it here, so a renamed,
+    re-icon'd, deleted, or newly-created badge shows up without a full reload.
+    """
+
+    def get(self, request, *args, **kwargs):
+        """Render the priority-list partial.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered `_priority_list.html` partial.
+        """
+        if not isinstance(request.user, AuthUser):
+            raise TypeError("Expected an authenticated user")
+        profile: Profile = request.user.profile
+        priority_items = Badge.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
+        return render(request, "dashboard/partials/badges/_priority_list.html", {"priority_items": priority_items})
+
+
 class OrganizePrioritySaveView(LoginRequiredMixin, View):
     """Save the combined priority order for tags and categories."""
 

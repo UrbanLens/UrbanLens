@@ -1,4 +1,8 @@
-<div class="trip-detail-header">
+<div class="trip-detail-header"
+     data-trip-name="{{ trip.name }}"
+     data-trip-description="{{ trip.description|default:'' }}"
+     data-trip-start-date="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
+     data-trip-end-date="{{ trip.end_date|date:'Y-m-d'|default:'' }}">
     <div class="trip-detail-header-left">
         <a href="{% url 'trips.list' %}" class="trip-back-link">
             <i class="material-icons">arrow_back</i> Plan
@@ -24,7 +28,7 @@
         {% endif %}
         <button type="button" class="btn-icon"
                 title="Edit trip"
-                onclick="document.getElementById('edit-trip-dialog').showModal()">
+                onclick="_tripOpenEditDialog()">
             <i class="material-icons">edit</i>
         </button>
         {% if trip.creator == profile %}

@@ -218,6 +218,28 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
         settings.save()
 
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            # Several numeric fields above are silently clamped into range rather
+            # than rejected (e.g. image_downscale_max_dimension to [256, 20000]) -
+            # report back what was actually persisted so the autosave JS can
+            # repaint the input instead of leaving it showing the raw value the
+            # admin typed while claiming "Saved".
+            clamped_fields = (
+                "max_trip_members",
+                "max_bbox_area_km2",
+                "external_data_cache_days",
+                "login_max_attempts",
+                "login_lockout_minutes",
+                "backup_frequency_hours",
+                "backup_retention",
+                "email_limit_per_hour",
+                "email_limit_per_day",
+                "email_limit_per_month",
+                "storage_quota_gb",
+                "image_downscale_max_dimension",
+            )
+            values = {field: getattr(settings, field) for field in clamped_fields if field in request.POST}
+            return JsonResponse({"ok": True, "values": values})
         return HttpResponseRedirect(reverse("site_admin") + "?saved=1")
 
 

@@ -18,6 +18,12 @@ export interface ConvertTarget {
     kind: string;
     label: string;
     endpoint: string;
+    /** GET url returning the destination tab's row list, for refreshing it after a convert. */
+    rowsUrl?: string;
+    /** CSS selector for the destination tab's rows container. */
+    rowsTarget?: string;
+    /** data-tab value of the destination tab's `.organize-tab` trigger, to switch to it after converting. */
+    tabKey?: string;
 }
 
 export interface OrgTabManagerConfig {
@@ -394,21 +400,33 @@ export class OrgTabManager {
         const ids = Array.from(this.selected);
         const iconSet = new Set<string>();
         const colorSet = new Set<string>();
+        const customIconSet = new Set<string>();
         ids.forEach((id) => {
             const card = document.querySelector<HTMLElement>(`[data-${this.datasetAttr(this.cfg.idKey)}="${id}"]`);
             if (!card) return;
             iconSet.add(card.dataset[this.cfg.iconKey] ?? "");
             colorSet.add(card.dataset[this.cfg.colorKey] ?? "");
+            if (this.cfg.customIconKey) customIconSet.add(card.dataset[this.cfg.customIconKey] ?? "");
         });
         const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0]! : null;
         const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0]! : null;
+        // A shared *custom uploaded* icon has no representation in the symbol/emoji
+        // picker below - without this check, every selected badge sharing one was
+        // computed as sharedIcon="" (empty symbol field), which unchecked "no
+        // change" and would submit icon="" on save, silently wiping the custom
+        // icon from all of them even for a bulk edit that only touched color/order.
+        const sharedCustomIcon = this.cfg.customIconKey && customIconSet.size === 1 ? Array.from(customIconSet)[0]! : null;
 
         const iconNochange = document.getElementById(d.iconNochangeId) as HTMLInputElement;
         const iconValue = document.getElementById(`icon-value-${d.iconPickerId}`) as HTMLInputElement | null;
         const iconCurrent = document.getElementById(`icon-current-${d.iconPickerId}`);
         const iconGrid = document.getElementById(`icon-grid-${d.iconPickerId}`);
         iconGrid?.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
-        if (sharedIcon !== null) {
+        if (sharedCustomIcon) {
+            iconNochange.checked = true;
+            if (iconValue) iconValue.value = "";
+            if (iconCurrent) iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+        } else if (sharedIcon !== null) {
             iconNochange.checked = false;
             if (iconValue) iconValue.value = sharedIcon;
             if (iconCurrent) iconCurrent.innerHTML = renderIconGlyphHtml(sharedIcon);
@@ -531,13 +549,23 @@ export class OrgTabManager {
             body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
 
             try {
-                const url = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget)!.endpoint : this.cfg.endpoints.bulkEdit;
+                const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;
+                const url = converting ? target!.endpoint : this.cfg.endpoints.bulkEdit;
                 const html = await this.postForHtml(url, body);
                 (document.getElementById(d.dialogId) as HTMLDialogElement).close();
                 this.replaceRows(html);
                 this.onRowsUpdated();
                 if (converting) {
                     toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
+                    // This request bypassed htmx (plain fetch), so the destination tab's
+                    // rows never see the converted items - refresh it explicitly and jump
+                    // there, mirroring the single-item edit form's kindChanged handling.
+                    if (target?.rowsUrl && target.rowsTarget) {
+                        window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
+                    }
+                    if (target?.tabKey) {
+                        document.querySelector<HTMLElement>(`.organize-tab[data-tab="${target.tabKey}"]`)?.click();
+                    }
                 } else {
                     toast.success(`${this.cfg.entityPluralCap} updated.`);
                 }

@@ -17,7 +17,7 @@
             {% elif context_type == "wiki" %}
             hx-delete="{% url 'location.wiki.comment.delete' location.slug comment.id %}"
             {% endif %}
-            hx-target="#comment-{{ comment.id }}"
+            hx-target="#comment-panel"
             hx-swap="outerHTML"
             hx-confirm="Delete this comment?"
             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>

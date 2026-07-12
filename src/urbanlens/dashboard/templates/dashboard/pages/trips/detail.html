@@ -93,7 +93,7 @@
             </div>
             <div id="trip-weather-panel"
                  hx-get="{% url 'trips.weather' trip.uuid %}"
-                 hx-trigger="load"
+                 hx-trigger="load, activityChanged from:body"
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
                     <i class="material-icons rotating">refresh</i>
@@ -819,9 +819,18 @@ function _updateActivitiesEmptyState(panel, tab, showCompleted) {
         return li.style.display !== 'none';
     });
     var emptyAllDone = panel.querySelector('.trip-panel-empty--all-completed');
+    var allDoneVisible = false;
     if (emptyAllDone) {
         var allCompleted = panel.dataset.allCompleted === 'true';
-        emptyAllDone.hidden = anyVisible || !allCompleted || showCompleted || tab !== 'all';
+        allDoneVisible = !anyVisible && allCompleted && !showCompleted && tab === 'all';
+        emptyAllDone.hidden = !allDoneVisible;
+    }
+    // Generic "nothing in this tab" message - covers e.g. the Confirmed tab
+    // going empty after the last confirmed activity is deleted/completed,
+    // which previously left the panel looking blank instead of explaining why.
+    var emptyTab = panel.querySelector('.trip-panel-empty--tab');
+    if (emptyTab) {
+        emptyTab.hidden = anyVisible || allDoneVisible;
     }
 }
 
@@ -1019,8 +1028,7 @@ window.tripToggleShowCompleted = function () {
 }());
 
 // -- Add activity success callback ----------------------------------------
-function _onAddActivitySuccess() {
-    document.getElementById('add-activity-dialog').close();
+function _resetAddActivityForm() {
     document.getElementById('add-activity-form').reset();
     document.getElementById('activity-location-display').textContent = '';
     document.getElementById('activity-location-uuid').value = '';
@@ -1043,6 +1051,13 @@ function _onAddActivitySuccess() {
     if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
     // map + view restore are handled by the activities section listener below
 }
+function _onAddActivitySuccess() {
+    document.getElementById('add-activity-dialog').close();
+    _resetAddActivityForm();
+}
+// Reset on every dismissal path (Cancel button, Escape key, backdrop click) -
+// not just a successful submit - so reopening never shows a stale draft.
+document.getElementById('add-activity-dialog').addEventListener('close', _resetAddActivityForm);
 
 // -- Activities section: auto-refresh map + restore view on any panel swap -
 (function () {
@@ -1294,6 +1309,32 @@ function _initCalDragDrop(calEl) {
 
 // -- Status pill toggle helper --------------------------------------------
 // -- Trip dates: hidden until "Add dates" is clicked ----------------------
+// The edit-trip form's inputs are only ever populated from server-rendered
+// context at initial page load - if the trip's name/dates changed since then
+// via some other path (e.g. confirming an activity auto-expands the trip's
+// date range), reopening this dialog would silently show the stale pre-change
+// values. Resync from the header's data attributes (kept current by every
+// #trip-header swap) right before showing the dialog.
+function _tripOpenEditDialog() {
+    var header = document.getElementById('trip-header')?.querySelector('.trip-detail-header');
+    if (header) {
+        var nameInput = document.getElementById('edit-trip-name');
+        if (nameInput) nameInput.value = header.dataset.tripName || '';
+        var descInput = document.getElementById('edit-trip-description');
+        if (descInput) descInput.value = header.dataset.tripDescription || '';
+        var startInput = document.getElementById('edit-trip-start');
+        if (startInput) startInput.value = header.dataset.tripStartDate || '';
+        var endInput = document.getElementById('edit-trip-end');
+        if (endInput) endInput.value = header.dataset.tripEndDate || '';
+        var hasDates = !!(header.dataset.tripStartDate || header.dataset.tripEndDate);
+        var row = document.getElementById('edit-trip-dates-row');
+        var toggle = document.getElementById('edit-trip-dates-toggle');
+        if (row) row.hidden = !hasDates;
+        if (toggle) toggle.hidden = hasDates;
+    }
+    document.getElementById('edit-trip-dialog').showModal();
+}
+
 function _tripRevealDates(prefix) {
     var row = document.getElementById(prefix + '-dates-row');
     var toggle = document.getElementById(prefix + '-dates-toggle');

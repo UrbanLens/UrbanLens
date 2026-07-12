@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
@@ -154,6 +155,24 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     return friendship
 
 
+def _mark_friend_request_notifications_read(viewer_profile: Profile, source_profile_id: int) -> None:
+    """Mark the viewer's pending "new friend request" notification(s) from a source as read.
+
+    Accepting/declining/ignoring a request on the profile page (rather than via the
+    notification dropdown's own accept/decline buttons) previously left the originating
+    notification unread indefinitely, inflating the bell badge count forever.
+
+    Args:
+        viewer_profile: Profile who just acted on the request.
+        source_profile_id: pk of the profile that sent the request.
+    """
+    NotificationLog.objects.filter(
+        profile=viewer_profile,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile_id=source_profile_id,
+    ).update(status=Status.READ)
+
+
 def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     """Re-render whichever own-profile friend widget triggered this HTMX request.
 
@@ -166,8 +185,10 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
     ctx = _friend_list_ctx(viewer_profile, viewer_profile)
     if request.headers.get("HX-Target") == "friends_page_list":
-        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
-    return render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+        response = render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
+    else:
+        response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+    return _trigger_badge_refresh(response)
 
 
 def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
@@ -209,11 +230,13 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(requesting, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return render(
+                request,
+                "dashboard/partials/profile/friend_list_partial.html",
+                _friend_list_ctx(requesting, to_profile),
+            )
+        return _redirect_to_profile(profile_id)
 
     def accept_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -239,6 +262,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             message=f"{request.user.profile.username} accepted your friend request.",
             url=reverse("profile.view_user", kwargs={"profile_slug": request.user.profile.slug or str(request.user.profile.uuid)}),
         )
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
 
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
@@ -255,6 +279,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.decline()
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
@@ -271,6 +296,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.ignore()
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
@@ -434,7 +460,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         from django.core.exceptions import ValidationError
         from django.core.mail import EmailMultiAlternatives
         from django.core.validators import validate_email
-        from django.template.loader import render_to_string
 
         from urbanlens.dashboard.models.email_log import EmailType
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
@@ -470,12 +495,14 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
 
+        friendship_changed = False
         existing_user = find_user_by_email(email)
         if existing_user:
             to_profile = existing_user.profile
             # Respect visibility settings silently - no error, no distinguishable response.
             if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
                 friendship = request_or_accept_friendship(inviter, to_profile)
+                friendship_changed = bool(friendship)
                 if friendship and subscription_role is not None:
                     from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
                     from urbanlens.dashboard.models.subscriptions import grant_subscription
@@ -526,4 +553,15 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 else:
                     record_email_sent(inviter, email, EmailType.JOIN_INVITE)
 
-        return render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})
+        response = render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})
+        if friendship_changed:
+            # A new outgoing request (or crossed-request auto-accept) doesn't
+            # otherwise show up anywhere without a reload - OOB-refresh whichever
+            # friend-list widget is present on the current page (the compact one
+            # on the profile page, or the full one on /friends/; htmx silently
+            # skips whichever id isn't in the DOM).
+            ctx = {**_friend_list_ctx(inviter, inviter), "oob": True}
+            widget_html = render_to_string(request=request, template_name="dashboard/partials/profile/friend_list_partial.html", context=ctx)
+            page_html = render_to_string(request=request, template_name="dashboard/partials/profile/friends_page_content.html", context=ctx)
+            response.content += (widget_html + page_html).encode()
+        return response

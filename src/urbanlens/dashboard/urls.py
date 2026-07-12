@@ -157,7 +157,7 @@ urlpatterns = [
                 ),
                 path(
                     "add/",
-                    maps.MapController.as_view({"get": "add_pin", "post": "post_add_pin"}),
+                    maps.MapController.as_view({"post": "post_add_pin"}),
                     name="pin.add",
                 ),
                 path(
@@ -909,6 +909,7 @@ urlpatterns = [
             [
                 path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
                 path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
+                path("priority/list/", organize.OrganizePriorityListView.as_view(), name="organize.priority.list"),
             ],
         ),
     ),
@@ -985,6 +986,7 @@ urlpatterns = [
                 path("", memories.MemoriesView.as_view(), name="memories.view"),
                 path("data/", memories.MemoriesFeedDataView.as_view(), name="memories.data"),
                 path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
+                path("hero-stats/", memories.MemoriesHeroStatsView.as_view(), name="memories.hero_stats"),
                 path("visit/<slug:pin_slug>/", memories.MemoriesVisitView.as_view(), name="memories.visit"),
                 path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
                 path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),

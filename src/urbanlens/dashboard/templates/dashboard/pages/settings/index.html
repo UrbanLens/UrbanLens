@@ -1258,9 +1258,21 @@ window.updateClusterRadius = function (value) {
         var el = _indicators[formId];
         if (!el) return;
         el.textContent = '✓ Saved';
+        el.classList.remove('settings-autosave-indicator--error');
         el.style.opacity = '1';
         clearTimeout(el._t);
         el._t = setTimeout(function () { el.style.opacity = '0'; }, 2500);
+    }
+
+    function showSaveError(formId, message) {
+        var el = _indicators[formId];
+        if (!el) return;
+        el.textContent = message || 'Could not save';
+        el.classList.add('settings-autosave-indicator--error');
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 4000);
+        if (window.toastr) toastr.error(message || 'Could not save your changes. Please try again.');
     }
 
     function doSave(form) {
@@ -1269,8 +1281,27 @@ window.updateClusterRadius = function (value) {
         fetch(form.action || window.location.href, {
             method: 'POST',
             body: new FormData(form),
-            headers: { 'X-CSRFToken': getCsrf() },
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
         }).then(function (r) {
+            // A validation failure still comes back with a 200 (either the JSON
+            // {ok:false} verdict below, or - for section branches that don't check
+            // is_xhr - a redirect-then-200 full page fetch() silently followed) so
+            // status alone can't tell success from failure; the response body must
+            // be inspected too.
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (data) {
+                    if (data.ok === false) {
+                        if (guard) guard.markDirty();
+                        var firstError = data.errors && Object.keys(data.errors).length
+                            ? Object.values(data.errors)[0][0] : null;
+                        showSaveError(form.id, firstError);
+                        return;
+                    }
+                    if (guard) guard.markClean();
+                    showSaved(form.id);
+                });
+            }
             if (r.ok && guard) guard.markClean();
             if (r.ok) showSaved(form.id);
         }).catch(function () {}).finally(function () {

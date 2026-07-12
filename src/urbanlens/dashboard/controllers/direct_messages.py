@@ -68,7 +68,11 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
 
 
 def _trigger_msg_badge_refresh(response: HttpResponse) -> HttpResponse:
-    """Attach an HTMX trigger so the navbar messages badge refreshes.
+    """Attach HTMX triggers so the navbar messages badge and sidebar conversation list refresh.
+
+    Used both when opening a thread (marks it read - the sidebar's unread pill and
+    last-message preview need to catch up) and on the plain-POST send fallback
+    (the sidebar's last-message preview needs to catch up there too).
 
     Args:
         response: The response to annotate.
@@ -76,7 +80,7 @@ def _trigger_msg_badge_refresh(response: HttpResponse) -> HttpResponse:
     Returns:
         The same response with an ``HX-Trigger`` header added.
     """
-    response["HX-Trigger"] = json.dumps({"msgCountRefresh": {"target": "body"}})
+    response["HX-Trigger"] = json.dumps({"msgCountRefresh": {"target": "body"}, "dmListRefresh": {"target": "body"}})
     return response
 
 

@@ -101,6 +101,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
+        "total_comment_count": comments_qs.count(),
         "profile": profile,
         "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),
@@ -164,7 +165,12 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         comment.delete()
         if markup_map is not None:
             markup_map.delete()
-        return HttpResponse("", status=200)
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
+        # orphaned top-level comments. Re-render the whole panel rather than just
+        # removing the deleted <li>, so those replies stay visible in place
+        # instead of disappearing until the next reload.
+        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        return _render_comments(request, ctx)
 
 
 # -- Wiki comments -------------------------------------------------------------
@@ -244,7 +250,12 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         comment.delete()
         if markup_map is not None:
             markup_map.delete()
-        return HttpResponse("", status=200)
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
+        # orphaned top-level comments. Re-render the whole panel rather than just
+        # removing the deleted <li>, so those replies stay visible in place
+        # instead of disappearing until the next reload.
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        return _render_comments(request, ctx)
 
 
 # -- Reactions ------------------------------------------------------------------

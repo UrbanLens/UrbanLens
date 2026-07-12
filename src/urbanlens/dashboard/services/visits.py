@@ -487,6 +487,7 @@ def add_visited_status(pin: Pin) -> None:
     visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
     if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
         pin.badges.add(visited_badge)
+        pin.save(update_fields=["updated"])
 
 
 def remove_visited_status(pin: Pin) -> None:
@@ -505,7 +506,7 @@ def remove_visited_status(pin: Pin) -> None:
     if visited_badge:
         pin.badges.remove(visited_badge)
     pin.last_visited = None
-    pin.save(update_fields=["last_visited"])
+    pin.save(update_fields=["last_visited", "updated"])
 
 
 def sync_last_visited(pin: Pin) -> None:
@@ -516,7 +517,7 @@ def sync_last_visited(pin: Pin) -> None:
     """
     latest = pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True).first()
     pin.last_visited = latest
-    pin.save(update_fields=["last_visited"])
+    pin.save(update_fields=["last_visited", "updated"])
 
 
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:

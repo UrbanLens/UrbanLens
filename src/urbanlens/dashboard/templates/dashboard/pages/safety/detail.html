@@ -14,13 +14,13 @@
     <div class="safety-header">
         <div class="safety-header-left">
             <h1 class="safety-title">
-                <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
-                {{ checkin.title }}
+                <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
+                <span id="safety-title-text">{{ checkin.title }}</span>
             </h1>
             <p class="safety-subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
         </div>
         <div class="safety-header-right">
-            {% if not checkin.is_resolved %}
+            <div id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
             <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline"
                   onsubmit="window._safetySkipLeaveWarning = true;">
                 {% csrf_token %}
@@ -31,7 +31,7 @@
                 {% csrf_token %}
                 <button type="submit" class="btn btn--ghost">Cancel</button>
             </form>
-            {% endif %}
+            </div>
             <button type="button" class="btn btn--danger btn--sm" id="safety-delete-btn"
                     data-delete-url="{% url 'safety.checkin.delete' checkin.slug|default:checkin.uuid %}"
                     data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}">
@@ -208,6 +208,12 @@
             return response.json();
         }).then(function (data) {
             if (pickerContainer && data.contacts_html) replaceHtmlAndRunScripts(pickerContainer, data.contacts_html);
+            var titleEl = document.getElementById('safety-title-text');
+            if (titleEl && data.title) titleEl.textContent = data.title;
+            // The site-wide "active check-in" banner (header.html) is only fetched
+            // once on page load - refresh it too, in case the title just changed.
+            var banner = document.getElementById('safety-active-banner');
+            if (banner && window.htmx) window.htmx.trigger(banner, 'load');
             setStatus('Saved', false);
             (data.warnings || []).forEach(function (warning) { if (window.toastr) toastr.error(warning); });
         }).catch(function () {
@@ -287,6 +293,25 @@
         }) : Promise.resolve(window.confirm(message));
         proceed.then(function (ok) { if (ok) window.location.href = a.href; });
     }, true);
+}());
+</script>
+<script>
+(function () {
+    // -- Live status updates (escalation, mark-safe, self check-in, cancel) ----
+    // Broadcast over the chat panel's existing websocket (see _chat_panel.html
+    // and services.safety._broadcast_status_update) so this page reflects a
+    // status change made elsewhere (e.g. a contact marking the owner safe from
+    // the portal) without needing a manual reload.
+    document.body.addEventListener('safetyStatusUpdate', function (e) {
+        var badge = document.getElementById('safety-status-badge');
+        if (badge) {
+            badge.className = 'safety-checkin-status-badge safety-checkin-status-badge--' + e.detail.status;
+            badge.textContent = e.detail.status_display;
+        }
+        var actions = document.getElementById('safety-resolve-actions');
+        if (actions) actions.hidden = !!e.detail.is_resolved;
+        if (e.detail.is_resolved) window._safetySkipLeaveWarning = true;
+    });
 }());
 </script>
 <script>

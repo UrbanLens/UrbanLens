@@ -124,6 +124,12 @@ JavaScript is unavailable.
                 toast('error', msg.detail || "Your message couldn't be sent.");
                 return;
             }
+            if (msg.type === 'status_update') {
+                // Status badge/action-button state lives on the owner detail page and
+                // contact portal, not this chat panel - let them react on their own.
+                document.body.dispatchEvent(new CustomEvent('safetyStatusUpdate', { detail: msg }));
+                return;
+            }
             appendMessage(msg);
         };
     }

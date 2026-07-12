@@ -182,7 +182,6 @@
     var notifBtn  = document.getElementById('nav-notif-btn');
     var msgWrap   = document.getElementById('nav-msg');
     var msgBtn    = document.getElementById('nav-msg-btn');
-    var _loaded   = false;
 
     function openMenu() {
         if (!menu) return;
@@ -203,7 +202,11 @@
         closeMsg();
         notifWrap.classList.add('is-open');
         notifBtn.setAttribute('aria-expanded', 'true');
-        if (!_loaded) { _loaded = true; document.body.dispatchEvent(new Event('notifOpen')); }
+        // Re-fetch on every open (matches openMsg() below) so actions taken
+        // elsewhere - accepting a friend request from the profile page, a pin
+        // share, etc. - are reflected instead of showing whatever was cached
+        // from the first time the dropdown was opened this page load.
+        document.body.dispatchEvent(new Event('notifOpen'));
     }
     function closeNotif() {
         if (!notifWrap) return;

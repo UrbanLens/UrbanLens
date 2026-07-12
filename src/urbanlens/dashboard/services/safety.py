@@ -574,6 +574,7 @@ def cancel_checkin(checkin: SafetyCheckin) -> None:
     checkin.status = SafetyCheckinStatus.CANCELLED
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
 
 
 def send_checkin_reminder(checkin: SafetyCheckin) -> None:
@@ -642,6 +643,7 @@ def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
     checkin.status = SafetyCheckinStatus.CHECKED_IN
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
     _conclude_checkin(checkin)
 
 
@@ -686,6 +688,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     checkin.status = SafetyCheckinStatus.OVERDUE
     checkin.escalated_at = timezone.now()
     checkin.save(update_fields=["status", "escalated_at", "updated"])
+    _broadcast_status_update(checkin)
 
 
 def mark_found_safe(contact: SafetyCheckinContact) -> None:
@@ -711,6 +714,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     checkin.status = SafetyCheckinStatus.FOUND_SAFE
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
 
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     NotificationLog.objects.create(
@@ -885,3 +889,40 @@ def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessag
         )
     except Exception:
         logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)
+
+
+def _broadcast_status_update(checkin: SafetyCheckin) -> None:
+    """Push a check-in status change to any live-connected chat clients for this check-in.
+
+    The status badge, the "I'm safe"/"I found them" action buttons, and the leave-page
+    warning all depend on ``checkin.status``/``is_resolved`` - without this, anyone with
+    the detail page or contact portal already open only saw the change via the system
+    chat message, not in the badge/button state, until they reloaded.
+
+    Best-effort, same as ``_broadcast_chat_message`` - the status is already durably
+    saved regardless of whether anyone is connected right now.
+
+    Args:
+        checkin: The check-in whose chat group should receive the update.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"safety_checkin_{checkin.pk}",
+            {
+                "type": "status.update",
+                "payload": {
+                    "type": "status_update",
+                    "status": checkin.status,
+                    "status_display": checkin.get_status_display(),
+                    "is_resolved": checkin.is_resolved,
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast status update for checkin %s", checkin.pk)

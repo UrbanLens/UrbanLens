@@ -32,11 +32,41 @@ Context:
     </a>
     {% if unlogged_visits_count %}
     <a href="{% url 'memories.visits' %}"
+       id="memories-visits-tab"
        class="memories-tab {% if active == 'visits' %}is-active{% endif %}"
        {% if active == 'visits' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">where_to_vote</i>
         <span>Visits</span>
-        <span class="badge">{{ unlogged_visits_count }}</span>
+        <span class="badge" id="memories-visits-tab-badge">{{ unlogged_visits_count }}</span>
     </a>
     {% endif %}
 </nav>
+<script>
+    // Confirming a photo-origin visit, creating a pin from a suggestion, or logging/clearing
+    // a "Visited" status here can create or re-badge a Pin, but this isn't the map page and
+    // can't reach into its in-memory pin store/localStorage cache directly. Flag it dirty
+    // instead, same as the bulk importer does - the map page checks this flag on load and on
+    // every background poll tick, so the change shows up there without a manual reload.
+    document.body.addEventListener('htmx:afterRequest', function (e) {
+        var detail = e.detail || {};
+        if (!detail.xhr || !detail.successful) { return; }
+        if ((detail.requestConfig && detail.requestConfig.verb) === 'get') { return; }
+        try { localStorage.setItem('ul_pins_dirty', '1'); } catch (err) { /* unavailable - map falls back to its poll */ }
+    });
+
+    // Logging/dismissing/unmarking an unlogged visit shrinks the count without
+    // ever growing it back through these actions - update the Visits tab's badge
+    // (or remove the tab once it hits zero) instead of leaving it at whatever it
+    // was when this nav was last rendered.
+    document.body.addEventListener('unloggedVisitsCountChanged', function (e) {
+        var count = e.detail && e.detail.count;
+        if (typeof count !== 'number') { return; }
+        var tab = document.getElementById('memories-visits-tab');
+        if (count <= 0) {
+            if (tab) tab.remove();
+            return;
+        }
+        var badge = document.getElementById('memories-visits-tab-badge');
+        if (badge) badge.textContent = count;
+    });
+</script>

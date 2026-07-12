@@ -1,5 +1,5 @@
 {% load dashboard_tags %}
-<div id="friend_list" class="profile-section">
+<div id="friend_list" class="profile-section" {% if oob %}hx-swap-oob="true"{% endif %}>
 
     {# ── Section header ──────────────────────────────────────────────────────── #}
     <div class="profile-section-header">

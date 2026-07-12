@@ -140,17 +140,25 @@
         }
     }
 
+    function syncEnabledUI(card, enabled) {
+        if (!card) return;
+        card.classList.toggle('is-disabled', !enabled);
+        var icon = card.querySelector('.api-state-icon');
+        if (icon) icon.textContent = enabled ? 'cloud' : 'cloud_off';
+    }
+
+    // Each card's form debounce-saves every field together (enable toggle, USA-only,
+    // notes) in one request, so a save failure can't just invert the checkbox's
+    // current value on error - that value might not be what actually changed.
+    // Track the last value the server confirmed instead, and revert to *that*.
+    document.querySelectorAll('.api-enabled-cb').forEach(function (cb) {
+        cb.dataset.lastSaved = cb.checked ? '1' : '0';
+    });
+
     document.body.addEventListener('change', function (e) {
         var cb = e.target;
         if (!cb.classList.contains('api-enabled-cb')) return;
-        var card = getCard(cb);
-        if (!card) return;
-        var enabled = cb.checked;
-        card.classList.toggle('is-disabled', !enabled);
-        var icon = card.querySelector('.api-state-icon');
-        if (icon) {
-            icon.textContent = enabled ? 'cloud' : 'cloud_off';
-        }
+        syncEnabledUI(getCard(cb), cb.checked);
     });
 
     document.body.addEventListener('htmx:beforeRequest', function (evt) {
@@ -167,8 +175,19 @@
         var card = getCard(form);
         if (card) card.classList.remove('is-saving');
         var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
+        var cb = form.querySelector('.api-enabled-cb');
         if (!(status >= 200 && status < 300)) {
             setStatus(card, 'error', 'Save failed (' + (status || '?') + ')');
+            // The enable/disable toggle above updates optimistically on 'change',
+            // independent of this request's outcome - without this, a failed save
+            // left the checkbox/icon/card styling showing the unsaved state as if
+            // it were current until a reload.
+            if (cb) {
+                cb.checked = cb.dataset.lastSaved === '1';
+                syncEnabledUI(card, cb.checked);
+            }
+        } else if (cb) {
+            cb.dataset.lastSaved = cb.checked ? '1' : '0';
         }
     });
 

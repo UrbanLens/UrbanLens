@@ -321,6 +321,15 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         """
         await self.send(text_data=json.dumps(event["message"]))
 
+    async def status_update(self, event):
+        """Deliver a check-in status change (escalated/found-safe) to this connection.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict (see
+                ``services.safety._broadcast_status_update``).
+        """
+        await self.send(text_data=json.dumps(event["payload"]))
+
     @database_sync_to_async
     def _resolve(self, checkin_uuid, token):
         """Resolve the check-in and, for the contact route, the authorizing contact.

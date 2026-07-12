@@ -11,7 +11,7 @@
         </a>
         <h1 class="friends-page-title">
             {% if is_own_profile %}Your Friends{% else %}{{ profile.full_name|default:profile.username }}'s Friends{% endif %}
-            <span class="friends-page-count">{{ friends|length }}</span>
+            <span class="friends-page-count" id="friends-page-count">{{ friends|length }}</span>
         </h1>
         {% if is_own_profile %}
         {% include "dashboard/partials/profile/_invite_friend_button.html" %}

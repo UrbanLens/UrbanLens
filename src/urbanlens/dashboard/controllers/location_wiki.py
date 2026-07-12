@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 
@@ -289,7 +290,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             changes=changes,
         )
 
-        return JsonResponse({"ok": True, "changes": list(changes.keys())})
+        # Description, dates, and security indicators all render together in the
+        # "About" card - send back the freshly-rendered fragment so the client can
+        # swap it in place instead of leaving edited-but-unrendered fields stale.
+        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki}, request=request)
+        return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
 
 
 def _render_history(request, location: Location, wiki: Wiki):

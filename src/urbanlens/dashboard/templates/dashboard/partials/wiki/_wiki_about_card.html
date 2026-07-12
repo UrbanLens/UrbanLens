@@ -1,0 +1,50 @@
+{% comment %}
+Wiki "About" card - description, dates, and security indicators.
+
+Context:
+  wiki - Wiki instance
+
+Rendered both on the initial wiki page load and, after a "Suggest Edits" save,
+as a fresh HTML fragment swapped in by the client (see wiki.html's
+wiki-edit-form submit handler) so edited description/dates/security chips
+show up immediately instead of only after a reload.
+{% endcomment %}
+{% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
+<div class="card wiki-card wiki-meta" id="wiki-about-card" data-collapse-scope="wiki" data-collapse-section="about">
+    <div class="card-header">
+        <i class="material-symbols-outlined">info</i>
+        <h2>About</h2>
+    </div>
+    <div class="card__body wiki-meta-body">
+        {% if wiki.description %}
+        <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
+        {% endif %}
+        {% if wiki.date_abandoned or wiki.effective_date_last_active %}
+        <div class="wiki-meta-dates">
+            {% if wiki.date_abandoned %}
+            <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
+            {% endif %}
+            {% if wiki.effective_date_last_active %}
+            <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ wiki.effective_date_last_active|date:"M j, Y" }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+        {# Security indicators - only shown when at least one is non-unknown #}
+        {% if wiki.fences != "unknown" or wiki.alarms != "unknown" or wiki.cameras != "unknown" or wiki.security != "unknown" or wiki.signs != "unknown" or wiki.vps != "unknown" or wiki.plywood != "unknown" or wiki.locked != "unknown" %}
+        <div class="security-indicators">
+            <span class="security-indicators-label">Security</span>
+            <div class="security-chips">
+                {% if wiki.fences != "unknown" %}<span class="security-chip security-chip--{{ wiki.fences }}">Fences: {{ wiki.get_fences_display }}</span>{% endif %}
+                {% if wiki.alarms != "unknown" %}<span class="security-chip security-chip--{{ wiki.alarms }}">Alarms: {{ wiki.get_alarms_display }}</span>{% endif %}
+                {% if wiki.cameras != "unknown" %}<span class="security-chip security-chip--{{ wiki.cameras }}">Cameras: {{ wiki.get_cameras_display }}</span>{% endif %}
+                {% if wiki.security != "unknown" %}<span class="security-chip security-chip--{{ wiki.security }}">Security: {{ wiki.get_security_display }}</span>{% endif %}
+                {% if wiki.signs != "unknown" %}<span class="security-chip security-chip--{{ wiki.signs }}">Signs: {{ wiki.get_signs_display }}</span>{% endif %}
+                {% if wiki.vps != "unknown" %}<span class="security-chip security-chip--{{ wiki.vps }}">VPS: {{ wiki.get_vps_display }}</span>{% endif %}
+                {% if wiki.plywood != "unknown" %}<span class="security-chip security-chip--{{ wiki.plywood }}">Plywood: {{ wiki.get_plywood_display }}</span>{% endif %}
+                {% if wiki.locked != "unknown" %}<span class="security-chip security-chip--{{ wiki.locked }}">Locked: {{ wiki.get_locked_display }}</span>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

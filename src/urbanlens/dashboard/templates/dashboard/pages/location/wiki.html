@@ -109,46 +109,8 @@
     {# -- Body grid --------------------------------------------------------- #}
     <div class="wiki-body">
 
-        {# -- Description / dates (if any) --------------------------------- #}
-        {% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
-        <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
-            <div class="card-header">
-                <i class="material-symbols-outlined">info</i>
-                <h2>About</h2>
-            </div>
-            <div class="card__body wiki-meta-body">
-                {% if wiki.description %}
-                <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
-                {% endif %}
-                {% if wiki.date_abandoned or wiki.effective_date_last_active %}
-                <div class="wiki-meta-dates">
-                    {% if wiki.date_abandoned %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
-                    {% endif %}
-                    {% if wiki.effective_date_last_active %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ wiki.effective_date_last_active|date:"M j, Y" }}</span>
-                    {% endif %}
-                </div>
-                {% endif %}
-                {# Security indicators - only shown when at least one is non-unknown #}
-                {% if wiki.fences != "unknown" or wiki.alarms != "unknown" or wiki.cameras != "unknown" or wiki.security != "unknown" or wiki.signs != "unknown" or wiki.vps != "unknown" or wiki.plywood != "unknown" or wiki.locked != "unknown" %}
-                <div class="security-indicators">
-                    <span class="security-indicators-label">Security</span>
-                    <div class="security-chips">
-                        {% if wiki.fences != "unknown" %}<span class="security-chip security-chip--{{ wiki.fences }}">Fences: {{ wiki.get_fences_display }}</span>{% endif %}
-                        {% if wiki.alarms != "unknown" %}<span class="security-chip security-chip--{{ wiki.alarms }}">Alarms: {{ wiki.get_alarms_display }}</span>{% endif %}
-                        {% if wiki.cameras != "unknown" %}<span class="security-chip security-chip--{{ wiki.cameras }}">Cameras: {{ wiki.get_cameras_display }}</span>{% endif %}
-                        {% if wiki.security != "unknown" %}<span class="security-chip security-chip--{{ wiki.security }}">Security: {{ wiki.get_security_display }}</span>{% endif %}
-                        {% if wiki.signs != "unknown" %}<span class="security-chip security-chip--{{ wiki.signs }}">Signs: {{ wiki.get_signs_display }}</span>{% endif %}
-                        {% if wiki.vps != "unknown" %}<span class="security-chip security-chip--{{ wiki.vps }}">VPS: {{ wiki.get_vps_display }}</span>{% endif %}
-                        {% if wiki.plywood != "unknown" %}<span class="security-chip security-chip--{{ wiki.plywood }}">Plywood: {{ wiki.get_plywood_display }}</span>{% endif %}
-                        {% if wiki.locked != "unknown" %}<span class="security-chip security-chip--{{ wiki.locked }}">Locked: {{ wiki.get_locked_display }}</span>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        {# -- Description / dates / security indicators (if any) ------------ #}
+        {% include "dashboard/partials/wiki/_wiki_about_card.html" with wiki=wiki %}
 
         {# -- Community stats card ------------------------------------------ #}
         <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
@@ -362,11 +324,22 @@
             if (resp.ok) {
                 toastr.success('Changes saved.');
                 document.getElementById('wiki-edit-dialog').close();
-                // Update visible fields without reload.
-                if (data.name) document.getElementById('wiki-field-name').textContent = data.name;
-                if (data.description !== undefined) {
-                    const dd = document.getElementById('wiki-field-description');
-                    if (dd) dd.textContent = data.description;
+                // Update visible fields without reload. The name uses the same
+                // wikiRenamed event the aliases panel's "Use this name" button
+                // fires, so every .wiki-title on the page stays in sync.
+                if (data.name) document.body.dispatchEvent(new CustomEvent('wikiRenamed', { detail: { name: data.name } }));
+                // Description, dates, and security chips all live in the "About"
+                // card - swap the whole thing so edits to any of them (not just
+                // description) show up immediately instead of only after reload.
+                if (resp.about_html !== undefined) {
+                    const existing = document.getElementById('wiki-about-card');
+                    if (existing) {
+                        existing.outerHTML = resp.about_html;
+                    } else if (resp.about_html) {
+                        // Card didn't exist yet (wiki had no description/dates/security
+                        // set) - insert it as the first card in the wiki body.
+                        document.querySelector('.wiki-body')?.insertAdjacentHTML('afterbegin', resp.about_html);
+                    }
                 }
                 // Refresh the history tab.
                 htmx.trigger('#wiki-tab-content', 'load');

@@ -419,8 +419,27 @@
         fetch(form.action, {
             method: 'POST',
             body: new FormData(form),
-            headers: { 'X-CSRFToken': getCsrf() },
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
         }).then(function (r) {
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (data) {
+                    if (data.ok === false) {
+                        if (guard) guard.markDirty();
+                        if (window.toastr) toastr.error('Could not save your changes. Please try again.');
+                        return;
+                    }
+                    // Several numeric fields are silently clamped into range server-side -
+                    // repaint the input with what was actually persisted so it doesn't
+                    // silently disagree with the DB while claiming "Saved".
+                    (Object.keys(data.values || {})).forEach(function (name) {
+                        var input = form.querySelector('[name="' + name + '"]');
+                        if (input && document.activeElement !== input) input.value = data.values[name];
+                    });
+                    if (guard) guard.markClean();
+                    showSaved(card);
+                });
+            }
             if (r.ok && guard) guard.markClean();
             if (r.ok) showSaved(card);
         }).catch(function () {}).finally(function () {

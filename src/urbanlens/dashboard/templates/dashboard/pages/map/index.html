@@ -1175,6 +1175,13 @@
     // Only triggers a full refresh when the server signals a change.
     async function _pollForUpdates() {
         try {
+            if (localStorage.getItem('ul_pins_dirty') === '1') {
+                localStorage.removeItem('ul_pins_dirty');
+                console.log('[UL] Pin cache flagged dirty by another tab/page - forcing refresh');
+                window.invalidatePinCache();
+                await _refreshAllPins();
+                return;
+            }
             const resp = await fetch('{% url "map.pins.meta" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!resp.ok) { _setOffline(true); return; }
             _setOffline(false);
@@ -3764,6 +3771,7 @@
         document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => { btn.style.display = ''; });
         _inclMode = 'and';
         _rebuildBadgeSelected();
+        htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
     function _toggleInclMode() {
@@ -4710,6 +4718,31 @@
         });
     }
 
+    // A badge created inline from the Add/Edit Pin dialog is immediately usable
+    // there, but the Filter panel's badge list is only rendered once at page
+    // load - append a matching chip so it's filterable/draggable without a reload.
+    function _appendFilterPanelBadgeChip(badge) {
+        const list = document.getElementById('fp-badge-list');
+        if (!list || list.querySelector(`[data-badge-id="${badge.id}"]`)) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'fp-chip fp-badge-avail';
+        btn.draggable = true;
+        btn.dataset.badgeId = badge.id;
+        btn.dataset.badgeName = (badge.name || '').toLowerCase();
+        btn.dataset.badgeLabel = badge.name || '';
+        btn.dataset.badgeColor = badge.color || '';
+        btn.dataset.badgeIcon = badge.icon || '';
+        if (badge.color) {
+            btn.style.borderColor = badge.color + '55';
+            btn.style.background = badge.color + '18';
+            btn.style.color = badge.color + 'cc';
+        }
+        btn.innerHTML = (badge.icon ? `<span style="font-size:.9em">${_escHtml(badge.icon)}</span>` : '') + _escHtml(badge.name || '');
+        btn.addEventListener('click', () => _onBadgeAvailClick(btn));
+        list.appendChild(btn);
+    }
+
     // Create-a-badge submit (from the mini dialog)
     (function () {
         const submitBtn = document.getElementById('apdlg-cb-submit');
@@ -4738,6 +4771,7 @@
                 const newBadge = { id: data.id, name: data.name, kind: data.kind, icon: data.icon || '', color: data.color || '' };
                 _apdlgAllBadges.push(newBadge);
                 _apdlgSelectBadge(newBadge);
+                _appendFilterPanelBadgeChip(newBadge);
                 document.getElementById('apdlg-create-badge-dialog').close();
                 toastr.success(`Badge "${data.name}" created.`);
             })

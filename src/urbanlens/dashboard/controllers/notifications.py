@@ -47,13 +47,25 @@ def _trigger_badge_refresh(response: HttpResponse) -> HttpResponse:
 
 
 class NotificationDropdownView(LoginRequiredMixin, View):
-    """GET /notifications/dropdown/ - renders the bell dropdown partial."""
+    """GET /notifications/dropdown/ - renders the bell dropdown partial.
+
+    Viewing the dropdown marks its notifications read (UL-348) - not just clicking
+    one individually. Action buttons (accept/decline friend request, pin share,
+    visit suggestion) are gated on the underlying request's own pending state, not
+    on notification read/unread, so this doesn't hide anything still actionable.
+    """
 
     def get(self, request):
         profile = request.user.profile
-        notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = list(NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20])
+        unread_ids = [n.id for n in notifications if n.is_unread]
+        if unread_ids:
+            NotificationLog.objects.filter(id__in=unread_ids).mark_read()
+            for n in notifications:
+                if n.id in unread_ids:
+                    n.status = Status.READ
         unread_count = NotificationLog.objects.for_profile(profile).unread().count()
-        return render(
+        response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
@@ -61,6 +73,7 @@ class NotificationDropdownView(LoginRequiredMixin, View):
                 "unread_count": unread_count,
             },
         )
+        return _trigger_badge_refresh(response) if unread_ids else response
 
 
 class NotificationMarkReadView(LoginRequiredMixin, View):

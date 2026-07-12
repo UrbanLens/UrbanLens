@@ -650,7 +650,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 },
                 request=request,
             )
-            return JsonResponse({"ok": True, "warnings": warnings, "contacts_html": contacts_html})
+            return JsonResponse({"ok": True, "warnings": warnings, "contacts_html": contacts_html, "title": checkin.title})
         for warning in warnings:
             messages.warning(request, warning)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)

@@ -175,10 +175,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def add_pin(self, request, *args, **kwargs):
-        # Render the add form
-        return render(request, "dashboard/pages/map/add_location.html")
-
     def post_add_pin(self, request, *args, **kwargs):
         try:
             name = request.POST.get("name")

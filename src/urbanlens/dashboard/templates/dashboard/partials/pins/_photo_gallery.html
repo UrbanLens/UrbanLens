@@ -250,6 +250,26 @@ Context:
     });
   };
 
+  // Upload/delete mutate the grid directly (no htmx refetch, see comment above)
+  // but previously left the header's photo-count badge showing its value as of
+  // last page load - keep it in sync with the same direct DOM edit.
+  function _updateGalleryCountBadge(delta) {
+    var header = document.querySelector('#photo-gallery .card-header');
+    if (!header) return;
+    var badge = header.querySelector('.badge');
+    var next = Math.max(0, (badge ? Number.parseInt(badge.textContent, 10) || 0 : 0) + delta);
+    if (next === 0) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'badge';
+      header.appendChild(badge);
+    }
+    badge.textContent = next;
+  }
+
   function _addItemToGrid(img) {
     var grid = document.getElementById('gallery-grid');
     var li = document.createElement('li');
@@ -295,6 +315,7 @@ Context:
       id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
       author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
     });
+    _updateGalleryCountBadge(1);
   }
 
   // -- Delete -----------------------------------------------------------------
@@ -309,6 +330,7 @@ Context:
         if (el) el.remove();
         _items = _items.filter(function (i) { return i.id !== imgId; });
         if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
+        _updateGalleryCountBadge(-1);
         if (window.toastr) toastr.success('Photo deleted.');
       }
     });

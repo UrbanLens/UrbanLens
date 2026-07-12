@@ -4,7 +4,7 @@
   <div class="card-header">
     <i class="material-symbols-outlined">chat</i>
     <span>Comments</span>
-    {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+    {% if total_comment_count %}<span class="badge">{{ total_comment_count }}</span>{% endif %}
   </div>
 
   <div class="card__body comment-panel-body">

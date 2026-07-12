@@ -1,4 +1,5 @@
 <div id="trip-activities-panel" class="trip-panel card"
+     {% if oob %}hx-swap-oob="true"{% endif %}
      data-trip-start="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
      data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}"
      data-all-completed="{% if all_activities_completed %}true{% else %}false{% endif %}"
@@ -201,6 +202,9 @@
             All activities for this trip have been completed.
         </p>
         {% endif %}
+        <p class="trip-panel-empty trip-panel-empty--tab" hidden>
+            Nothing in this view.
+        </p>
         {% else %}
         <p class="trip-panel-empty">No activities yet.</p>
         {% endif %}

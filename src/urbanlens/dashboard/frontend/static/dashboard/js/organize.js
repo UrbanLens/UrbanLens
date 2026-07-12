@@ -3289,21 +3289,31 @@ ${this.cfg.deleteWarning}`;
     const ids = Array.from(this.selected);
     const iconSet = new Set;
     const colorSet = new Set;
+    const customIconSet = new Set;
     ids.forEach((id) => {
       const card = document.querySelector(`[data-${this.datasetAttr(this.cfg.idKey)}="${id}"]`);
       if (!card)
         return;
       iconSet.add(card.dataset[this.cfg.iconKey] ?? "");
       colorSet.add(card.dataset[this.cfg.colorKey] ?? "");
+      if (this.cfg.customIconKey)
+        customIconSet.add(card.dataset[this.cfg.customIconKey] ?? "");
     });
     const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0] : null;
     const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0] : null;
+    const sharedCustomIcon = this.cfg.customIconKey && customIconSet.size === 1 ? Array.from(customIconSet)[0] : null;
     const iconNochange = document.getElementById(d.iconNochangeId);
     const iconValue = document.getElementById(`icon-value-${d.iconPickerId}`);
     const iconCurrent = document.getElementById(`icon-current-${d.iconPickerId}`);
     const iconGrid = document.getElementById(`icon-grid-${d.iconPickerId}`);
     iconGrid?.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
-    if (sharedIcon !== null) {
+    if (sharedCustomIcon) {
+      iconNochange.checked = true;
+      if (iconValue)
+        iconValue.value = "";
+      if (iconCurrent)
+        iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+    } else if (sharedIcon !== null) {
       iconNochange.checked = false;
       if (iconValue)
         iconValue.value = sharedIcon;
@@ -3430,13 +3440,20 @@ ${this.cfg.deleteWarning}`;
       body.add_parent_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
       body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
       try {
-        const url = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget).endpoint : this.cfg.endpoints.bulkEdit;
+        const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;
+        const url = converting ? target.endpoint : this.cfg.endpoints.bulkEdit;
         const html = await this.postForHtml(url, body);
         document.getElementById(d.dialogId).close();
         this.replaceRows(html);
         this.onRowsUpdated();
         if (converting) {
           toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
+          if (target?.rowsUrl && target.rowsTarget) {
+            window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
+          }
+          if (target?.tabKey) {
+            document.querySelector(`.organize-tab[data-tab="${target.tabKey}"]`)?.click();
+          }
         } else {
           toast.success(`${this.cfg.entityPluralCap} updated.`);
         }
@@ -3883,6 +3900,10 @@ function initOrganizePriority() {
     updatePrioritySelBar();
   });
   window._initPrioritySortable = initPrioritySortable;
+  document.getElementById("priority-list")?.addEventListener("htmx:afterSwap", () => {
+    clearPrioritySelection();
+    initPrioritySortable();
+  });
   if (document.getElementById("panel-priority") && !document.getElementById("panel-priority").hidden) {
     initPrioritySortable();
   }
@@ -3995,14 +4016,18 @@ function showTagCustomPreview(input) {
 }
 window.showBadgeCustomPreview = showBadgeCustomPreview;
 window.showTagCustomPreview = showTagCustomPreview;
+var KIND_ROWS_TARGET = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
+var KIND_TAB_KEY = { tag: "tags", category: "categories", status: "status" };
 function buildTabConfig(rows, overrides) {
+  const page = document.querySelector(".organize-page");
+  const rowsUrls = { tag: page?.dataset.rowsUrlTag, category: page?.dataset.rowsUrlCategory, status: page?.dataset.rowsUrlStatus };
   const convertTargets = [];
   if (rows.dataset.convertCategoryUrl)
-    convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl });
+    convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl, rowsUrl: rowsUrls.category, rowsTarget: KIND_ROWS_TARGET.category, tabKey: KIND_TAB_KEY.category });
   if (rows.dataset.convertTagUrl)
-    convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl });
+    convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl, rowsUrl: rowsUrls.tag, rowsTarget: KIND_ROWS_TARGET.tag, tabKey: KIND_TAB_KEY.tag });
   if (rows.dataset.convertStatusUrl)
-    convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl });
+    convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl, rowsUrl: rowsUrls.status, rowsTarget: KIND_ROWS_TARGET.status, tabKey: KIND_TAB_KEY.status });
   const base = {
     ns: overrides.ns,
     nsCapitalized: overrides.nsCapitalized,
@@ -4211,8 +4236,6 @@ function initKindChangedListener() {
     category: page?.dataset.rowsUrlCategory,
     status: page?.dataset.rowsUrlStatus
   };
-  const rowTargets = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
-  const tabKeys = { tag: "tags", category: "categories", status: "status" };
   document.body.addEventListener("htmx:afterRequest", (e) => {
     const detail = e.detail;
     if (!detail.xhr || !detail.successful)
@@ -4221,12 +4244,25 @@ function initKindChangedListener() {
     if (!kindChanged)
       return;
     const url = rowUrls[kindChanged];
-    const target = rowTargets[kindChanged];
+    const target = KIND_ROWS_TARGET[kindChanged];
     if (url && target)
       window.htmx?.ajax("GET", url, { target, swap: "innerHTML" });
-    const tabKey = tabKeys[kindChanged];
+    const tabKey = KIND_TAB_KEY[kindChanged];
     if (tabKey)
       document.querySelector(`.organize-tab[data-tab="${tabKey}"]`)?.click();
+  });
+}
+function initPinCacheInvalidation() {
+  document.body.addEventListener("htmx:afterRequest", (e) => {
+    const detail = e.detail;
+    if (!detail.xhr || !detail.successful)
+      return;
+    if (detail.requestConfig?.verb?.toLowerCase() === "get")
+      return;
+    try {
+      localStorage.setItem("ul_pins_dirty", "1");
+    } catch {}
+    document.body.dispatchEvent(new Event("refreshPriority"));
   });
 }
 function initConsolidatedDialogOpener() {
@@ -4272,6 +4308,7 @@ function init() {
   installOrgTabSwitching();
   initConsolidatedDialogOpener();
   initKindChangedListener();
+  initPinCacheInvalidation();
   initOnboarding();
   initTabs();
   initOrganizePriority();

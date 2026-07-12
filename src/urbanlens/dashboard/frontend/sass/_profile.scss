@@ -635,6 +635,13 @@
     padding-top: 1rem;
 }
 
+.settings-autosave-indicator {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+
+    &--error { color: $color-red-500; }
+}
+
 .settings-save-btn {
     @include btn-primary;
     padding: 10px 24px;

@@ -309,6 +309,26 @@
         setTimeout(function () { document.body.dispatchEvent(new Event('refreshQueue')); }, delay);
     }
 
+    // Upload/delete mutate the grid directly (no htmx refetch, so the "All
+    // photos" count next to the gallery header would otherwise stay at its
+    // value as of last page load).
+    function _updatePhotoCountBadge(delta) {
+        var head = document.querySelector('.photos-gallery-head');
+        if (!head) return;
+        var badge = head.querySelector('.badge');
+        var next = Math.max(0, (badge ? Number.parseInt(badge.textContent, 10) || 0 : 0) + delta);
+        if (next === 0) {
+            if (badge) badge.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'badge';
+            head.appendChild(badge);
+        }
+        badge.textContent = next;
+    }
+
     function _prependTile(img) {
         var grid = document.getElementById('photo-grid');
         if (!grid) { window.location.reload(); return; } // grid was in empty state
@@ -330,6 +350,7 @@
             '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
             '<i class="material-symbols-outlined">delete</i></button>';
         grid.insertBefore(li, grid.firstChild);
+        _updatePhotoCountBadge(1);
     }
 
     // -- Delete ----------------------------------------------------------------
@@ -339,7 +360,7 @@
             .then(function (r) {
                 if (!r.ok) return;
                 var el = document.getElementById('photo-tile-' + id);
-                if (el) el.remove();
+                if (el) { el.remove(); _updatePhotoCountBadge(-1); }
                 var card = document.getElementById('photo-card-' + id);
                 if (card) card.remove();
                 if (window.toastr) toastr.info('Photo deleted.');

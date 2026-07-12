@@ -73,19 +73,25 @@ def _unlogged_band_context(profile: Profile) -> dict[str, object]:
     }
 
 
-def _toast(message: str, level: str = "success") -> HttpResponse:
+def _toast(message: str, level: str = "success", *, unlogged_count: int | None = None) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
     Args:
         message: Text to display in the toast.
         level: toastr level (``success``/``info``/``warning``/``error``).
+        unlogged_count: When given, also tells the shared _photos_tabs.html nav
+            (outside this card's own swap target) to update or remove its
+            "Visits" tab badge instead of leaving it stale.
 
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
         ``outerHTML`` removes the card while the toast fires.
     """
+    triggers: dict[str, object] = {"showToast": {"message": message, "level": level}}
+    if unlogged_count is not None:
+        triggers["unloggedVisitsCountChanged"] = {"count": unlogged_count}
     response = HttpResponse("")
-    response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": level}})
+    response["HX-Trigger"] = json.dumps(triggers)
     return response
 
 
@@ -173,6 +179,43 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
     return min(candidates) if candidates else None
 
 
+def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
+    """Build the Memories page's hero-stat tiles (distance, places, photos, trips, active span).
+
+    Shared by the initial page render and ``MemoriesHeroStatsView`` (the latter
+    lets the tiles refresh in place after an in-page action like logging a
+    visit or adding photos, instead of only updating on the next full reload).
+
+    Args:
+        profile: The profile whose memories to summarize.
+
+    Returns:
+        (hero_stats context dict for _hero_stats.html, has_memory_data flag).
+    """
+    route_count = Route.objects.for_profile(profile).count()
+    total_distance_km = total_travel_distance_km(profile)
+    units = profile.effective_distance_units
+    places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
+    photo_count = Image.objects.filter(profile=profile).count()
+    trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
+    has_memory_data = any((route_count, places_visited, photo_count, trip_count))
+
+    today = timezone.now().date()
+    earliest = _earliest_memory_date(profile)
+    active_count, active_unit = _active_span(earliest, today)
+
+    hero_stats = {
+        "total_distance": round(km_to_display(total_distance_km, units), 1),
+        "distance_unit": unit_label(units),
+        "places_visited": places_visited,
+        "photo_count": photo_count,
+        "trip_count": trip_count,
+        "active_count": active_count,
+        "active_unit": active_unit,
+    }
+    return hero_stats, has_memory_data
+
+
 class MemoriesView(LoginRequiredMixin, View):
     """Memories page - map + timeline of everywhere a profile has been.
 
@@ -190,18 +233,10 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        route_count = Route.objects.for_profile(profile).count()
-        # Distance traveled = recorded route length + travel between consecutive visits.
-        total_distance_km = total_travel_distance_km(profile)
-        units = profile.effective_distance_units
-        places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
-        photo_count = Image.objects.filter(profile=profile).count()
-        trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
-        has_memory_data = any((route_count, places_visited, photo_count, trip_count))
+        hero_stats, has_memory_data = _compute_hero_stats(profile)
 
         today = timezone.now().date()
         earliest = _earliest_memory_date(profile)
-        active_count, active_unit = _active_span(earliest, today)
 
         return render(
             request,
@@ -210,20 +245,36 @@ class MemoriesView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "memories",
                 "has_memory_data": has_memory_data,
-                "hero_stats": {
-                    "total_distance": round(km_to_display(total_distance_km, units), 1),
-                    "distance_unit": unit_label(units),
-                    "places_visited": places_visited,
-                    "photo_count": photo_count,
-                    "trip_count": trip_count,
-                    "active_count": active_count,
-                    "active_unit": active_unit,
-                },
+                "hero_stats": hero_stats,
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
                 **_unlogged_band_context(profile),
                 **profile.get_map_center_template_context(),
             },
         )
+
+
+class MemoriesHeroStatsView(LoginRequiredMixin, View):
+    """HTMX partial - the hero-stat tiles at the top of the Memories page.
+
+    GET /memories/hero-stats/
+
+    Re-fetched via ``memoriesFeedRefresh`` (the same trigger already fired after
+    logging a visit or uploading photos) so distance/places/photos/trips/active-span
+    stay current after an in-page action, not just on the next full reload.
+    """
+
+    def get(self, request: HttpRequest):
+        """Render the hero-stats partial.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered ``_hero_stats.html`` partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        hero_stats, _has_memory_data = _compute_hero_stats(profile)
+        return render(request, "dashboard/partials/memories/_hero_stats.html", {"hero_stats": hero_stats})
 
 
 class MemoriesFeedDataView(LoginRequiredMixin, View):
@@ -435,15 +486,19 @@ class MemoriesVisitView(LoginRequiredMixin, View):
 
         sync_external_participants(request, visit)
 
+        band_context = _unlogged_band_context(profile)
         response = render(
             request,
             "dashboard/partials/memories/_unlogged_visits.html",
-            _unlogged_band_context(profile),
+            band_context,
         )
         response["HX-Trigger"] = json.dumps(
             {
                 "showToast": {"message": "Visit logged." if created else "Details saved.", "level": "success"},
                 "memoriesFeedRefresh": True,
+                # The "Visits" tab badge lives outside #memories-unlogged-band, in
+                # the shared _photos_tabs.html nav - tell it to catch up.
+                "unloggedVisitsCountChanged": {"count": len(unlogged_visited_pins(profile))},
             },
         )
         return response
@@ -618,12 +673,12 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     def dismiss(self, request: HttpRequest, pin: Pin) -> HttpResponse:
         """Hide the pin from the unlogged-visits queue without touching its visited status."""
         Pin.objects.filter(pk=pin.pk).update(unlogged_visit_dismissed=True)
-        return _toast("Removed from your list.", "info")
+        return _toast("Removed from your list.", "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 
     def unmark(self, request: HttpRequest, pin: Pin) -> HttpResponse:
         """Clear the pin's "Visited" status/badge so it drops out of the queue entirely."""
         remove_visited_status(pin)
-        return _toast('"Visited" status removed.', "info")
+        return _toast('"Visited" status removed.', "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 
     _ACTIONS = {"dismiss": dismiss, "unmark": unmark}
 

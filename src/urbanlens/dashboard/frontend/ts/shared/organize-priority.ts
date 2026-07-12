@@ -285,6 +285,16 @@ export function initOrganizePriority(): void {
 
     window._initPrioritySortable = initPrioritySortable;
 
+    // The list re-fetches its own contents (see _priority_list.html's
+    // hx-trigger="refreshPriority from:body") after a badge mutation elsewhere
+    // on the page. That's an innerHTML swap - #priority-list itself survives,
+    // but its children (and Sortable's references to them) don't, so it needs
+    // rebinding same as the tab-switch case in organize-header.ts.
+    document.getElementById("priority-list")?.addEventListener("htmx:afterSwap", () => {
+        clearPrioritySelection();
+        initPrioritySortable();
+    });
+
     if (document.getElementById("panel-priority") && !document.getElementById("panel-priority")!.hidden) {
         initPrioritySortable();
     }

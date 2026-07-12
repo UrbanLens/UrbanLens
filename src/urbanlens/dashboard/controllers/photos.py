@@ -267,14 +267,14 @@ class PhotoActionView(LoginRequiredMixin, View):
             return _render_card(request, image, toast="That suggestion is no longer available.")
         if accept_visit_suggestion(suggestion, profile) is None:
             return _render_card(request, image, toast="Visit logging is turned off - enable it in Settings to add this to your visit history.")
-        return _toast("Added to your visit history.")
+        return _toast("Added to your visit history.", refresh_queue=True)
 
     def reject(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Reject a photo-origin suggestion."""
         suggestion = self._pending_suggestion(image)
         if suggestion is not None:
             reject_visit_suggestion(suggestion)
-        return _toast("Suggestion dismissed.", "info")
+        return _toast("Suggestion dismissed.", "info", refresh_queue=True)
 
     def create_pin(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Create a pin and log a visit, honouring the confirmation dialog's placement.
@@ -310,19 +310,19 @@ class PhotoActionView(LoginRequiredMixin, View):
             return _render_card(request, image, toast="That pin could not be found.", level="error")
         visit = log_visit_on_pin(profile, image, pin)
         if visit is None:
-            return _toast("Photo filed. Visit logging is turned off, so no visit was recorded.", "info")
-        return _toast("Visit logged.")
+            return _toast("Photo filed. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)
+        return _toast("Visit logged.", refresh_queue=True)
 
     def dismiss(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Clear a photo out of the organize queue without deleting it."""
         Image.objects.filter(pk=image.pk).update(organize_dismissed=True)
-        return _toast("Photo cleared from your to-do list.", "info")
+        return _toast("Photo cleared from your to-do list.", "info", refresh_queue=True)
 
     def delete_photo(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Delete the photo entirely."""
         image.image.delete(save=False)
         image.delete()
-        return _toast("Photo deleted.", "info")
+        return _toast("Photo deleted.", "info", refresh_queue=True)
 
     _ACTIONS = {
         "accept": accept,

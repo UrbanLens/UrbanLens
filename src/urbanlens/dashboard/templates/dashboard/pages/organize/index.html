@@ -104,60 +104,7 @@
 
         {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
 
-        <div id="priority-list" class="priority-list" data-save-url="{% url 'organize.priority.save' %}">
-            {% for item in priority_items %}
-            <div class="priority-item" data-id="{{ item.id }}" data-kind="{{ item.kind }}">
-                <div class="priority-drag-handle" title="Drag to reorder">
-                    <i class="material-symbols-outlined">drag_indicator</i>
-                </div>
-                <div class="priority-item-icon" {% if item.color %}style="background:{{ item.color }}22;border-color:{{ item.color }}44;"{% endif %}>
-                    {% if item.custom_icon %}
-                        <img src="{{ item.custom_icon.url }}" alt="" class="tag-icon-img">
-                    {% elif item.icon %}
-                        {% if item.icon|is_material_icon %}
-                            <i class="material-icons" {% if item.color %}style="color:{{ item.color }}"{% endif %}>{{ item.icon }}</i>
-                        {% else %}
-                            <span class="tag-icon-emoji">{{ item.icon }}</span>
-                        {% endif %}
-                    {% else %}
-                        <i class="material-icons tag-icon-empty">{% if item.kind == 'category' %}category{% else %}label{% endif %}</i>
-                    {% endif %}
-                </div>
-                <div class="priority-item-info">
-                    <span class="priority-item-name">{{ item.name }}</span>
-                    <div class="priority-item-badges">
-                        <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
-                        {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
-                    </div>
-                </div>
-                <div class="priority-jump-actions">
-                    <button type="button" class="priority-jump-btn jump-top" data-priority-jump="top" title="Send to top"><i class="material-symbols-outlined">vertical_align_top</i></button>
-                    <button type="button" class="priority-jump-btn jump-bottom" data-priority-jump="bottom" title="Send to bottom"><i class="material-symbols-outlined">vertical_align_bottom</i></button>
-                </div>
-                {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and item.profile %}
-                <button type="button" class="priority-edit-btn" title="Edit {{ item.kind }}"
-                        hx-get="{% url 'badge.edit' badge_kind=item.kind badge_id=item.id %}"
-                        hx-target="#badge-edit-dialog-body" hx-swap="innerHTML">
-                    <i class="material-symbols-outlined">edit</i>
-                </button>
-                {% endif %}
-                <div class="priority-order-editor">
-                    <button type="button" class="priority-order-badge" title="Change position">{{ forloop.counter }}</button>
-                    <input type="number" class="priority-order-input" aria-hidden="true" tabindex="-1"
-                           aria-label="Position in list" inputmode="numeric">
-                    <button type="button" class="priority-order-save" aria-hidden="true" tabindex="-1"
-                            aria-label="Save position">
-                        <i class="material-icons" aria-hidden="true">check</i>
-                    </button>
-                </div>
-            </div>
-            {% empty %}
-            <div class="tag-empty">
-                <i class="material-symbols-outlined">label_off</i>
-                <p>No tags, categories, or statuses yet.</p>
-            </div>
-            {% endfor %}
-        </div>
+        {% include "dashboard/partials/badges/_priority_list.html" with priority_items=priority_items %}
     </div>{# end #panel-priority #}
     {% endif %}
 

@@ -13,6 +13,7 @@ from django.db.models import CharField, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.utils.html import escape
 from django.views import View
 import requests
@@ -405,8 +406,20 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
     )
 
 
-def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the activities panel with index map, vote counts, and per-activity permissions."""
+def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:
+    """Render just the activities panel markup (index map, vote counts, per-activity permissions).
+
+    Split out from ``_render_activities_panel`` so other views whose primary
+    response is a different panel (e.g. toggling a member's organizer status)
+    can still include a fresh copy as an out-of-band swap - organizer status
+    feeds directly into each activity's ``can_manage`` flag here.
+
+    Args:
+        oob: When True, marks the rendered root element ``hx-swap-oob="true"``
+            so it can be concatenated onto another view's primary response
+            instead of wrapping it in a second element carrying the same id
+            (which would leave two ``#trip-activities-panel`` nodes in the DOM).
+    """
     from urbanlens.dashboard.models.trips.model import TripActivity, TripActivityVote
 
     activities = list(_activity_qs(trip))
@@ -451,16 +464,41 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
         for act in activities
     ]
     all_activities_completed = bool(activities) and all(act.status == TripActivity.STATUS_COMPLETED for act in activities)
-    return render(
-        request,
-        "dashboard/partials/trips/trip_activities_panel.html",
-        {
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/trips/trip_activities_panel.html",
+        context={
             "trip": trip,
             "activities_with_index": activities_with_index,
             "profile": profile,
             "all_activities_completed": all_activities_completed,
+            "oob": oob,
         },
     )
+
+
+def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
+    """Re-render the activities panel as the primary HTMX response.
+
+    Bundles two out-of-band refreshes so sibling panels don't go stale after an
+    activity add/edit/delete/complete:
+
+    - ``#trip-header``: an activity add/edit/delete/complete can change the
+      trip's persisted date range (see ``_expand_trip_dates``) - keep the
+      header's date display in sync instead of leaving it stale until reload.
+    - the weather panel can't be refreshed the same cheap way (it's a live
+      external API call), so it's told to re-fetch itself via HX-Trigger,
+      same as its own initial ``hx-trigger="load"``.
+    """
+    activities_html = _activities_panel_html(request, trip, profile)
+    header_html = render_to_string(
+        request=request,
+        template_name="dashboard/partials/trips/trip_header_partial.html",
+        context={"trip": trip, "profile": profile, "viewer_is_organizer": _is_organizer(profile, trip)},
+    )
+    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>')
+    response["HX-Trigger"] = "activityChanged"
+    return response
 
 
 class TripListView(LoginRequiredMixin, View):
@@ -1114,7 +1152,14 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         membership.is_organizer = not membership.is_organizer
         membership.save(update_fields=["is_organizer", "updated"])
 
-        return _render_members_panel(request, trip, profile)
+        # Organizer status feeds directly into each activity's can_manage flag
+        # (see _activities_panel_html) - without this, the acting creator (and
+        # the newly (de)promoted organizer, on their own screen) wouldn't see
+        # activity permissions update until reloading.
+        members_response = _render_members_panel(request, trip, profile)
+        activities_html = _activities_panel_html(request, trip, profile, oob=True)
+        members_response.content += activities_html.encode()
+        return members_response
 
 
 class TripLocationSearchView(LoginRequiredMixin, View):

@@ -100,6 +100,13 @@ class SettingsView(LoginRequiredMixin, View):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         section = request.POST.get("section")
+        # The settings page autosaves via fetch() and only checks the response
+        # status - a validation failure previously fell through to the normal
+        # 200 full-page re-render below (or a 302-then-200 redirect for the
+        # messages.error() branches), which fetch() can't distinguish from
+        # success, so the UI showed "Saved" for changes that were never
+        # persisted. AJAX requests get a JSON verdict instead.
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         privacy_form = PrivacySettingsForm(instance=profile)
         contact_form = ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk)
@@ -168,6 +175,8 @@ class SettingsView(LoginRequiredMixin, View):
                 except (ValueError, TypeError):
                     dimension = None
                 if dimension is None or dimension not in allowed_user_dimension_values(profile):
+                    if is_xhr:
+                        return JsonResponse({"ok": False, "errors": {"image_downscale_max_dimension": ["That photo size is not available."]}})
                     messages.error(request, "That photo size is not available.")
                     return redirect("settings.view")
                 profile.image_downscale_max_dimension = dimension
@@ -221,6 +230,28 @@ class SettingsView(LoginRequiredMixin, View):
             **self._build_map_center_context(profile),
             **get_storage_settings_context(profile),
         }
+        if is_xhr:
+            # Exactly one of these is bound-and-invalid (whichever `section` matched
+            # above and failed `is_valid()`) - the rest were never bound with POST
+            # data, so their .errors are empty.
+            bound_forms = (
+                privacy_form,
+                contact_form,
+                style_form,
+                map_display_form,
+                map_center_form,
+                places_layer_form,
+                markup_defaults_form,
+                ai_form,
+                memories_form,
+                community_form,
+                external_api_form,
+            )
+            errors: dict[str, object] = {}
+            for form in bound_forms:
+                if form.errors:
+                    errors.update(form.errors)
+            return JsonResponse({"ok": False, "errors": errors})
         return render(request, "dashboard/pages/settings/index.html", context)
 
 
