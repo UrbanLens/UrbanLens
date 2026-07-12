@@ -938,7 +938,9 @@ class ProfileBadgeToggleView(LoginRequiredMixin, View):
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
-        badge = get_object_or_404(Badge, pk=badge_id, kind=KIND_USER)
+        # visible_to keeps forged ids from attaching (and thereby exposing)
+        # another user's private people badges.
+        badge = get_object_or_404(Badge.objects.visible_to(author), pk=badge_id, kind=KIND_USER)
 
         assignment, created = ProfileBadgeAssignment.objects.get_or_create(
             author=author,

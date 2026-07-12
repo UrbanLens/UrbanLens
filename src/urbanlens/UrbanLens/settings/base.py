@@ -74,13 +74,16 @@ ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # CorsMiddleware must sit above CommonMiddleware (and anything else that
+    # can short-circuit a response) so CORS headers are applied to redirects
+    # and preflight responses - see django-cors-headers docs.
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     # Innermost: swaps in the simulated viewer for "view profile as" previews.
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
 ]
@@ -131,6 +134,10 @@ DATABASES = {
         "PASSWORD": os.getenv("UL_DB_PASS"),
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
+        # UL_TEST_DB_NAME lets concurrent test runs (e.g. two working copies
+        # or agent sessions on one machine) use separate test databases
+        # instead of fighting over the default "test_<NAME>".
+        "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
     },
 }
 # Valkey/Redis cache. Used for per-profile map pin payloads and Django's
@@ -442,6 +449,11 @@ TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
 # anonymous requests (e.g. public API endpoints) are tightly constrained.
 # Requires Valkey cache to be configured - no-ops gracefully when cache is absent.
 REST_FRAMEWORK = {
+    # Every registered API endpoint is user-scoped; opt out per-view if a
+    # genuinely public endpoint is ever added.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",

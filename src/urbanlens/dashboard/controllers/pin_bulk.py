@@ -173,7 +173,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 pin.save(update_fields=["description"])
 
         if add_ids := [int(x) for x in data.get("add_badge_ids", [])]:
-            valid = list(Badge.objects.filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
+            valid = list(Badge.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
             for pin in pins:
                 pin.badges.add(*valid)
 
