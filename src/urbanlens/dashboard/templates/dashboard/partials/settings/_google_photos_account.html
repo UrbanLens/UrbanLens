@@ -1,0 +1,24 @@
+{# Google Photos settings subsection - loaded via HTMX (GooglePhotosSettingsView). Context: account #}
+<div id="google-photos-settings-body" class="settings-subsection-body">
+    {% if account %}
+    <p class="settings-help">
+        Connected as <strong>{{ account.google_email|default:"your Google account" }}</strong>.
+    </p>
+    <div class="settings-actions">
+        <button type="button" class="btn btn--danger"
+                hx-post="{% url 'settings.google_photos.disconnect' %}"
+                hx-target="#google-photos-settings-body"
+                hx-swap="outerHTML"
+                hx-confirm="Disconnect Google Photos? Photos already imported are kept, but the pin-detail import stops working until you reconnect.">
+            <i class="material-symbols-outlined">link_off</i>
+            Disconnect Google Photos
+        </button>
+    </div>
+    {% else %}
+    <p class="settings-help">Connect Google Photos to pick photos from your library to import onto your pins.</p>
+    <a href="{% url 'settings.google_photos.connect' %}" class="btn btn--primary">
+        <i class="material-symbols-outlined">link</i>
+        Connect Google Photos
+    </a>
+    {% endif %}
+</div>

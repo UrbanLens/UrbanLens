@@ -10,6 +10,7 @@ from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, 
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.site_settings.meta import (
     DEFAULT_CLOUDFLARE_MODEL,
     DEFAULT_OPENAI_MODEL,
@@ -207,8 +208,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
-    notify_gotify_token = CharField(
-        max_length=200,
+    notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
         help_text="Gotify application token used to authenticate pushes to the server above. Defaults to the UL_GOTIFY_TOKEN environment variable.",

@@ -133,6 +133,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
     google_client_id: str | None = Field(default=None, description="The google client id")
     google_client_secret: str | None = Field(default=None, description="The google client secret")
+    flickr_api_key: str | None = Field(default=None, description="The Flickr API (consumer) key, for the per-user photo import OAuth 1.0a flow")
+    flickr_api_secret: str | None = Field(default=None, description="The Flickr API (consumer) secret")
     apple_maps_api_key: str | None = Field(default=None, description="The apple maps JWT (pre-generated from Apple Developer private key)")
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")

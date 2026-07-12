@@ -7,27 +7,26 @@ client (``UL_GOOGLE_CLIENT_ID`` / ``UL_GOOGLE_CLIENT_SECRET``) is only the
 application identity; each user grants it access to their calendar via the
 "Connect Google Calendar" consent flow.
 
-Module-level helpers implement the OAuth authorization-code flow (authorize
-URL, code exchange, refresh, revoke). The :class:`GoogleCalendarGateway`
+Module-level helpers wrap the provider-agnostic OAuth mechanics in
+``dashboard/services/google_oauth.py`` with Calendar's own client lookup and
+scopes, preserving their original (pre-extraction) signatures so every
+existing caller keeps working unchanged. The :class:`GoogleCalendarGateway`
 wraps the Calendar v3 events API with automatic token refresh and the
 standard rate-limit/call-log session via ``service_key``.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 from dataclasses import dataclass
 import datetime
-import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
-from urllib.parse import urlencode
 
 from django.utils import timezone
-import requests
 
+from urbanlens.dashboard.services import google_oauth
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -35,9 +34,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 - OAuth endpoint URL, not a credential
-GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3"
 
 # calendar.events grants read/write on events only (not calendar settings);
@@ -55,10 +51,8 @@ TRIP_UUID_EVENT_PROPERTY = "urbanlens_trip_uuid"
 # the trip-level all-day event.
 ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 
-_OAUTH_TIMEOUT = 30
 
-
-class CalendarNotConfiguredError(RuntimeError):
+class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
     """Raised when the site has no Google OAuth client configured."""
 
 
@@ -94,18 +88,7 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
         CalendarNotConfiguredError: When the OAuth client is not configured.
     """
     client_id, _ = _oauth_client()
-    params = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(CALENDAR_SCOPES),
-        # offline + consent so Google issues a refresh token we can use to
-        # keep the connection alive without re-prompting the user.
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state,
-    }
-    return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+    return google_oauth.build_authorization_url(client_id, redirect_uri, CALENDAR_SCOPES, state)
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
@@ -124,21 +107,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
         GatewayRequestError: When the token exchange fails.
     """
     client_id, client_secret = _oauth_client()
-    response = requests.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "code": code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        },
-        timeout=_OAUTH_TIMEOUT,
-    )
-    if response.status_code != 200:
-        logger.error("Google token exchange failed (%s): %s", response.status_code, response.text[:500])
-        raise GatewayRequestError("Google Calendar authorization failed.")
-    return response.json()
+    return google_oauth.exchange_code_for_tokens(client_id, client_secret, code, redirect_uri)
 
 
 def refresh_access_token(refresh_token: str) -> dict[str, Any]:
@@ -155,20 +124,7 @@ def refresh_access_token(refresh_token: str) -> dict[str, Any]:
         GatewayRequestError: When the refresh fails (e.g. access revoked).
     """
     client_id, client_secret = _oauth_client()
-    response = requests.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "refresh_token": refresh_token,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "grant_type": "refresh_token",
-        },
-        timeout=_OAUTH_TIMEOUT,
-    )
-    if response.status_code != 200:
-        logger.warning("Google token refresh failed (%s): %s", response.status_code, response.text[:500])
-        raise GatewayRequestError("Google Calendar access has expired or been revoked. Please reconnect.")
-    return response.json()
+    return google_oauth.refresh_access_token(client_id, client_secret, refresh_token)
 
 
 def revoke_token(token: str) -> bool:
@@ -180,40 +136,7 @@ def revoke_token(token: str) -> bool:
     Returns:
         True when Google confirmed the revocation.
     """
-    try:
-        response = requests.post(GOOGLE_REVOKE_URL, data={"token": token}, timeout=_OAUTH_TIMEOUT)
-    except requests.RequestException:
-        logger.warning("Google token revocation request failed", exc_info=True)
-        return False
-    return response.status_code == 200
-
-
-def extract_email_from_id_token(id_token: str | None) -> str | None:
-    """Read the ``email`` claim from an OAuth ``id_token``.
-
-    The token arrives directly from Google's token endpoint over TLS, so the
-    payload is decoded without signature verification - it is used for
-    display only, never for authentication.
-
-    Args:
-        id_token: Raw JWT string from the token response, if any.
-
-    Returns:
-        The email claim, or None when absent or unparsable.
-    """
-    if not id_token:
-        return None
-    parts = id_token.split(".")
-    if len(parts) != 3:
-        return None
-    payload = parts[1]
-    padded = payload + "=" * (-len(payload) % 4)
-    try:
-        claims = json.loads(base64.urlsafe_b64decode(padded))
-    except (ValueError, binascii.Error):
-        return None
-    email = claims.get("email")
-    return email if isinstance(email, str) else None
+    return google_oauth.revoke_token(token)
 
 
 class CalendarEventNotFoundError(GatewayRequestError):

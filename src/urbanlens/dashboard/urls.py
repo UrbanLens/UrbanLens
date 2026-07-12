@@ -22,7 +22,9 @@ from urbanlens.dashboard.controllers import (
     direct_message_shares,
     direct_messages,
     e2ee,
+    flickr,
     friendship,
+    google_photos,
     image_gallery,
     immich,
     location_wiki,
@@ -452,6 +454,51 @@ urlpatterns = [
                                 name="pin.immich.import.progress",
                             ),
                             path(
+                                "<slug:pin_slug>/flickr/search/",
+                                flickr.PinFlickrSearchView.as_view(),
+                                name="pin.flickr.search",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr/import/",
+                                flickr.PinFlickrImportView.as_view(),
+                                name="pin.flickr.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr/import/<str:task_id>/progress/",
+                                flickr.PinFlickrImportProgressView.as_view(),
+                                name="pin.flickr.import.progress",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/",
+                                google_photos.PinGooglePhotosStartView.as_view(),
+                                name="pin.google_photos.start",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/session/",
+                                google_photos.PinGooglePhotosSessionCreateView.as_view(),
+                                name="pin.google_photos.session.create",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/session/<str:session_id>/status/",
+                                google_photos.PinGooglePhotosSessionStatusView.as_view(),
+                                name="pin.google_photos.session.status",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/thumbnail/<str:session_id>/<str:item_id>/",
+                                google_photos.PinGooglePhotosThumbnailView.as_view(),
+                                name="pin.google_photos.thumbnail",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/import/",
+                                google_photos.PinGooglePhotosImportView.as_view(),
+                                name="pin.google_photos.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/import/<str:task_id>/progress/",
+                                google_photos.PinGooglePhotosImportProgressView.as_view(),
+                                name="pin.google_photos.import.progress",
+                            ),
+                            path(
                                 "import/",
                                 include(
                                     [
@@ -572,6 +619,14 @@ urlpatterns = [
     path("settings/undo-history/clear/", undo.UndoClearView.as_view(), name="undo.clear"),
     path("settings/immich/", immich.ImmichSettingsView.as_view(), name="settings.immich"),
     path("settings/immich/disconnect/", immich.ImmichDisconnectView.as_view(), name="settings.immich.disconnect"),
+    path("settings/flickr/", flickr.FlickrSettingsView.as_view(), name="settings.flickr"),
+    path("settings/flickr/connect/", flickr.FlickrConnectView.as_view(), name="settings.flickr.connect"),
+    path("settings/flickr/callback/", flickr.FlickrCallbackView.as_view(), name="settings.flickr.callback"),
+    path("settings/flickr/disconnect/", flickr.FlickrDisconnectView.as_view(), name="settings.flickr.disconnect"),
+    path("settings/google-photos/", google_photos.GooglePhotosSettingsView.as_view(), name="settings.google_photos"),
+    path("settings/google-photos/connect/", google_photos.GooglePhotosConnectView.as_view(), name="settings.google_photos.connect"),
+    path("settings/google-photos/callback/", google_photos.GooglePhotosCallbackView.as_view(), name="settings.google_photos.callback"),
+    path("settings/google-photos/disconnect/", google_photos.GooglePhotosDisconnectView.as_view(), name="settings.google_photos.disconnect"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",

@@ -444,9 +444,9 @@
 {# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
 <dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
 
-{# -- Import from Immich dialog (content loaded via HTMX when opened) ------ #}
-<dialog id="pin-immich-dialog" class="pin-immich-dialog ul-dialog">
-    <div id="pin-immich-dialog-body"></div>
+{# -- Import Photos dialog (Immich/Flickr/Google Photos tabs) -------------- #}
+<dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog">
+    {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
 </dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}

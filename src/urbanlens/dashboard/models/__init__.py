@@ -24,8 +24,10 @@ from urbanlens.dashboard.models.direct_messages import (
 )
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
+from urbanlens.dashboard.models.flickr import FlickrAccount
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+from urbanlens.dashboard.models.google_photos import GooglePhotosAccount
 from urbanlens.dashboard.models.google_place import GooglePlace
 from urbanlens.dashboard.models.images import Image
 from urbanlens.dashboard.models.immich import ImmichAccount

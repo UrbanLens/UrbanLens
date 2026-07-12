@@ -31,6 +31,30 @@
   }
 }
 
+// Compact "Import Photos" button in the card header (opposite the upload button)
+.gallery-import-photos-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-muted, #64748b);
+  transition: color .15s, background .15s;
+
+  &:hover {
+    color: var(--color-accent, #2563eb);
+    background: rgba(37, 99, 235, .08);
+  }
+
+  .material-symbols-outlined {
+    font-size: 1.15rem;
+  }
+}
+
 // Full-page drop overlay
 .gallery-drop-overlay {
   position: fixed;

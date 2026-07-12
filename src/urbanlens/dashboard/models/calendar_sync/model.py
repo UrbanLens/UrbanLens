@@ -28,6 +28,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class CalendarSyncDirection(TextChoices):
@@ -60,8 +61,8 @@ class GoogleCalendarAccount(abstract.DashboardModel):
         blank=True,
         help_text="Email of the connected Google account, for display only.",
     )
-    access_token = TextField()
-    refresh_token = TextField(null=True, blank=True)
+    access_token = EncryptedTextField()
+    refresh_token = EncryptedTextField(null=True, blank=True)
     token_expiry = DateTimeField(null=True, blank=True)
     calendar_id = CharField(
         max_length=255,

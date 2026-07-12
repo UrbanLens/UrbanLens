@@ -1,0 +1,24 @@
+{# Flickr settings subsection - loaded via HTMX (FlickrSettingsView). Context: account #}
+<div id="flickr-settings-body" class="settings-subsection-body">
+    {% if account %}
+    <p class="settings-help">
+        Connected as <strong>{{ account.flickr_username|default:account.flickr_user_id }}</strong>.
+    </p>
+    <div class="settings-actions">
+        <button type="button" class="btn btn--danger"
+                hx-post="{% url 'settings.flickr.disconnect' %}"
+                hx-target="#flickr-settings-body"
+                hx-swap="outerHTML"
+                hx-confirm="Disconnect your Flickr account? Photos already imported are kept, but the pin-detail import stops working until you reconnect.">
+            <i class="material-symbols-outlined">link_off</i>
+            Disconnect Flickr
+        </button>
+    </div>
+    {% else %}
+    <p class="settings-help">Connect Flickr to search and import your own photos near your pins from the pin detail page.</p>
+    <a href="{% url 'settings.flickr.connect' %}" class="btn btn--primary">
+        <i class="material-symbols-outlined">link</i>
+        Connect Flickr
+    </a>
+    {% endif %}
+</div>

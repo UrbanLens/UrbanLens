@@ -1,11 +1,11 @@
-{# Immich tab body (swapped into #pin-import-photos-body by the Import Photos dialog shell).
+{# Flickr tab body (swapped into #pin-import-photos-body by the Import Photos dialog shell).
    Context: pin, account, radius_m, radius_choices_m, assets, error #}
 {% if not account %}
 <div class="immich-picker-error ul-dialog-body">
-    <p>Connect your Immich server to import photos near this pin.</p>
-    <a href="{% url 'settings.view' %}#immich-settings-section" class="btn btn--primary">
+    <p>Connect your Flickr account to import photos near this pin.</p>
+    <a href="{% url 'settings.view' %}#flickr-settings-section" class="btn btn--primary">
         <i class="material-symbols-outlined">link</i>
-        Connect Immich in Settings
+        Connect Flickr in Settings
     </a>
 </div>
 {% elif error %}
@@ -15,12 +15,12 @@
 {% else %}
 <div class="ul-dialog-body">
     <form class="immich-picker-radius"
-          hx-get="{% url 'pin.immich.search' pin.slug %}"
+          hx-get="{% url 'pin.flickr.search' pin.slug %}"
           hx-target="#pin-import-photos-body"
           hx-swap="innerHTML"
           hx-trigger="change">
-        <label for="immich-radius-select">Within</label>
-        <select id="immich-radius-select" name="radius_m">
+        <label for="flickr-radius-select">Within</label>
+        <select id="flickr-radius-select" name="radius_m">
             {% for value, label in radius_choices_m %}
             <option value="{{ value }}" {% if value == radius_m %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -28,7 +28,7 @@
         <span>of this pin</span>
     </form>
 
-    <form hx-post="{% url 'pin.immich.import' pin.slug %}"
+    <form hx-post="{% url 'pin.flickr.import' pin.slug %}"
           hx-target="#pin-import-photos-body"
           hx-swap="innerHTML"
           class="immich-picker-form">
@@ -37,8 +37,8 @@
         <div class="immich-picker-grid">
             {% for asset in assets %}
             <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
-                <input type="checkbox" name="asset_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
-                <img src="{% url 'pin.immich.thumbnail' pin.slug asset.id %}" loading="lazy" alt="">
+                <input type="checkbox" name="photo_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
+                <img src="{{ asset.thumbnail_url }}" loading="lazy" alt="">
                 {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
             </label>
             {% endfor %}

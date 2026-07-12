@@ -247,6 +247,30 @@
             </div>
         </div>
 
+        {# -- Flickr (subsection) ------------------------------------------------- #}
+        <div class="settings-subsection" id="flickr-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">photo_camera</i>
+                Flickr
+            </h3>
+            <p class="settings-section-desc">Connect Flickr to import your own photos near your pins.</p>
+            <div hx-get="{% url 'settings.flickr' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+
+        {# -- Google Photos (subsection) ------------------------------------------ #}
+        <div class="settings-subsection" id="google-photos-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">add_photo_alternate</i>
+                Google Photos
+            </h3>
+            <p class="settings-section-desc">Connect Google Photos to pick photos to import from the pin detail page.</p>
+            <div hx-get="{% url 'settings.google_photos' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+
         {# -- Direct Messages (subsection) --------------------------------------- #}
         <div class="settings-subsection" id="direct-message-settings-section">
             <h3 class="settings-subsection-title">

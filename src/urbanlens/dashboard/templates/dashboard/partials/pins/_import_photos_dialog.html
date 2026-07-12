@@ -1,0 +1,43 @@
+{# Import Photos dialog shell: persistent header + source tabs, swapped body per tab.
+   Included directly in location/index.html (not HTMX-loaded) - each tab lazily
+   loads its own content into #pin-import-photos-body on first activation. #}
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Import Photos" %}
+
+<div class="import-photos-tabs" role="tablist">
+    <button type="button" class="import-photos-tab is-active" role="tab" aria-selected="true"
+            hx-get="{% url 'pin.immich.search' pin.slug %}"
+            hx-target="#pin-import-photos-body" hx-swap="innerHTML"
+            onclick="ulImportPhotosSelectTab(this)">
+        <i class="material-symbols-outlined">cloud_download</i>
+        Immich
+    </button>
+    <button type="button" class="import-photos-tab" role="tab" aria-selected="false"
+            hx-get="{% url 'pin.flickr.search' pin.slug %}"
+            hx-target="#pin-import-photos-body" hx-swap="innerHTML"
+            onclick="ulImportPhotosSelectTab(this)">
+        <i class="material-symbols-outlined">photo_camera</i>
+        Flickr
+    </button>
+    <button type="button" class="import-photos-tab" role="tab" aria-selected="false"
+            hx-get="{% url 'pin.google_photos.start' pin.slug %}"
+            hx-target="#pin-import-photos-body" hx-swap="innerHTML"
+            onclick="ulImportPhotosSelectTab(this)">
+        <i class="material-symbols-outlined">add_photo_alternate</i>
+        Google Photos
+    </button>
+</div>
+
+<div id="pin-import-photos-body" class="ul-dialog-body">
+    <p class="loading-text">Loading...</p>
+</div>
+
+<script>
+function ulImportPhotosSelectTab(btn) {
+    btn.closest('.import-photos-tabs').querySelectorAll('.import-photos-tab').forEach(function (tab) {
+        tab.classList.remove('is-active');
+        tab.setAttribute('aria-selected', 'false');
+    });
+    btn.classList.add('is-active');
+    btn.setAttribute('aria-selected', 'true');
+}
+</script>
