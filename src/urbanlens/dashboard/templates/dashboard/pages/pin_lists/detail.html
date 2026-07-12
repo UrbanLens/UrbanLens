@@ -42,14 +42,14 @@
                     {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
                 </button>
                 <div class="pin-list-trip-actions">
-                    <button type="button" class="btn btn--primary" onclick="pinListCreateTrip()">
+                    <button type="button" class="btn btn--secondary" onclick="pinListCreateTrip()">
                         <i class="material-symbols-outlined">flight_takeoff</i> Create Trip
                     </button>
                     <button type="button" class="btn btn--secondary" onclick="document.getElementById('add-to-trip-dialog').showModal()">
                         <i class="material-symbols-outlined">luggage</i> Add to Trip
                     </button>
                 </div>
-                <button type="button" class="btn btn--danger-ghost" onclick="pinListDelete()">
+                <button type="button" class="btn btn--danger-hover" onclick="pinListDelete()">
                     <i class="material-symbols-outlined">delete</i> Delete
                 </button>
             </div>
@@ -99,54 +99,62 @@
 {# -- Edit list dialog ------------------------------------------------------ #}
 <dialog id="edit-list-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit List" %}
-    <form onsubmit="return pinListSaveEdit(event)">
-        <div class="form-row">
-            <label for="edit-list-name">List name <span class="required">*</span></label>
-            <input type="text" id="edit-list-name" required maxlength="100" value="{{ pin_list.name }}">
-        </div>
-        <div class="form-row">
-            <label for="edit-list-description">Description</label>
-            <textarea id="edit-list-description" rows="3">{{ pin_list.description }}</textarea>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg">Save</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-        </div>
-    </form>
+    <div class="ul-dialog-body">
+        <form onsubmit="return pinListSaveEdit(event)">
+            <div class="form-row">
+                <label for="edit-list-name">List name <span class="required">*</span></label>
+                <input type="text" id="edit-list-name" required maxlength="100" value="{{ pin_list.name }}">
+            </div>
+            <div class="form-row">
+                <label for="edit-list-description">Description</label>
+                <textarea id="edit-list-description" rows="3">{{ pin_list.description }}</textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg">Save</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
 </dialog>
 
 {# -- Add pins dialog --------------------------------------------------------#}
 <dialog id="add-pins-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Pins" %}
-    <div class="form-row">
-        <input type="search" id="add-pins-search" placeholder="Search your pins..." autocomplete="off" oninput="pinListSearchPins(this.value)">
+    <div class="ul-dialog-body">
+        <div class="form-row">
+            <input type="search" id="add-pins-search" placeholder="Search your pins..." autocomplete="off" oninput="pinListSearchPins(this.value)">
+        </div>
+        <ul class="pin-list-add-results" id="add-pins-results"></ul>
     </div>
-    <ul class="pin-list-add-results" id="add-pins-results"></ul>
 </dialog>
 
 {# -- Add to trip dialog ------------------------------------------------------#}
 <dialog id="add-to-trip-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add to Trip" %}
-    <input type="search" id="add-to-trip-search" class="pin-list-add-results-search" placeholder="Search your trips..." oninput="pinListFilterTrips(this.value)" autocomplete="off">
-    <ul class="pin-list-add-results" id="add-to-trip-results">
-        {% for trip in trips %}
-        <li data-search="{{ trip.name|lower }}">
-            <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.uuid }}')">
-                <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
-            </button>
-        </li>
-        {% endfor %}
-    </ul>
-    {% if not trips %}<p class="pin-list-smart-hint">You're not on any trips yet.</p>{% endif %}
+    <div class="ul-dialog-body">
+        <input type="search" id="add-to-trip-search" class="pin-list-add-results-search" placeholder="Search your trips..." oninput="pinListFilterTrips(this.value)" autocomplete="off">
+        <ul class="pin-list-add-results" id="add-to-trip-results">
+            {% for trip in trips %}
+            <li data-search="{{ trip.name|lower }}">
+                <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.uuid }}')">
+                    <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if not trips %}<p class="pin-list-smart-hint">You're not on any trips yet.</p>{% endif %}
+    </div>
 </dialog>
 
 {# -- >100 pins confirmation dialog ------------------------------------------#}
 <dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add a lot of pins?" %}
-    <p id="pin-list-confirm-bulk-add-text"></p>
-    <div class="form-actions">
-        <button type="button" class="btn btn--primary" id="pin-list-confirm-bulk-add-btn">Add anyway</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+    <div class="ul-dialog-body">
+        <p id="pin-list-confirm-bulk-add-text"></p>
+        <div class="form-actions">
+            <button type="button" class="btn btn--primary" id="pin-list-confirm-bulk-add-btn">Add anyway</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
     </div>
 </dialog>
 {% endblock %}

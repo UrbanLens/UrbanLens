@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from urbanlens.dashboard.models.immich.model import ImmichAccount
 
@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
 _DEFAULT_RECENT_LIMIT = 100
+_DEFAULT_PAGE_SIZE = 1000
+#: Runaway-loop guard for ``iter_library_assets`` - 500 pages at the default
+#: page size covers a 500k-asset library, far beyond any real Immich install.
+_MAX_LIBRARY_PAGES = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,11 +48,18 @@ class SearchAsset:
 
     Unlike :class:`MapMarker`, this endpoint doesn't require (or guarantee)
     GPS coordinates - a match found this way isn't necessarily near any
-    particular point.
+    particular point. ``lat``/``lon``/``city`` come from the same ``exifInfo``
+    block ``map/markers`` and ``taken_at`` already draw from, so a single
+    paginated sweep of this endpoint (see ``iter_library_assets``) is enough
+    to recover location + capture date together without a second API call
+    per asset.
     """
 
     id: str
     taken_at: datetime.datetime | None = None
+    lat: float | None = None
+    lon: float | None = None
+    city: str | None = None
 
 
 @dataclass(slots=True, kw_only=True)
@@ -176,6 +187,29 @@ class ImmichGateway(Gateway):
             if marker.get("lat") is not None and marker.get("lon") is not None
         ]
 
+    def _search_metadata_page(self, filters: dict[str, Any], *, page: Any = None, size: int = _DEFAULT_RECENT_LIMIT) -> tuple[list[SearchAsset], Any, int]:
+        """Run one page of a ``POST /api/search/metadata`` query.
+
+        Args:
+            filters: Immich metadata-search filters (e.g. ``takenAfter``/``takenBefore``).
+            page: Pagination token from a previous page's response, or None for the first page.
+            size: Maximum number of assets to return in this page.
+
+        Returns:
+            Tuple of (assets on this page, the token to request the next page - falsy
+            when this was the last page, total assets matching the filter).
+
+        Raises:
+            GatewayRequestError: On a network error or non-2xx response.
+        """
+        request: dict[str, Any] = {**filters, "size": size}
+        if page is not None:
+            request["page"] = page
+        body = self._post("/search/metadata", json=request)
+        assets_body = body.get("assets", {})
+        items = assets_body.get("items", [])
+        return [_parse_asset(item) for item in items], assets_body.get("nextPage"), int(assets_body.get("total") or 0)
+
     def _search_metadata(self, filters: dict[str, Any], *, size: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
         """Run one ``POST /api/search/metadata`` query and parse the results.
 
@@ -189,9 +223,36 @@ class ImmichGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        body = self._post("/search/metadata", json={**filters, "size": size})
-        items = body.get("assets", {}).get("items", [])
-        return [SearchAsset(id=item["id"], taken_at=_parse_taken_at(item)) for item in items]
+        assets, _next_page, _total = self._search_metadata_page(filters, size=size)
+        return assets
+
+    def iter_library_assets(self, *, page_size: int = _DEFAULT_PAGE_SIZE) -> Iterator[tuple[list[SearchAsset], int]]:
+        """Page through every asset in the user's library, yielding one page at a time.
+
+        Used for a full-library location sweep, where downloading every asset
+        would be far too expensive - this only fetches the lightweight metadata
+        (id, GPS, capture date, city) already present in the search response.
+
+        Args:
+            page_size: Assets requested per page.
+
+        Yields:
+            One (assets on this page, total assets in the library) tuple per
+            page, in Immich's default (most recent first) order. Stops when
+            Immich reports no further page, or after ``_MAX_LIBRARY_PAGES`` as
+            a runaway-loop guard.
+
+        Raises:
+            GatewayRequestError: On a network error or non-2xx response.
+        """
+        page: Any = None
+        for _ in range(_MAX_LIBRARY_PAGES):
+            assets, next_page, total = self._search_metadata_page({}, page=page, size=page_size)
+            if assets:
+                yield assets, total
+            if not next_page:
+                return
+            page = next_page
 
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[SearchAsset]:
         """Return the user's own assets taken on any of the given calendar dates.
@@ -280,6 +341,27 @@ def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
         return datetime.datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _parse_asset(item: dict[str, Any]) -> SearchAsset:
+    """Parse one raw asset object from a ``/search/metadata`` result item.
+
+    Args:
+        item: One raw asset object from the search response.
+
+    Returns:
+        A SearchAsset with GPS/city populated from ``exifInfo`` when present.
+    """
+    exif_info = item.get("exifInfo") or {}
+    lat = exif_info.get("latitude")
+    lon = exif_info.get("longitude")
+    return SearchAsset(
+        id=item["id"],
+        taken_at=_parse_taken_at(item),
+        lat=float(lat) if lat is not None else None,
+        lon=float(lon) if lon is not None else None,
+        city=exif_info.get("city"),
+    )
 
 
 def _filename_from_content_disposition(header: str | None) -> str:

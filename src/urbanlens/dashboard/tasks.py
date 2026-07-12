@@ -567,6 +567,79 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
+    """Sweep a user's entire Immich library for places they've been.
+
+    Unlike ``import_immich_photos``, this never downloads any photo - it pages
+    through the lightweight ``/search/metadata`` listing (GPS + capture date
+    + city, already present in the response) and feeds every geotagged asset
+    through ``services.pin_suggestions.ingest_location_hits``, which matches
+    each coordinate against the profile's existing pins and clusters whatever
+    doesn't match into new-pin suggestions. Nothing is created automatically -
+    this only produces/updates ``PinSuggestion`` rows for the user to review
+    and accept or reject. Only triggered by an explicit "Scan your library"
+    action (see ``controllers.immich.ImmichLibraryScanStartView``), never on
+    connect.
+
+    Args:
+        profile_id: PK of the requesting profile (also the Immich account owner).
+
+    Returns:
+        Summary counts (matched/new-pin suggestions touched, assets scanned).
+    """
+    from urbanlens.dashboard.models.immich.model import ImmichAccount
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestionOrigin
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.apis.immich import ImmichGateway
+    from urbanlens.dashboard.services.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
+
+    empty = {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0}
+    profile = Profile.objects.filter(pk=profile_id).first()
+    account = ImmichAccount.objects.filter(profile_id=profile_id).first()
+    if profile is None or account is None:
+        update_task_progress(self, current=0, total=1, message="Scan failed: profile or Immich connection no longer exists.")
+        return empty
+
+    gateway = ImmichGateway(account=account)
+    hits: list[LocationHit] = []
+    scanned = 0
+    try:
+        for page, total in gateway.iter_library_assets():
+            for asset in page:
+                scanned += 1
+                if asset.lat is None or asset.lon is None or asset.taken_at is None:
+                    continue
+                hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city))
+            update_task_progress(self, current=scanned, total=max(total, scanned, 1), message=f"Scanned {scanned} of {total} photo(s)...")
+    except GatewayRequestError as exc:
+        update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scan failed: {exc}")
+        return {**empty, "scanned": scanned}
+
+    update_task_progress(self, current=scanned, total=max(scanned, 1), message="Matching against your pins...")
+    summary = ingest_location_hits(profile, hits, origin=PinSuggestionOrigin.IMMICH)
+
+    result = {"scanned": scanned, "matched_suggestions": summary.matched_suggestions, "new_pin_suggestions": summary.new_pin_suggestions}
+    total_suggestions = summary.matched_suggestions + summary.new_pin_suggestions
+    if total_suggestions:
+        NotificationLog.objects.create(
+            profile=profile,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.INFO,
+            title="Found new locations from your Immich library",
+            message=(
+                f"Your Immich library scan found {summary.new_pin_suggestions} possible new pin(s) and "
+                f"{summary.matched_suggestions} visit(s) to pins you already have. Review them in Memories."
+            ),
+        )
+    update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scan complete - found {total_suggestions} suggestion(s).")
+    return result
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.
 

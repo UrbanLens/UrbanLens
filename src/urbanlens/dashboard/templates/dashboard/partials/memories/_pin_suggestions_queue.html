@@ -1,0 +1,23 @@
+{% comment %}
+The batch-scan pin suggestion queue. Re-fetched via the `refreshQueue` event
+after an accept/reject action so the list stays in sync.
+
+Context:
+  suggestions - list of pending PinSuggestion rows, newest first
+{% endcomment %}
+{% if suggestions %}
+<div class="pin-suggestions-grid" id="pin-suggestions-grid">
+    {% for suggestion in suggestions %}
+    {% include "dashboard/partials/memories/_pin_suggestion_card.html" %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="material-symbols-outlined">travel_explore</i>
+    <p>No location suggestions right now.</p>
+    <p class="empty-state-sub">
+        Scan your <a href="{% url 'settings.immich' %}">Immich library</a> or a
+        <a href="{% url 'tools.index' %}">local photo folder</a> to find places you've been.
+    </p>
+</div>
+{% endif %}

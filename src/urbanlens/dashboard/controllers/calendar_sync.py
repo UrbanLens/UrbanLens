@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.controllers.trip import _trip_or_403, _trips_for_list
-from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink, get_calendar_account
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
@@ -69,7 +69,7 @@ def calendar_context(profile: Profile, trip=None) -> dict:
         Dict with ``calendar_account`` and (when a trip is given)
         ``calendar_link`` keys.
     """
-    account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+    account = get_calendar_account(profile)
     context: dict = {"calendar_account": account}
     if trip is not None:
         context["calendar_link"] = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first() if account else None
@@ -152,7 +152,7 @@ class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
             account.delete()
@@ -171,7 +171,7 @@ class CalendarImportView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is None:
             return render(request, "dashboard/partials/trips/_calendar_import_dialog.html", {"error": "Connect your Google Calendar first.", "profile": profile})
 
@@ -195,7 +195,7 @@ class CalendarImportView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is None:
             # Plain-text 4xx bodies surface via the global htmx:responseError toast.
             return HttpResponse("Connect your Google Calendar first.", status=400)
@@ -244,7 +244,7 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is None:
             return HttpResponse("Connect your Google Calendar first.", status=400)
 
@@ -304,7 +304,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."), status=200)
 
@@ -329,7 +329,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        account = get_calendar_account(profile)
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."))
 

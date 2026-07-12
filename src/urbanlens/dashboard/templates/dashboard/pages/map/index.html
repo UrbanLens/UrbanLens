@@ -50,7 +50,6 @@
     <div id="filter-panel">
         <div class="fp-header">
             <span class="fp-title">Filter (F)</span>
-            {% include "dashboard/partials/ui/_tooltip_help.html" with text="Filters apply instantly as you change them. Pins matching all selected criteria stay visible on the map." wide=True %}
             <button type="button" class="fp-save-filter" id="fp-save-filter-btn" style="display:none"
                     onclick="document.getElementById('save-filter-dialog').showModal()" aria-label="Save filter">
                 <i class="material-symbols-outlined">bookmark_add</i>
@@ -67,19 +66,6 @@
 
             <div class="fp-section">
                 <input type="text" name="name" id="fp-search" class="fp-search" placeholder="Search pins..." autocomplete="off">
-            </div>
-
-            {# Overlapping pins -- flags pins whose footprint (a drawn/generated #}
-            {# property boundary, or a default circle around its coordinates    #}
-            {# when it has none) overlaps another pin's - useful both for real  #}
-            {# overlapping properties and for spotting pins accidentally left   #}
-            {# stacked on the same spot. #}
-            <div class="fp-section fp-toggle-row">
-                <label class="fp-toggle">
-                    <input type="checkbox" name="overlapping_pins" id="fp-overlapping-pins">
-                    <span>Overlapping pins only</span>
-                </label>
-                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Shows pins whose boundary (or, for pins without one, the area right around their coordinates) overlaps another pin's - handy for spotting duplicates or pins left stacked on the same spot." pos="right" %}
             </div>
 
             {# Scores -- all numeric sliders combined -- #}
@@ -281,6 +267,19 @@
             </details>
             {% endif %}
 
+            {# Overlapping pins -- flags pins whose footprint (a drawn/generated #}
+            {# property boundary, or a default circle around its coordinates    #}
+            {# when it has none) overlaps another pin's - useful both for real  #}
+            {# overlapping properties and for spotting pins accidentally left   #}
+            {# stacked on the same spot. #}
+            <div class="fp-section fp-toggle-row">
+                <label class="fp-toggle">
+                    <input type="checkbox" name="overlapping_pins" id="fp-overlapping-pins">
+                    <span>Overlapping pins only</span>
+                </label>
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Shows pins located within another pin's boundary - handy for spotting duplicates or pins that should be merged together." pos="right" %}
+            </div>
+
             {% include "dashboard/partials/pins/_saved_filters_section.html" %}
 
             <button type="button" class="fp-reset" onclick="resetFilters()">
@@ -292,19 +291,21 @@
     {# -- Save Filter dialog ------------------------------------------------ #}
     <dialog id="save-filter-dialog" class="ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Save Filter" %}
-        <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
-              hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
-              hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="saved-filter-name">Name <span class="required">*</span></label>
-                <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100" placeholder="e.g. Must-visit demolitions" autocomplete="off">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary">Save Filter</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-            </div>
-        </form>
+        <div class="ul-dialog-body">
+            <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
+                hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
+                hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
+                {% csrf_token %}
+                <div class="form-row">
+                    <label for="saved-filter-name">Name <span class="required">*</span></label>
+                    <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100" placeholder="e.g. Must-visit demolitions" autocomplete="off">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Save Filter</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                </div>
+            </form>
+        </div>
     </dialog>
 
     {# -- Pin list panel (left-docked) ------------------------------------ #}

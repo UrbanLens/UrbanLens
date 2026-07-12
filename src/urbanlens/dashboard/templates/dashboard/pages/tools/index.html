@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block content %}
 <div class="tools-page page-content">
@@ -232,6 +233,55 @@
             </div>
         </div>
 
+        {# -- Photo location scan card -------------------------------------------- #}
+        <div class="ul-card tools-card tools-card--wide" id="photo-scan-card">
+            <div class="ul-card-header">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Find Pins in a Photo Folder</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Scan a folder of photos or videos on your device for geotagged locations.
+                    Nothing is uploaded while scanning - only the folder is read in your browser.
+                    When you're ready, upload the results to turn them into pin suggestions you can review.
+                </p>
+
+                <div
+                    id="photo-scan-root"
+                    data-upload-url="{% url 'tools.photo_scan.upload' %}"
+                    data-profile-uuid="{{ profile_uuid|default:'' }}"
+                >
+                    <div class="photo-scan-controls">
+                        <button type="button" class="btn btn--primary" id="photo-scan-start-btn">
+                            <i class="material-symbols-outlined">folder_open</i>
+                            <span>Choose folder &amp; scan</span>
+                        </button>
+                        <button type="button" class="btn btn--danger" id="photo-scan-stop-btn" hidden>
+                            <i class="material-symbols-outlined">stop</i>
+                            <span>Stop</span>
+                        </button>
+                        <button type="button" class="btn btn--secondary" id="photo-scan-upload-btn" hidden disabled>
+                            <i class="material-symbols-outlined">cloud_upload</i>
+                            <span>Upload results</span>
+                        </button>
+                    </div>
+
+                    <div class="photo-scan-progress" id="photo-scan-progress" hidden>
+                        <div class="photo-scan-progress-label">
+                            <span id="photo-scan-progress-text">Scanning...</span>
+                            <span id="photo-scan-progress-count"></span>
+                        </div>
+                        <div class="photo-scan-progress-track">
+                            <div class="photo-scan-progress-bar" id="photo-scan-progress-bar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <ul class="photo-scan-results" id="photo-scan-results"></ul>
+                    <p class="photo-scan-empty" id="photo-scan-empty">No results yet.</p>
+                </div>
+            </div>
+        </div>
 
         {# -- Admin Tools card (admins only) ------------------------------------ #}
         {% if perms.dashboard.view_site_admin %}
@@ -706,6 +756,99 @@
     color: var(--ul-grey-7);
     padding: .1rem 0;
 }
+
+/* -- Photo location scan card ----------------------------------------------- */
+
+.photo-scan-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: 1rem;
+}
+
+.photo-scan-progress {
+    margin-bottom: 1rem;
+}
+
+.photo-scan-progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin-bottom: .3rem;
+}
+
+.photo-scan-progress-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--ul-grey-3);
+    overflow: hidden;
+}
+
+.photo-scan-progress-bar {
+    height: 100%;
+    background: var(--ul-primary, #1976D2);
+    transition: width .2s ease;
+}
+
+.photo-scan-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.photo-scan-result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .5rem .65rem;
+    border: 1px solid var(--ul-grey-3);
+    border-radius: 8px;
+    font-size: .85rem;
+}
+
+.photo-scan-result-item--existing {
+    opacity: .55;
+}
+
+.photo-scan-result-main {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+}
+
+.photo-scan-result-coords {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.photo-scan-result-meta {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.photo-scan-result-badge {
+    flex-shrink: 0;
+    font-size: .72rem;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    background: var(--ul-grey-2);
+    color: var(--ul-grey-7);
+    white-space: nowrap;
+}
+
+.photo-scan-empty {
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    margin: 0;
+}
 </style>
 
 <script>
@@ -891,4 +1034,8 @@
 })();
 </script>
 
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/photo-location-scan.js' %}"></script>
 {% endblock %}

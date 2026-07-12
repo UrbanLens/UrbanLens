@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 _SETTINGS_PARTIAL = "dashboard/partials/settings/_immich_account.html"
 _PICKER_PARTIAL = "dashboard/partials/pins/_immich_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
+_SCAN_PROGRESS_PARTIAL = "dashboard/partials/settings/_immich_scan_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
@@ -99,6 +100,49 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
         ImmichAccount.objects.filter(profile=profile).delete()
         response = render(request, _SETTINGS_PARTIAL, {"account": None, "form": ImmichAccountForm()})
         return _with_toast(response, "Immich disconnected.")
+
+
+class ImmichLibraryScanStartView(LoginRequiredMixin, View):
+    """POST /settings/immich/scan/ - enqueue a full-library location sweep.
+
+    Explicit, opt-in action (a button on the Immich settings subsection) -
+    never triggered automatically on connect. Only produces/updates
+    ``PinSuggestion`` rows for the user to review; see ``tasks.sweep_immich_library_locations``.
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        profile = _request_profile(request)
+        if not ImmichAccount.objects.filter(profile=profile).exists():
+            return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
+        if not profile.external_apis_enabled:
+            return HttpResponse('<p class="immich-import-error">External lookups are turned off in your settings.</p>', status=400)
+
+        from urbanlens.dashboard.tasks import sweep_immich_library_locations
+
+        result = safely_enqueue_task(sweep_immich_library_locations, profile.pk)
+        if result is None:
+            return render(request, _SCAN_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Scan queue is unavailable. Please try again later."}, status=503)
+        return render(request, _SCAN_PROGRESS_PARTIAL, {"task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting scan..."})
+
+
+class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
+    """GET /settings/immich/scan/<task_id>/progress/ - polled progress fragment."""
+
+    def get(self, request: HttpRequest, task_id: str) -> HttpResponse:
+        progress = get_task_progress(task_id)
+        context = {"task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
+        response = render(request, _SCAN_PROGRESS_PARTIAL, context)
+        if progress.state == "SUCCESS":
+            result = progress.result or {}
+            total = int(result.get("matched_suggestions", 0)) + int(result.get("new_pin_suggestions", 0))
+            if total:
+                summary = f"Found {total} suggestion(s) from {result.get('scanned', 0)} photo(s). Review them in Memories."
+            else:
+                summary = f"Scanned {result.get('scanned', 0)} photo(s) - no new locations found."
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}})
+        elif progress.state in {"FAILURE", "REVOKED"}:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Scan failed."}})
+        return response
 
 
 # -- Pin detail: search / thumbnail / import ----------------------------------

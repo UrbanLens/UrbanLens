@@ -1,0 +1,47 @@
+{% comment %}
+A single pending PinSuggestion card. Accept/reject post to memories.locations.action
+and target this card by id, swapping outerHTML - a success response is empty (the
+card vanishes and a toast fires), an error response re-renders the card unchanged
+with an error toast.
+
+Context:
+  suggestion - the pending PinSuggestion
+{% endcomment %}
+<article class="pin-suggestion-card" id="pin-suggestion-card-{{ suggestion.pk }}">
+    <div class="pin-suggestion-card-meta">
+        <span class="badge badge--muted">{{ suggestion.get_origin_display }}</span>
+        <span class="pin-suggestion-card-count">{{ suggestion.hit_count }} photo{{ suggestion.hit_count|pluralize }}</span>
+    </div>
+
+    {% if suggestion.is_new_pin %}
+    <p class="pin-suggestion-card-prompt">
+        <strong>New pin</strong> near
+        {% if suggestion.suggested_name %}<strong>{{ suggestion.suggested_name }}</strong>{% else %}{{ suggestion.latitude }}, {{ suggestion.longitude }}{% endif %}
+    </p>
+    {% else %}
+    <p class="pin-suggestion-card-prompt">
+        <strong>{{ suggestion.visit_dates|length }} visit{{ suggestion.visit_dates|length|pluralize }}</strong>
+        for <strong>{{ suggestion.pin.effective_name }}</strong>
+    </p>
+    {% endif %}
+
+    {% if suggestion.visit_dates %}
+    <p class="pin-suggestion-card-dates">
+        {{ suggestion.visit_dates|slice:":5"|join:", " }}{% if suggestion.visit_dates|length > 5 %}, +{{ suggestion.visit_dates|length|add:"-5" }} more{% endif %}
+    </p>
+    {% endif %}
+
+    <div class="pin-suggestion-card-actions">
+        <button type="button" class="btn btn--sm btn--primary"
+                hx-post="{% url 'memories.locations.action' suggestion.pk 'accept' %}"
+                hx-target="#pin-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
+            <i class="material-symbols-outlined">check</i>
+            {% if suggestion.is_new_pin %}Create pin{% else %}Log visit{{ suggestion.visit_dates|length|pluralize }}{% endif %}
+        </button>
+        <button type="button" class="btn btn--sm btn--ghost"
+                hx-post="{% url 'memories.locations.action' suggestion.pk 'reject' %}"
+                hx-target="#pin-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
+            Not this
+        </button>
+    </div>
+</article>

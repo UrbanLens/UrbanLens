@@ -4,23 +4,18 @@
 {% block page_title %}Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block content %}
+<section class="pin-lists-header">
+    <div class="pin-lists-header-inner">
+        <p class="pin-lists-eyebrow">Your collections</p>
+        <h1 class="pin-lists-title">Lists</h1>
+        <p class="pin-lists-subtitle">
+            Group pins into named collections - manual or "smart" ones that keep themselves
+            up to date. Turn a list into a trip or a markup map in one click.
+        </p>
+    </div>
+</section>
+
 <div class="pin-lists-page page-content">
-
-    <section class="pin-lists-header">
-        <div class="pin-lists-header-inner">
-            <p class="pin-lists-eyebrow">Your collections</p>
-            <h1 class="pin-lists-title">Lists</h1>
-            <p class="pin-lists-subtitle">
-                Group pins into named collections - manual or "smart" ones that keep themselves
-                up to date. Turn a list into a trip or a markup map in one click.
-            </p>
-            <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
-                <i class="material-symbols-outlined">add</i>
-                New List
-            </button>
-        </div>
-    </section>
-
     <div class="pin-lists-toolbar">
         <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
                oninput="pinListsFilterCards(this.value)" autocomplete="off">
@@ -35,6 +30,10 @@
                 <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
             </select>
         </div>
+        <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
+            <i class="material-symbols-outlined">add</i>
+            New List
+        </button>
     </div>
 
     {% if pin_lists %}
@@ -64,32 +63,30 @@
         <i class="material-symbols-outlined">bookmarks</i>
         <h2>No lists yet</h2>
         <p>Create a list to start grouping pins for a trip, a project, or just to keep track of favorites.</p>
-        <button type="button" class="btn btn--primary" onclick="document.getElementById('create-list-dialog').showModal()">
-            <i class="material-symbols-outlined">add</i>
-            Create your first list
-        </button>
     </div>
     {% endif %}
 </div>
 
 <dialog id="create-list-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
-    <form hx-post="{% url 'lists.create' %}" hx-swap="none"
-          hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
-        {% csrf_token %}
-        <div class="form-row">
-            <label for="pin-list-name">List name <span class="required">*</span></label>
-            <input type="text" name="name" id="pin-list-name" required maxlength="100" placeholder="e.g. Ohio road trip" autocomplete="off">
-        </div>
-        <div class="form-row">
-            <label for="pin-list-description">Description</label>
-            <textarea name="description" id="pin-list-description" rows="3" placeholder="What's this list for?"></textarea>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg">Create List</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-        </div>
-    </form>
+    <div class="ul-dialog-body">
+        <form hx-post="{% url 'lists.create' %}" hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="pin-list-name">List name <span class="required">*</span></label>
+                <input type="text" name="name" id="pin-list-name" required maxlength="100" placeholder="e.g. Ohio road trip" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="pin-list-description">Description</label>
+                <textarea name="description" id="pin-list-description" rows="3" placeholder="What's this list for?"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg">Create List</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
 </dialog>
 {% endblock %}
 

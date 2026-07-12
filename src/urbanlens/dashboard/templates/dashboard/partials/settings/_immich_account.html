@@ -6,6 +6,14 @@
         {% if account.last_verified %}Verified {{ account.last_verified|date:"M j, Y" }}.{% endif %}
     </p>
     <div class="settings-actions">
+        <button type="button" class="btn btn--secondary"
+                hx-post="{% url 'settings.immich.scan' %}"
+                hx-target="#immich-scan-progress"
+                hx-swap="outerHTML"
+                hx-confirm="Scan your entire Immich library for places you've been? This can take a while for a large library. Nothing is created automatically - you'll review and confirm each suggestion afterward.">
+            <i class="material-symbols-outlined">travel_explore</i>
+            Scan library for new locations
+        </button>
         <button type="button" class="btn btn--danger"
                 hx-post="{% url 'settings.immich.disconnect' %}"
                 hx-target="#immich-settings-body"
@@ -15,6 +23,13 @@
             Disconnect Immich
         </button>
     </div>
+    <p class="settings-help">
+        Scans your whole library for photo locations and suggests visits for pins you
+        already have, plus candidate new pins for places you don't. Nothing is created
+        until you review and accept each suggestion in
+        <a href="{% url 'memories.locations' %}">Memories &rsaquo; Locations</a>.
+    </p>
+    <div id="immich-scan-progress"></div>
     {% else %}
     <p class="settings-help">
         Connect a self-hosted <a href="{% url 'faq' %}#faq-immich-what" target="_blank" rel="noopener">Immich</a> server to search and import photos near your pins.

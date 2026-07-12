@@ -15,13 +15,16 @@ from __future__ import annotations
 import datetime
 from unittest import mock
 
+from cryptography.fernet import InvalidToken
 from django.contrib.auth.models import User
+from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, strategies as st
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink, get_calendar_account
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
@@ -377,7 +380,7 @@ class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
 
     def setUp(self):
         super().setUp()
-        self.user.set_password("pw")  # noqa: S106
+        self.user.set_password("pw")
         self.user.save()
         self.client.force_login(self.user)
 
@@ -639,6 +642,45 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
         deleted_ids = {call.args[0] for call in gateway.delete_event.call_args_list}
         self.assertEqual(deleted_ids, {"trip-evt", "act-evt"})
         self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+
+class GetCalendarAccountTests(_CalendarSyncDBTestCase):
+    """get_calendar_account heals accounts left with undecryptable tokens.
+
+    Regression test for a production 500: rotating field_encryption_key
+    without migrating old rows makes EncryptedTextField.from_db_value raise
+    InvalidToken, which crashed every page that touched the calendar
+    connection (e.g. GET /dashboard/trips/).
+    """
+
+    def _corrupt_stored_access_token(self):
+        """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE dashboard_google_calendar_accounts SET access_token = %s WHERE id = %s",
+                ["not-a-valid-fernet-token", self.account.id],
+            )
+
+    def test_returns_account_when_decryptable(self):
+        self.assertEqual(get_calendar_account(self.profile), self.account)
+
+    def test_undecryptable_account_is_healed_to_none(self):
+        self._corrupt_stored_access_token()
+        self.assertIsNone(get_calendar_account(self.profile))
+        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+
+    def test_raw_query_still_raises_invalid_token(self):
+        """Sanity check that the corruption helper actually reproduces the bug."""
+        self._corrupt_stored_access_token()
+        with pytest.raises(InvalidToken):
+            GoogleCalendarAccount.objects.filter(profile=self.profile).first()
+
+    def test_trips_list_page_does_not_500_with_undecryptable_account(self):
+        self._corrupt_stored_access_token()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("trips.list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
 
 class CalendarCallbackViewTests(TestCase):

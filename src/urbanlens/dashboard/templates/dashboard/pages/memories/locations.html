@@ -1,0 +1,27 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load memories_components %}
+
+{% block title %}Locations{% endblock %}
+
+{% block content %}
+<div id="locations-page" class="memories-tab-page">
+
+    <div class="memories-header">
+        <div>
+            <h1 class="memories-title"><i class="material-symbols-outlined">travel_explore</i> Locations</h1>
+            <p class="memories-subtitle">Places a photo scan found evidence of visiting. Review each one before anything is created.</p>
+        </div>
+    </div>
+
+    <div class="page-inner">
+        {% memories_tabs "locations" %}
+
+        <div id="pin-suggestions-wrap"
+             hx-get="{% url 'memories.locations.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_pin_suggestions_queue.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

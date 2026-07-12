@@ -571,14 +571,14 @@ class TripListView(LoginRequiredMixin, View):
     """
 
     def get(self, request):
-        from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
+        from urbanlens.dashboard.models.calendar_sync.model import get_calendar_account
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
         friends = get_connections(profile)
-        calendar_account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        calendar_account = get_calendar_account(profile)
         return render(
             request,
             "dashboard/pages/trips/index.html",

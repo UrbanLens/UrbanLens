@@ -173,6 +173,45 @@ class ImmichGatewayTests(TestCase):
         _args, kwargs = gw.session.post.call_args
         self.assertEqual(kwargs["json"], {"size": 10})
 
+    def test_search_metadata_parses_gps_and_city_from_exif_info(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(
+            json_data={"assets": {"items": [{"id": "a1", "exifInfo": {"latitude": 40.5, "longitude": -74.5, "city": "Newark", "dateTimeOriginal": "2024-01-01T12:00:00+00:00"}}]}},
+        )
+        (asset,) = gw.list_recent()
+        self.assertEqual(asset.lat, 40.5)
+        self.assertEqual(asset.lon, -74.5)
+        self.assertEqual(asset.city, "Newark")
+        self.assertEqual(asset.taken_at, datetime.datetime(2024, 1, 1, 12, 0, tzinfo=datetime.UTC))
+
+    def test_search_metadata_handles_assets_with_no_gps(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={"assets": {"items": [{"id": "a1"}]}})
+        (asset,) = gw.list_recent()
+        self.assertIsNone(asset.lat)
+        self.assertIsNone(asset.lon)
+        self.assertIsNone(asset.city)
+
+    def test_iter_library_assets_pages_until_no_next_page(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.side_effect = [
+            _mock_response(json_data={"assets": {"items": [{"id": "a1", "exifInfo": {"latitude": 1.0, "longitude": 2.0}}], "nextPage": "2", "total": 2}}),
+            _mock_response(json_data={"assets": {"items": [{"id": "a2", "exifInfo": {"latitude": 3.0, "longitude": 4.0}}], "nextPage": None, "total": 2}}),
+        ]
+        pages = list(gw.iter_library_assets(page_size=1))
+        self.assertEqual(gw.session.post.call_count, 2)
+        self.assertEqual([[asset.id for asset in page] for page, _total in pages], [["a1"], ["a2"]])
+        self.assertEqual(pages[0][1], 2)
+        # Second page's request should carry the token from the first page's nextPage.
+        _args, kwargs = gw.session.post.call_args_list[1]
+        self.assertEqual(kwargs["json"]["page"], "2")
+
+    def test_iter_library_assets_stops_when_first_page_is_empty(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={"assets": {"items": [], "nextPage": None, "total": 0}})
+        pages = list(gw.iter_library_assets())
+        self.assertEqual(pages, [])
+
 
 # -- Settings: connect / disconnect ------------------------------------------------
 
@@ -201,6 +240,27 @@ class ImmichSettingsViewTests(TestCase):
         ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
         self.client.post(reverse("settings.immich.disconnect"))
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
+
+
+class ImmichLibraryScanStartViewTests(TestCase):
+    """The scan trigger requires a connected account and enqueues the sweep task."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+
+    def test_requires_a_connected_account(self) -> None:
+        response = self.client.post(reverse("settings.immich.scan"))
+        self.assertEqual(response.status_code, 400)
+
+    def test_enqueues_the_sweep_task_when_connected(self) -> None:
+        ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
+        fake_result = mock.MagicMock(id="task-123")
+        with mock.patch("urbanlens.dashboard.controllers.immich.safely_enqueue_task", return_value=fake_result) as enqueue:
+            response = self.client.post(reverse("settings.immich.scan"))
+        self.assertEqual(response.status_code, 200)
+        enqueue.assert_called_once()
+        self.assertIn(b"task-123", response.content)
 
 
 # -- Pin detail: search -------------------------------------------------------------
@@ -323,3 +383,70 @@ class ImportImmichPhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+
+
+# -- Celery task: sweep_immich_library_locations ------------------------------------
+
+
+class SweepImmichLibraryLocationsTaskTests(TestCase):
+    """The full-library sweep never downloads photos - only matches/clusters GPS+dates."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make("dashboard.Location", latitude=Decimal("40.000000"), longitude=Decimal("-74.000000"))
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+
+    def _run(self, pages):
+        with (
+            mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter(pages)),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
+            return tasks.sweep_immich_library_locations(self.profile.pk)
+
+    def test_sweep_matches_a_geotagged_asset_against_an_existing_pin(self) -> None:
+        from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
+
+        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        result = self._run([([asset], 1)])
+        self.assertEqual(result, {"scanned": 1, "matched_suggestions": 1, "new_pin_suggestions": 0})
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.pin_id, self.pin.pk)
+
+    def test_sweep_skips_assets_without_gps_or_date(self) -> None:
+        from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
+
+        no_gps = SearchAsset(id="a1", taken_at=timezone.now())
+        no_date = SearchAsset(id="a2", lat=40.0001, lon=-74.0)
+        result = self._run([([no_gps, no_date], 2)])
+        self.assertEqual(result["scanned"], 2)
+        self.assertFalse(PinSuggestion.objects.exists())
+
+    def test_sweep_creates_notification_only_when_suggestions_are_found(self) -> None:
+        from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+        self._run([([], 0)])
+        self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
+
+        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        self._run([([asset], 1)])
+        self.assertTrue(NotificationLog.objects.filter(profile=self.profile).exists())
+
+    def test_sweep_handles_gateway_failure_gracefully(self) -> None:
+        def failing_iter(self_gw, **kwargs):
+            yield [SearchAsset(id="a1", taken_at=timezone.now(), lat=1.0, lon=2.0)], 5
+            raise GatewayRequestError("boom")
+
+        with (
+            mock.patch.object(ImmichGateway, "iter_library_assets", failing_iter),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
+            result = tasks.sweep_immich_library_locations(self.profile.pk)
+        self.assertEqual(result["scanned"], 1)
+
+    def test_missing_account_is_a_noop(self) -> None:
+        self.account.delete()
+        with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+            result = tasks.sweep_immich_library_locations(self.profile.pk)
+        self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})

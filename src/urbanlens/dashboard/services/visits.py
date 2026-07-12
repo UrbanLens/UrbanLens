@@ -16,8 +16,11 @@ from urbanlens.dashboard.services.connections import are_connections
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     import datetime
     from decimal import Decimal
+
+    from django.contrib.gis.geos import Point as GEOSPoint
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
@@ -520,6 +523,55 @@ def sync_last_visited(pin: Pin) -> None:
     pin.save(update_fields=["last_visited", "updated"])
 
 
+def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
+    """Whether a pin's effective property boundary contains a point.
+
+    Falls back to a 50 m proximity check (mirroring the default circle
+    boundary) for pins with no resolvable boundary polygon at all.
+
+    Args:
+        pin: Pin to test (its ``location`` should be prefetched to avoid an
+            extra query per candidate).
+        point: GEOS point to test containment for.
+
+    Returns:
+        True if the point falls within the pin's effective boundary.
+    """
+    from django.contrib.gis.measure import D
+
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+
+    polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
+    if polygon is not None:
+        return bool(polygon.contains(point))
+    return Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
+
+
+def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:
+    """Return the first of a profile's root pins whose effective boundary contains a point.
+
+    This is the codebase's actual "is this point inside one of my pins"
+    check - a pin's effective *property boundary* (its own drawing, a wiki
+    drawing, the API-generated default, or the 50 m circle/coordinate
+    fallback), not a literal stored bounding box.
+
+    Args:
+        profile: Profile whose root pins should be checked.
+        point: GEOS point to test.
+        pins: Pre-fetched candidate pins, for callers checking many points
+            against the same profile (avoids re-querying per point). Defaults
+            to a fresh query of the profile's root pins.
+
+    Returns:
+        The first matching Pin, or None.
+    """
+    candidates = pins if pins is not None else Pin.objects.filter(profile=profile).root_pins().select_related("location")
+    for pin in candidates:
+        if _pin_contains_point(pin, point):
+            return pin
+    return None
+
+
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
     """Record geolocation-based visits for the profile's pins containing a point.
 
@@ -543,10 +595,7 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         return []
 
     from django.contrib.gis.geos import Point
-    from django.contrib.gis.measure import D
     from django.utils import timezone
-
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
@@ -560,14 +609,7 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
     for pin in pins:
         if pin.pk in already_visited_today:
             continue
-
-        polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
-        if polygon is not None:
-            contains_point = polygon.contains(point)
-        else:
-            contains_point = Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
-
-        if not contains_point:
+        if not _pin_contains_point(pin, point):
             continue
 
         visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)

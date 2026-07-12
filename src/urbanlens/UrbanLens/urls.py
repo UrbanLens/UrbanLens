@@ -9,6 +9,7 @@ from django.conf import settings as django_settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
+from django.http import HttpResponseServerError
 from django.shortcuts import render
 from django.urls import include, path, re_path
 
@@ -92,3 +93,17 @@ def handler404(request: HttpRequest, exception: Exception) -> HttpResponse:
     plain-text fallback instead of the site's styled error page.
     """
     return _render_404_page(request)
+
+
+def handler500(request: HttpRequest) -> HttpResponse:
+    """Render the styled 500 page for uncaught server errors.
+
+    Falls back to a bare response if rendering the styled page itself fails
+    (e.g. a context processor hitting a database that's the reason we're
+    here in the first place), so a second failure never masks the first.
+    """
+    try:
+        return render(request, "dashboard/pages/errors/500.html", status=500)
+    except Exception:
+        logger.exception("Failed to render the styled 500 page")
+        return HttpResponseServerError("Server Error (500)")

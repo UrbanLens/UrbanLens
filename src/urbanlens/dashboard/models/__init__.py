@@ -37,6 +37,7 @@ from urbanlens.dashboard.models.notifications import NotificationLog, Notificati
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.pin_list import PinList, PinListItem
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.note import ProfileNote

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+import datetime
+import json
 import logging
 import os
+from typing import Any
 import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -13,6 +15,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, PinSuggestionOrigin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.export import (
     EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
     VALID_EXPORT_TYPES,
@@ -28,10 +32,13 @@ from urbanlens.dashboard.services.import_data import (
     import_dir as _import_dir_fn,
     schedule_import_cleanup,
 )
+from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
 
 logger = logging.getLogger(__name__)
 
 _MAX_IMPORT_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB
+_MAX_CLUSTERS_PER_REQUEST = 500
+_MAX_COUNT_PER_CLUSTER = 2000
 
 
 def _export_dir(job_id: str) -> str:
@@ -93,11 +100,13 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(
             request,
             "dashboard/pages/tools/index.html",
             {
                 "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
+                "profile_uuid": profile.uuid,
             },
         )
 
@@ -232,7 +241,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
 
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
-        today = date.today().isoformat()
+        today = datetime.date.today().isoformat()
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
@@ -391,4 +400,110 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "message": "Database backup queued.",
             },
             status=202,
+        )
+
+
+def _parse_cluster(cluster: Any) -> list[LocationHit]:
+    """Parse and validate one cluster row from the local-scan upload payload.
+
+    Each cluster becomes ``count`` synthetic hits (one per date, cycling
+    through ``dates`` when count exceeds the number of distinct dates) so it
+    flows through ``ingest_location_hits`` exactly like individually-scanned
+    hits would, with an accurate hit count and date list.
+
+    Args:
+        cluster: One raw JSON object from the ``clusters`` array.
+
+    Returns:
+        Synthetic LocationHits for this cluster, or an empty list if the row
+        is malformed (missing/invalid coordinates or no valid dates).
+    """
+    if not isinstance(cluster, dict):
+        return []
+    try:
+        latitude = float(cluster["latitude"])
+        longitude = float(cluster["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return []
+
+    dates_raw = cluster.get("dates")
+    valid_dates: list[str] = []
+    if isinstance(dates_raw, list):
+        for raw_date in dates_raw[:MAX_STORED_VISIT_DATES]:
+            if not isinstance(raw_date, str):
+                continue
+            try:
+                datetime.date.fromisoformat(raw_date)
+            except ValueError:
+                continue
+            valid_dates.append(raw_date)
+    if not valid_dates:
+        return []
+
+    try:
+        count = int(cluster.get("count", len(valid_dates)))
+    except (TypeError, ValueError):
+        count = len(valid_dates)
+    count = max(1, min(count, _MAX_COUNT_PER_CLUSTER))
+
+    label = cluster.get("label")
+    label = label.strip()[:255] if isinstance(label, str) and label.strip() else None
+
+    hits: list[LocationHit] = []
+    for index in range(count):
+        day = datetime.date.fromisoformat(valid_dates[index % len(valid_dates)])
+        taken_at = datetime.datetime.combine(day, datetime.time(12, 0), tzinfo=datetime.UTC)
+        hits.append(LocationHit(latitude=latitude, longitude=longitude, taken_at=taken_at, label=label))
+    return hits
+
+
+class PhotoLocationScanUploadView(LoginRequiredMixin, View):
+    """POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
+
+    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and
+    de-dupes matches entirely client-side before uploading, so this payload is
+    small - one row per cluster, not per photo - and the photo/video files
+    themselves never reach the server, only the extracted lat/lng/date/label
+    metadata. Feeds the same ``ingest_location_hits`` pipeline the Immich
+    sweep uses, so results merge/dedupe against any existing suggestions.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Ingest a batch of pre-clustered location results.
+
+        Args:
+            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count", "label"}, ...]}``.
+
+        Returns:
+            JSON summary of suggestions created/updated, or a 400 error.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid request body."}, status=400)
+
+        clusters = body.get("clusters") if isinstance(body, dict) else None
+        if not isinstance(clusters, list) or not clusters:
+            return JsonResponse({"error": "No location clusters provided."}, status=400)
+        if len(clusters) > _MAX_CLUSTERS_PER_REQUEST:
+            return JsonResponse({"error": f"Too many results at once (max {_MAX_CLUSTERS_PER_REQUEST})."}, status=400)
+
+        hits: list[LocationHit] = []
+        for cluster in clusters:
+            hits.extend(_parse_cluster(cluster))
+        if not hits:
+            return JsonResponse({"error": "No valid location data found in upload."}, status=400)
+
+        summary = ingest_location_hits(profile, hits, origin=PinSuggestionOrigin.LOCAL_SCAN)
+        return JsonResponse(
+            {
+                "ok": True,
+                "matched_suggestions": summary.matched_suggestions,
+                "new_pin_suggestions": summary.new_pin_suggestions,
+                "hits_processed": summary.hits_processed,
+                "review_url": reverse("memories.locations"),
+            },
         )
