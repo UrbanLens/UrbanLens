@@ -10,33 +10,33 @@ Context:
   unlogged_visits_count - count badge shown on the Visits tab; the tab is hidden when zero
   pin_suggestions_count - count badge shown on the Locations tab; the tab is hidden when zero
 {% endcomment %}
-<nav class="memories-tabs" aria-label="Memories views">
+<nav class="ul-subnav-tabs" aria-label="Memories views">
     <a href="{% url 'memories.view' %}"
-       class="memories-tab {% if active == 'timeline' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'timeline' %}is-active{% endif %}"
        {% if active == 'timeline' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">timeline</i>
         <span>Timeline</span>
     </a>
     <a href="{% url 'memories.photos' %}"
-       class="memories-tab {% if active == 'photos' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'photos' %}is-active{% endif %}"
        {% if active == 'photos' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">photo_library</i>
         <span>Photos</span>
     </a>
     <a href="{% url 'memories.maps' %}"
-       class="memories-tab {% if active == 'maps' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'maps' %}is-active{% endif %}"
        {% if active == 'maps' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">map</i>
         <span>Maps</span>
     </a>
     <a href="{% url 'memories.sharing' %}"
-       class="memories-tab {% if active == 'sharing' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'sharing' %}is-active{% endif %}"
        {% if active == 'sharing' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">ios_share</i>
         <span>Sharing</span>
     </a>
     <a href="{% url 'memories.journal' %}"
-       class="memories-tab {% if active == 'journal' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'journal' %}is-active{% endif %}"
        {% if active == 'journal' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">auto_stories</i>
         <span>Journal</span>
@@ -44,7 +44,7 @@ Context:
     {% if unlogged_visits_count %}
     <a href="{% url 'memories.visits' %}"
        id="memories-visits-tab"
-       class="memories-tab {% if active == 'visits' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'visits' %}is-active{% endif %}"
        {% if active == 'visits' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">where_to_vote</i>
         <span>Visits</span>
@@ -54,7 +54,7 @@ Context:
     {% if pin_suggestions_count %}
     <a href="{% url 'memories.locations' %}"
        id="memories-locations-tab"
-       class="memories-tab {% if active == 'locations' %}is-active{% endif %}"
+       class="ul-subnav-tab {% if active == 'locations' %}is-active{% endif %}"
        {% if active == 'locations' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">travel_explore</i>
         <span>Locations</span>

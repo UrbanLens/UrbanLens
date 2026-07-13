@@ -232,7 +232,7 @@ class StyleSettingsForm(forms.ModelForm):
     guidance_level = forms.ChoiceField(
         choices=GuidanceLevel.choices,
         widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
-        label="In-app Help",
+        label="Guidance",
         help_text="Choose how UrbanLens introduces features as you explore.",
     )
     distance_units = forms.ChoiceField(

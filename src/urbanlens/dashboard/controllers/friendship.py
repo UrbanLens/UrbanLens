@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -405,6 +406,19 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
         return render(request, "dashboard/pages/profile/friends.html", {**ctx, "profile": profile})
 
+    def friends_page_widget(self, request: HttpRequest, profile_id: int):
+        """HTMX partial: just the /friends/ page's list content, for live refresh."""
+        from django.http import Http404
+
+        profile = Profile.objects.filter(pk=profile_id).first()
+        if not profile:
+            raise Http404
+        viewer = request.user.profile if request.user.is_authenticated else None
+        if viewer is None or viewer.pk != profile.pk:
+            raise Http404
+        ctx = _friend_list_ctx(viewer, profile)
+        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
+
     def friend_request_respond(self, request: HttpRequest, from_profile_id: int):
         """Accept or decline a friend request from the notification dropdown.
 
@@ -516,14 +530,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
 
-        friendship_changed = False
         existing_user = find_user_by_email(email)
         if existing_user:
             to_profile = existing_user.profile
             # Respect visibility settings silently - no error, no distinguishable response.
             if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
                 friendship = request_or_accept_friendship(inviter, to_profile)
-                friendship_changed = bool(friendship)
                 if friendship and subscription_role is not None:
                     from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
                     from urbanlens.dashboard.models.subscriptions import grant_subscription
@@ -574,15 +586,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 else:
                     record_email_sent(inviter, email, EmailType.JOIN_INVITE)
 
+        # The response body must be byte-identical no matter what happened above -
+        # embedding a friend-list refresh directly here would let a caller tell a
+        # registered target from an unregistered one (or a closed-visibility target
+        # from an open one) just by diffing response content. Any live refresh of
+        # the friend-list widgets instead happens via a separate, decoupled request
+        # triggered by the header below.
         response = render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})
-        if friendship_changed:
-            # A new outgoing request (or crossed-request auto-accept) doesn't
-            # otherwise show up anywhere without a reload - OOB-refresh whichever
-            # friend-list widget is present on the current page (the compact one
-            # on the profile page, or the full one on /friends/; htmx silently
-            # skips whichever id isn't in the DOM).
-            ctx = {**_friend_list_ctx(inviter, inviter), "oob": True}
-            widget_html = render_to_string(request=request, template_name="dashboard/partials/profile/friend_list_partial.html", context=ctx)
-            page_html = render_to_string(request=request, template_name="dashboard/partials/profile/friends_page_content.html", context=ctx)
-            response.content += (widget_html + page_html).encode()
+        response["HX-Trigger"] = json.dumps({"friendListChanged": True})
         return response

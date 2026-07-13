@@ -434,7 +434,10 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
 
-    pref = getattr(invitee.notification_preferences, "added_to_trip", DeliveryPreference.SITE)
+    try:
+        pref = invitee.notification_preferences.added_to_trip
+    except AttributeError:
+        pref = DeliveryPreference.SITE
     if pref == DeliveryPreference.NONE:
         return
     NotificationLog.objects.create(

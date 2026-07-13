@@ -91,7 +91,10 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.TRIP, trip=trip, trip_membership=membership)
     broadcast_direct_message(message)
 
-    pref = getattr(recipient.notification_preferences, "added_to_trip", DeliveryPreference.SITE)
+    try:
+        pref = recipient.notification_preferences.added_to_trip
+    except AttributeError:
+        pref = DeliveryPreference.SITE
     if pref != DeliveryPreference.NONE:
         from django.urls import reverse
 

@@ -386,57 +386,8 @@ $memories-type-colors: (
 }
 
 // -- Memories sub-nav tabs (Timeline | Photos) ------------------------------
-
-// Materialize paints every bare <nav> as a 56px salmon (#ee6e73) bar and forces
-// `nav i` icons to display:block/56px. This is a plain sub-nav, so reset all of
-// that back to a normal underline tab strip. Rendered inside `.ul-page-subnav`
-// (see _page_hero.scss), which supplies the full-bleed background/divider.
-.memories-tabs {
-    display: flex;
-    gap: .25rem;
-    width: auto;
-    height: auto;
-    line-height: normal;
-    color: inherit;
-}
-
-.memories-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .6rem .9rem;
-    font-size: .9rem;
-    font-weight: 600;
-    color: var(--ul-grey-7);
-    text-decoration: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: color .15s ease, border-color .15s ease;
-
-    // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.
-    .material-symbols-outlined {
-        display: inline-flex;
-        align-items: center;
-        height: auto;
-        line-height: 1;
-        font-size: 1.2rem;
-    }
-
-    &:focus,
-    &:active,
-    &:hover {
-        color: var(--ul-grey-8);
-        border-bottom-color: var(--ul-grey-4);
-    }
-
-    &.is-active {
-        color: var(--ul-grey-9);
-        border-bottom-color: $color-deep-purple-500;
-        background-color: var(--ul-grey-0b);
-
-        .material-symbols-outlined { color: $color-deep-purple-500; }
-    }
-}
+// Styled by the shared `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see
+// _page_hero.scss) - every subnav tab strip site-wide uses those now.
 
 // -- Photos page ------------------------------------------------------------
 

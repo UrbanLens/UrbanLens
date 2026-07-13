@@ -752,6 +752,11 @@ urlpatterns = [
                     name="friend.page",
                 ),
                 path(
+                    "friends/<int:profile_id>/widget/",
+                    friendship.FriendController.as_view({"get": "friends_page_widget"}),
+                    name="friend.page_widget",
+                ),
+                path(
                     "request/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "request_friend"}),
                     name="friend.request",

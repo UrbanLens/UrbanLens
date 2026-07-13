@@ -1721,63 +1721,23 @@ dialog.tag-create-card.ul-dialog {
     margin: 0 0 1.25rem;
 }
 
-.organize-tab-bar {
-    display: flex;
-    align-items: center;
-    width: fit-content;
-    max-width: 100%;
-    gap: .2rem;
-    padding: .3rem;
-    margin-bottom: 1.75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
-    box-shadow: var(--ul-shadow-sm);
-}
-
+// `.organize-tab-bar`/`.organize-tab` are bare hooks for organize.js's
+// tab-switch/filter/convert-target logic - the look comes entirely from the
+// shared `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see _page_hero.scss)
+// rendered alongside them.
 .organize-tab {
     position: relative;
-    padding: .6rem 1.15rem;
-    font-size: .88rem;
-    font-weight: 600;
-    color: var(--ul-grey-6);
-    border: none;
-    background: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    white-space: nowrap;
-    border-radius: $radius-sm;
-    transition: color .15s ease, background .15s ease, box-shadow .15s ease, transform .1s ease;
 
     i {
-        font-size: 1.05rem;
         transition: transform .15s ease;
-    }
-
-    &:hover {
-        color: var(--ul-grey-9);
-        background: var(--ul-hover-bg);
     }
 
     &:active {
         transform: scale(.96);
     }
 
-    &.active {
-        color: #fff;
-        background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 78%, black));
-        box-shadow: 0 3px 10px color-mix(in srgb, var(--primary-color) 45%, transparent);
-
-        i {
-            transform: scale(1.05);
-        }
-
-        &:hover {
-            color: #fff;
-            background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 78%, black));
-        }
+    &.active i {
+        transform: scale(1.05);
     }
 }
 
@@ -1796,12 +1756,6 @@ dialog.tag-create-card.ul-dialog {
     color: var(--primary-color);
     border: 1px solid color-mix(in srgb, $primary-color 30%, transparent);
     transition: background .15s ease, color .15s ease, border-color .15s ease;
-
-    .organize-tab.active & {
-        background: rgba(255, 255, 255, .25);
-        color: #fff;
-        border-color: rgba(255, 255, 255, .35);
-    }
 
     &[hidden] { display: none; }
 }
@@ -2830,26 +2784,8 @@ dialog.tag-create-card.ul-dialog {
 // -- Organize page: responsive rules ------------------------------------------
 
 @include down($breakpoint-sm) {
-    // Tab bar: allow horizontal scroll instead of wrapping/overflow
-    .organize-tab-bar {
-        width: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-
-        &::-webkit-scrollbar {
-            display: none;
-        }
-    }
-
-    // Slightly compact tabs on small screens
-    .organize-tab {
-        padding: .55rem .85rem;
-        font-size: .82rem;
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
+    // Tab bar sizing/scroll behavior now comes from the shared
+    // `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see _page_hero.scss).
 
     .organize-page-header-actions {
         width: 100%;

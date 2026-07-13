@@ -140,7 +140,6 @@
     &__inner {
         width: 90%;
         max-width: $breakpoint-lg;
-        margin: 0 auto;
 
         @include up($breakpoint-sm) {
             width: 85%;
@@ -149,5 +148,77 @@
         @include up($breakpoint-md) {
             width: 70%;
         }
+    }
+}
+
+// Shared tab strip for a `.ul-page-subnav` (Memories, Settings, Organize,
+// ...) - one canonical look for every subnav so pages don't grow their own
+// variant. Materialize paints every bare <nav> as a 56px salmon bar and
+// forces `nav i` icons to display:block/56px - this resets all of that back
+// to a plain underline tab strip, and works equally as <a> links (Memories,
+// which navigates between pages) or <button role="tab"> elements (Settings,
+// Organize, which switch panels client-side with no page load).
+//
+// The active modifier accepts both `.is-active` (Memories, server-rendered
+// per page load) and `.active` (Settings/Organize, JS-toggled on click) so
+// each page's existing state-toggling logic doesn't need to change.
+.ul-subnav-tabs {
+    display: flex;
+    gap: .25rem;
+    width: 100%;
+    height: auto;
+    line-height: normal;
+    color: inherit;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.ul-subnav-tab {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: .4rem;
+    padding: .6rem .9rem;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    text-decoration: none;
+    white-space: nowrap;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color .15s ease, border-color .15s ease;
+
+    // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.
+    .material-symbols-outlined {
+        display: inline-flex;
+        align-items: center;
+        height: auto;
+        line-height: 1;
+        font-size: 1.2rem;
+    }
+
+    &:focus,
+    &:active,
+    &:hover {
+        color: var(--ul-grey-8);
+        border-bottom-color: var(--ul-grey-4);
+    }
+
+    &.is-active,
+    &.active {
+        color: var(--ul-grey-9);
+        border-bottom-color: $color-deep-purple-500;
+        background-color: var(--ul-grey-0b);
+
+        .material-symbols-outlined { color: $color-deep-purple-500; }
     }
 }

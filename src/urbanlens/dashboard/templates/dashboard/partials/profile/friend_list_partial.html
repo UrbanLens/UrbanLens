@@ -1,5 +1,9 @@
     {% load dashboard_tags %}
-<div id="friend_list" class="profile-section">
+<div id="friend_list"
+     hx-get="{% url 'friend.list' friend_list_profile.id %}"
+     hx-trigger="friendListChanged from:body"
+     hx-swap="outerHTML"
+     class="profile-section">
 
     {# -- Section header -------------------------------------------------------- #}
     <div class="profile-section-header">

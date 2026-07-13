@@ -677,7 +677,7 @@ class Profile(abstract.PublicDashboardModel):
         return bool(my_trips & their_trips)
 
     @staticmethod
-    def visibility_permits(visibility: str, subject: Profile, other: Profile) -> bool:
+    def visibility_permits(visibility: str, subject: Profile, other: Profile, *, allow_pending_request: bool = True) -> bool:
         """Return True if ``subject``'s ``visibility`` setting permits ``other``.
 
         Shared evaluator for every per-field ``VisibilityChoice`` setting on
@@ -688,12 +688,17 @@ class Profile(abstract.PublicDashboardModel):
         never more of a stranger than someone who merely shares a pin or trip.
         A pending friend request *sent by* ``subject`` counts the recipient as
         a friend too (one way only): asking someone to connect deliberately
-        lets them see who is asking.
+        lets them see who is asking. Set ``allow_pending_request=False`` for
+        settings that shouldn't extend that courtesy - e.g. contact info like
+        a phone number is more sensitive than "who's asking to connect" and
+        should wait for the request to actually be accepted.
 
         Args:
             visibility: The ``VisibilityChoice`` value being evaluated.
             subject: The profile whose setting is being checked.
             other: The profile requesting access.
+            allow_pending_request: Whether an unanswered request from
+                ``subject`` to ``other`` should count as passing the gate.
 
         Returns:
             True when ``other`` satisfies the visibility requirement.
@@ -702,7 +707,9 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if visibility == VisibilityChoice.NO_ONE:
             return False
-        if Profile.are_friends(subject, other) or Profile.has_pending_request_to(subject, other):
+        if Profile.are_friends(subject, other):
+            return True
+        if allow_pending_request and Profile.has_pending_request_to(subject, other):
             return True
         if visibility == VisibilityChoice.FRIENDS:
             return False
@@ -746,6 +753,11 @@ class Profile(abstract.PublicDashboardModel):
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.
 
+        Unlike most visibility settings, a merely-pending friend request does
+        not unlock this - contact details like a phone number are more
+        sensitive than "who's asking to connect" and wait for an accepted
+        friendship.
+
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.
 
@@ -758,7 +770,7 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if viewer is None:
             return False
-        return self.visibility_permits(self.contact_visibility, self, viewer)
+        return self.visibility_permits(self.contact_visibility, self, viewer, allow_pending_request=False)
 
     def accepts_direct_messages_from(self, sender: Profile) -> bool:
         """Return True if ``sender`` may send this profile a direct message.

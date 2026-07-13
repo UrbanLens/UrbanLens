@@ -1,7 +1,10 @@
 {% load dashboard_tags %}
 {# The page header's count lives outside this swap target - keep it in sync via OOB. #}
 <span class="friends-page-count" id="friends-page-count" hx-swap-oob="true">{{ friends|length }}</span>
-<div id="friends_page_list" {% if oob %}hx-swap-oob="true"{% endif %}>
+<div id="friends_page_list"
+     hx-get="{% url 'friend.page_widget' friend_list_profile.id %}"
+     hx-trigger="friendListChanged from:body"
+     hx-swap="outerHTML">
 
     {# -- Outgoing friend requests (own profile only) ---------------------------- #}
     {% if is_own_profile and outgoing_requests %}

@@ -204,8 +204,11 @@ class MarkupTypeEnumTests(TestCase):
     def test_has_polygon(self) -> None:
         self.assertIn("polygon", MarkupType.values)
 
-    def test_exactly_six_members(self) -> None:
-        self.assertEqual(len(MarkupType.values), 6)
+    def test_has_pin(self) -> None:
+        self.assertIn("pin", MarkupType.values)
+
+    def test_exactly_seven_members(self) -> None:
+        self.assertEqual(len(MarkupType.values), 7)
 
     @given(st.sampled_from(_MARKUP_TYPES))
     @settings(max_examples=50, deadline=None)

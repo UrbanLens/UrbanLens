@@ -8,23 +8,23 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        <div class="settings-tabs" role="tablist" id="settings-tabs">
-            <button type="button" class="settings-tab active" data-tab="privacy" role="tab" aria-selected="true">
+        <div class="settings-tabs ul-subnav-tabs" role="tablist" id="settings-tabs">
+            <button type="button" class="settings-tab ul-subnav-tab active" data-tab="privacy" role="tab" aria-selected="true">
                 <i class="material-symbols-outlined">lock</i> Privacy
             </button>
-            <button type="button" class="settings-tab" data-tab="connections" role="tab" aria-selected="false">
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="connections" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">cable</i> Connections
             </button>
-            <button type="button" class="settings-tab" data-tab="messages" role="tab" aria-selected="false">
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="messages" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">chat</i> Messages
             </button>
-            <button type="button" class="settings-tab" data-tab="security" role="tab" aria-selected="false">
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="security" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">passkey</i> Security
             </button>
-            <button type="button" class="settings-tab" data-tab="map" role="tab" aria-selected="false">
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="map" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">map</i> Theme
             </button>
-            <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false">
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="account" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">manage_accounts</i> Account
             </button>
         </div>
@@ -473,7 +473,7 @@
             <p class="settings-help">
                 Passkeys work with Face ID, Windows Hello, security keys, and password managers
                 like Bitwarden. Once you've added one, signing in requires your password
-                <em>and</em> a passkey. Remove your last passkey to turn this back off.
+                <em>and</em> a passkey. Remove your last passkey to turn this off.
             </p>
 
             {% if passkeys %}
