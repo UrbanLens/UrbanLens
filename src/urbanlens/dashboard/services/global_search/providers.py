@@ -538,23 +538,11 @@ class DirectMessageSearchProvider(SearchProvider):
     fuzzy_field = ""
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
-        from urbanlens.dashboard.models.direct_messages import DirectMessage
+        from urbanlens.dashboard.services.direct_messages import message_search_queryset
 
         if not parsed.terms and not parsed.person:
             return []
-        queryset = (
-            DirectMessage.objects.filter(
-                Q(sender=profile, deleted_by_sender_at__isnull=True) | Q(recipient=profile, deleted_by_recipient_at__isnull=True),
-            )
-            .exclude(body="")
-            .select_related("sender__user", "recipient__user")
-            .filter(date_range_filter("created", parsed))
-        )
-        if parsed.person:
-            recipient_ann, recipient_q = person_match("recipient", parsed.person, profile)
-            sender_ann, sender_q = person_match("sender", parsed.person, profile)
-            queryset = queryset.annotate(**recipient_ann, **sender_ann).filter((Q(sender=profile) & recipient_q) | (Q(recipient=profile) & sender_q))
-        queryset = self.apply_text(queryset, parsed, ["body"])
+        queryset = message_search_queryset(profile, parsed).select_related("sender__user", "recipient__user")
 
         results = []
         for message in queryset[:limit]:

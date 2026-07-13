@@ -78,9 +78,13 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
             "collapse_scope": "pin",
             "wrap_body": False,
             "show_header_add_button": True,
-            "description_text": "Every name this pin is known by.",
+            "explainer_id": "pin-aliases-explainer",
+            "explainer_body": (
+                "Aliases are alternate names for this pin - former names, local nicknames, or codenames. "
+                "They're used when you search your own pins, and when we look things up externally (e.g. Google). "
+                "Mark an alias as a nickname (the person icon) and it'll help you find your own pins but never leave the site for external searches."
+            ),
             "empty_text": "No aliases yet.",
-            "nickname_help_text": "Nickname-only aliases help you find your own pins, but are never sent to external APIs (Google, Wikipedia, etc).",
             "obj_slug": pin.slug,
             "url_toggle_nickname": "pin.alias.toggle_nickname",
             "url_use": "pin.alias.use",
@@ -104,9 +108,13 @@ def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpRespo
             "collapse_scope": "wiki",
             "wrap_body": True,
             "show_header_add_button": False,
-            "description_text": "Every name this location is known by.",
+            "explainer_id": "location-aliases-explainer",
+            "explainer_body": (
+                "Aliases are alternate names for this location - former names, local nicknames, or codenames. "
+                "They're used when the community searches for this place, and when we look things up externally (e.g. Google). "
+                "Mark an alias as a nickname (the person icon) and it'll help the community find this location but never leave the site for external searches."
+            ),
             "empty_text": "No aliases yet. Add alternate names for this location.",
-            "nickname_help_text": "Nickname-only aliases help the community find this location, but are never sent to external APIs (Google, Wikipedia, etc).",
             "obj_slug": location.slug,
             "url_toggle_nickname": "location.wiki.alias.toggle_nickname",
             "url_use": "location.wiki.alias.use",

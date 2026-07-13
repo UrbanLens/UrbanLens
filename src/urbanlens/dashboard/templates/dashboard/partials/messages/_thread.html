@@ -65,6 +65,25 @@ live messages and fall back to the plain POST endpoint when the socket is down.
         </form>
       </div>
     </div>
+    <button type="button" class="dm-thread__search-btn" id="dm-thread-search-btn"
+            title="Search this conversation" aria-label="Search this conversation"
+            aria-expanded="false" aria-controls="dm-thread-search">
+      <i class="material-symbols-outlined">search</i>
+    </button>
+  </div>
+
+  <div class="dm-thread-search" id="dm-thread-search" hidden>
+    <i class="material-symbols-outlined dm-thread-search__icon" aria-hidden="true">search</i>
+    <input type="search" id="dm-thread-search-input" class="dm-thread-search__input"
+           placeholder="Search this conversation..." autocomplete="off"
+           hx-get="{% url 'messages.conversation_search' partner.slug %}"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#dm-thread-search-results"
+           hx-swap="innerHTML">
+    <button type="button" class="dm-thread-search__close" id="dm-thread-search-close" aria-label="Close search">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+    <div id="dm-thread-search-results" class="dm-thread-search-results"></div>
   </div>
 
   <div class="dm-locked-banner" id="dm-locked-banner" hidden>
@@ -87,7 +106,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
     {% with message=item.message %}
     {% with tombstone=message|tombstone_text:viewer_id %}
     <li class="dm-bubble {% if message.sender_id == partner.pk %}dm-bubble--them{% else %}dm-bubble--own{% endif %}{% if tombstone %} dm-bubble--tombstone{% endif %}{% if message.is_grouped %} dm-bubble--grouped{% endif %}"
-        data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}">
+        id="dm-msg-{{ message.id }}" data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}">
       <button type="button" class="dm-bubble__menu-btn" data-message-id="{{ message.id }}" aria-label="Message actions">
         <i class="material-symbols-outlined">more_vert</i>
       </button>
@@ -106,9 +125,9 @@ live messages and fall back to the plain POST endpoint when the socket is down.
         {% if message.sender_id == viewer_id or message.images_revealed or image_permission_status == "allowed" %}
         <div class="dm-bubble__images">
           {% for image in images %}
-          <a href="{{ image.image.url }}" target="_blank" rel="noopener" class="dm-bubble__image-link">
+          <button type="button" class="dm-bubble__image-link" onclick="window.dmOpenLightbox(this)">
             <img src="{{ image.image.url }}" alt="" class="dm-bubble__image">
-          </a>
+          </button>
           {% endfor %}
         </div>
         {% elif image_permission_status == "rejected" %}

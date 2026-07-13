@@ -1488,8 +1488,14 @@
         background: var(--ul-grey-0);
     }
 
-    input[type="checkbox"] {
+    .ul-checkbox-wrap {
+        width: auto;
+        height: auto;
         flex-shrink: 0;
+    }
+
+    &:has(input[type="checkbox"]:checked) {
+        background: rgba(59, 130, 246, .08);
     }
 }
 

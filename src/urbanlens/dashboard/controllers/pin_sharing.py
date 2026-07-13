@@ -106,11 +106,29 @@ class PinShareDialogView(LoginRequiredMixin, View):
             {
                 "pin": pin,
                 "friends": get_connections(request.user.profile),
-                "aliases": pin.aliases.all(),
                 "photos": pin.images.all(),
                 "child_pin_count": pin.descendants().count(),
                 "maps": MarkupMap.objects.for_profile(request.user.profile).order_by("-updated"),
             },
+        )
+
+
+class PinShareMapGridView(LoginRequiredMixin, View):
+    """Just the pin-share dialog's map-picker tiles (see ``_pin_share_map_grid.html``).
+
+    Refetched by the dialog's "New map" flow after a map is created, so the
+    picker gains the new (auto-selected) tile without reloading the rest of
+    the already-filled-in share form.
+
+    GET /map/pin/<slug:pin_slug>/share/maps/
+    """
+
+    def get(self, request, pin_slug):
+        get_object_or_404(Pin, slug=pin_slug, profile=request.user.profile)
+        return render(
+            request,
+            "dashboard/partials/pins/_pin_share_map_grid.html",
+            {"maps": MarkupMap.objects.for_profile(request.user.profile).order_by("-updated")},
         )
 
 
@@ -128,28 +146,18 @@ class PinShareCreateView(LoginRequiredMixin, View):
             return HttpResponse(length_error, status=400)
 
         shared_name = None
-        name_choice = request.POST.get("name_choice") or ""
         custom_name = (request.POST.get("custom_name") or "").strip()
-        if not name_choice and custom_name:
-            # The dialog's default mode is a free-text name field with no
-            # explicit choice control - a typed name means "share under this".
-            name_choice = "custom"
-        if name_choice == "custom":
-            if not custom_name:
-                return HttpResponse("Enter a name, or choose one of your existing aliases.", status=400)
+        if custom_name:
             length_error = text_length_error(custom_name, 255, "Name")
             if length_error:
                 return HttpResponse(length_error, status=400)
             shared_name = custom_name
-            # New names typed here become a permanent alias on the sharer's own
-            # pin too, same as any other place the pin's name is set (see
+            # A typed name becomes a permanent alias on the sharer's own pin
+            # too, same as any other place the pin's name is set (see
             # Pin.save's alias-sync, which this mirrors for a name that never
             # touches pin.name itself).
             PinAlias.objects.get_or_create(pin=pin, name=custom_name)
-        elif name_choice.startswith("alias:"):
-            alias = get_object_or_404(PinAlias, pk=name_choice.removeprefix("alias:"), pin=pin)
-            shared_name = alias.name
-        # else: blank choice keeps shared_name None - "use the pin's current name".
+        # else: blank input keeps shared_name None - "use the pin's current name".
 
         image_ids = request.POST.getlist("image_ids")
         selected_images = pin.images.filter(id__in=image_ids) if image_ids else Image.objects.none()

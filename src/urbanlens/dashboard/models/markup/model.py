@@ -119,6 +119,18 @@ class MarkupMap(abstract.FrontendDashboardModel):
         blank=True,
         related_name="+",
     )
+    # Direct association with the pin this map was created for (e.g. via the
+    # pin-share dialog's "New map" flow). Set immediately on creation,
+    # independent of whether the map is ever actually shared - distinct from
+    # PinShare.markup_map, which records a map attached to a specific share
+    # event. Backs the pin detail page's "Markup Maps" section.
+    pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="associated_maps",
+    )
 
     objects = MarkupMapManager()
 
@@ -126,6 +138,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         profile_id: int
         cloned_from_id: int | None
         shared_by_id: int | None
+        pin_id: int | None
         items: QuerySet[PinMarkup]
         safety_checkins: QuerySet[SafetyCheckin]
         attached_safety_checkins: QuerySet[SafetyCheckin]
@@ -236,6 +249,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
             Index(fields=["uuid"], name="idxdb_mm_uuid"),
             Index(fields=["profile"], name="idxdb_mm_profile"),
             Index(fields=["profile", "cloned_from"], name="idxdb_mm_profile_clonedfrom"),
+            Index(fields=["pin"], name="idxdb_mm_pin"),
         ]
 
 

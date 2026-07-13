@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.direct_messages import (
     key_change_events_for,
     mark_thread_open,
     reaction_summary,
+    search_direct_messages,
     toggle_reaction,
 )
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
@@ -49,6 +50,11 @@ DROPDOWN_CONVERSATION_LIMIT = 8
 
 #: How many profiles the new-message recipient search returns.
 RECIPIENT_SEARCH_LIMIT = 8
+
+#: Minimum characters before a message search runs at all, matching the
+#: recipient search's threshold - short of that, results would be too broad
+#: to be useful and would just add query load on every keystroke.
+MESSAGE_SEARCH_MIN_QUERY_LENGTH = 2
 
 
 def _get_profile(request: HttpRequest) -> Profile:
@@ -131,8 +137,9 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
             "share__trip",
             "share__trip_membership",
             "share__recommended_profile",
+            "markup_map",
         )
-        .prefetch_related("images", "reactions__profile"),
+        .prefetch_related("images", "reactions__profile", "markup_map__items"),
     )
     timeline = build_thread_timeline(thread_messages, key_change_events_for(profile, partner))
     identity = display_identity_for(profile, partner)
@@ -527,6 +534,63 @@ class ConversationReadView(LoginRequiredMixin, View):
         DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
         clear_email_debounce(partner.pk, profile.pk)
         return _trigger_msg_badge_refresh(DjangoHttpResponse(status=204))
+
+
+class ConversationSearchView(LoginRequiredMixin, View):
+    """GET /messages/<profile_slug>/search/?q=... - search within one conversation.
+
+    Understands the same natural-language phrasing as global search (dates,
+    "photos"/"maps"/"pins" keywords, "from <person>") via
+    ``services.direct_messages.search_direct_messages`` - the same query
+    parser and queryset builder the Ctrl+K dialog's message search uses, so
+    behavior never drifts between the two surfaces.
+    """
+
+    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+        """Return message hits within this conversation matching ``q``.
+
+        Args:
+            request: The incoming request. Reads ``q``.
+            profile_slug: Slug of the conversation partner.
+
+        Returns:
+            The message-search-results partial, scoped to this conversation.
+        """
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        query = request.GET.get("q", "").strip()
+        hits = search_direct_messages(profile, query, partner=partner) if len(query) >= MESSAGE_SEARCH_MIN_QUERY_LENGTH else []
+        return render(
+            request,
+            "dashboard/partials/messages/_message_search_results.html",
+            {"hits": hits, "query": query, "scope": "conversation"},
+        )
+
+
+class MessagesSearchView(LoginRequiredMixin, View):
+    """GET /messages/search/?q=... - search across every conversation.
+
+    Companion to :class:`ConversationSearchView`: same query parsing and
+    underlying queryset, just unscoped to a single partner.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Return message hits across all of the profile's conversations matching ``q``.
+
+        Args:
+            request: The incoming request. Reads ``q``.
+
+        Returns:
+            The message-search-results partial, grouped by conversation.
+        """
+        profile = _get_profile(request)
+        query = request.GET.get("q", "").strip()
+        hits = search_direct_messages(profile, query) if len(query) >= MESSAGE_SEARCH_MIN_QUERY_LENGTH else []
+        return render(
+            request,
+            "dashboard/partials/messages/_message_search_results.html",
+            {"hits": hits, "query": query, "scope": "all"},
+        )
 
 
 class ConversationListView(LoginRequiredMixin, View):

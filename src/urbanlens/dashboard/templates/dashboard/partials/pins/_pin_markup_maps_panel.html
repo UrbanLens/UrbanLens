@@ -1,0 +1,40 @@
+{% comment %}
+Markup Maps panel for the pin detail page - maps directly associated with
+this pin (MarkupMap.pin), e.g. created via the pin-share dialog's "New map"
+flow. Only rendered when the pin has at least one (the view returns 204
+otherwise, and the page's htmx:afterOnLoad handler removes the placeholder).
+
+Context:
+  pin       - Pin instance.
+  map_cards - list of {map, snapshot, item_count} dicts.
+{% endcomment %}
+<div id="pin-markup-maps-panel" class="pin-markup-maps-panel card card--secondary"
+     data-collapse-scope="pin" data-collapse-section="markup-maps">
+    <div class="card-header">
+        <i class="material-symbols-outlined">map</i>
+        <span>Markup Maps</span>
+        <span class="badge">{{ map_cards|length }}</span>
+    </div>
+    <div class="memories-maps-grid">
+        {% for card in map_cards %}
+        {% with uuid_str=card.map.uuid|stringformat:"s" %}
+        <article class="memories-map-card" id="pin-markup-map-{{ card.map.uuid }}">
+            {% include "dashboard/partials/map/_map_view_preview.html" with map_id="pmm-"|add:uuid_str %}
+            <div class="memories-map-card-body">
+                <h3 class="memories-map-card-title">{{ card.map.title|default:"Untitled map" }}</h3>
+                <p class="memories-map-card-meta">
+                    {{ card.item_count }} annotation{{ card.item_count|pluralize }} ·
+                    updated {{ card.map.updated|date:"M j, Y" }}
+                </p>
+                <div class="memories-map-card-actions">
+                    <a class="btn btn--ghost btn--sm" href="{% url 'memories.maps' %}">
+                        <i class="material-symbols-outlined">open_in_new</i> Manage
+                    </a>
+                </div>
+            </div>
+        </article>
+        {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="pmm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" map_obj=card.map %}
+        {% endwith %}
+        {% endfor %}
+    </div>
+</div>

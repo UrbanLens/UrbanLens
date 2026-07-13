@@ -1078,8 +1078,8 @@ textarea.edit-textarea {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: linear-gradient(135deg, $color-indigo-900, $color-indigo-700);
-    color: #fff;
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
     padding: 14px 18px;
     margin-bottom: 20px;
@@ -1087,29 +1087,24 @@ textarea.edit-textarea {
 
 .setup-banner-icon {
     font-size: 1.6rem;
-    opacity: .9;
+    color: $color-blue-500;
     flex-shrink: 0;
 }
 
 .setup-banner-text {
     flex: 1;
 
-    strong { display: block; font-size: .95rem; }
-    span   { font-size: .82rem; opacity: .85; }
+    strong { display: block; font-size: .95rem; color: var(--ul-grey-9); }
+    span   { font-size: .82rem; color: var(--ul-grey-7); }
 }
 
 .setup-banner-skip {
-    background: rgba(255, 255, 255, .15);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, .3);
-    border-radius: $radius-sm;
+    @include btn-ghost;
+    background: var(--ul-grey-0);
     padding: 6px 14px;
     font-size: .82rem;
-    cursor: pointer;
     flex-shrink: 0;
     white-space: nowrap;
-
-    &:hover { background: rgba(255, 255, 255, .25); }
 }
 
 // -- Edit profile: username input group ----------------------------------------
@@ -1423,6 +1418,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     color: var(--ul-grey-0);
     font-weight: bold;
     box-shadow: 5px 5px 10px rgba(0,0,0,0.2);
+    background: var(--ul-accent-amber);
 }
 
 .profile-annotation-label {
@@ -2762,6 +2758,7 @@ a.profile-stat--link {
 .profile-viewas-item {
     display: block;
     width: 100%;
+    box-sizing: border-box;
     text-align: left;
     background: none;
     border: none;

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models import abstract
 
@@ -74,13 +75,21 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
         )
 
     def with_pin_counts(self) -> Self:
-        """Annotate pin_count / wiki_count and prefetch children (with their own pin_count) and parents."""
+        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
+
+        Each count is a correlated subquery rather than a sibling `Count()` on the
+        same queryset - annotating `pins` and `wikis` together would join both M2M
+        tables in before grouping, producing a row per (pin, wiki) pair per badge
+        (a cartesian fan-out) that `distinct=True` only fixes after the fact.
+        """
         from urbanlens.dashboard.models.badges.model import Badge
 
+        pin_counts = Badge.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("pins")).values("c")
+        wiki_counts = Badge.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("wikis")).values("c")
+
         return self.annotate(
-            pin_count=Count("pins", distinct=True),
-            wiki_count=Count("wikis", distinct=True),
-            location_count=Count("wikis", distinct=True),
+            pin_count=Coalesce(Subquery(pin_counts, output_field=IntegerField()), 0),
+            location_count=Coalesce(Subquery(wiki_counts, output_field=IntegerField()), 0),
         ).prefetch_related(
             Prefetch(
                 "children",

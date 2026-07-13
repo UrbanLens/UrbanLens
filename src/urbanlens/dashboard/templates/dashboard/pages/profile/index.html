@@ -1,5 +1,15 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block subnav %}
+{% if profile.user == request.user %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="profile-page page-content">
 

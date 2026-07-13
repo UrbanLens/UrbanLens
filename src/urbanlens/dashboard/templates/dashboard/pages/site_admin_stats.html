@@ -1,8 +1,18 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="bar_chart" title="Site Statistics" subtitle="Usage metrics and server health at a glance." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="stats" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% url 'site_admin_home' as admin_home_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="bar_chart" title="Site Statistics" subtitle="Usage metrics and server health at a glance." back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content">
 
     <div class="api-limits-toolbar">

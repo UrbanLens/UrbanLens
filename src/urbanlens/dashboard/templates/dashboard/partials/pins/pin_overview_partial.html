@@ -115,7 +115,7 @@
                 {% include "dashboard/partials/pins/_pin_stat_rating_item.html" with pin=pin field="vulnerability" label="Vulnerability" help="How at-risk or fragile this site feels - useful for planning and sharing responsibly." modifier="vulnerability" wide=False client_version=client_version %}
             </div>
             <div class="detail-items">
-                {% if pin.has_place_name %}
+                {% if pin.has_place_name and pin.place_name != pin.effective_official_name %}
                 <div class="detail-item detail-item--place">
                     <span class="field-label">Place Name</span>
                     <span class="field-value">{{ pin.place_name }}</span>

@@ -53,9 +53,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from datetime import date
 
+        from django.db.models import Case, When
+
+        from urbanlens.dashboard.models.aliases.model import AliasType
         from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.pin.model import PinType
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
@@ -128,7 +130,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "google_maps_api_key": settings.google_unrestricted_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "page_name": "location-details",
-                "pin_type_choices": PinType.choices,
+                "pin_alias_suggestions": pin.aliases.order_by(Case(When(kind=AliasType.OFFICIAL, then=0), default=1), "name"),
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
                 "all_categories": Badge.objects.categories().ordered(),

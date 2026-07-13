@@ -105,7 +105,10 @@
                 {% for friend in friends %}
                 <li class="trip-invite-friend-item">
                     <label class="trip-invite-friend-label">
-                        <input type="checkbox" name="invite_profile_ids" value="{{ friend.id }}">
+                        <span class="ul-checkbox-wrap">
+                            <input type="checkbox" name="invite_profile_ids" value="{{ friend.id }}">
+                            <span class="ul-checkbox"></span>
+                        </span>
                         {% if friend.avatar %}
                         <img class="trip-invite-friend-avatar" src="{{ friend.avatar.url }}" alt="">
                         {% else %}

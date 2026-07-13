@@ -1,6 +1,9 @@
 {% load dashboard_tags %}
 {# Pin or location badge membership panel (tags, categories, and statuses). #}
-<div class="tag-panel card" id="{{ panel_id }}"
+{# `embedded` drops the .card wrapper/header treatment for the pin detail page's #}
+{# combined Organization section, where this panel sits as a subsection instead #}
+{# of its own card - see location/index.html and _membership_panel_ctx(). #}
+<div class="tag-panel{% if not embedded %} card{% endif %}{% if embedded %} tag-panel--embedded{% endif %}" id="{{ panel_id }}"
      data-collapse-scope="{{ collapse_scope }}" data-collapse-section="categories">
     <div class="card-header">
         <i class="material-symbols-outlined">label</i>

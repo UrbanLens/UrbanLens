@@ -980,6 +980,7 @@ def _membership_panel_ctx(
     obj_uuid: str,
     collapse_scope: str,
     empty_text: str | None = None,
+    embedded: bool = False,
 ) -> dict:
     """Build template context for badge_membership_panel.html."""
     ctx: dict = {
@@ -992,6 +993,7 @@ def _membership_panel_ctx(
         "badge_url_kind": _MEMBERSHIP_URL_KIND,
         "obj_uuid": obj_uuid,
         "collapse_scope": collapse_scope,
+        "embedded": embedded,
     }
     if empty_text:
         ctx["empty_text"] = empty_text
@@ -1029,6 +1031,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 membership_route="pin",
                 obj_uuid=pin_slug,
                 collapse_scope="pin",
+                embedded=True,
             ),
         )
 
@@ -1056,6 +1059,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
                 membership_route="pin",
                 obj_uuid=pin_slug,
                 collapse_scope="pin",
+                embedded=True,
             ),
         )
 

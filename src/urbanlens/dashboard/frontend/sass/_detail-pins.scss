@@ -275,11 +275,8 @@
 
 // -- Aliases panel ------------------------------------------------------------
 .aliases-panel {
-    .aliases-description {
-        padding: .5rem 1rem 0;
-        font-size: .83rem;
-        color: var(--ul-grey-6);
-        margin: 0;
+    .ul-page-explainer {
+        margin: .5rem 1rem 0;
     }
 }
 
@@ -409,24 +406,39 @@
     padding: 0 1rem 1rem;
     align-items: center;
 
-    // Rendered as a small pill so the checked state is obvious at a glance.
-    .alias-nickname-check {
+    // Hidden until the header "+" button reveals it (see .is-adding below) -
+    // only applies where that button exists (the pin page's own panel).
+    &.alias-add-form--collapsed {
+        display: none;
+    }
+
+    // Icon-button toggle, matching .alias-chip-nickname-toggle's look - the
+    // checkbox itself stays functional but visually hidden.
+    .alias-nickname-toggle {
         display: inline-flex;
         align-items: center;
-        gap: .35rem;
-        padding: .3rem .55rem;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
         border: 1px solid var(--ul-grey-1a);
-        border-radius: 999px;
-        font-size: .78rem;
         color: var(--ul-grey-6);
-        white-space: nowrap;
         cursor: pointer;
-        user-select: none;
+        flex-shrink: 0;
         transition: border-color .15s, background .15s, color .15s;
 
+        input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .material-symbols-outlined { font-size: 15px; }
+
         &:has(input:checked) {
-            border-color: $color-indigo-500;
-            background: rgba(99, 102, 241, .1);
+            border-color: $color-amber-500;
+            background: color-mix(in srgb, $color-amber-500 20%, transparent);
+            color: $color-amber-700;
         }
     }
 
@@ -467,54 +479,9 @@
     }
 }
 
-// -- Collapsible "what are aliases?" explainer --------------------------------
-.alias-help {
-    margin: 0 1rem 1rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
-    font-size: .8rem;
-    color: var(--ul-grey-6);
-
-    .alias-help-summary {
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .45rem .6rem;
-        cursor: pointer;
-        list-style: none;
-        user-select: none;
-
-        &::-webkit-details-marker {
-            display: none;
-        }
-
-        .material-symbols-outlined {
-            font-size: 1rem;
-            color: var(--ul-grey-5);
-        }
-    }
-
-    &[open] .alias-help-summary {
-        border-bottom: 1px solid var(--ul-grey-1a);
-    }
-
-    .alias-help-body {
-        padding: .5rem .6rem;
-
-        p {
-            margin: 0 0 .5rem;
-            line-height: 1.45;
-
-            &:last-child {
-                margin-bottom: 0;
-            }
-        }
-    }
-
-    .alias-help-inline-icon {
-        font-size: .9rem;
-        vertical-align: -.15em;
-    }
+// Header "+" button reveals the (otherwise collapsed) add-alias form.
+.aliases-panel.is-adding .alias-add-form--collapsed {
+    display: flex;
 }
 
 // -- Circle-style bg/border opacity row --------------------------------------

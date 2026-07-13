@@ -1,8 +1,18 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Site Settings" subtitle="Configure site-wide behaviour, branding, and security." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="settings" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% url 'site_admin_home' as admin_home_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Site Settings" subtitle="Configure site-wide behaviour, branding, and security." back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content">
 
     {% if saved %}

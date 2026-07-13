@@ -204,21 +204,25 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
 
-        <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
-            hx-swap="outerHTML"
-            class="tag-panel card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="categories">
-            <div class="tag-panel-header">
-                <i class="material-symbols-outlined">category</i>
-                <span>Badges</span>
+        <div class="organization-card card card--secondary">
+            <div class="card-header">
+                <i class="material-symbols-outlined">folder</i>
+                <span>Organization</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
+                hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
+                hx-swap="outerHTML"
+                class="tag-panel tag-panel--embedded"
+                data-collapse-scope="pin" data-collapse-section="categories">
+                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            </div>
+            <hr class="organization-divider">
+            <div class="organization-lists-section">
+                <button type="button" class="btn btn--secondary pin-add-to-list-btn" onclick="document.getElementById('add-to-list-dialog').showModal()">
+                    <i class="material-symbols-outlined">playlist_add</i> Add to a list
+                </button>
+            </div>
         </div>
-
-        <button type="button" class="btn btn--secondary pin-add-to-list-btn" onclick="document.getElementById('add-to-list-dialog').showModal()">
-            <i class="material-symbols-outlined">playlist_add</i> Add to a list
-        </button>
         {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
@@ -243,6 +247,21 @@
             <div class="card-header">
                 <i class="material-symbols-outlined">tune</i>
                 <span>Custom Fields</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        </div>
+
+        {# Only rendered when the pin has associated markup maps - the view returns 204 #}
+        {# otherwise, and the htmx:afterOnLoad handler below removes this placeholder. #}
+        <div hx-get="{% url 'pin.markup_maps' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','markup-maps')], ul:unhide, refreshMarkupMaps from:body"
+            hx-swap="outerHTML"
+            id="pin-markup-maps-panel"
+            class="pin-markup-maps-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="markup-maps">
+            <div class="card-header">
+                <i class="material-symbols-outlined">map</i>
+                <span>Markup Maps</span>
             </div>
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
@@ -534,26 +553,31 @@
         {% csrf_token %}
 
         <div class="pin-edit-form-body ul-dialog-body">
-        <div class="form-row">
+        <div class="form-row pin-edit-name-row">
             <label for="pe-name">Name <span class="form-optional">(leave blank to use wiki name)</span></label>
             <input type="text" name="name" id="pe-name"
                    value="{{ pin.name|default:'' }}" maxlength="255"
-                   placeholder="{{ pin.effective_name }}">
+                   placeholder="{{ pin.effective_name }}" autocomplete="off"
+                   oninput="_pinEditFilterNameSuggestions(this)"
+                   onfocus="_pinEditShowNameSuggestions()">
+            {% if pin_alias_suggestions %}
+            <ul class="pin-edit-name-suggestions" id="pe-name-suggestions" hidden>
+                {% for alias in pin_alias_suggestions %}
+                <li data-search="{{ alias.name|lower }}">
+                    <button type="button" onclick="_pinEditPickNameSuggestion(this)">
+                        {{ alias.name }}
+                        {% if alias.kind == "official" %}<span class="pin-edit-name-suggestion-tag">official</span>{% endif %}
+                    </button>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
         </div>
 
         <div class="form-row">
             <label for="pe-description">Description / Notes</label>
             <textarea name="description" id="pe-description" rows="4"
                       placeholder="Your personal notes about this location...">{{ pin.description|default:'' }}</textarea>
-        </div>
-
-        <div class="form-row">
-            <label for="pe-pin-type">Pin Type</label>
-            <select name="pin_type" id="pe-pin-type">
-                {% for value, label in pin_type_choices %}
-                <option value="{{ value }}"{% if pin.pin_type == value %} selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
         </div>
 
         <div class="form-row form-row--two-col">
@@ -667,6 +691,32 @@
             if (key === 'csrfmiddlewaretoken') return;
             if (params[key] === originals[key]) delete params[key];
         });
+    });
+
+    // -- Pin edit dialog: name suggestions from the pin's own aliases -----------
+    // Pre-rendered server-side (official-first, see _overview_context), filtered
+    // client-side as the user types - no network round trip needed for such a
+    // small, already-loaded list.
+    function _pinEditShowNameSuggestions() {
+        const list = document.getElementById('pe-name-suggestions');
+        if (list) list.hidden = false;
+    }
+    function _pinEditFilterNameSuggestions(input) {
+        const q = input.value.trim().toLowerCase();
+        document.querySelectorAll('#pe-name-suggestions li').forEach((li) => {
+            li.hidden = q.length > 0 && li.dataset.search.indexOf(q) === -1;
+        });
+        _pinEditShowNameSuggestions();
+    }
+    function _pinEditPickNameSuggestion(btn) {
+        const input = document.getElementById('pe-name');
+        input.value = btn.firstChild.textContent.trim();
+        document.getElementById('pe-name-suggestions').hidden = true;
+    }
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.pin-edit-name-row')) return;
+        const list = document.getElementById('pe-name-suggestions');
+        if (list) list.hidden = true;
     });
 
 </script>
@@ -952,6 +1002,7 @@
             'loopnet-section', 'usgs-topo-section',
             'web-search-section',
             'satellite-view-section', 'street-view-section',
+            'pin-markup-maps-panel',
         ]);
 
         // HTMX does not perform a swap for 204 No Content responses, so the

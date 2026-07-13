@@ -1,7 +1,18 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/admin/_home_hero_body.html" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="home" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/admin/_home_hero_body.html" %}
 <div class="site-admin-page page-content">
 
     {# -- Status & meta row -------------------------------------------------------- #}

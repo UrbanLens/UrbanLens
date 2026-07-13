@@ -870,6 +870,22 @@ dialog.tag-create-card.ul-dialog {
     overflow: hidden;
 }
 
+// Nested inside the pin detail page's combined "Organization" card (see
+// .organization-card) instead of standing alone - drop the card-in-a-card
+// chrome, keep the "Badges" sub-header + "Add a badge" button.
+.tag-panel--embedded {
+    background: none;
+    border: none;
+    border-radius: 0;
+
+    .card-header {
+        padding: 0 0 .5rem;
+        background: none;
+        border-bottom: none;
+        box-shadow: none;
+    }
+}
+
 .tag-panel-header {
     display: flex;
     align-items: center;

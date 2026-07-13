@@ -34,6 +34,11 @@
             <div class="dm-sidebar__header">
                 <h1 class="dm-title"><i class="material-symbols-outlined">forum</i> Messages</h1>
                 <div class="dm-sidebar__header-actions">
+                    <button type="button" class="dm-sidebar-search-btn" id="dm-messages-search-btn"
+                            title="Search all conversations" aria-label="Search all conversations"
+                            aria-expanded="false" aria-controls="dm-messages-search">
+                        <i class="material-symbols-outlined">search</i>
+                    </button>
                     <button type="button" class="btn btn--sm btn--primary dm-compose-btn" id="dm-compose-btn"
                             aria-expanded="false" aria-controls="dm-compose">
                         <i class="material-symbols-outlined">edit_square</i>
@@ -55,6 +60,17 @@
                        hx-target="#dm-recipient-results"
                        hx-swap="innerHTML">
                 <div id="dm-recipient-results" class="dm-recipient-results"></div>
+            </div>
+
+            <div class="dm-messages-search" id="dm-messages-search" hidden>
+                <i class="material-symbols-outlined dm-messages-search__icon" aria-hidden="true">search</i>
+                <input type="search" id="dm-messages-search-input" class="dm-messages-search__input"
+                       placeholder="Search all conversations..." autocomplete="off"
+                       hx-get="{% url 'messages.search' %}"
+                       hx-trigger="input changed delay:300ms, search"
+                       hx-target="#dm-messages-search-results"
+                       hx-swap="innerHTML">
+                <div id="dm-messages-search-results" class="dm-messages-search-results"></div>
             </div>
 
             <div class="dm-sidebar__list"
@@ -84,6 +100,26 @@
 
 <div id="dm-share-dialog-host"></div>
 <div id="dm-map-picker-dialog-host"></div>
+
+{# Minimal photo lightbox for DM image attachments - reuses the shared #}
+{# gallery-lightbox CSS (see _gallery.scss) but skips the side panel (no #}
+{# captions/relevance/custom fields apply to a raw DM photo attachment). #}
+<dialog id="dm-lightbox" class="gallery-lightbox ul-dialog">
+    <div class="lightbox-inner">
+        <button type="button" class="lightbox-close" onclick="document.getElementById('dm-lightbox').close()">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+        <div class="lightbox-media-area">
+            <button type="button" class="lightbox-nav lightbox-prev" onclick="window.dmLightboxNav(-1)">
+                <i class="material-symbols-outlined">chevron_left</i>
+            </button>
+            <img id="dm-lightbox-img" src="" alt="" class="lightbox-img">
+            <button type="button" class="lightbox-nav lightbox-next" onclick="window.dmLightboxNav(1)">
+                <i class="material-symbols-outlined">chevron_right</i>
+            </button>
+        </div>
+    </div>
+</dialog>
 
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script>
@@ -192,6 +228,36 @@
         htmx.trigger(document.body, 'dmListRefresh');
         htmx.trigger(document.body, 'msgCountRefresh');
     }
+
+    // -- Photo lightbox -----------------------------------------------------------
+    // Clicking a DM image attachment opens it in-place instead of a new tab.
+    // `urls` is every image in that message's own attachment group, so
+    // prev/next cycles within the same bubble (mirrors the pin/wiki gallery's
+    // per-context lightbox nav).
+    var _dmLightboxUrls = [];
+    var _dmLightboxIdx = 0;
+
+    function _showDmLightbox() {
+        var img = document.getElementById('dm-lightbox-img');
+        if (img) img.src = _dmLightboxUrls[_dmLightboxIdx] || '';
+    }
+
+    window.dmOpenLightbox = function (btn) {
+        var group = btn.closest('.dm-bubble__images');
+        var imgs = Array.prototype.slice.call(group ? group.querySelectorAll('img') : []);
+        var clicked = btn.querySelector('img');
+        _dmLightboxUrls = imgs.map(function (i) { return i.src; });
+        var idx = imgs.indexOf(clicked);
+        _dmLightboxIdx = idx >= 0 ? idx : 0;
+        _showDmLightbox();
+        document.getElementById('dm-lightbox').showModal();
+    };
+
+    window.dmLightboxNav = function (dir) {
+        if (!_dmLightboxUrls.length) return;
+        _dmLightboxIdx = (_dmLightboxIdx + dir + _dmLightboxUrls.length) % _dmLightboxUrls.length;
+        _showDmLightbox();
+    };
 
     // -- Composer textarea: auto-expand, Enter to send / Shift+Enter for a newline --
     var COMPOSER_MAX_HEIGHT = 160; // px, matches .dm-composer textarea max-height
@@ -434,6 +500,24 @@
             cancelReply();
             return;
         }
+        // Search-this-conversation toggle lives inside the thread partial
+        // (swapped on every conversation switch), so it's handled here via
+        // delegation rather than a direct listener bound once at page load.
+        var threadSearchBtn = e.target.closest('#dm-thread-search-btn');
+        if (threadSearchBtn) {
+            e.stopPropagation();
+            toggleThreadSearch();
+            return;
+        }
+        if (e.target.closest('#dm-thread-search-close')) {
+            closeThreadSearch();
+            return;
+        }
+        if (e.target.closest('.dm-search-result')) {
+            // Let the link navigate/jump first; just tidy the panel away.
+            closeThreadSearch();
+            closeMessagesSearch();
+        }
         if (!e.target.closest('.dm-bubble-menu')) {
             document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
         }
@@ -482,6 +566,7 @@
         var grouped = isGroupedWithPrevious(list, own, msg.created);
         var li = document.createElement('li');
         li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them') + (grouped ? ' dm-bubble--grouped' : '');
+        li.id = 'dm-msg-' + msg.id;
         li.dataset.messageId = msg.id;
         li.dataset.createdAt = msg.created || '';
 
@@ -529,11 +614,10 @@
             var imagesWrap = document.createElement('div');
             imagesWrap.className = 'dm-bubble__images';
             msg.images.forEach(function (img) {
-                var link = document.createElement('a');
-                link.href = img.url;
-                link.target = '_blank';
-                link.rel = 'noopener';
+                var link = document.createElement('button');
+                link.type = 'button';
                 link.className = 'dm-bubble__image-link';
+                link.addEventListener('click', function () { window.dmOpenLightbox(link); });
                 var thumb = document.createElement('img');
                 thumb.src = img.url;
                 thumb.alt = '';
@@ -1260,6 +1344,76 @@
             if (e.key === 'Escape') closeComposePanel();
         });
     }
+
+    // -- Search all conversations (sidebar) toggle -------------------------------
+    var messagesSearchBtn = document.getElementById('dm-messages-search-btn');
+    var messagesSearchPanel = document.getElementById('dm-messages-search');
+    function closeMessagesSearch() {
+        if (!messagesSearchPanel || messagesSearchPanel.hidden) return;
+        messagesSearchPanel.hidden = true;
+        if (messagesSearchBtn) messagesSearchBtn.setAttribute('aria-expanded', 'false');
+    }
+    if (messagesSearchBtn && messagesSearchPanel) {
+        messagesSearchBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = !messagesSearchPanel.hidden;
+            messagesSearchPanel.hidden = open;
+            messagesSearchBtn.setAttribute('aria-expanded', String(!open));
+            if (!open) document.getElementById('dm-messages-search-input').focus();
+        });
+        document.addEventListener('click', function (e) {
+            if (messagesSearchPanel.hidden) return;
+            if (messagesSearchPanel.contains(e.target) || messagesSearchBtn.contains(e.target)) return;
+            closeMessagesSearch();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeMessagesSearch();
+        });
+    }
+
+    // -- Search this conversation toggle -----------------------------------------
+    // The toggle button and panel live inside the thread partial (swapped on
+    // every conversation switch), so the click that opens/closes them is
+    // handled via delegation above; these just do the DOM work.
+    function toggleThreadSearch() {
+        var panel = document.getElementById('dm-thread-search');
+        var btn = document.getElementById('dm-thread-search-btn');
+        if (!panel || !btn) return;
+        var open = !panel.hidden;
+        panel.hidden = open;
+        btn.setAttribute('aria-expanded', String(!open));
+        if (!open) {
+            var input = document.getElementById('dm-thread-search-input');
+            if (input) input.focus();
+        }
+    }
+    function closeThreadSearch() {
+        var panel = document.getElementById('dm-thread-search');
+        var btn = document.getElementById('dm-thread-search-btn');
+        if (!panel || panel.hidden) return;
+        panel.hidden = true;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeThreadSearch();
+    });
+
+    // -- Deep-link to a message from a search result -----------------------------
+    // Scrolls to and briefly highlights the target bubble, whether this is a
+    // fresh page load (clicked a result for a different conversation), or a
+    // same-page hash change (clicked a result while that conversation was
+    // already open - the URL only gains a fragment, no navigation happens).
+    function highlightMessageFromHash() {
+        var hash = window.location.hash;
+        if (!hash || hash.indexOf('#dm-msg-') !== 0) return;
+        var target = document.getElementById(hash.slice(1));
+        if (!target) return;
+        target.scrollIntoView({ block: 'center' });
+        target.classList.add('dm-bubble--highlight');
+        setTimeout(function () { target.classList.remove('dm-bubble--highlight'); }, 2000);
+    }
+    window.addEventListener('hashchange', highlightMessageFromHash);
+    highlightMessageFromHash();
 
     // Keep the thread scrolled to the newest message after HTMX pane swaps,
     // and show the thread pane on mobile when a conversation is opened.

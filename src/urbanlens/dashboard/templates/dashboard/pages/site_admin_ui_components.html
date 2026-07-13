@@ -2,6 +2,18 @@
 
 {% block page_title %}UI Components - {{ site_title }}{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="palette" title="UI Components" subtitle="Visual reference for reusable classes throughout the application." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="ui_components" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <style>
 .ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; }
@@ -24,8 +36,6 @@
 .ui-kit-dialog-demo.ul-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 .site-admin-nav-links { display: flex; flex-wrap: wrap; gap: .5rem; }
 </style>
-{% url 'site_admin_home' as admin_home_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="palette" title="UI Components" subtitle="Visual reference for reusable classes throughout the application." back_url=admin_home_url back_label="Admin Home" %}
 <div class="ui-kit-page page-content">
     <div class="ui-kit-grid">
 

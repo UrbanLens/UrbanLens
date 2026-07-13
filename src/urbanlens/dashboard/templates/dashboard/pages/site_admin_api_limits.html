@@ -1,8 +1,18 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="cloud" title="API Rate Limits" subtitle="Configure per-service rate limits and geo-filtering." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="api_limits" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% url 'site_admin_home' as admin_home_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="API Rate Limits" subtitle="Configure per-service rate limits and geo-filtering." back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content api-limits-page">
 
     <div class="api-limits-toolbar">

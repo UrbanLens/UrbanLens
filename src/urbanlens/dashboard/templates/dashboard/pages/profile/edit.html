@@ -1,5 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="edit" title="Edit Profile" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 {% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
 {% if date_errors %}
@@ -19,8 +31,6 @@
 {% endif %}
 {% endwith %}
 
-{% url 'profile.view' as profile_view_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="edit" title="Edit Profile" back_url=profile_view_url back_label="Back to Profile" %}
 <div class="edit-profile-page page-content">
 
     {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}

@@ -273,7 +273,8 @@
 }
 
 .dm-sidebar-collapse-btn,
-.dm-sidebar-expand-btn {
+.dm-sidebar-expand-btn,
+.dm-sidebar-search-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -294,6 +295,11 @@
     &:hover {
         background: var(--ul-grey-1a);
     }
+}
+
+.dm-sidebar-search-btn[aria-expanded="true"] {
+    background: var(--ul-hover-bg-primary);
+    color: var(--primary-color);
 }
 
 // Sits just inside the thread pane's left edge, only shown while collapsed.
@@ -394,6 +400,56 @@
     &__go {
         font-size: 1.05rem;
         color: var(--primary-color);
+    }
+}
+
+// -- Search all conversations (sidebar) ----------------------------------------
+
+.dm-messages-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .6rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0a);
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.05rem;
+        color: var(--ul-grey-4a);
+    }
+}
+
+// Materialize's global input styling needs the ID to reliably lose, same as
+// #dm-recipient-input above.
+#dm-messages-search-input.dm-messages-search__input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    height: auto;
+    font-size: .85rem;
+    background: transparent;
+    color: var(--ul-grey-9);
+
+    &:focus {
+        border: none;
+        box-shadow: none;
+    }
+
+    &::placeholder {
+        color: var(--ul-grey-4a);
+    }
+}
+
+.dm-messages-search-results {
+    flex-basis: 100%;
+
+    &:empty {
+        display: none;
     }
 }
 
@@ -596,6 +652,201 @@
     }
 }
 
+// Sits at the far right of the header (the header has no filler element to
+// push against, hence the explicit auto margin here rather than relying on
+// `justify-content: space-between`).
+.dm-thread__search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    margin-left: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    padding: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1a);
+    }
+
+    &[aria-expanded="true"] {
+        background: var(--ul-hover-bg-primary);
+        color: var(--primary-color);
+    }
+}
+
+.dm-thread-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem 1rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+    background: var(--ul-grey-0a);
+    flex-shrink: 0;
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.05rem;
+        color: var(--ul-grey-4a);
+    }
+
+    &__close {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: 50%;
+        background: none;
+        color: var(--ul-grey-4a);
+        cursor: pointer;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        i {
+            font-size: 1.1rem;
+        }
+    }
+}
+
+// Materialize's global input styling needs the ID to reliably lose, same as
+// #dm-recipient-input above.
+#dm-thread-search-input.dm-thread-search__input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    height: auto;
+    font-size: .85rem;
+    background: transparent;
+    color: var(--ul-grey-9);
+
+    &:focus {
+        border: none;
+        box-shadow: none;
+    }
+
+    &::placeholder {
+        color: var(--ul-grey-4a);
+    }
+}
+
+.dm-thread-search-results {
+    flex-basis: 100%;
+    max-height: 40vh;
+    overflow-y: auto;
+
+    &:empty {
+        display: none;
+    }
+}
+
+// -- Shared results list (search this conversation / search all conversations) --
+
+.dm-search-result-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dm-search-result {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .4rem .5rem;
+    border-radius: $radius-sm;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-hover-bg-primary);
+        outline: none;
+    }
+}
+
+.dm-search-result__icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-5);
+
+    .material-symbols-outlined {
+        font-size: 17px;
+    }
+}
+
+.dm-search-result__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .05rem;
+}
+
+.dm-search-result__title {
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--ul-grey-9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dm-search-result__snippet {
+    font-size: .78rem;
+    color: var(--ul-grey-5a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dm-search-result__date {
+    flex-shrink: 0;
+    font-size: .7rem;
+    color: var(--ul-grey-4a);
+    font-variant-numeric: tabular-nums;
+}
+
+.dm-search-empty {
+    padding: .75rem .6rem;
+    text-align: center;
+    color: var(--ul-grey-5a);
+    font-size: .8rem;
+
+    i {
+        font-size: 1.4rem;
+        color: var(--ul-grey-4a);
+    }
+
+    &__hint {
+        font-size: .72rem;
+        color: var(--ul-grey-4a);
+        margin-top: .2rem;
+    }
+}
+
 #dm-messages {
     list-style: none;
     flex: 1;
@@ -644,6 +895,13 @@
     }
 }
 
+// A box-shadow ring (not background-color) so this never fights the bubble's
+// own background - a solid color for `--them`, a gradient for `--own`.
+@keyframes dm-message-highlight {
+    from { box-shadow: 0 0 0 3px var(--ul-hover-bg-primary); }
+    to { box-shadow: 0 0 0 3px transparent; }
+}
+
 .dm-bubble {
     position: relative;
     max-width: min(75%, 34rem);
@@ -671,6 +929,11 @@
     &--tombstone {
         opacity: .65;
         font-style: italic;
+    }
+
+    // Briefly drawn attention to after jumping here from a search result.
+    &--highlight {
+        animation: dm-message-highlight 2s ease-out;
     }
 
     // Floating "more actions" affordance, tucked just outside the bubble on its
@@ -864,6 +1127,16 @@
             margin: 0;
         }
     }
+}
+
+// Was an <a target="_blank">; now a <button> that opens the in-page
+// lightbox instead, so the native button chrome needs resetting away.
+.dm-bubble__image-link {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
 }
 
 .dm-bubble__image--blurred {

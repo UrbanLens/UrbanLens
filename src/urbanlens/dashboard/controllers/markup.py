@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -303,7 +303,12 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
         context = _resolve_title_context(request, body)
-        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context))
+        # When created from a specific pin's page (e.g. the pin-share dialog's
+        # "New map" flow), associate the map with that pin immediately - see
+        # MarkupMap.pin. _resolve_title_context() already scopes the Pin
+        # lookup to the requesting profile.
+        pin_for_map = context if isinstance(context, Pin) else None
+        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context), pin=pin_for_map)
 
         if isinstance(body.get("markup"), list) or isinstance(body.get("shapes"), list):
             snapshot = sanitize_map_data(body)
@@ -401,6 +406,36 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
         _apply_view_state(markup_map, _parse_body(request))
         return JsonResponse({"ok": True})
+
+
+class PinMarkupMapsView(LoginRequiredMixin, View):
+    """"Markup Maps" panel for the pin detail page (loaded via HTMX).
+
+    Lists MarkupMaps directly associated with the pin (``MarkupMap.pin`` -
+    e.g. created via the pin-share dialog's "New map" flow). Most pins have
+    none, so this returns 204 in that case; the page's shared
+    ``htmx:afterOnLoad`` handler removes the placeholder card entirely (same
+    pattern as the external-data panels).
+
+    GET /map/pin/<slug:pin_slug>/markup-maps/
+    """
+
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        """Render the panel, or 204 when the pin has no associated maps.
+
+        Args:
+            request: HttpRequest.
+            pin_slug: Slug of the pin (scoped to the requesting profile).
+
+        Returns:
+            Rendered panel, or an empty 204 response.
+        """
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        maps = list(MarkupMap.objects.filter(pin=pin).prefetch_related("items").order_by("-updated"))
+        if not maps:
+            return HttpResponse(status=204)
+        map_cards = [{"map": markup_map, "snapshot": markup_map.to_snapshot(), "item_count": len(markup_map.items.all())} for markup_map in maps]
+        return render(request, "dashboard/partials/pins/_pin_markup_maps_panel.html", {"pin": pin, "map_cards": map_cards})
 
 
 class MarkupMapDeleteView(LoginRequiredMixin, View):

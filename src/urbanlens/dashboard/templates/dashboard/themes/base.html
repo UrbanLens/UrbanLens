@@ -1377,21 +1377,27 @@
         window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
+            // Click-binding is a separate pass from thumbnail rendering below -
+            // Array.forEach aborts entirely on an uncaught exception, and one
+            // malformed map's Leaflet render throwing must never be able to
+            // leave every *later* preview on the page permanently unclickable
+            // (the "Expand map" button/title link still work regardless since
+            // they're plain onclick attributes, which is what made this class
+            // of bug easy to miss - only the click-anywhere-on-thumb path broke).
+            document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
+                var id = preview.dataset.commentId;
+                if (preview.dataset.expandBound) return;
+                preview.dataset.expandBound = '1';
+                preview.classList.add('comment-map-preview--clickable');
+                preview.addEventListener('click', function (e) {
+                    if (e.target.closest('.comment-map-expand-btn')) return;
+                    if (id) window._expandCommentMap(id);
+                });
+            });
+
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
-
-                // Clicking anywhere on the preview (not just the "Expand" button)
-                // opens the read-only, larger map viewer.
-                if (!preview.dataset.expandBound) {
-                    preview.dataset.expandBound = '1';
-                    preview.classList.add('comment-map-preview--clickable');
-                    preview.addEventListener('click', function (e) {
-                        if (e.target.closest('.comment-map-expand-btn')) return;
-                        if (id) window._expandCommentMap(id);
-                    });
-                }
-
                 if (!thumb || thumb.dataset.initialized) return;
                 var script = document.getElementById('comment-map-data-' + id);
                 if (!script) return;
@@ -1410,7 +1416,11 @@
                 thumb.addEventListener('click', function () {
                     if (id) window._expandCommentMap(id);
                 });
-                window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
+                try {
+                    window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
+                } catch (err) {
+                    console.error('Failed to render map thumbnail', id, err);
+                }
             });
         }
 

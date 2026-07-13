@@ -16,13 +16,17 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 
 logger = logging.getLogger(__name__)
 
@@ -885,3 +889,90 @@ def has_used_direct_messages(profile: Profile) -> bool:
         True when at least one message involves the profile.
     """
     return DirectMessage.objects.involving(profile).exists()
+
+
+#: Default result cap for the Messages page's own search (as opposed to
+#: global search's smaller per-section limit, since this is the only section
+#: rendered here).
+DIRECT_MESSAGE_SEARCH_LIMIT = 25
+
+
+def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: Profile | None = None) -> QuerySet[DirectMessage]:
+    """Build the filtered, ordered DirectMessage queryset for a parsed search query.
+
+    Shared by the global Ctrl+K search's ``DirectMessageSearchProvider`` and
+    the Messages page's own "search this conversation" / "search all
+    conversations" features, so visibility, date-range, and person-name rules
+    can never drift between the two surfaces. Only plaintext bodies are
+    searchable - end-to-end encrypted messages never reach the server in
+    readable form, so they are excluded outright rather than silently
+    mismatched.
+
+    Args:
+        profile: The searching profile; results are scoped to messages they
+            sent or received, minus anything they've deleted for themselves.
+        parsed: The parsed query (free-text terms, date range, person name).
+        partner: Restrict to the conversation with this partner ("search this
+            conversation"); None searches every conversation.
+
+    Returns:
+        Matching messages, most recent first.
+    """
+    from urbanlens.dashboard.services.global_search.providers import date_range_filter, person_match, term_filter
+
+    queryset = (DirectMessage.objects.between(profile, partner) if partner is not None else DirectMessage.objects.involving(profile)).visible_to(profile).exclude(body="")
+    queryset = queryset.filter(date_range_filter("created", parsed))
+    if parsed.person:
+        recipient_ann, recipient_q = person_match("recipient", parsed.person, profile)
+        sender_ann, sender_q = person_match("sender", parsed.person, profile)
+        queryset = queryset.annotate(**recipient_ann, **sender_ann).filter((Q(sender=profile) & recipient_q) | (Q(recipient=profile) & sender_q))
+    if parsed.terms:
+        queryset = queryset.filter(term_filter(parsed.terms, ["body"]))
+    return queryset.order_by("-created")
+
+
+def search_direct_messages(profile: Profile, raw_query: str, *, partner: Profile | None = None, limit: int = DIRECT_MESSAGE_SEARCH_LIMIT) -> list[dict[str, Any]]:
+    """Search the profile's direct messages using the same NL parser as global search.
+
+    Understands the same phrasing global search does - "photos last week",
+    "between june 1 and june 10", "from Alice" - by reusing
+    :func:`~urbanlens.dashboard.services.global_search.parser.parse_query` and
+    :func:`message_search_queryset` rather than a second, DM-page-specific
+    parser.
+
+    Args:
+        profile: The searching profile.
+        raw_query: The query exactly as typed.
+        partner: Restrict to one conversation ("search this conversation");
+            None searches every conversation ("search all conversations").
+        limit: Maximum number of hits to return.
+
+    Returns:
+        Dicts with ``message`` (DirectMessage), ``partner`` (the other
+        participant on that message), ``snippet`` (excerpt around the match),
+        and ``url`` (link to the conversation, anchored to the message),
+        most recent match first. Empty when the query carries no usable
+        signal (blank, or below global search's minimum length/structure).
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.global_search.parser import parse_query
+    from urbanlens.dashboard.services.global_search.results import excerpt
+
+    parsed = parse_query(raw_query)
+    if parsed.is_empty:
+        return []
+
+    queryset = message_search_queryset(profile, parsed, partner=partner).select_related("sender__user", "recipient__user")[:limit]
+    hits = []
+    for message in queryset:
+        other = message.recipient if message.sender_id == profile.pk else message.sender
+        hits.append(
+            {
+                "message": message,
+                "partner": other,
+                "snippet": excerpt(message.body, parsed.terms),
+                "url": f"{reverse('messages.conversation', kwargs={'profile_slug': other.ensure_slug()})}#dm-msg-{message.pk}",
+            },
+        )
+    return hits

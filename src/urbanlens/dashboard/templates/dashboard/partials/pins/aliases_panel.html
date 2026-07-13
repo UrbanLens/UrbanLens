@@ -4,15 +4,16 @@
     <div class="card-header">
         <i class="material-symbols-outlined">label_important</i>
         <span>Aliases</span>
+        {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id=explainer_id %}
         {% if show_header_add_button %}
         <button type="button" class="btn btn--icon-sm" title="Add alias"
-                onclick="this.closest('.aliases-panel').querySelector('.alias-add-input').focus()">
+                onclick="var p=this.closest('.aliases-panel'); p.classList.add('is-adding'); p.querySelector('.alias-add-input').focus();">
             <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}
     </div>
     {% if wrap_body %}<div class="card__body aliases-body">{% endif %}
-    <p class="aliases-description">{{ description_text }}</p>
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id=explainer_id heading="What are aliases and nicknames?" body=explainer_body %}
 
     {% if aliases %}
     <div class="alias-chips-row">
@@ -58,30 +59,19 @@
     <p class="aliases-empty">{{ empty_text }}</p>
     {% endif %}
 
-    <form class="alias-add-form"
+    <form class="alias-add-form{% if show_header_add_button %} alias-add-form--collapsed{% endif %}"
           hx-post="{% url url_add obj_slug %}"
           hx-target="#{{ panel_id }}"
           hx-swap="outerHTML">
         {% csrf_token %}
         <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
-        <label class="alias-nickname-check" title="{{ nickname_help_text }}">
+        <label class="alias-nickname-toggle" data-tooltip="Don't use in web searches">
             <input type="checkbox" name="is_nickname" value="1">
-            <span class="alias-nickname-check-text">Don't use in web searches</span>
+            <i class="material-symbols-outlined">person</i>
         </label>
         <button type="submit" class="alias-add-btn">
             <i class="material-symbols-outlined">add</i>
         </button>
     </form>
-
-    <details class="alias-help">
-        <summary class="alias-help-summary">
-            <i class="material-symbols-outlined">help</i>
-            What are aliases and "Nicknames"?
-        </summary>
-        <div class="alias-help-body">
-            <p>Aliases are alternate names - former names, local nicknames, or codenames. They are used when you search for your own pins, and also when we contact external sources, like google searches.</p>
-            <p>Check <strong>Don't use in web searches</strong> to make an alias a nickname. Nicknames are unofficial names that won't improve search results. Like "The Lounge", "The Office with a Bad Smell", "Rooftop Hangout", or "John's Place". They will still be used when you search for your own pins on the site, but they won't ever leave the site for external searches.</p>
-        </div>
-    </details>
     {% if wrap_body %}</div>{% endif %}
 </div>
