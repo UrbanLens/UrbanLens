@@ -2,8 +2,15 @@
 The batch-scan pin suggestion queue. Re-fetched via the `refreshQueue` event
 after an accept/reject action so the list stays in sync.
 
+Pagination targets the dedicated `memories.locations.queue` URL rather than
+`request.path` (unlike the generic `_pagination_controls.html` partial) since
+this same template is also rendered directly inside the full page
+(`memories.locations`) - a next-page click there must not swap a full HTML
+document into the grid.
+
 Context:
-  suggestions - list of pending PinSuggestion rows, newest first
+  suggestions - the current page's pending PinSuggestion rows, newest first
+  page_obj    - the Django Page for this slice
 {% endcomment %}
 {% if suggestions %}
 <div class="pin-suggestions-grid" id="pin-suggestions-grid">
@@ -11,6 +18,35 @@ Context:
     {% include "dashboard/partials/memories/_pin_suggestion_card.html" %}
     {% endfor %}
 </div>
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pagination-bar pin-suggestions-pagination">
+    {% if page_obj.has_previous %}
+    <button type="button" class="pagination-btn"
+            hx-get="{% url 'memories.locations.queue' %}?page={{ page_obj.previous_page_number }}"
+            hx-target="#pin-suggestions-wrap" hx-swap="innerHTML"
+            aria-label="Previous page">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    {% else %}
+    <button type="button" class="pagination-btn" disabled aria-label="Previous page">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    {% endif %}
+    <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <button type="button" class="pagination-btn"
+            hx-get="{% url 'memories.locations.queue' %}?page={{ page_obj.next_page_number }}"
+            hx-target="#pin-suggestions-wrap" hx-swap="innerHTML"
+            aria-label="Next page">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    {% else %}
+    <button type="button" class="pagination-btn" disabled aria-label="Next page">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    {% endif %}
+</div>
+{% endif %}
 {% else %}
 <div class="empty-state">
     <i class="material-symbols-outlined">travel_explore</i>

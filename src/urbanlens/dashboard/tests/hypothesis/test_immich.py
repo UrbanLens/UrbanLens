@@ -11,7 +11,9 @@ Covers:
   mode branching, and already-imported flagging.
 - import_immich_photos task - creates Image + PinVisit for a new asset,
   skips a duplicate checksum, skips an over-quota asset, without failing the
-  rest of the batch.
+  rest of the batch, and (when called with visit_id_by_asset, as
+  accept_pin_suggestion does) attaches to that visit instead of creating a
+  redundant one of its own.
 """
 
 from __future__ import annotations
@@ -419,7 +421,7 @@ class ImportImmichPhotosTaskTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
         self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
 
-    def _run(self, asset_ids, downloads):
+    def _run(self, asset_ids, downloads, visit_id_by_asset=None):
         """Run the task with get_asset_original mapped per asset id from `downloads`."""
 
         def fake_get_asset_original(self_gw, asset_id):
@@ -429,7 +431,7 @@ class ImportImmichPhotosTaskTests(TestCase):
             mock.patch.object(ImmichGateway, "get_asset_original", fake_get_asset_original),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
-            return tasks.import_immich_photos(self.pin.pk, self.profile.pk, asset_ids)
+            return tasks.import_immich_photos(self.pin.pk, self.profile.pk, asset_ids, visit_id_by_asset)
 
     def test_imports_a_new_asset_and_logs_a_visit(self) -> None:
         counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
@@ -456,6 +458,25 @@ class ImportImmichPhotosTaskTests(TestCase):
                 {"ok": (b"small", "a.jpg", "image/jpeg"), "too_big": (b"huge", "b.jpg", "image/jpeg")},
             )
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
+
+    def test_visit_id_by_asset_attaches_to_that_visit_without_creating_another(self) -> None:
+        """Regression test for accept_pin_suggestion's photo-import wiring (services/pin_suggestions.py)."""
+        target_visit = baker.make_recipe("dashboard.pin_visit", pin=self.pin, source=VisitSource.HISTORY)
+        before = PinVisit.objects.filter(pin=self.pin).count()
+
+        counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"a1": target_visit.pk})
+
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        image = Image.objects.get(pin=self.pin, profile=self.profile)
+        self.assertEqual(image.visit_id, target_visit.pk)
+        self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), before)
+
+    def test_asset_not_in_visit_id_by_asset_falls_back_to_its_own_visit(self) -> None:
+        counts = self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")}, visit_id_by_asset={"other-asset": 999})
+        self.assertEqual(counts, {"imported": 1, "skipped": 0, "failed": 0})
+        image = Image.objects.get(pin=self.pin, profile=self.profile)
+        self.assertIsNotNone(image.visit_id)
+        self.assertTrue(PinVisit.objects.filter(pk=image.visit_id, source=VisitSource.PHOTO).exists())
 
     def test_missing_account_is_a_noop(self) -> None:
         self.account.delete()
@@ -499,6 +520,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertEqual(result, {"scanned": 1, "matched_suggestions": 1, "new_pin_suggestions": 0})
         suggestion = PinSuggestion.objects.get()
         self.assertEqual(suggestion.pin_id, self.pin.pk)
+        self.assertEqual(suggestion.sample_assets, [{"asset_id": "a1", "taken_at": "2024-01-01"}])
 
     def test_sweep_skips_assets_without_gps_or_date(self) -> None:
         from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion

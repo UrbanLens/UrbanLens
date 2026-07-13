@@ -1,11 +1,12 @@
 {% comment %}
-`@pin` share dialog: pick one of the sender's own pins, then confirm with an
-optional message and an optional customized map. Injected into
+`@pin` share dialog: pick one of the sender's own pins. Picking one stages it
+as a composer attachment (mirrors the photo/map chips) and closes the dialog -
+the actual share is sent from the normal composer, alongside whatever the
+sender is typing and any map/photo also attached. Injected into
 #dm-share-dialog-host by pages/messages/index.html's inline JS.
 Context: `partner`, `pins`.
 {% endcomment %}
-<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="pin"
-        data-submit-url="{% url 'messages.share.pin' partner.slug %}" data-field-name="pin_slug">
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="pin" data-field-name="pin_slug">
   <div class="dialog-header">
     <span>Share a pin with {{ partner.username }}</span>
     <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
@@ -13,33 +14,19 @@ Context: `partner`, `pins`.
     </button>
   </div>
 
-  <div class="dm-share-step dm-share-step--pick">
+  <div class="dm-share-step">
     <input type="search" class="dm-share-filter" placeholder="Search your pins..." oninput="window.dmFilterShareList(this)">
     <ul class="dm-share-list">
       {% for pin in pins %}
       <li class="dm-share-list-item" data-search="{{ pin.display_label|lower }}">
-        <button type="button" class="dm-share-pick-btn" data-value="{{ pin.slug }}" data-label="{{ pin.display_label }}" onclick="window.dmSharePick(this)">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ pin.slug }}" data-label="{{ pin.display_label }}"
+                data-lat="{{ pin.effective_latitude }}" data-lng="{{ pin.effective_longitude }}"
+                onclick="window.dmSharePick(this)">
           <i class="material-symbols-outlined">location_on</i> {{ pin.display_label }}
         </button>
       </li>
       {% endfor %}
     </ul>
     {% if not pins %}<p class="dm-share-empty">You don't have any pins yet.</p>{% endif %}
-  </div>
-
-  <div class="dm-share-step dm-share-step--confirm" hidden>
-    <p class="dm-share-confirm-summary">Share <strong class="dm-share-confirm-label"></strong> with {{ partner.username }}?</p>
-    <textarea class="dm-share-message" placeholder="Add a message (optional)" maxlength="2000"></textarea>
-    <button type="button" class="btn btn--ghost dm-share-customize-map-btn">
-      <i class="material-symbols-outlined">map</i> Customize the map sent with this pin
-    </button>
-    <span class="dm-composer-attachment-chip dm-share-map-chip" hidden>
-      <i class="material-symbols-outlined">map</i> Map customized
-      <button type="button" class="dm-share-map-chip-remove" aria-label="Remove customized map">&times;</button>
-    </span>
-    <div class="dm-share-confirm-actions">
-      <button type="button" class="btn btn--ghost dm-share-back-btn">Back</button>
-      <button type="button" class="btn btn--primary dm-share-send-btn">Share pin</button>
-    </div>
   </div>
 </dialog>

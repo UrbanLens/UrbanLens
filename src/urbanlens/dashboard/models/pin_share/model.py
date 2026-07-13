@@ -12,6 +12,9 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.model import Pin
+
 
 class PinShare(abstract.DashboardModel):
     """A one-to-one share of a single pin from one profile to another.
@@ -110,6 +113,26 @@ class PinShare(abstract.DashboardModel):
     @property
     def is_actionable(self) -> bool:
         return self.status == PinShareStatus.PENDING
+
+    @property
+    def resulting_pin(self) -> Pin | None:
+        """The recipient-side Pin this share produced, once accepted.
+
+        Covers both accept paths: a brand-new Pin (``source_share`` points
+        back here) and the "recipient already had this place pinned" dedup
+        case (no `source_share` link, so it's found by location instead).
+
+        Returns:
+            The recipient's Pin, or None if this share isn't accepted (yet).
+        """
+        if self.status != PinShareStatus.ACCEPTED:
+            return None
+        created = self.pins_created.first()
+        if created is not None:
+            return created
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        return Pin.objects.filter(profile=self.to_profile, parent_pin__isnull=True, location_id=self.pin.location_id).exclude(pk=self.pin_id).first()
 
     @classmethod
     def chain_share_count(cls, root_share_ids: list[int]) -> int:

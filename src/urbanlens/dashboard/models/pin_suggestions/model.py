@@ -13,6 +13,11 @@ from urbanlens.dashboard.models.pin_suggestions.queryset import PinSuggestionMan
 #: not an API-call budget like ``services.photo_import.MAX_VISIT_DATES``.
 MAX_STORED_VISIT_DATES = 30
 
+#: Representative photos kept per suggestion for review-queue previews and
+#: opt-in gallery import - a small, fixed sample, not every hit that fed the
+#: cluster.
+MAX_SUGGESTION_PHOTOS = 3
+
 
 class PinSuggestionOrigin(abstract.TextChoices):
     """What kind of batch scan raised a PinSuggestion."""
@@ -58,6 +63,10 @@ class PinSuggestion(abstract.DashboardModel):
         suggested_name: A place-name guess (e.g. Immich's reverse-geocoded city) to
             offer as the new pin's name. Only applied on accept, and only when the
             target pin has no name of its own yet.
+        sample_assets: Up to ``MAX_SUGGESTION_PHOTOS`` representative Immich assets
+            that fed this cluster, as ``{"asset_id": str, "taken_at": "YYYY-MM-DD"}``
+            dicts. Immich-origin suggestions only - local-scan photos never reach
+            the server unless the user opts in during the scan (see ``Image.pin_suggestion``).
     """
 
     latitude = DecimalField(max_digits=9, decimal_places=6)
@@ -67,6 +76,7 @@ class PinSuggestion(abstract.DashboardModel):
     visit_dates = JSONField(default=list)
     hit_count = PositiveIntegerField(default=1)
     suggested_name = CharField(max_length=255, blank=True, default="")
+    sample_assets = JSONField(default=list)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_suggestions")
     pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="pin_suggestions")

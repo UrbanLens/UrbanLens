@@ -313,7 +313,11 @@
     }
 
     // -- Pending attachments for the next message to be sent ---------------------
-    var pendingAttachments = { images: [], mapUuid: null };
+    // `share` (an @pin/@trip/@friend pick) is mutually staged alongside a map
+    // exactly like photos/maps already were - the actual share only happens
+    // when the composer's own Send button is clicked, using whatever the
+    // sender typed as the message body (see the composer submit handler).
+    var pendingAttachments = { images: [], mapUuid: null, share: null };
     var _mapChipThumbMap = null;   // Leaflet instance currently rendered in the chip, if any
     var _mapChipThumbUuid = null;  // uuid it was rendered for, so unrelated re-renders don't re-fetch
 
@@ -366,10 +370,22 @@
         var mapField = document.getElementById('dm-markup-map-uuid');
         if (mapField) mapField.value = pendingAttachments.mapUuid || '';
         _renderMapChipThumb(pendingAttachments.mapUuid);
+
+        var shareChip = document.getElementById('dm-share-chip');
+        if (shareChip) {
+            shareChip.hidden = !pendingAttachments.share;
+            if (pendingAttachments.share) {
+                var shareIcons = { pin: 'location_on', trip: 'luggage', friend: 'person_add' };
+                var iconEl = document.getElementById('dm-share-chip-icon');
+                var labelEl = document.getElementById('dm-share-chip-label');
+                if (iconEl) iconEl.textContent = shareIcons[pendingAttachments.share.kind] || 'share';
+                if (labelEl) labelEl.textContent = pendingAttachments.share.label;
+            }
+        }
     }
 
     function resetAttachments() {
-        pendingAttachments = { images: [], mapUuid: null };
+        pendingAttachments = { images: [], mapUuid: null, share: null };
         renderAttachmentChips();
     }
 
@@ -545,17 +561,28 @@
             E2EE.decryptDom(li, window.dmActiveSlug()).catch(function (err) { console.error('E2EE decrypt failed', err); });
         }
         scrollMessages();
+    }
 
-        // A live map attachment needs the server-rendered viewer partial (the
-        // Leaflet init script isn't duplicated client-side) - refresh the whole
-        // thread pane instead of trying to render it from the bare JSON payload.
-        if (msg.markup_map_uuid) {
-            var thread = activeThread();
-            if (thread && thread.dataset.viewUrl && window.htmx) {
-                htmx.ajax('GET', thread.dataset.viewUrl, { target: '#dm-thread-pane', swap: 'innerHTML' })
-                    .then(function () { if (window._initThumbs) window._initThumbs(); });
-            }
-        }
+    // Some live messages can't be rendered from the bare JSON payload alone -
+    // a map attachment needs the server-rendered viewer partial (the Leaflet
+    // init script isn't duplicated client-side), a share needs the full
+    // `_message_share_card.html` (kind-specific fields, current status), and a
+    // gated incoming photo needs the server's blur/consent decision instead of
+    // showing the raw image for a moment before a correction arrives. All
+    // three refresh the whole thread pane instead of hand-building a bubble.
+    function needsServerRender(msg, own) {
+        return !!(msg.markup_map_uuid || msg.has_share || (msg.images && msg.images.length && !own));
+    }
+
+    function refreshActiveThread() {
+        var thread = activeThread();
+        if (!thread || !thread.dataset.viewUrl || !window.htmx) return;
+        return htmx.ajax('GET', thread.dataset.viewUrl, { target: '#dm-thread-pane', swap: 'innerHTML' })
+            .then(function () {
+                if (window._initThumbs) window._initThumbs();
+                scrollMessages();
+                refreshEncryption();
+            });
     }
 
     // -- "Thread open" marker: lets the server skip notifications/emails ---------
@@ -676,12 +703,14 @@
             var active = window.dmActiveSlug();
             if (msg.sender_slug === active) {
                 // Incoming message on the thread we're looking at.
-                appendBubble(msg, false);
+                if (needsServerRender(msg, false)) refreshActiveThread();
+                else appendBubble(msg, false);
                 markThreadRead();
                 htmx.trigger(document.body, 'dmListRefresh');
             } else if (msg.sender_slug === mySlug && msg.recipient_slug === active) {
                 // Our own message (from this or another tab) echoing back.
-                appendBubble(msg, true);
+                if (needsServerRender(msg, true)) refreshActiveThread();
+                else appendBubble(msg, true);
                 htmx.trigger(document.body, 'dmListRefresh');
             } else {
                 refreshList();
@@ -702,10 +731,21 @@
         var body = input.value.trim();
         var imageIds = pendingAttachments.images.map(function (i) { return i.id; });
         var mapUuid = pendingAttachments.mapUuid;
+        var stagedShare = pendingAttachments.share;
         var replyToField = document.getElementById('dm-reply-to-id');
         var replyToId = replyToField && replyToField.value ? parseInt(replyToField.value, 10) : null;
-        if (!body && !imageIds.length && !mapUuid) return;
+        if (!body && !imageIds.length && !mapUuid && !stagedShare) return;
         var partner = window.dmActiveSlug();
+
+        // A staged @pin/@trip/@friend share needs server-side business logic
+        // the WebSocket consumer doesn't have (creating the PinShare/trip
+        // invite/friend-recommendation row) - it always goes out over its own
+        // POST endpoint, carrying the composer's own text as the message body
+        // and any staged map along with it. Not encrypted in v1, same as maps/photos.
+        if (stagedShare) {
+            sendStagedShare(form, partner, stagedShare, body, mapUuid);
+            return;
+        }
 
         // Encryption (if any) happens before the frame leaves the browser. The
         // body text is only encrypted; attachments stay server-visible in v1.
@@ -766,6 +806,37 @@
         });
     });
 
+    function sendStagedShare(form, partner, share, body, mapUuid) {
+        var input = document.getElementById('dm-composer-input');
+        var sendBtn = form.querySelector('.dm-composer__send');
+        var formData = new FormData();
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+        formData.append(share.fieldName, share.value);
+        formData.append('body', body);
+        if (share.kind === 'pin' && mapUuid) formData.append('markup_map_uuid', mapUuid);
+        if (sendBtn) sendBtn.disabled = true;
+        fetch(shareUrlFor(partner, share.kind), { method: 'POST', body: formData, credentials: 'same-origin' })
+            .then(function (resp) {
+                if (resp.ok) {
+                    return resp.text().then(function (html) {
+                        var pane = document.getElementById('dm-thread-pane');
+                        pane.innerHTML = html;
+                        htmx.process(pane);
+                        if (window._initThumbs) window._initThumbs();
+                        resetComposerInput(input);
+                        resetAttachments();
+                        cancelReply();
+                        scrollMessages();
+                        refreshList();
+                        refreshEncryption();
+                    });
+                }
+                return resp.text().then(function (text) { throw new Error(text || 'Could not send that share.'); });
+            })
+            .catch(function (err) { toast('error', err.message || 'Could not send that share.'); })
+            .finally(function () { if (sendBtn) sendBtn.disabled = false; });
+    }
+
     // -- Attach photo ------------------------------------------------------------
     document.addEventListener('click', function (e) {
         if (e.target.closest('#dm-attach-photo-btn')) {
@@ -800,18 +871,29 @@
     document.addEventListener('click', function (e) {
         if (e.target.closest('#dm-attach-map-btn')) {
             if (!window._openCommentMapComposer) return;
-            window._openCommentMapComposer({
+            var mapOpts = {
                 onSaved: function (uuid) {
                     pendingAttachments.mapUuid = uuid;
                     renderAttachmentChips();
                 },
-            });
+            };
+            // Center on the pin being shared, when one is staged, so drawing
+            // a map to go with it doesn't open on the default world view.
+            var stagedShare = pendingAttachments.share;
+            if (stagedShare && stagedShare.kind === 'pin' && stagedShare.lat != null && stagedShare.lng != null) {
+                mapOpts.initialView = { lat: stagedShare.lat, lng: stagedShare.lng, zoom: 15 };
+            }
+            window._openCommentMapComposer(mapOpts);
         }
         if (e.target.closest('#dm-attach-existing-map-btn')) {
             openExistingMapPicker();
         }
         if (e.target.closest('#dm-map-chip-remove')) {
             pendingAttachments.mapUuid = null;
+            renderAttachmentChips();
+        }
+        if (e.target.closest('#dm-share-chip-remove')) {
+            pendingAttachments.share = null;
             renderAttachmentChips();
         }
     });
@@ -874,10 +956,13 @@
     // action removes the typed "@query" text and hands off to that action's
     // existing flow (the share dialog for pin/trip/friend, the map composer
     // for map) exactly as if the toolbar button had been clicked.
+    // "Draw a map" / "Attach an existing map" already have dedicated toolbar
+    // buttons (#dm-attach-map-btn / #dm-attach-existing-map-btn) - listing
+    // "map" here too would just be a second way to trigger the identical
+    // action, so this menu sticks to the three actions that only exist here.
     var MENTION_ACTIONS = [
         { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
         { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
-        { kind: 'map', icon: 'map', label: 'Draw a map' },
         { kind: 'friend', icon: 'person_add', label: 'Recommend a friend' },
     ];
 
@@ -994,19 +1079,6 @@
             autoExpandComposer(input);
         }
         closeMentionMenu();
-
-        if (kind === 'map') {
-            if (!window._openCommentMapComposer) return;
-            window._openCommentMapComposer({
-                onSaved: function (uuid) {
-                    pendingAttachments.mapUuid = uuid;
-                    renderAttachmentChips();
-                    var composerInput = document.getElementById('dm-composer-input');
-                    if (composerInput) composerInput.focus();
-                },
-            });
-            return;
-        }
         openShareDialog(kind);
     }
 
@@ -1026,14 +1098,25 @@
             .catch(function () { toast('error', 'Could not load that dialog. Please try again.'); });
     }
 
+    // Picking an item stages it as a composer attachment chip (mirrors photos
+    // and maps) and closes the dialog immediately - the actual share is sent
+    // from the normal composer Send button, alongside whatever the sender is
+    // typing, so it can never jump the gun on a still-being-drafted message.
     window.dmSharePick = function (btn) {
         var dialog = btn.closest('.dm-share-dialog');
         if (!dialog) return;
-        dialog.querySelector('.dm-share-step--pick').hidden = true;
-        var confirmStep = dialog.querySelector('.dm-share-step--confirm');
-        confirmStep.hidden = false;
-        confirmStep.dataset.value = btn.dataset.value;
-        confirmStep.querySelector('.dm-share-confirm-label').textContent = btn.dataset.label;
+        pendingAttachments.share = {
+            kind: dialog.dataset.kind,
+            fieldName: dialog.dataset.fieldName,
+            value: btn.dataset.value,
+            label: btn.dataset.label,
+            lat: btn.dataset.lat ? parseFloat(btn.dataset.lat) : null,
+            lng: btn.dataset.lng ? parseFloat(btn.dataset.lng) : null,
+        };
+        renderAttachmentChips();
+        dialog.close();
+        var input = document.getElementById('dm-composer-input');
+        if (input) input.focus();
     };
 
     document.addEventListener('click', function (e) {
@@ -1057,69 +1140,6 @@
             return;
         }
         if (!e.target.closest('#dm-mention-menu')) closeMentionMenu();
-
-        if (e.target.closest('.dm-share-back-btn')) {
-            var dlg1 = e.target.closest('.dm-share-dialog');
-            if (dlg1) {
-                dlg1.querySelector('.dm-share-step--confirm').hidden = true;
-                dlg1.querySelector('.dm-share-step--pick').hidden = false;
-            }
-            return;
-        }
-
-        if (e.target.closest('.dm-share-customize-map-btn')) {
-            if (!window._openCommentMapComposer) return;
-            var dlg2 = e.target.closest('.dm-share-dialog');
-            window._openCommentMapComposer({
-                onSaved: function (uuid) {
-                    dlg2.dataset.mapUuid = uuid;
-                    var chip = dlg2.querySelector('.dm-share-map-chip');
-                    if (chip) chip.hidden = false;
-                },
-            });
-            return;
-        }
-        if (e.target.closest('.dm-share-map-chip-remove')) {
-            var dlg3 = e.target.closest('.dm-share-dialog');
-            if (dlg3) {
-                delete dlg3.dataset.mapUuid;
-                var chip3 = e.target.closest('.dm-share-map-chip');
-                if (chip3) chip3.hidden = true;
-            }
-            return;
-        }
-
-        if (e.target.closest('.dm-share-send-btn')) {
-            var dialog = e.target.closest('.dm-share-dialog');
-            if (!dialog) return;
-            var confirmStep = dialog.querySelector('.dm-share-step--confirm');
-            var value = confirmStep.dataset.value;
-            var message = (confirmStep.querySelector('.dm-share-message') || {}).value || '';
-            var formData = new FormData();
-            formData.append('csrfmiddlewaretoken', getCsrfToken());
-            formData.append(dialog.dataset.fieldName, value);
-            formData.append('body', message);
-            if (dialog.dataset.mapUuid) formData.append('markup_map_uuid', dialog.dataset.mapUuid);
-            var sendBtn = e.target.closest('.dm-share-send-btn');
-            sendBtn.disabled = true;
-            fetch(dialog.dataset.submitUrl, { method: 'POST', body: formData })
-                .then(function (resp) {
-                    if (resp.ok) {
-                        return resp.text().then(function (html) {
-                            var pane = document.getElementById('dm-thread-pane');
-                            pane.innerHTML = html;
-                            htmx.process(pane);
-                            if (window._initThumbs) window._initThumbs();
-                            scrollMessages();
-                            refreshList();
-                            dialog.close();
-                        });
-                    }
-                    return resp.text().then(function (text) { throw new Error(text || 'Could not send that share.'); });
-                })
-                .catch(function (err) { toast('error', err.message || 'Could not send that share.'); })
-                .finally(function () { sendBtn.disabled = false; });
-        }
     });
 
     function getCsrfToken() {
@@ -1314,6 +1334,17 @@
                 toast('error', 'That recovery key did not match.');
             }
         });
+    });
+
+    // Restoring this page from the back/forward cache (browser Back/Forward
+    // after leaving without a full reload) shows the exact DOM snapshot from
+    // before navigating away - stale share-card buttons, consent prompts,
+    // read state, etc. `pageshow` fires on both a fresh load and a bfcache
+    // restore; `event.persisted` is only true for the latter.
+    window.addEventListener('pageshow', function (ev) {
+        if (!ev.persisted) return;
+        refreshList();
+        if (activeThread()) refreshActiveThread();
     });
 
     refreshEncryption();

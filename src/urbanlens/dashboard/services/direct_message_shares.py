@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.direct_messages.meta import DirectMessageShareKi
 from urbanlens.dashboard.models.direct_messages.share import DirectMessageShare
 from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
 from urbanlens.dashboard.services.connections import are_connections, get_connections
-from urbanlens.dashboard.services.direct_messages import create_direct_message
+from urbanlens.dashboard.services.direct_messages import broadcast_direct_message, create_direct_message
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -53,8 +53,9 @@ def share_pin_in_message(sender: Profile, recipient: Profile, pin: Pin, body: st
     from urbanlens.dashboard.services.pin_sharing import create_pin_share
 
     pin_share = create_pin_share(sender, recipient, pin)
-    message = create_direct_message(sender, recipient, body, markup_map_uuid=markup_map_uuid)
+    message = create_direct_message(sender, recipient, body, markup_map_uuid=markup_map_uuid, defer_broadcast=True)
     DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.PIN, pin_share=pin_share)
+    broadcast_direct_message(message)
     return message
 
 
@@ -88,8 +89,9 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     membership, _created = TripMembership.objects.get_or_create(
         trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED}
     )
-    message = create_direct_message(sender, recipient, body)
+    message = create_direct_message(sender, recipient, body, defer_broadcast=True)
     DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.TRIP, trip=trip, trip_membership=membership)
+    broadcast_direct_message(message)
 
     pref = getattr(recipient.notification_preferences, "added_to_trip", DeliveryPreference.SITE)
     if pref != DeliveryPreference.NONE:
@@ -137,11 +139,12 @@ def recommend_friend_in_message(sender: Profile, recipient: Profile, recommended
     if not recommended.allow_friend_recommendations:
         raise PermissionError(f"{recommended.username} doesn't allow friend recommendations.")
 
-    message = create_direct_message(sender, recipient, body)
+    message = create_direct_message(sender, recipient, body, defer_broadcast=True)
     DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.FRIEND, recommended_profile=recommended)
     DirectMessageTemporaryAccess.objects.create(
         profile=recommended,
         granted_to=recipient,
         expires_at=timezone.now() + FRIEND_RECOMMENDATION_ACCESS_DURATION,
     )
+    broadcast_direct_message(message)
     return message

@@ -206,7 +206,14 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         "sender_name": message.sender.username,
         "recipient_slug": message.recipient.slug or "",
         "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
+        "images_revealed": message.images_revealed,
         "markup_map_uuid": str(message.markup_map.uuid) if message.markup_map is not None else None,
+        # Only a cheap presence flag - the actual share (pin/trip/friend
+        # fields, current status) needs the full `_message_share_card.html`
+        # render, so the client re-fetches the thread partial instead of
+        # trying to reconstruct that markup from JSON (same reason
+        # `markup_map_uuid` doesn't ship the whole map).
+        "has_share": getattr(message, "share", None) is not None,
         "reply_to": reply_to,
     }
 
@@ -436,6 +443,7 @@ def create_direct_message(
     image_ids: list[int] | None = None,
     markup_map_uuid: str | None = None,
     reply_to_id: int | None = None,
+    defer_broadcast: bool = False,
 ) -> DirectMessage:
     """Validate, persist, broadcast, and notify for one new direct message.
 
@@ -452,6 +460,11 @@ def create_direct_message(
             (uploaded separately beforehand) to attach to this message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
         reply_to_id: PK of an earlier message in this conversation to quote.
+        defer_broadcast: When True, skip the live WebSocket push - the caller
+            is attaching a ``DirectMessageShare`` to this message right after
+            and must call ``broadcast_direct_message`` once that's done, so
+            `serialize_direct_message`'s ``has_share`` flag is correct on the
+            wire instead of racing a second, duplicate "message" event.
 
     Returns:
         The newly created DirectMessage.
@@ -531,8 +544,22 @@ def create_direct_message(
         _notify_recipient(message)
         _schedule_message_email(message)
 
-    _broadcast_direct_message(message)
+    if not defer_broadcast:
+        _broadcast_direct_message(message)
     return message
+
+
+def broadcast_direct_message(message: DirectMessage) -> None:
+    """Push `message` to both participants' live sessions now.
+
+    The public entry point for callers that passed ``defer_broadcast=True`` to
+    `create_direct_message` (e.g. `services.direct_message_shares`, which
+    attaches a `DirectMessageShare` before the message is visible on the wire).
+
+    Args:
+        message: The message to broadcast.
+    """
+    _broadcast_direct_message(message)
 
 
 def _broadcast_message_update(payload: dict[str, Any], groups: set[str]) -> None:

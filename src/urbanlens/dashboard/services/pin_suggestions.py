@@ -17,14 +17,15 @@ accepts one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 import logging
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, PinSuggestion, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.visits import add_visited_status, find_pin_containing_point, resolve_location_for_point, sync_last_visited, visit_logging_allowed
@@ -55,21 +56,33 @@ class LocationHit:
         taken_at: When the source photo/asset was captured.
         label: Optional place-name hint (e.g. Immich's reverse-geocoded city),
             offered as ``PinSuggestion.suggested_name`` for new-pin clusters.
+        asset_id: Immich asset id this hit came from, if any - collected into
+            ``PinSuggestion.sample_assets`` for review-queue thumbnails/import.
+        source_key: Client-supplied cluster id (local-scan uploads only), used
+            only to report back which ``PinSuggestion`` a submitted cluster
+            resolved to (see ``IngestSummary.suggestion_ids_by_key``). Never
+            persisted.
     """
 
     latitude: float
     longitude: float
     taken_at: datetime.datetime
     label: str | None = None
+    asset_id: str | None = None
+    source_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class IngestSummary:
-    """Counts returned to the caller for a progress/toast message."""
+    """Counts and identifiers returned to the caller for a progress/toast message."""
 
     matched_suggestions: int
     new_pin_suggestions: int
     hits_processed: int
+    #: Maps each hit's ``source_key`` (when present) to the PinSuggestion pk it
+    #: resolved to - lets a local-scan caller learn which suggestion a
+    #: submitted cluster became, e.g. to upload opt-in candidate photos to it.
+    suggestion_ids_by_key: dict[str, int] = field(default_factory=dict)
 
 
 def _dates_from_hits(hits: list[LocationHit]) -> list[str]:
@@ -94,6 +107,27 @@ def _label_from_hits(hits: list[LocationHit]) -> str:
         if hit.label:
             return hit.label
     return ""
+
+
+def _merge_sample_assets(existing: list[dict[str, str]], hits: list[LocationHit]) -> list[dict[str, str]]:
+    """Return existing sample assets plus any new ones from hits, deduped and capped.
+
+    Args:
+        existing: Current ``PinSuggestion.sample_assets`` value.
+        hits: Hits being merged into the suggestion this call.
+
+    Returns:
+        Updated list, deduplicated by asset_id and capped at ``MAX_SUGGESTION_PHOTOS``.
+    """
+    seen = {sample["asset_id"] for sample in existing}
+    merged = list(existing)
+    for hit in hits:
+        if len(merged) >= MAX_SUGGESTION_PHOTOS:
+            break
+        if hit.asset_id and hit.asset_id not in seen:
+            merged.append({"asset_id": hit.asset_id, "taken_at": hit.taken_at.date().isoformat()})
+            seen.add(hit.asset_id)
+    return merged
 
 
 def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict[Pin, list[LocationHit]], list[LocationHit]]:
@@ -178,16 +212,17 @@ def _find_nearby_pending_new_pin_suggestion(profile: Profile, latitude: float, l
     return None
 
 
-def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHit], origin: PinSuggestionOrigin) -> None:
+def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHit], origin: PinSuggestionOrigin) -> PinSuggestion:
     """Create or extend the pending suggestion to log visit(s) on an existing pin."""
     dates = _dates_from_hits(hits)
     existing = PinSuggestion.objects.filter(profile=profile, pin=pin, status=PinSuggestionStatus.PENDING).first()
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
         existing.hit_count += len(hits)
-        existing.save(update_fields=["visit_dates", "hit_count", "updated"])
-        return
-    PinSuggestion.objects.create(
+        existing.sample_assets = _merge_sample_assets(existing.sample_assets, hits)
+        existing.save(update_fields=["visit_dates", "hit_count", "sample_assets", "updated"])
+        return existing
+    return PinSuggestion.objects.create(
         profile=profile,
         pin=pin,
         latitude=pin.effective_latitude,
@@ -195,10 +230,11 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
         origin=origin,
         visit_dates=dates,
         hit_count=len(hits),
+        sample_assets=_merge_sample_assets([], hits),
     )
 
 
-def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], origin: PinSuggestionOrigin) -> None:
+def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], origin: PinSuggestionOrigin) -> PinSuggestion:
     """Create or extend the pending suggestion to create a new pin for a cluster of hits."""
     latitude, longitude = _centroid(cluster)
     dates = _dates_from_hits(cluster)
@@ -206,11 +242,12 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
         existing.hit_count += len(cluster)
+        existing.sample_assets = _merge_sample_assets(existing.sample_assets, cluster)
         if not existing.suggested_name:
             existing.suggested_name = _label_from_hits(cluster)
-        existing.save(update_fields=["visit_dates", "hit_count", "suggested_name", "updated"])
-        return
-    PinSuggestion.objects.create(
+        existing.save(update_fields=["visit_dates", "hit_count", "sample_assets", "suggested_name", "updated"])
+        return existing
+    return PinSuggestion.objects.create(
         profile=profile,
         pin=None,
         latitude=latitude,
@@ -219,6 +256,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
         visit_dates=dates,
         hit_count=len(cluster),
         suggested_name=_label_from_hits(cluster),
+        sample_assets=_merge_sample_assets([], cluster),
     )
 
 
@@ -239,17 +277,88 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
     """
     hit_list = list(hits)
     matched, unmatched = _match_hits_to_pins(profile, hit_list)
+    suggestion_ids_by_key: dict[str, int] = {}
     for pin, pin_hits in matched.items():
-        _upsert_matched_suggestion(profile, pin, pin_hits, origin)
+        suggestion = _upsert_matched_suggestion(profile, pin, pin_hits, origin)
+        for hit in pin_hits:
+            if hit.source_key:
+                suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
     clusters = _cluster_hits(unmatched, CLUSTER_RADIUS_M)
     for cluster in clusters:
-        _upsert_new_pin_suggestion(profile, cluster, origin)
+        suggestion = _upsert_new_pin_suggestion(profile, cluster, origin)
+        for hit in cluster:
+            if hit.source_key:
+                suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
-    return IngestSummary(matched_suggestions=len(matched), new_pin_suggestions=len(clusters), hits_processed=len(hit_list))
+    return IngestSummary(
+        matched_suggestions=len(matched),
+        new_pin_suggestions=len(clusters),
+        hits_processed=len(hit_list),
+        suggestion_ids_by_key=suggestion_ids_by_key,
+    )
 
 
-def accept_pin_suggestion(suggestion: PinSuggestion, profile: Profile) -> tuple[Pin, list[PinVisit]]:
+def _delete_image_with_file(image: Image) -> None:
+    """Delete an Image row and its stored file together.
+
+    Plain ``QuerySet.delete()``/``Model.delete()`` never touches storage, so
+    every deletion site in this codebase deletes the file first. Factored out
+    here since accept/reject both need it for candidate photo cleanup.
+    """
+    image.image.delete(save=False)
+    image.delete()
+
+
+@dataclass(frozen=True, slots=True)
+class AcceptResult:
+    """What accepting a suggestion produced.
+
+    Attributes:
+        pin: The reused or newly-created pin.
+        visits: Newly-created PinVisit rows - possibly empty if every date was
+            already logged, or if the profile has turned off visit-history
+            tracking.
+        immich_import_visits: Maps a selected Immich asset id to the PinVisit
+            pk it should attach to once downloaded. Accepting a suggestion
+            never talks to Immich or enqueues Celery itself - the caller is
+            responsible for actually importing these (see
+            ``tasks.import_immich_photos``).
+    """
+
+    pin: Pin
+    visits: list[PinVisit]
+    immich_import_visits: dict[str, int]
+
+
+def _resolve_visit(visit_by_date: dict[datetime.date, PinVisit], day: datetime.date | None, fallback: PinVisit | None) -> PinVisit | None:
+    """Return the visit for ``day`` if one exists, else ``fallback``."""
+    if day is not None and day in visit_by_date:
+        return visit_by_date[day]
+    return fallback
+
+
+def _visit_by_date(pin: Pin, suggestion: PinSuggestion, new_visits: list[PinVisit]) -> dict[datetime.date, PinVisit]:
+    """Map every date in ``suggestion.visit_dates`` to its PinVisit, new or pre-existing.
+
+    A selected photo taken on a date that was already logged before this
+    accept call (see the skip branch in ``accept_pin_suggestion``) must still
+    resolve to that real existing visit rather than being dropped.
+    """
+    days = [datetime.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
+    by_date: dict[datetime.date, PinVisit] = {visit.visited_at.date(): visit for visit in pin.visit_history.filter(visited_at__date__in=days)}
+    for visit in new_visits:
+        by_date[visit.visited_at.date()] = visit
+    return by_date
+
+
+def accept_pin_suggestion(
+    suggestion: PinSuggestion,
+    profile: Profile,
+    *,
+    image_ids: list[int] | None = None,
+    asset_ids: list[str] | None = None,
+) -> AcceptResult:
     """Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
 
     Mirrors ``services.memories.photos.create_pin_and_log_visit`` for the new-pin
@@ -259,14 +368,26 @@ def accept_pin_suggestion(suggestion: PinSuggestion, profile: Profile) -> tuple[
     date in ``suggestion.visit_dates`` rather than a single one - a batch scan
     commonly finds several separate visits to the same place.
 
+    Any candidate photos the user selected (``image_ids`` - local-scan opt-in
+    uploads staged against this suggestion; ``asset_ids`` - Immich assets from
+    ``suggestion.sample_assets``) are attached to the pin and to whichever
+    visit matches their capture date. Selected local images graduate from
+    candidate to real gallery photos; unselected ones are deleted along with
+    their stored files, since they have no further purpose once the
+    suggestion is resolved.
+
     Args:
         suggestion: The pending suggestion being accepted.
         profile: The accepting profile (must be suggestion.profile).
+        image_ids: Pks of candidate ``Image`` rows (``pin_suggestion=suggestion``,
+            ``profile=profile``) the user chose to keep. Any not selected are
+            deleted. Ignored ids (wrong owner/suggestion) are silently skipped.
+        asset_ids: Immich asset ids (must be a subset of
+            ``suggestion.sample_assets``) the user chose to import.
 
     Returns:
-        Tuple of (the pin, newly-created PinVisit rows - possibly empty if
-        every date was already logged, or if the profile has turned off
-        visit-history tracking).
+        An :class:`AcceptResult` describing the pin, any newly-created visits,
+        and any selected Immich assets still to be imported by the caller.
     """
     if suggestion.pin_id is not None:
         matched_pin = suggestion.pin
@@ -296,17 +417,46 @@ def accept_pin_suggestion(suggestion: PinSuggestion, profile: Profile) -> tuple[
             sync_last_visited(pin)
             add_visited_status(pin)
 
+    visit_by_date = _visit_by_date(pin, suggestion, visits)
+    fallback_visit = visits[0] if visits else (next(iter(visit_by_date.values()), None))
+
+    selected_images = list(Image.objects.filter(pk__in=image_ids or [], profile=profile, pin_suggestion=suggestion))
+    for image in selected_images:
+        photo_day = image.taken_at.date() if image.taken_at else None
+        image.visit = _resolve_visit(visit_by_date, photo_day, fallback_visit)
+        image.pin = pin
+        image.location = pin.location
+        image.pin_suggestion = None
+        image.save(update_fields=["visit", "pin", "location", "pin_suggestion", "updated"])
+
+    selected_ids = {image.pk for image in selected_images}
+    for stale in Image.objects.filter(pin_suggestion=suggestion).exclude(pk__in=selected_ids):
+        _delete_image_with_file(stale)
+
+    sample_by_id = {sample["asset_id"]: sample for sample in suggestion.sample_assets}
+    immich_import_visits: dict[str, int] = {}
+    for asset_id in asset_ids or []:
+        sample = sample_by_id.get(asset_id)
+        if sample is None:
+            continue
+        asset_day = datetime.date.fromisoformat(sample["taken_at"])
+        target = _resolve_visit(visit_by_date, asset_day, fallback_visit)
+        if target is not None:
+            immich_import_visits[asset_id] = target.pk
+
     suggestion.pin = pin
     suggestion.status = PinSuggestionStatus.ACCEPTED
     suggestion.save(update_fields=["pin", "location", "status", "updated"])
-    return pin, visits
+    return AcceptResult(pin=pin, visits=visits, immich_import_visits=immich_import_visits)
 
 
 def reject_pin_suggestion(suggestion: PinSuggestion) -> None:
-    """Reject a pending PinSuggestion.
+    """Reject a pending PinSuggestion, discarding any staged candidate photos.
 
     Args:
         suggestion: The pending suggestion being rejected.
     """
+    for image in Image.objects.filter(pin_suggestion=suggestion):
+        _delete_image_with_file(image)
     suggestion.status = PinSuggestionStatus.REJECTED
     suggestion.save(update_fields=["status", "updated"])

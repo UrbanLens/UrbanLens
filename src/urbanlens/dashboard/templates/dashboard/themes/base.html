@@ -1356,6 +1356,13 @@
                 // regardless of whether the compiled CSS has loaded yet.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';
+                // Leaflet calls L.DomEvent.disableClickPropagation() on the map
+                // container in _initContainer, so clicks inside the thumb never
+                // bubble up to the preview's own click listener above. Bind
+                // directly on the thumb too so clicking the map itself works.
+                thumb.addEventListener('click', function () {
+                    if (id) window._expandCommentMap(id);
+                });
                 window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
             });
         }

@@ -288,6 +288,45 @@ class PinShareDetailView(LoginRequiredMixin, View):
         )
 
 
+def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, str]:
+    """Apply an accept/reject decision to a pending `share` and return a status message.
+
+    Shared by `PinShareRespondView` (the standalone pin-share page and the
+    notification dropdown) and `MessageShareRespondPinView` (the DM share
+    card) so both entry points mutate the share identically.
+
+    Args:
+        share: The share to respond to. Caller must have already confirmed
+            `share.status == PinShareStatus.PENDING`.
+        action: ``"accept"`` or ``"reject"``.
+
+    Returns:
+        A ``(target_pin, message)`` tuple. `target_pin` is the recipient-side
+        Pin on accept (None otherwise); `message` is a human-readable summary
+        suitable for a toast/Django message.
+    """
+    target_pin = None
+    if action == "accept":
+        with transaction.atomic():
+            target_pin = _recipient_existing_pin(share.to_profile, share.pin)
+            if target_pin is None:
+                target_pin = _create_pin_from_share(share)
+            bundled_count = _accept_bundled_shares(share, target_pin)
+            share.status = PinShareStatus.ACCEPTED
+            share.save(update_fields=["status", "updated"])
+        message = f"Pin added to your map with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}." if bundled_count else "Pin added to your map."
+    elif action == "reject":
+        share.status = PinShareStatus.REJECTED
+        share.save(update_fields=["status", "updated"])
+        share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED)
+        message = "Shared pin rejected."
+    else:
+        message = "Unknown action."
+    if share.notification_id:
+        NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
+    return target_pin, message
+
+
 class PinShareRespondView(LoginRequiredMixin, View):
     def post(self, request, share_id):
         share = get_object_or_404(PinShare.objects.select_related("pin"), pk=share_id, to_profile=request.user.profile)
@@ -295,26 +334,11 @@ class PinShareRespondView(LoginRequiredMixin, View):
         if share.status != PinShareStatus.PENDING:
             messages.info(request, "This shared pin has already been handled.")
             return redirect("pin.share.detail", share_id=share.id)
-        target_pin = None
+        target_pin, status_message = apply_pin_share_response(share, action)
         if action == "accept":
-            with transaction.atomic():
-                target_pin = _recipient_existing_pin(share.to_profile, share.pin)
-                if target_pin is None:
-                    target_pin = _create_pin_from_share(share)
-                bundled_count = _accept_bundled_shares(share, target_pin)
-                share.status = PinShareStatus.ACCEPTED
-                share.save(update_fields=["status", "updated"])
-            if bundled_count:
-                messages.success(request, f"Pin added to your map with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}.")
-            else:
-                messages.success(request, "Pin added to your map.")
+            messages.success(request, status_message)
         elif action == "reject":
-            share.status = PinShareStatus.REJECTED
-            share.save(update_fields=["status", "updated"])
-            share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED)
-            messages.info(request, "Shared pin rejected.")
-        if share.notification_id:
-            NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
+            messages.info(request, status_message)
         if request.headers.get("HX-Request"):
             from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
 

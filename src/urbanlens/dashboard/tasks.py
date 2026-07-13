@@ -508,20 +508,28 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str]) -> dict[str, int]:
+def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str], visit_id_by_asset: dict[str, int] | None = None) -> dict[str, int]:
     """Download selected Immich assets and import them onto a pin.
 
     Runs the same checksum-dedupe and storage-quota checks as a manual upload
     (``PinGalleryView.post``), attaches a photo-sourced ``PinVisit`` per new
-    image via ``log_visit_on_pin``, and enqueues ``process_image_upload`` for
-    each so EXIF/downscale post-processing matches every other upload path.
-    An asset already imported to this pin, or one that would exceed the
-    uploader's storage quota, is skipped rather than failing the whole batch.
+    image, and enqueues ``process_image_upload`` for each so EXIF/downscale
+    post-processing matches every other upload path. An asset already
+    imported to this pin, or one that would exceed the uploader's storage
+    quota, is skipped rather than failing the whole batch.
 
     Args:
         pin_id: PK of the pin to import onto.
         profile_id: PK of the requesting profile (also the pin owner).
         asset_ids: Immich asset ids selected in the picker dialog.
+        visit_id_by_asset: When importing on behalf of an accepted
+            ``PinSuggestion`` (see ``services.pin_suggestions.accept_pin_suggestion``),
+            maps an asset id to the specific ``PinVisit`` (already created for
+            that suggestion's dates) it should attach to instead of getting a
+            fresh one of its own. Omitted assets, and every asset when this is
+            ``None`` (the manual "Import from Immich" picker path), fall back
+            to creating their own visit via ``log_visit_on_pin``, unchanged
+            from before this parameter existed.
 
     Returns:
         Counts of imported/skipped/failed assets, surfaced to the polling UI.
@@ -534,6 +542,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.visits.model import PinVisit
     from urbanlens.dashboard.services.apis.immich import ImmichGateway
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.services.gateway import GatewayRequestError
@@ -568,6 +577,9 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             counts["failed"] += 1
             continue
 
+        target_visit_id = (visit_id_by_asset or {}).get(asset_id)
+        target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
+
         image = Image.objects.create(
             image=ContentFile(content, name=filename),
             pin=pin,
@@ -576,8 +588,10 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             checksum=checksum,
             file_size=len(content),
             source_url=account.asset_web_url(asset_id),
+            visit=target_visit,
         )
-        log_visit_on_pin(profile, image, pin)
+        if target_visit is None:
+            log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
         counts["imported"] += 1
 
@@ -636,7 +650,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
                 scanned += 1
                 if asset.lat is None or asset.lon is None or asset.taken_at is None:
                     continue
-                hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city))
+                hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city, asset_id=asset.id))
             update_task_progress(self, current=scanned, total=max(total, scanned, 1), message=f"Scanned {scanned} of {total} photo(s)...")
     except GatewayRequestError as exc:
         update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scan failed: {exc}")

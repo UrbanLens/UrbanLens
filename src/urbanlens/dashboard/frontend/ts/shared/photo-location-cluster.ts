@@ -14,13 +14,21 @@ export const DEFAULT_CLUSTER_RADIUS_M = 50;
 /** Radius within which a cluster is considered to already have a cached pin. */
 export const EXISTING_PIN_RADIUS_M = 100;
 
+/**
+ * Representative photo File references kept per cluster for the opt-in
+ * preview/upload picker - a small sample, not every hit that fed the
+ * cluster. Matches the server's MAX_SUGGESTION_PHOTOS cap with headroom for
+ * browsing before narrowing down to a selection.
+ */
+export const MAX_CLUSTER_PHOTOS_SHOWN = 6;
+
 export interface PhotoHit {
     lat: number;
     lng: number;
     /** ISO YYYY-MM-DD capture date, when known. */
     date?: string;
-    /** File name, used as a representative label for the cluster. */
-    fileName?: string;
+    /** The source file, kept only so the opt-in picker can preview/upload it. */
+    file?: File;
 }
 
 export interface PhotoCluster {
@@ -28,8 +36,8 @@ export interface PhotoCluster {
     lng: number;
     count: number;
     dates: string[];
-    /** File name of the first hit that fed this cluster. */
-    label?: string;
+    /** Up to MAX_CLUSTER_PHOTOS_SHOWN representative files, in scan order. */
+    photos: File[];
 }
 
 export interface CachedPinPoint {
@@ -65,10 +73,11 @@ export function addHitToClusters(clusters: PhotoCluster[], hit: PhotoHit, radius
             cluster.lng = cluster.lng + (hit.lng - cluster.lng) / n;
             cluster.count = n;
             if (hit.date && !cluster.dates.includes(hit.date)) cluster.dates.push(hit.date);
+            if (hit.file && cluster.photos.length < MAX_CLUSTER_PHOTOS_SHOWN) cluster.photos.push(hit.file);
             return clusters;
         }
     }
-    clusters.push({ lat: hit.lat, lng: hit.lng, count: 1, dates: hit.date ? [hit.date] : [], label: hit.fileName });
+    clusters.push({ lat: hit.lat, lng: hit.lng, count: 1, dates: hit.date ? [hit.date] : [], photos: hit.file ? [hit.file] : [] });
     return clusters;
 }
 

@@ -1,7 +1,15 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
+{% load map_components %}
 {% load memories_components %}
 
 {% block title %}Locations{% endblock %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
 
 {% block content %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="travel_explore" title="Locations" subtitle="Places a photo scan found evidence of visiting. Review each one before anything is created." %}
@@ -9,6 +17,21 @@
 
     <div class="page-inner">
         {% memories_tabs "locations" %}
+
+        {% if pin_suggestions_count %}
+        <div class="pin-suggestions-map-wrap">
+            <div id="pin-suggestions-map" data-map-data-url="{% url 'memories.locations.map_data' %}"></div>
+            {% map_layers_panel "street,terrain,satellite,dark" panel_id="pin-suggestions-map-layers" %}
+            <button type="button" class="pin-suggestions-select-toggle" id="pin-suggestions-select-toggle" title="Drag-select multiple pins">
+                <i class="material-symbols-outlined">select_all</i>
+                <span>Select multiple</span>
+            </button>
+        </div>
+        <p class="pin-suggestions-map-hint">
+            <i class="material-symbols-outlined">info</i>
+            Click a pin to select it, or turn on "Select multiple" to drag across the map - then use the toolbar below to accept or dismiss your selection.
+        </p>
+        {% endif %}
 
         <div id="pin-suggestions-wrap"
              hx-get="{% url 'memories.locations.queue' %}"
@@ -18,4 +41,202 @@
         </div>
     </div>
 </div>
+
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="pin_suggestions" actions=bulk_actions %}
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>
+
+<script>
+(function () {
+    var mapEl = document.getElementById('pin-suggestions-map');
+    if (!mapEl) return;
+
+    var mapDataUrl = mapEl.dataset.mapDataUrl;
+    var bulkUrls = { accept: '{% url "memories.locations.bulk" "accept" %}', reject: '{% url "memories.locations.bulk" "reject" %}' };
+    var csrfToken = '{{ csrf_token }}';
+
+    var map = L.map(mapEl).setView([20, 0], 2);
+    window.MapLayers.create(map, { root: document.getElementById('pin-suggestions-map-layers') });
+
+    var selectedIds = new Set();
+    var markerMap = new Map();   // suggestion id -> L.Marker
+    var isNewPinById = new Map();
+
+    function markerIcon(isNewPin, selected) {
+        var cls = 'pin-suggestion-marker' + (isNewPin ? ' pin-suggestion-marker--new' : ' pin-suggestion-marker--visit') + (selected ? ' is-selected' : '');
+        return L.divIcon({
+            className: cls,
+            html: '<i class="material-symbols-outlined">' + (isNewPin ? 'add_location' : 'event_available') + '</i>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+        });
+    }
+
+    function syncMarker(id) {
+        var marker = markerMap.get(id);
+        if (!marker) return;
+        marker.setIcon(markerIcon(!!isNewPinById.get(id), selectedIds.has(id)));
+    }
+
+    function syncCard(id) {
+        var card = document.getElementById('pin-suggestion-card-' + id);
+        if (!card) return;
+        card.classList.toggle('is-selected', selectedIds.has(id));
+        var cb = card.querySelector('.pin-suggestion-select-cb');
+        if (cb) cb.checked = selectedIds.has(id);
+    }
+
+    function syncToolbar() {
+        var n = selectedIds.size;
+        window.ulBulkToolbar.sync('pin_suggestions', n, n > 0 ? {
+            accept: function () { runBulkAction('accept'); },
+            reject: function () { runBulkAction('reject'); },
+            deselect: clearSelection,
+        } : {});
+    }
+
+    function toggleSelection(id) {
+        if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+        syncMarker(id);
+        syncCard(id);
+        syncToolbar();
+    }
+    window._pinSuggestionsToggleSelection = toggleSelection;
+
+    function clearSelection() {
+        var ids = Array.from(selectedIds);
+        selectedIds.clear();
+        ids.forEach(function (id) { syncMarker(id); syncCard(id); });
+        syncToolbar();
+    }
+
+    function runBulkAction(action) {
+        var ids = Array.from(selectedIds);
+        if (!ids.length) return;
+        fetch(bulkUrls[action], {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ suggestion_ids: ids }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (data) {
+            var n = data.processed || 0;
+            var verb = action === 'accept' ? 'Accepted' : 'Dismissed';
+            if (window.toastr) toastr.success(verb + ' ' + n + ' suggestion' + (n === 1 ? '' : 's') + '.');
+            clearSelection();
+            document.body.dispatchEvent(new CustomEvent('refreshQueue'));
+        })
+        .catch(function () {
+            if (window.toastr) toastr.error('Something went wrong. Please try again.');
+        });
+    }
+
+    function loadMarkers() {
+        fetch(mapDataUrl).then(function (r) { return r.json(); }).then(function (data) {
+            markerMap.forEach(function (marker) { map.removeLayer(marker); });
+            markerMap.clear();
+            isNewPinById.clear();
+
+            var suggestions = data.suggestions || [];
+            var bounds = [];
+            suggestions.forEach(function (s) {
+                isNewPinById.set(s.id, s.is_new_pin);
+                var marker = L.marker([s.latitude, s.longitude], { icon: markerIcon(s.is_new_pin, selectedIds.has(s.id)) }).addTo(map);
+                var label = s.name || (s.latitude.toFixed(5) + ', ' + s.longitude.toFixed(5));
+                marker.bindTooltip(label + ' · ' + s.hit_count + ' photo' + (s.hit_count === 1 ? '' : 's'));
+                marker.on('click', function () {
+                    toggleSelection(s.id);
+                    var card = document.getElementById('pin-suggestion-card-' + s.id);
+                    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                });
+                markerMap.set(s.id, marker);
+                bounds.push([s.latitude, s.longitude]);
+            });
+            // Drop any selection for suggestions no longer pending (accepted/rejected/off-page).
+            Array.from(selectedIds).forEach(function (id) { if (!markerMap.has(id)) selectedIds.delete(id); });
+            syncToolbar();
+            if (bounds.length === 1) map.setView(bounds[0], 14);
+            else if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+        });
+    }
+
+    // -- Select-multiple mode: while active, map dragging (panning) is
+    // disabled in favor of rectangle drag-select, exactly like the main
+    // map's select tool - toggled up front rather than reactively per
+    // gesture, so there's no race with Leaflet's own drag handling.
+    var selectMode = false;
+    var selectToggleBtn = document.getElementById('pin-suggestions-select-toggle');
+
+    function setSelectMode(on) {
+        selectMode = on;
+        map.dragging[on ? 'disable' : 'enable']();
+        selectToggleBtn.classList.toggle('active', on);
+        mapEl.classList.toggle('select-mode', on);
+    }
+    selectToggleBtn.addEventListener('click', function () { setSelectMode(!selectMode); });
+
+    // -- Rectangle drag-select: mousedown-move-up on the map container while
+    // select-multiple mode is active. A 6px move threshold keeps a plain
+    // click on empty map space from being treated as a (zero-size) drag-select.
+    (function initDragSelect() {
+        var dragRect = null;
+        map.getContainer().addEventListener('mousedown', function (e) {
+            if (!selectMode || e.button !== 0) return;
+            var startLL = map.mouseEventToLatLng(e);
+            var startX = e.clientX;
+            var startY = e.clientY;
+            var dragging = false;
+
+            function onMove(ev) {
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+                dragging = true;
+                if (dragRect) map.removeLayer(dragRect);
+                dragRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+                    color: '#1E88E5', weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false,
+                }).addTo(map);
+            }
+            function onUp(ev) {
+                document.removeEventListener('mousemove', onMove);
+                if (dragRect) { map.removeLayer(dragRect); dragRect = null; }
+                if (!dragging) return;
+                var bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+                markerMap.forEach(function (marker, id) {
+                    if (!selectedIds.has(id) && bounds.contains(marker.getLatLng())) toggleSelection(id);
+                });
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp, { once: true });
+        });
+    }());
+
+    // Re-fetch markers whenever the queue refreshes (single accept/reject via
+    // HX-Trigger, or our own bulk actions above).
+    document.body.addEventListener('refreshQueue', loadMarkers);
+    loadMarkers();
+
+    // -- Card-level selection checkbox + per-photo "N selected" caption -----
+    // Delegated on the wrap so it keeps working across HTMX swaps/pagination.
+    var wrap = document.getElementById('pin-suggestions-wrap');
+    wrap.addEventListener('change', function (e) {
+        var target = e.target;
+        if (target.classList.contains('pin-suggestion-select-cb')) {
+            var id = parseInt(target.dataset.suggestionId, 10);
+            if (!isNaN(id)) toggleSelection(id);
+            return;
+        }
+        if (target.name === 'image_ids' || target.name === 'asset_ids') {
+            var card = target.closest('.pin-suggestion-card');
+            if (!card) return;
+            var boxes = card.querySelectorAll('input[name="image_ids"], input[name="asset_ids"]');
+            var total = boxes.length;
+            var checked = 0;
+            boxes.forEach(function (box) {
+                box.closest('.photo-pick')?.classList.toggle('photo-pick--selected', box.checked);
+                if (box.checked) checked++;
+            });
+            var caption = card.querySelector('[data-photo-caption]');
+            if (caption) caption.textContent = checked + ' of ' + total + " selected for the pin's gallery";
+        }
+    });
+})();
+</script>
 {% endblock %}

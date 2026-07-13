@@ -135,9 +135,10 @@ class PinListDetailView(LoginRequiredMixin, View):
                 "saved_filters": saved_filters,
                 "trips": trips,
                 **profile.get_map_center_template_context(),
-                # The boundary-drawing map below only ever shows the single OSM
-                # base layer, so its attribution is static (see the shared
-                # footer partial's map_attribution doc comment).
+                # Both maps on this page (the pins overview and the boundary
+                # drawing map) only ever show the single OSM base layer, so
+                # attribution is static (see the shared footer partial's
+                # map_attribution doc comment).
                 "map_attribution": "© OpenStreetMap contributors",
             },
         )

@@ -4,7 +4,11 @@
  * they have no DOM/File System Access dependency.
  */
 import { describe, expect, test } from "bun:test";
-import { addHitToClusters, clusterHits, haversineMeters, isNearCachedPin, partitionByCachedPins } from "./photo-location-cluster";
+import { addHitToClusters, clusterHits, haversineMeters, isNearCachedPin, MAX_CLUSTER_PHOTOS_SHOWN, partitionByCachedPins } from "./photo-location-cluster";
+
+function fakeFile(name: string): File {
+    return new File(["x"], name, { type: "image/jpeg" });
+}
 
 describe("haversineMeters", () => {
     test("is zero for the same point", () => {
@@ -83,10 +87,26 @@ describe("addHitToClusters", () => {
         expect(result).toBe(clusters);
         expect(result).toHaveLength(1);
     });
+
+    test("no fileName/label field survives onto a cluster", () => {
+        const clusters = addHitToClusters([], { lat: 40.0, lng: -75.0, file: fakeFile("IMG_0001.jpg") });
+        expect(clusters[0]).not.toHaveProperty("label");
+        expect(clusters[0]).not.toHaveProperty("fileName");
+    });
+
+    test("collects representative photos onto a cluster, capped at MAX_CLUSTER_PHOTOS_SHOWN", () => {
+        let clusters: ReturnType<typeof addHitToClusters> = [];
+        for (let i = 0; i < MAX_CLUSTER_PHOTOS_SHOWN + 4; i++) {
+            clusters = addHitToClusters(clusters, { lat: 40.0, lng: -75.0, file: fakeFile(`img${i}.jpg`) });
+        }
+        expect(clusters).toHaveLength(1);
+        expect(clusters[0]?.count).toBe(MAX_CLUSTER_PHOTOS_SHOWN + 4);
+        expect(clusters[0]?.photos).toHaveLength(MAX_CLUSTER_PHOTOS_SHOWN);
+    });
 });
 
 describe("cached-pin partitioning", () => {
-    const cluster = { lat: 40.0, lng: -75.0, count: 1, dates: [] as string[] };
+    const cluster = { lat: 40.0, lng: -75.0, count: 1, dates: [] as string[], photos: [] as File[] };
 
     test("isNearCachedPin is true within radius", () => {
         expect(isNearCachedPin(cluster, [{ lat: 40.0001, lng: -75.0001 }])).toBe(true);
@@ -97,7 +117,7 @@ describe("cached-pin partitioning", () => {
     });
 
     test("partitionByCachedPins splits fresh vs already-pinned clusters", () => {
-        const far = { lat: 41.0, lng: -76.0, count: 1, dates: [] as string[] };
+        const far = { lat: 41.0, lng: -76.0, count: 1, dates: [] as string[], photos: [] as File[] };
         const { fresh, existing } = partitionByCachedPins([cluster, far], [{ lat: 40.0001, lng: -75.0001 }]);
         expect(fresh).toEqual([far]);
         expect(existing).toEqual([cluster]);

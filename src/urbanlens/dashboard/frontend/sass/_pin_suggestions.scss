@@ -1,0 +1,288 @@
+// Memories > Locations - the batch-scan pin suggestion review queue.
+// Map + multi-select is driven by inline JS in
+// templates/dashboard/pages/memories/locations.html.
+
+@use 'variables' as *;
+
+// -- Map -------------------------------------------------------------------
+
+.pin-suggestions-map-wrap {
+    position: relative;
+    margin-bottom: $space-sm;
+    border-radius: $radius-md;
+    overflow: hidden;
+    box-shadow: var(--ul-shadow-sm);
+}
+
+#pin-suggestions-map {
+    height: 320px;
+    width: 100%;
+    background: var(--ul-grey-1);
+
+    @include up($breakpoint-sm) {
+        height: 420px;
+    }
+}
+
+.pin-suggestions-select-toggle {
+    position: absolute;
+    top: $space-sm;
+    right: $space-sm;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: $space-xs;
+    padding: .4rem .7rem;
+    border-radius: $radius-full;
+    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0a);
+    color: var(--ul-grey-8);
+    font-size: .78rem;
+    cursor: pointer;
+    box-shadow: var(--ul-shadow-sm);
+
+    .material-symbols-outlined {
+        font-size: 18px;
+    }
+
+    &.active {
+        background: var(--ul-primary-color);
+        border-color: var(--ul-primary-color);
+        color: #fff;
+    }
+}
+
+#pin-suggestions-map.select-mode {
+    cursor: crosshair;
+}
+
+.pin-suggestions-map-hint {
+    display: flex;
+    align-items: center;
+    gap: $space-xs;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin: 0 0 $space-lg;
+
+    .material-symbols-outlined {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+}
+
+.pin-suggestion-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: var(--ul-primary-color);
+    border: 2px solid var(--ul-grey-0a);
+    box-shadow: var(--ul-shadow-sm);
+    transition: transform .12s ease, box-shadow .12s ease;
+
+    .material-symbols-outlined {
+        transform: rotate(45deg);
+        color: #fff;
+        font-size: 16px;
+    }
+}
+
+.pin-suggestion-marker--visit {
+    background: #{$color-teal-500};
+}
+
+.pin-suggestion-marker.is-selected {
+    transform: rotate(-45deg) scale(1.25);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, .35), var(--ul-shadow-md);
+    z-index: 1000 !important;
+}
+
+// -- Grid & cards ------------------------------------------------------------
+
+.pin-suggestions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: $space-md;
+    margin-bottom: $space-lg;
+}
+
+.pin-suggestion-card {
+    position: relative;
+    display: flex;
+    gap: $space-sm;
+    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-md;
+    padding: $space-md;
+    box-shadow: var(--ul-shadow-sm);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.pin-suggestion-card.is-selected {
+    border-color: var(--ul-primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, .2);
+}
+
+.pin-suggestion-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+}
+
+.pin-suggestion-select {
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.pin-suggestion-select-cb {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+.pin-suggestion-select-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: $radius-xs;
+    border: 2px solid var(--ul-grey-3);
+    color: transparent;
+    transition: background .12s ease, border-color .12s ease, color .12s ease;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.pin-suggestion-select-cb:checked + .pin-suggestion-select-box {
+    background: var(--ul-primary-color);
+    border-color: var(--ul-primary-color);
+    color: #fff;
+}
+
+.pin-suggestion-card-meta {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    font-size: .78rem;
+}
+
+.pin-suggestion-card-count {
+    color: var(--ul-grey-6);
+}
+
+.pin-suggestion-card-prompt {
+    margin: 0;
+    font-size: .95rem;
+    line-height: 1.35;
+}
+
+.pin-suggestion-card-dates {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-suggestion-card-actions {
+    display: flex;
+    gap: $space-sm;
+    margin-top: $space-xs;
+}
+
+// -- Photo picker (shared visual language with the Tools-page opt-in picker) --
+
+.pin-suggestion-photos {
+    display: flex;
+    gap: $space-xs;
+}
+
+.pin-suggestion-photos--empty {
+    align-items: center;
+    gap: $space-xs;
+    padding: $space-sm;
+    border: 1px dashed var(--ul-grey-2);
+    border-radius: $radius-sm;
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+
+    .material-symbols-outlined {
+        font-size: 18px;
+    }
+}
+
+.photo-pick {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: $radius-sm;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--ul-grey-2);
+    flex-shrink: 0;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: .7;
+        transition: opacity .15s ease;
+    }
+
+    input[type="checkbox"] {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+}
+
+.photo-pick-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    color: #fff;
+    background: rgba(0, 0, 0, .45);
+    border-radius: $radius-full;
+    pointer-events: none;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+        display: block;
+    }
+}
+
+.photo-pick--selected {
+    border-color: var(--ul-primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, .25);
+
+    img {
+        opacity: 1;
+    }
+
+    .photo-pick-badge {
+        background: var(--ul-primary-color);
+    }
+}
+
+.pin-suggestion-photos-caption {
+    margin: 0;
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+}
+
+// -- Pagination --------------------------------------------------------------
+
+.pin-suggestions-pagination {
+    justify-content: center;
+}

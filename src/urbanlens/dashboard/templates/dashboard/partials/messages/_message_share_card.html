@@ -2,33 +2,53 @@
 Inline card for an `@pin`/`@trip`/`@friend` share attached to a message.
 Context: `share` (DirectMessageShare), `viewer_id`, `partner`.
 
-Accept/reject/RSVP/friend-request actions reuse the existing full endpoints
-(plain form posts, normal navigation) rather than duplicating their
-accept/deny logic here - this card is a chat-native entry point into flows
-that already exist elsewhere in the app.
+Pin/friend accept-reject actions are HTMX-driven (outerHTML swap of this same
+card, keyed by `dm-share-card-<message id>`) so responding never navigates the
+recipient out of the thread - see MessageShareRespondPinView/
+MessageShareRespondFriendView. Trip RSVP still hands off to the trip detail
+page since RSVP needs more UI than fits in a chat card.
 {% endcomment %}
-<div class="dm-share-card">
+<div class="dm-share-card" id="dm-share-card-{{ share.message_id }}">
   {% if share.kind == "pin" and share.pin_share %}
   <div class="dm-share-card__row">
     <i class="material-symbols-outlined">location_on</i>
     <span class="dm-share-card__label">{{ share.pin_share.pin.display_label }}</span>
   </div>
-  {% if share.pin_share.status == "pending" %}
   {% if share.message.recipient_id == viewer_id %}
-  <form method="post" action="{% url 'pin.share.respond' share.pin_share.id %}" class="dm-share-card__actions">
-    {% csrf_token %}
-    <button type="submit" name="action" value="accept" class="btn btn--primary btn--sm">Accept</button>
-    <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Reject</button>
-  </form>
+    {% if share.pin_share.status == "pending" %}
+    <div class="dm-share-card__actions">
+      <button type="button" class="btn btn--primary btn--sm"
+              hx-post="{% url 'messages.share.pin.respond' partner.slug share.message_id %}" hx-vals='{"action": "accept"}'
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Accept</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              hx-post="{% url 'messages.share.pin.respond' partner.slug share.message_id %}" hx-vals='{"action": "reject"}'
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Reject</button>
+    </div>
+    {% elif share.pin_share.status == "already_pinned" %}
+    <p class="dm-share-card__status">You already have this pinned.</p>
+    {% elif share.pin_share.status == "accepted" %}
+    {% with resulting_pin=share.pin_share.resulting_pin %}
+    {% if resulting_pin %}
+    <a href="{% url 'pin.details' resulting_pin.slug %}" class="dm-share-card__status dm-share-card__status--link">
+      <i class="material-symbols-outlined">check_circle</i> Added to your map.
+    </a>
+    {% else %}
+    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to your map.</p>
+    {% endif %}
+    {% endwith %}
+    {% elif share.pin_share.status == "rejected" %}
+    <p class="dm-share-card__status">Declined.</p>
+    {% endif %}
   {% else %}
-  <p class="dm-share-card__status">Waiting on {{ share.message.recipient.username }}.</p>
-  {% endif %}
-  {% elif share.pin_share.status == "already_pinned" %}
-  <p class="dm-share-card__status">{{ share.message.recipient.username }} already has this pinned.</p>
-  {% elif share.pin_share.status == "accepted" %}
-  <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to their map.</p>
-  {% elif share.pin_share.status == "rejected" %}
-  <p class="dm-share-card__status">Declined.</p>
+    {% if share.pin_share.status == "pending" %}
+    <p class="dm-share-card__status">Waiting on {{ share.message.recipient.username }}.</p>
+    {% elif share.pin_share.status == "already_pinned" %}
+    <p class="dm-share-card__status">{{ share.message.recipient.username }} already has this pinned.</p>
+    {% elif share.pin_share.status == "accepted" %}
+    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to their map.</p>
+    {% elif share.pin_share.status == "rejected" %}
+    <p class="dm-share-card__status">Declined.</p>
+    {% endif %}
   {% endif %}
 
   {% elif share.kind == "trip" and share.trip %}
@@ -52,10 +72,15 @@ that already exist elsewhere in the app.
     <a class="dm-share-card__label" href="{% url 'profile.view_user' share.recommended_profile.slug %}">{{ share.recommended_profile.username }}</a>
   </div>
   {% if share.message.recipient_id == viewer_id %}
-  <form method="post" action="{% url 'friend.request' share.recommended_profile.id %}" class="dm-share-card__actions">
-    {% csrf_token %}
-    <button type="submit" class="btn btn--primary btn--sm">Add Friend</button>
-  </form>
+    {% if share.is_actionable %}
+    <div class="dm-share-card__actions">
+      <button type="button" class="btn btn--primary btn--sm"
+              hx-post="{% url 'messages.share.friend.respond' partner.slug share.message_id %}"
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Add Friend</button>
+    </div>
+    {% else %}
+    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Friend request sent.</p>
+    {% endif %}
   {% endif %}
   {% endif %}
 </div>

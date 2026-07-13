@@ -15,8 +15,9 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, PinSuggestionOrigin
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.export import (
     EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
@@ -26,6 +27,7 @@ from urbanlens.dashboard.services.export import (
     export_dir as _export_dir_fn,
     schedule_export_cleanup,
 )
+from urbanlens.dashboard.services.images import compute_checksum
 from urbanlens.dashboard.services.import_data import (
     IMPORT_TTL_SECONDS as _IMPORT_TTL_SECONDS,
     ImportJobStatus,
@@ -453,11 +455,14 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
     label = cluster.get("label")
     label = label.strip()[:255] if isinstance(label, str) and label.strip() else None
 
+    cluster_id = cluster.get("id")
+    source_key = cluster_id if isinstance(cluster_id, str) and cluster_id else None
+
     hits: list[LocationHit] = []
     for index in range(count):
         day = datetime.date.fromisoformat(valid_dates[index % len(valid_dates)])
         taken_at = datetime.datetime.combine(day, datetime.time(12, 0), tzinfo=datetime.UTC)
-        hits.append(LocationHit(latitude=latitude, longitude=longitude, taken_at=taken_at, label=label))
+        hits.append(LocationHit(latitude=latitude, longitude=longitude, taken_at=taken_at, label=label, source_key=source_key))
     return hits
 
 
@@ -506,6 +511,71 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
                 "matched_suggestions": summary.matched_suggestions,
                 "new_pin_suggestions": summary.new_pin_suggestions,
                 "hits_processed": summary.hits_processed,
+                "suggestion_ids": summary.suggestion_ids_by_key,
                 "review_url": reverse("memories.locations"),
             },
         )
+
+
+class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
+    """POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
+
+    The local-folder scanner never uploads photo files by default (see
+    ``PhotoLocationScanUploadView``) - this endpoint exists only for photos the
+    user explicitly checked in the scanner's opt-in picker, immediately after
+    the cluster metadata upload has told the client which ``PinSuggestion``
+    each cluster became. The image is staged unattached (candidate only) until
+    the suggestion is accepted or rejected - see ``services.pin_suggestions.accept_pin_suggestion``
+    and ``reject_pin_suggestion``.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Create a candidate Image staged against a pending local-scan suggestion.
+
+        Args:
+            request: POST with multipart fields ``suggestion_id`` and ``image``.
+
+        Returns:
+            ``{"ok": True, "image_id": ...}`` on success, or an error JSON.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        suggestion_id = request.POST.get("suggestion_id")
+        if not suggestion_id or not suggestion_id.isdigit():
+            return JsonResponse({"error": "Missing or invalid suggestion_id."}, status=400)
+
+        suggestion = PinSuggestion.objects.filter(
+            pk=int(suggestion_id),
+            profile=profile,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            status=PinSuggestionStatus.PENDING,
+        ).first()
+        if suggestion is None:
+            return JsonResponse({"error": "That suggestion is no longer available."}, status=404)
+
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return JsonResponse({"error": "No image provided."}, status=400)
+        content_type = image_file.content_type or ""
+        if not content_type.startswith("image/"):
+            return JsonResponse({"error": "That file is not an image."}, status=400)
+
+        if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
+            return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
+
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
+        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, pin_suggestion=suggestion)
+
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
+        return JsonResponse({"ok": True, "image_id": img.pk}, status=201)

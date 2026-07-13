@@ -1,9 +1,9 @@
 {% comment %}
 `@trip` invite dialog: pick one of the sender's upcoming trips (or plan a new
-one) to invite the conversation partner to. Context: `partner`, `trips`.
+one) to invite the conversation partner to. Picking one stages it as a
+composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
 {% endcomment %}
-<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip"
-        data-submit-url="{% url 'messages.share.trip' partner.slug %}" data-field-name="trip_uuid">
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_uuid">
   <div class="dialog-header">
     <span>Invite {{ partner.username }} to a trip</span>
     <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
@@ -11,7 +11,7 @@ one) to invite the conversation partner to. Context: `partner`, `trips`.
     </button>
   </div>
 
-  <div class="dm-share-step dm-share-step--pick">
+  <div class="dm-share-step">
     <input type="search" class="dm-share-filter" placeholder="Search your trips..." oninput="window.dmFilterShareList(this)">
     <ul class="dm-share-list">
       <li class="dm-share-list-item" data-search="plan a new trip">
@@ -28,14 +28,5 @@ one) to invite the conversation partner to. Context: `partner`, `trips`.
       {% endfor %}
     </ul>
     {% if not trips %}<p class="dm-share-empty">You're not on any trips yet - plan one above.</p>{% endif %}
-  </div>
-
-  <div class="dm-share-step dm-share-step--confirm" hidden>
-    <p class="dm-share-confirm-summary">Invite {{ partner.username }} to <strong class="dm-share-confirm-label"></strong>?</p>
-    <textarea class="dm-share-message" placeholder="Add a message (optional)" maxlength="2000"></textarea>
-    <div class="dm-share-confirm-actions">
-      <button type="button" class="btn btn--ghost dm-share-back-btn">Back</button>
-      <button type="button" class="btn btn--primary dm-share-send-btn">Send invite</button>
-    </div>
   </div>
 </dialog>

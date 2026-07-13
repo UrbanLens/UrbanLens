@@ -51,9 +51,12 @@
         </div>
     </div>
 
+    {# -- Map of all pins currently on this list ------------------------------ #}
+    <section class="pin-list-map-section" id="pin-list-map-section" {% if not items %}hidden{% endif %}>
+        <div id="pin-list-map" class="pin-list-map"></div>
+    </section>
+
     {# -- Smart list configuration ------------------------------------------- #}
-    {# Starts collapsed once a list already has pins in it - it's configuration
-       most people set up once and don't need to revisit every time. #}
     <section class="pin-list-smart-panel">
         <div class="pin-list-smart-panel-header">
             <button type="button" class="pin-list-smart-panel-toggle" id="pin-list-smart-toggle-btn"
@@ -86,7 +89,12 @@
                 <p class="pin-list-smart-hint">You don't have any saved filters yet - create one above, or save one from the map's filter panel.</p>
                 {% endif %}
             </div>
-            <div class="pin-list-smart-row">
+            <div class="pin-list-smart-row" id="pin-list-boundary-add-row" {% if pin_list.smart_boundary %}hidden{% endif %}>
+                <button type="button" class="btn btn--ghost btn--sm" onclick="pinListShowBoundaryFilter()">
+                    <i class="material-symbols-outlined">add</i> Add a boundary filter
+                </button>
+            </div>
+            <div class="pin-list-smart-row" id="pin-list-boundary-row" {% if not pin_list.smart_boundary %}hidden{% endif %}>
                 <div class="pin-list-boundary-header">
                     <label>Match pins inside a boundary</label>
                     <button type="button" class="btn btn--ghost btn--sm" onclick="pinListClearBoundary()">
@@ -284,7 +292,10 @@
     }
     initSortable();
     document.body.addEventListener('htmx:afterSwap', (e) => {
-        if (e.detail.target && e.detail.target.id === 'pin-list-items') initSortable();
+        if (e.detail.target && e.detail.target.id === 'pin-list-items') {
+            initSortable();
+            syncOverviewMap();
+        }
     });
 
     // -- Edit dialog ----------------------------------------------------------
@@ -360,13 +371,25 @@
 
     window.pinListClearBoundary = function () {
         _boundaryLayers.clearLayers();
-        _postJson(LIST_EDIT_URL, { smart_boundary: null }).then(() => refreshItems()).catch(_toastError);
+        _postJson(LIST_EDIT_URL, { smart_boundary: null }).then(() => {
+            refreshItems();
+            document.getElementById('pin-list-boundary-row').hidden = true;
+            document.getElementById('pin-list-boundary-add-row').hidden = false;
+        }).catch(_toastError);
+    };
+
+    window.pinListShowBoundaryFilter = function () {
+        document.getElementById('pin-list-boundary-add-row').hidden = true;
+        document.getElementById('pin-list-boundary-row').hidden = false;
+        _initBoundaryMap();
+        if (_boundaryMap) setTimeout(() => _boundaryMap.invalidateSize(), 0);
     };
 
     function refreshItems() {
         fetch("{% url 'lists.items' pin_list.uuid %}").then((r) => r.text()).then((html) => {
             document.getElementById('pin-list-items').outerHTML = html;
             initSortable();
+            syncOverviewMap();
         });
     }
 
@@ -428,6 +451,7 @@
             .then((html) => {
                 document.getElementById('pin-list-items').outerHTML = html;
                 initSortable();
+                syncOverviewMap();
                 _toastSuccess('Added to list.');
             })
             .catch(_toastError);
@@ -472,12 +496,20 @@
     };
 
     // -- Boundary drawing mini-map --------------------------------------------
-    const mapEl = document.getElementById('pin-list-boundary-map');
+    // Only rendered once the "Match pins inside a boundary" row is actually
+    // visible (either it already has a saved boundary, or the user opted in
+    // via pinListShowBoundaryFilter) - Leaflet can't size itself correctly
+    // against a hidden (zero-size) container.
     let _boundaryLayers = { clearLayers: function () {} };
-    if (mapEl) {
+    let _boundaryMap = null;
+    function _initBoundaryMap() {
+        if (_boundaryMap) return;
+        const mapEl = document.getElementById('pin-list-boundary-map');
+        if (!mapEl) return;
         const centerLat = {{ map_center_lat|default:39.8283 }};
         const centerLng = {{ map_center_lng|default:-98.5795 }};
         const boundaryMap = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
+        _boundaryMap = boundaryMap;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(boundaryMap);
         const drawnItems = new L.FeatureGroup().addTo(boundaryMap);
         _boundaryLayers = drawnItems;
@@ -509,6 +541,52 @@
         boundaryMap.on(L.Draw.Event.EDITED, saveBoundary);
         boundaryMap.on(L.Draw.Event.DELETED, saveBoundary);
     }
+    {% if pin_list.smart_boundary %}_initBoundaryMap();{% endif %}
+
+    // -- Overview map of every pin currently on this list --------------------
+    // Reads coordinates straight off the (already server-rendered, and later
+    // HTMX/fetch-refreshed) #pin-list-items rows rather than a separate JSON
+    // payload, so the map re-syncs for free whenever that list changes.
+    function _escapeHtml(s) {
+        return String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+    }
+    const _overviewMapEl = document.getElementById('pin-list-map');
+    let _overviewMap = null;
+    let _overviewMarkers = null;
+    function syncOverviewMap() {
+        if (!_overviewMapEl) return;
+        const sectionEl = document.getElementById('pin-list-map-section');
+        const points = Array.from(document.querySelectorAll('#pin-list-items .pin-list-item[data-id]')).map((el) => ({
+            lat: parseFloat(el.dataset.lat),
+            lng: parseFloat(el.dataset.lng),
+            color: el.dataset.color,
+            name: el.dataset.name,
+            url: el.dataset.url,
+        })).filter((pt) => Number.isFinite(pt.lat) && Number.isFinite(pt.lng));
+        if (!points.length) {
+            if (sectionEl) sectionEl.hidden = true;
+            return;
+        }
+        if (sectionEl) sectionEl.hidden = false;
+
+        if (!_overviewMap) {
+            _overviewMap = L.map(_overviewMapEl, { attributionControl: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_overviewMap);
+            _overviewMarkers = L.layerGroup().addTo(_overviewMap);
+        }
+        _overviewMarkers.clearLayers();
+
+        const markers = points.map((pt) =>
+            L.circleMarker([pt.lat, pt.lng], { radius: 7, color: pt.color, weight: 2, fillColor: pt.color, fillOpacity: 0.85 })
+                .bindPopup('<a href="' + pt.url + '">' + _escapeHtml(pt.name) + '</a>')
+                .addTo(_overviewMarkers),
+        );
+
+        if (markers.length > 1) _overviewMap.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+        else _overviewMap.setView([points[0].lat, points[0].lng], 14);
+        setTimeout(() => _overviewMap.invalidateSize(), 0);
+    }
+    syncOverviewMap();
 
     // -- Bulk-add >100 confirmation (used when Add Pins search results are large
     // via the map's own "Add these pins to a list" flow landing here) ---------

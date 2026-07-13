@@ -3,9 +3,11 @@
  * directory (recursively) for photos/videos with GPS metadata entirely in
  * the browser - files never leave the device while scanning - clusters
  * nearby matches live, filters out locations the user already has a pin for
- * (best-effort, via the main map's cached pin store), and uploads only the
- * resulting cluster summaries (lat/lng/dates/count - never the files
- * themselves) for review as PinSuggestion rows.
+ * (best-effort, via the main map's cached pin store), and uploads the
+ * resulting cluster summaries (lat/lng/dates/count) for review as
+ * PinSuggestion rows. Photo files themselves are never uploaded unless the
+ * user explicitly checks one in the opt-in picker before clicking upload -
+ * everything else stays device-only.
  *
  * Uses the File System Access API (`showDirectoryPicker`) where available,
  * falling back to a `<input webkitdirectory>` file picker (Firefox/Safari).
@@ -15,6 +17,11 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { addHitToClusters, clusterHits, partitionByCachedPins, type PhotoCluster, type PhotoHit } from "../shared/photo-location-cluster";
 import { readCachedPinLocations } from "../shared/pin-cache";
+
+/** Candidate photos a user may opt into uploading per cluster - matches the server's MAX_SUGGESTION_PHOTOS cap. */
+const MAX_SELECTABLE_PHOTOS: number = 3;
+
+type UploadCluster = PhotoCluster & { id: string };
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff"]);
 // Video GPS extraction is best-effort: exifr's QuickTime/MP4 support is partial,
@@ -50,7 +57,7 @@ async function extractHit(file: File): Promise<PhotoHit | null> {
         } catch {
             // Date extraction is best-effort - a location with no date is still useful.
         }
-        return { lat: gps.latitude, lng: gps.longitude, date, fileName: file.name };
+        return { lat: gps.latitude, lng: gps.longitude, date, file };
     } catch {
         return null;
     }
@@ -85,6 +92,7 @@ class PhotoLocationScanApp {
     private readonly resultsList: HTMLElement;
     private readonly emptyMsg: HTMLElement;
     private readonly uploadUrl: string;
+    private readonly uploadPhotoUrl: string;
     private readonly profileUuid: string;
 
     private clusters: PhotoCluster[] = [];
@@ -96,6 +104,17 @@ class PhotoLocationScanApp {
      * out, so nothing is lost to the incremental display clustering.
      */
     private allHits: PhotoHit[] = [];
+    /**
+     * Photos the user has explicitly opted into uploading as a preview,
+     * keyed by File object identity (not cluster identity) - `upload()`
+     * recomputes clusters fresh from `allHits` right before submitting, so a
+     * checkbox toggled against a File during live scanning must still be
+     * identifiable against that freshly-reclustered result. File references
+     * are stable across both since both derive from the same `allHits`.
+     */
+    private readonly selectedFiles = new Set<File>();
+    /** Object URLs created for thumbnail previews, revoked before each re-render to avoid leaks. */
+    private objectUrls: string[] = [];
     private abortController: AbortController | null = null;
     private scanning = false;
 
@@ -111,6 +130,7 @@ class PhotoLocationScanApp {
         this.resultsList = this.el("photo-scan-results");
         this.emptyMsg = this.el("photo-scan-empty");
         this.uploadUrl = root.dataset.uploadUrl ?? "";
+        this.uploadPhotoUrl = root.dataset.uploadPhotoUrl ?? "";
         this.profileUuid = root.dataset.profileUuid ?? "";
 
         this.fallbackInput = document.createElement("input");
@@ -236,6 +256,8 @@ class PhotoLocationScanApp {
         const cachedPins = readCachedPinLocations(this.profileUuid).map((p) => ({ lat: p.latitude, lng: p.longitude }));
         const { fresh, existing } = partitionByCachedPins(this.clusters, cachedPins);
 
+        for (const url of this.objectUrls) URL.revokeObjectURL(url);
+        this.objectUrls = [];
         this.resultsList.innerHTML = "";
         this.updateEmptyMessage();
 
@@ -271,7 +293,71 @@ class PhotoLocationScanApp {
         badge.textContent = alreadyHavePin ? "Already have a pin" : "New";
 
         item.append(main, badge);
+        if (cluster.photos.length > 0) item.appendChild(this.renderPicker(cluster));
         return item;
+    }
+
+    /**
+     * Opt-in thumbnail picker for one cluster: unchecked by default, and
+     * visually unambiguous about which photos are selected to upload as a
+     * preview - a filled, accent-colored badge and border for selected
+     * thumbnails, a faint outline for unselected ones, plus a running
+     * "N of 3 selected" caption so the state is never ambiguous at a glance.
+     */
+    private renderPicker(cluster: PhotoCluster): HTMLElement {
+        const wrap = document.createElement("div");
+        wrap.className = "photo-scan-picker";
+
+        const caption = document.createElement("span");
+        caption.className = "photo-scan-picker-caption";
+
+        const thumbs = document.createElement("div");
+        thumbs.className = "photo-scan-thumbs";
+
+        const thumbEntries: { el: HTMLElement; checkbox: HTMLInputElement; file: File }[] = [];
+
+        const refresh = (): void => {
+            const selectedCount = cluster.photos.filter((file) => this.selectedFiles.has(file)).length;
+            caption.textContent = `${selectedCount} of ${MAX_SELECTABLE_PHOTOS} photo${MAX_SELECTABLE_PHOTOS === 1 ? "" : "s"} selected for your review queue`;
+            for (const entry of thumbEntries) {
+                const isSelected = this.selectedFiles.has(entry.file);
+                entry.el.classList.toggle("photo-scan-thumb--selected", isSelected);
+                const disable = !isSelected && selectedCount >= MAX_SELECTABLE_PHOTOS;
+                entry.el.classList.toggle("photo-scan-thumb--disabled", disable);
+                entry.checkbox.disabled = disable;
+            }
+        };
+
+        for (const file of cluster.photos) {
+            const thumbEl = document.createElement("label");
+            thumbEl.className = "photo-scan-thumb";
+
+            const url = URL.createObjectURL(file);
+            this.objectUrls.push(url);
+            const img = document.createElement("img");
+            img.src = url;
+            img.alt = "";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.addEventListener("change", () => {
+                if (checkbox.checked) this.selectedFiles.add(file);
+                else this.selectedFiles.delete(file);
+                refresh();
+            });
+
+            const thumbBadge = document.createElement("span");
+            thumbBadge.className = "photo-scan-thumb-badge";
+            thumbBadge.innerHTML = '<i class="material-symbols-outlined">check_circle</i>';
+
+            thumbEl.append(img, checkbox, thumbBadge);
+            thumbs.appendChild(thumbEl);
+            thumbEntries.push({ el: thumbEl, checkbox, file });
+        }
+
+        wrap.append(caption, thumbs);
+        refresh();
+        return wrap;
     }
 
     private async upload(): Promise<void> {
@@ -282,22 +368,31 @@ class PhotoLocationScanApp {
             // live display clusters - the display grouping is order-dependent
             // (it locks in whichever cluster a hit met first while scanning),
             // so recomputing fresh from every raw coordinate gives a more
-            // accurate final grouping now that the whole set is known.
-            const finalClusters = clusterHits(this.allHits);
+            // accurate final grouping now that the whole set is known. Each
+            // cluster gets a fresh client-side id so the response can report
+            // back which PinSuggestion it became, for the opt-in photo upload
+            // below.
+            const finalClusters: UploadCluster[] = clusterHits(this.allHits).map((cluster) => ({ ...cluster, id: crypto.randomUUID() }));
             const response = await fetch(this.uploadUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({
                     clusters: finalClusters.map((cluster) => ({
+                        id: cluster.id,
                         latitude: cluster.lat,
                         longitude: cluster.lng,
                         dates: cluster.dates,
                         count: cluster.count,
-                        label: cluster.label,
                     })),
                 }),
             });
-            const data = (await response.json().catch(() => null)) as { error?: string; matched_suggestions?: number; new_pin_suggestions?: number; review_url?: string } | null;
+            const data = (await response.json().catch(() => null)) as {
+                error?: string;
+                matched_suggestions?: number;
+                new_pin_suggestions?: number;
+                review_url?: string;
+                suggestion_ids?: Record<string, number>;
+            } | null;
             if (!response.ok || !data?.review_url) {
                 toast.error(data?.error ?? "Could not upload results. Please try again.");
                 this.uploadBtn.disabled = false;
@@ -305,13 +400,47 @@ class PhotoLocationScanApp {
             }
             const total = (data.matched_suggestions ?? 0) + (data.new_pin_suggestions ?? 0);
             toast.success(`Uploaded - found ${total} suggestion(s). Review them in Memories.`);
+
+            await this.uploadSelectedPhotos(finalClusters, data.suggestion_ids ?? {});
+
             this.clusters = [];
             this.allHits = [];
+            this.selectedFiles.clear();
             this.renderResults();
             this.uploadBtn.hidden = true;
         } catch {
             toast.error("Could not upload results. Please check your connection and try again.");
             this.uploadBtn.disabled = false;
+        }
+    }
+
+    /**
+     * Upload any opted-in preview photos, tagged to the PinSuggestion each
+     * cluster resolved to. Best-effort: a failed photo upload doesn't undo
+     * the location results already saved above, so failures are reported
+     * separately rather than blocking the main success toast.
+     */
+    private async uploadSelectedPhotos(finalClusters: UploadCluster[], suggestionIds: Record<string, number>): Promise<void> {
+        if (!this.uploadPhotoUrl) return;
+        let failures = 0;
+        for (const cluster of finalClusters) {
+            const suggestionId = suggestionIds[cluster.id];
+            if (!suggestionId) continue;
+            const selected = cluster.photos.filter((file) => this.selectedFiles.has(file));
+            for (const file of selected) {
+                try {
+                    const body = new FormData();
+                    body.append("suggestion_id", String(suggestionId));
+                    body.append("image", file);
+                    const res = await fetch(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
+                    if (!res.ok) failures += 1;
+                } catch {
+                    failures += 1;
+                }
+            }
+        }
+        if (failures > 0) {
+            toast.error(`${failures} preview photo${failures === 1 ? "" : "s"} could not be uploaded, but your location results were saved.`);
         }
     }
 }

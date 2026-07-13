@@ -241,6 +241,8 @@
                     Scan a folder of photos or videos on your device for geotagged locations.
                     Nothing is uploaded while scanning - your files are only seen by your browser.
                     When you're ready, upload any locations found to turn them into pins you can review.
+                    Only location and date metadata is uploaded by default - the photos themselves stay
+                    on your device unless you check one below to include it as a preview in your review queue.
                     Your browser's folder picker may say &quot;Upload&quot; and warn about uploading files -
                     that's standard browser wording for letting a site read local files, not something this
                     tool controls. No files are sent anywhere until you click &quot;Upload results&quot; below.
@@ -249,6 +251,7 @@
                 <div
                     id="photo-scan-root"
                     data-upload-url="{% url 'tools.photo_scan.upload' %}"
+                    data-upload-photo-url="{% url 'tools.photo_scan.upload_photo' %}"
                     data-profile-uuid="{{ profile_uuid|default:'' }}"
                 >
                     <div class="photo-scan-controls">
@@ -884,6 +887,99 @@
     color: var(--ul-grey-6);
     font-size: .85rem;
     margin: 0;
+}
+
+.photo-scan-result-item {
+    flex-wrap: wrap;
+}
+
+.photo-scan-picker {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.photo-scan-picker-caption {
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+}
+
+.photo-scan-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.photo-scan-thumb {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--ul-grey-3);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.photo-scan-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: .7;
+    transition: opacity .15s ease;
+}
+
+.photo-scan-thumb:hover img {
+    opacity: .9;
+}
+
+.photo-scan-thumb input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.photo-scan-thumb-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #fff;
+    background: rgba(0, 0, 0, .45);
+    border-radius: 999px;
+    font-size: 16px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.photo-scan-thumb-badge .material-symbols-outlined {
+    font-size: 16px;
+    display: block;
+}
+
+.photo-scan-thumb--selected {
+    border-color: var(--ul-primary, #1976D2);
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, .25);
+}
+
+.photo-scan-thumb--selected img {
+    opacity: 1;
+}
+
+.photo-scan-thumb--selected .photo-scan-thumb-badge {
+    background: var(--ul-primary, #1976D2);
+}
+
+.photo-scan-thumb--disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.photo-scan-thumb--disabled input[type="checkbox"] {
+    cursor: not-allowed;
 }
 </style>
 

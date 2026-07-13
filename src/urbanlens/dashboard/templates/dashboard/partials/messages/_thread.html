@@ -49,14 +49,13 @@ live messages and fall back to the plain POST endpoint when the socket is down.
             <i class="material-symbols-outlined">volume_off</i> Mute
           </button>
         </form>
-        <form method="post" action="{% url 'messages.image_permission' partner.slug %}">
-          {% csrf_token %}
-          <input type="hidden" name="decision" value="{% if image_permission_status == 'rejected' %}allow{% else %}reject{% endif %}">
-          <button type="submit" class="dm-bubble-menu__item">
-            <i class="material-symbols-outlined">{% if image_permission_status == 'rejected' %}image{% else %}hide_image{% endif %}</i>
-            {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
-          </button>
-        </form>
+        <button type="button" class="dm-bubble-menu__item"
+                hx-post="{% url 'messages.image_permission' partner.slug %}"
+                hx-vals='{"decision": "{% if image_permission_status == 'rejected' %}allow{% else %}reject{% endif %}"}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">
+          <i class="material-symbols-outlined">{% if image_permission_status == 'rejected' %}image{% else %}hide_image{% endif %}</i>
+          {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
+        </button>
         <form method="post" action="{% url 'friend.block' partner.id %}"
               onsubmit="return confirm('Block {{ partner.username }}? They will not be able to see your profile or message you.')">
           {% csrf_token %}
@@ -123,22 +122,15 @@ live messages and fall back to the plain POST endpoint when the socket is down.
           </div>
           <p class="dm-image-consent__prompt">{{ partner.username }} wants to send you an image.</p>
           <div class="dm-image-consent__actions">
-            <form method="post" action="{% url 'messages.image_permission' partner.slug %}">
-              {% csrf_token %}
-              <input type="hidden" name="decision" value="allow">
-              <button type="submit" class="btn btn--primary btn--sm">Allow</button>
-            </form>
-            <form method="post" action="{% url 'messages.image_permission' partner.slug %}">
-              {% csrf_token %}
-              <input type="hidden" name="decision" value="allow_once">
-              <input type="hidden" name="message_id" value="{{ message.id }}">
-              <button type="submit" class="btn btn--ghost btn--sm">Allow Once</button>
-            </form>
-            <form method="post" action="{% url 'messages.image_permission' partner.slug %}">
-              {% csrf_token %}
-              <input type="hidden" name="decision" value="reject">
-              <button type="submit" class="btn btn--ghost btn--sm">Reject</button>
-            </form>
+            <button type="button" class="btn btn--primary btn--sm"
+                    hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "allow"}'
+                    hx-target="#dm-thread-pane" hx-swap="innerHTML">Allow</button>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "allow_once", "message_id": {{ message.id }}}'
+                    hx-target="#dm-thread-pane" hx-swap="innerHTML">Allow Once</button>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "reject"}'
+                    hx-target="#dm-thread-pane" hx-swap="innerHTML">Reject</button>
           </div>
         </div>
         {% endif %}
@@ -238,6 +230,11 @@ live messages and fall back to the plain POST endpoint when the socket is down.
       <span class="dm-map-chip-thumb" id="dm-map-chip-thumb"></span>
       <i class="material-symbols-outlined">map</i> Map attached
       <button type="button" id="dm-map-chip-remove" aria-label="Remove attached map">&times;</button>
+    </span>
+    <span class="dm-composer-attachment-chip dm-composer-attachment-chip--share" id="dm-share-chip" hidden>
+      <i class="material-symbols-outlined" id="dm-share-chip-icon">location_on</i>
+      <span id="dm-share-chip-label"></span>
+      <button type="button" id="dm-share-chip-remove" aria-label="Remove attachment">&times;</button>
     </span>
   </div>
   <form class="dm-composer" id="dm-composer" action="{% url 'messages.send' partner.slug %}" method="post">

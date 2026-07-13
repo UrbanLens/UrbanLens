@@ -96,6 +96,18 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    # Set only while this is a candidate photo the user opted to upload during a
+    # local-folder location scan, staged for possible import into a pin's gallery
+    # if the pending PinSuggestion is accepted. Cleared (set back to null) once the
+    # photo graduates to a real gallery photo on accept; the row itself is deleted
+    # (not just unlinked) if the suggestion is rejected or the photo wasn't selected.
+    pin_suggestion = ForeignKey(
+        "dashboard.PinSuggestion",
+        on_delete=SET_NULL,
+        related_name="candidate_images",
+        null=True,
+        blank=True,
+    )
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -152,6 +164,7 @@ class Image(abstract.FrontendDashboardModel):
         visit_id: int | None
         direct_message_id: int | None
         profile_id: int | None
+        pin_suggestion_id: int | None
 
     objects = ImageManager()
 

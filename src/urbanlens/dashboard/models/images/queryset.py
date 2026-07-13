@@ -190,7 +190,10 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         have not been dismissed - the pool the Memories "needs attention" queue
         surfaces so they can be confirmed, pinned, or manually logged. Photos
         uploaded directly to a pin/wiki gallery are excluded; only bare
-        Memories-page uploads (no pin, no wiki) qualify.
+        Memories-page uploads (no pin, no wiki) qualify. Photos staged as scan
+        candidates (``pin_suggestion`` set) are also excluded - those belong to
+        the Locations review queue, not this one, until their suggestion is
+        accepted or rejected.
 
         Args:
             profile: The uploader whose unfiled photos to return.
@@ -204,6 +207,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             organize_dismissed=False,
             pin__isnull=True,
             wiki__isnull=True,
+            pin_suggestion__isnull=True,
         ).order_by("-created")
 
 
