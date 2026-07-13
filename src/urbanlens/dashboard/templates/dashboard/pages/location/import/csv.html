@@ -167,6 +167,11 @@
     font-size: .9rem;
 }
 .iw-file-chip-remove:hover { color: var(--ul-text-danger); }
+.iw-file-chip.iw-media-chip i { color: var(--ul-grey-7); }
+
+/* Inline media-upload progress (separate from the location-file parse/import flow) */
+.iw-media-progress { margin-top: 10px; }
+.iw-media-progress .iw-progress-bar-track { margin-bottom: 4px; }
 
 /* Parse loading spinner */
 .iw-parsing {
@@ -478,6 +483,7 @@
                 Import data from another app. Many apps are supported.
                 {% endif %}
                 We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout's My Activity (Maps) HTML export - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+                {% if import_variant != "memories" %}You can also drop in photos{% if can_upload_videos %} or videos{% endif %} here - they're added to your library and matched to pins by location automatically.{% endif %}
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
             <div class="iw-takeout-help" style="margin-bottom:18px;">
@@ -504,9 +510,13 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
+            <div class="iw-media-progress" id="iw-media-progress" hidden>
+                <div class="iw-progress-bar-track"><div class="iw-progress-bar-fill" id="iw-media-bar"></div></div>
+                <span class="iw-hint" id="iw-media-progress-label" style="margin:0"></span>
+            </div>
         </div>
         <div class="iw-footer">
             <button id="iw-btn-upload" class="btn btn--primary btn--lg btn--submit" disabled>Continue →</button>
@@ -579,6 +589,25 @@ var abortCtrl = null;
 var importing = false;
 var needsConfirm = false;
 var allSelected = true;
+
+/* -- Photos/videos dropped alongside location-data files --------------- */
+/* These are attached to nothing in particular - they're uploaded through
+   the exact same endpoint/pipeline as the Memories > Photos page, and get
+   matched to pins (including ones this same import just created) later by
+   the existing GPS-based visit-suggestion matching. No pin-specific upload
+   code lives here. */
+var acceptsMedia = {% if import_variant != "memories" %}true{% else %}false{% endif %};
+var canUploadVideos = {{ can_upload_videos|yesno:"true,false" }};
+var MEDIA_UPLOAD_URL = '{% url "memories.photos.upload" %}';
+var IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
+var VIDEO_EXT_RE = /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i;
+
+function mediaKind(file) {
+    if (!acceptsMedia) return null;
+    if ((file.type || '').indexOf('image/') === 0 || IMAGE_EXT_RE.test(file.name)) return 'image';
+    if ((file.type || '').indexOf('video/') === 0 || VIDEO_EXT_RE.test(file.name)) return 'video';
+    return null;
+}
 
 /* -- DOM references --------------------------------------------------- */
 var $ = function (id) { return document.getElementById(id); };
@@ -670,6 +699,10 @@ fileZone.addEventListener('drop', function (e) {
 
 function handleFiles(newFiles) {
     newFiles.forEach(function (f) {
+        if (mediaKind(f) === 'video' && !canUploadVideos) {
+            toastr.warning(f.name + ': video uploads are not enabled for your account.', 'Skipped');
+            return;
+        }
         if (!selectedFiles.find(function (x) { return x.name === f.name && x.size === f.size; }))
             selectedFiles.push(f);
     });
@@ -680,11 +713,13 @@ function renderFileChips() {
     var container = $('iw-selected-files');
     container.innerHTML = '';
     selectedFiles.forEach(function (f, idx) {
+        var kind = mediaKind(f);
         var chip = document.createElement('div');
-        chip.className = 'iw-file-chip';
+        chip.className = 'iw-file-chip' + (kind ? ' iw-media-chip' : '');
+        var icon = kind === 'image' ? 'photo' : kind === 'video' ? 'videocam' : 'insert_drive_file';
         chip.innerHTML =
-            '<i class="material-symbols-outlined">insert_drive_file</i>' +
-            '<span class="iw-file-chip-name">' + escHtml(f.name) + '</span>' +
+            '<i class="material-symbols-outlined">' + icon + '</i>' +
+            '<span class="iw-file-chip-name">' + escHtml(f.name) + (kind ? ' <em>(added to your library)</em>' : '') + '</span>' +
             '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
         container.appendChild(chip);
     });
@@ -697,13 +732,63 @@ function renderFileChips() {
     $('iw-btn-upload').disabled = selectedFiles.length === 0;
 }
 
+/* -- Photos/videos: uploaded via the same endpoint/pipeline as Memories >
+   Photos, independent of the location-file parse/preview/confirm flow
+   below. They aren't tied to a specific imported pin - the existing
+   GPS-based visit-suggestion matching files them in afterwards. */
+function uploadMediaFiles(files) {
+    var progress = $('iw-media-progress');
+    var bar = $('iw-media-bar');
+    var label = $('iw-media-progress-label');
+    progress.hidden = false;
+    var total = files.length, done = 0, ok = 0;
+    label.textContent = 'Uploading 0 of ' + total + '...';
+
+    files.forEach(function (file) {
+        var fd = new FormData();
+        fd.append('image', file);
+        fd.append('csrfmiddlewaretoken', getCsrfToken());
+        fetch(MEDIA_UPLOAD_URL, { method: 'POST', body: fd, headers: { 'X-CSRFToken': getCsrfToken() } })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                    return data;
+                });
+            })
+            .then(function () { ok++; })
+            .catch(function (err) {
+                toastr.error(file.name + ': ' + (err.message || 'upload failed'));
+            })
+            .finally(function () {
+                done++;
+                bar.style.width = Math.round(done / total * 100) + '%';
+                label.textContent = 'Uploading ' + done + ' of ' + total + '...';
+                if (done === total) {
+                    label.textContent = ok + ' of ' + total + ' added to your library.';
+                    setTimeout(function () { progress.hidden = true; bar.style.width = '0'; }, 1200);
+                    if (ok) toastr.success(ok + (ok === 1 ? ' photo/video' : ' photos/videos') + ' added to your library.');
+                }
+            });
+    });
+}
+
 /* -- Step 1 → Step 2: Parse -------------------------------------------- */
 $('iw-btn-upload').addEventListener('click', async function () {
     if (selectedFiles.length === 0) return;
+
+    var mediaFiles = selectedFiles.filter(function (f) { return mediaKind(f) !== null; });
+    var locationFiles = selectedFiles.filter(function (f) { return mediaKind(f) === null; });
+
+    if (mediaFiles.length > 0) uploadMediaFiles(mediaFiles);
+    selectedFiles = locationFiles;
+    renderFileChips();
+
+    if (locationFiles.length === 0) return;
+
     showStep('parsing', 0);
     $('closeImportDialog').disabled = true;
 
-    var hasDocument = selectedFiles.some(function (f) {
+    var hasDocument = locationFiles.some(function (f) {
         return /\.(txt|docx)$/i.test(f.name);
     });
     $('iw-parsing-label').textContent = hasDocument
@@ -712,7 +797,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
 
     var formData = new FormData();
     formData.append('csrfmiddlewaretoken', getCsrfToken());
-    selectedFiles.forEach(function (f) { formData.append('upload_files', f); });
+    locationFiles.forEach(function (f) { formData.append('upload_files', f); });
 
     try {
         var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData });

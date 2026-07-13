@@ -7,6 +7,7 @@ from functools import lru_cache
 import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
+from django.conf import settings as django_settings
 from django.db.models import TextField
 
 from urbanlens.UrbanLens.settings.app import settings
@@ -17,14 +18,20 @@ def _fernet() -> Fernet:
     """Return the process-wide Fernet instance used by ``EncryptedTextField``.
 
     Uses ``settings.field_encryption_key`` when set; otherwise derives a stable
-    key from ``settings.secret_key`` so existing installs work without a new
-    required secret. Cached because Fernet key setup is not free and this is
+    key from Django's ``SECRET_KEY`` (not ``AppSettings.secret_key`` - that
+    pydantic field has no wired env var in any deployment of this app, so it
+    silently falls back to a fresh random value in *every* process, which
+    made encrypted fields undecryptable across gunicorn workers/Celery/manage.py
+    runs the moment ``field_encryption_key`` was left unset). ``SECRET_KEY`` is
+    read from ``DJANGO_SECRET_KEY``, which every deployment already sets
+    consistently, so this key is stable process-to-process without requiring
+    a new secret. Cached because Fernet key setup is not free and this is
     called on every encrypted field read/write.
 
     Returns:
         A ``Fernet`` instance ready for ``encrypt``/``decrypt``.
     """
-    raw_key = settings.field_encryption_key or settings.secret_key
+    raw_key = settings.field_encryption_key or django_settings.SECRET_KEY
     derived = hashlib.sha256(raw_key.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(derived))
 

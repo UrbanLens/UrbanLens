@@ -224,8 +224,14 @@ class PhotoUploadView(LoginRequiredMixin, View):
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
-        if not (image_file.content_type or "").startswith("image/"):
-            return JsonResponse({"error": "That file is not an image."}, status=400)
+        content_type = image_file.content_type or ""
+        if content_type.startswith("video/"):
+            from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+            if not user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS):
+                return JsonResponse({"error": "Video uploads are not enabled for your account."}, status=403)
+        elif not content_type.startswith("image/"):
+            return JsonResponse({"error": "That file is not an image or video."}, status=400)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(profile=profile, checksum=checksum).exists():

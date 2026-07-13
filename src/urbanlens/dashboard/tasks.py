@@ -544,7 +544,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     counts = {"imported": 0, "skipped": 0, "failed": 0}
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     profile = Profile.objects.filter(pk=profile_id).first()
-    account = ImmichAccount.objects.filter(profile_id=profile_id).first()
+    account = ImmichAccount.objects.get_for_profile(profile) if profile is not None else None
     if pin is None or profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Immich connection no longer exists.")
         return counts
@@ -622,7 +622,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
 
     empty = {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
-    account = ImmichAccount.objects.filter(profile_id=profile_id).first()
+    account = ImmichAccount.objects.get_for_profile(profile) if profile is not None else None
     if profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Scan failed: profile or Immich connection no longer exists.")
         return empty

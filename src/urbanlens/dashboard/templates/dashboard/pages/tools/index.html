@@ -2,12 +2,8 @@
 {% load static %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="build" title="Tools" subtitle="Manage your data." %}
 <div class="tools-page page-content">
-
-    <div class="tools-header">
-        <h1 class="tools-title">Tools</h1>
-        <p class="tools-subtitle">Manage your data.</p>
-    </div>
 
     <div class="tools-grid">
 
@@ -280,6 +276,42 @@
                     <ul class="photo-scan-results" id="photo-scan-results"></ul>
                     <p class="photo-scan-empty" id="photo-scan-empty">No results yet.</p>
                 </div>
+            </div>
+        </div>
+
+        {# -- Immich library scan card -------------------------------------------- #}
+        <div class="ul-card tools-card tools-card--wide" id="immich-scan-card">
+            <div class="ul-card-header">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Scan Immich Library</h3>
+            </div>
+
+            <div class="ul-card-body">
+                {% if immich_account %}
+                <p class="tools-card-desc">
+                    Scans your whole Immich library for photo locations and suggests visits for pins
+                    you already have, plus candidate new pins for places you don't. Nothing is created
+                    until you review and accept each suggestion in
+                    <a href="{% url 'memories.locations' %}">Memories &rsaquo; Locations</a>.
+                </p>
+                <div class="tools-card-actions">
+                    <button type="button" class="btn btn--primary"
+                            hx-post="{% url 'settings.immich.scan' %}"
+                            hx-target="#immich-scan-progress"
+                            hx-swap="outerHTML"
+                            hx-confirm="Scan your entire Immich library for places you've been? This can take a while for a large library. Nothing is created automatically - you'll review and confirm each suggestion afterward.">
+                        <i class="material-symbols-outlined">travel_explore</i>
+                        Scan library for new locations
+                    </button>
+                </div>
+                <div id="immich-scan-progress"></div>
+                {% else %}
+                <p class="tools-card-desc">
+                    Connect a self-hosted Immich server in
+                    <a href="{% url 'settings.view' %}#immich-settings-section">Settings &rsaquo; Immich</a>
+                    to scan your library for places you've been.
+                </p>
+                {% endif %}
             </div>
         </div>
 

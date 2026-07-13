@@ -1088,57 +1088,13 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
 // -- Admin homepage ------------------------------------------------------------
 
-.admin-home-hero {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    padding: 1.5rem 1.75rem;
-    background: linear-gradient(135deg, var(--ul-grey-1) 0%, var(--ul-grey-1b) 100%);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 14px;
-    margin-bottom: 1.5rem;
-}
-
-.admin-home-hero__left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.admin-home-hero__icon {
+.admin-home-status-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    background: rgba($color-blue-500, .12);
-    flex-shrink: 0;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.9rem;
-        color: $color-blue-500;
-    }
-}
-
-.admin-home-hero__title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--ul-grey-9);
-    margin: 0 0 .2rem;
-}
-
-.admin-home-hero__sub {
-    font-size: .88rem;
-    color: var(--ul-grey-6);
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: .6rem;
+    gap: .5rem;
     flex-wrap: wrap;
+    margin-bottom: 1.5rem;
 }
 
 .admin-home-status {
@@ -1164,13 +1120,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         background: rgba($color-amber-500, .12);
         color: $color-amber-600;
     }
-}
-
-.admin-home-hero__meta {
-    display: flex;
-    gap: .5rem;
-    flex-wrap: wrap;
-    align-items: flex-start;
 }
 
 .admin-home-meta-pill {
@@ -1745,10 +1694,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         &:focus {
             border-color: color.adjust($primary-color, $lightness: 10%);
         }
-    }
-
-    .admin-home-hero {
-        background: linear-gradient(135deg, var(--ul-black) 0%, var(--ul-grey-0a) 100%);
     }
 
     .admin-home-meta-pill {

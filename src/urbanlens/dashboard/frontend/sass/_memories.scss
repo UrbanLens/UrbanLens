@@ -22,34 +22,13 @@ $memories-type-colors: (
     margin-top: 1rem;
 }
 
-.memories-header {
+.memories-toolbar {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
-}
-
-.memories-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin: 0 0 .25rem;
-    display: flex;
     align-items: center;
-    gap: .4rem;
-    color: var(--ul-grey-8);
-
-    .material-symbols-outlined {
-        font-size: 1.7rem;
-        color: $color-deep-purple-500;
-    }
-}
-
-.memories-subtitle {
-    margin: 0;
-    color: var(--ul-grey-7);
-    font-size: .9rem;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-bottom: 1.5rem;
 }
 
 // -- Hero stats -------------------------------------------------------------

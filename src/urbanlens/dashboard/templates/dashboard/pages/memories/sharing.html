@@ -5,13 +5,8 @@
 {% block title %}Sharing{% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="ios_share" title="Pins & maps you've shared" subtitle="Everything you've shared with friends, who received it, and how far it travelled from there." %}
 <div id="memories-sharing-page" class="memories-tab-page">
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">ios_share</i> Pins &amp; maps you've shared</h1>
-            <p class="memories-subtitle">Everything you've shared with friends, who received it, and how far it travelled from there.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
         {% memories_tabs "sharing" %}

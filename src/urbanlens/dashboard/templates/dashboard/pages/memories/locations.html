@@ -4,14 +4,8 @@
 {% block title %}Locations{% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="travel_explore" title="Locations" subtitle="Places a photo scan found evidence of visiting. Review each one before anything is created." %}
 <div id="locations-page" class="memories-tab-page">
-
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">travel_explore</i> Locations</h1>
-            <p class="memories-subtitle">Places a photo scan found evidence of visiting. Review each one before anything is created.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
         {% memories_tabs "locations" %}

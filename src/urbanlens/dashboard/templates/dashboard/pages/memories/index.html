@@ -17,6 +17,7 @@
 {% block title %}Memories{% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome_motion" title="Memories" subtitle="Everywhere you've been - routes, trips, visits, and photos, on one map and timeline." %}
 <div id="memories-page" class="memories-tab-page"
      data-feed-url="{% url 'memories.data' %}"
      data-visit-url-base="{% url 'memories.view' %}visit/"
@@ -26,11 +27,7 @@
      data-map-lng="{{ map_center_lng|default:'null' }}">
 
     {% if has_memory_data %}
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">auto_awesome_motion</i> Memories</h1>
-            <p class="memories-subtitle">Everywhere you've been - routes, trips, visits, and photos, on one map and timeline.</p>
-        </div>
+    <div class="memories-toolbar">
         <button type="button" class="btn btn--secondary" id="memories-import-btn"
                 hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
             <i class="material-symbols-outlined">upload</i> Import routes &amp; history

@@ -1,19 +1,16 @@
 {# Immich settings subsection - loaded via HTMX (ImmichSettingsView). Context: account, form #}
 <div id="immich-settings-body" class="settings-subsection-body">
     {% if account %}
-    <p class="settings-help">
+    <p class="settings-help immich-connected-status">
+        <i class="material-symbols-outlined immich-status-icon immich-status-icon--connected" title="Connected">check_circle</i>
         Connected to <strong>{{ account.server_url }}</strong>.
         {% if account.last_verified %}Verified {{ account.last_verified|date:"M j, Y" }}.{% endif %}
     </p>
+    <p class="settings-help">
+        Scan your library for photo locations from
+        <a href="{% url 'tools.index' %}#immich-scan-card">Tools &rsaquo; Find Pins in a Photo Folder</a>.
+    </p>
     <div class="settings-actions">
-        <button type="button" class="btn btn--secondary"
-                hx-post="{% url 'settings.immich.scan' %}"
-                hx-target="#immich-scan-progress"
-                hx-swap="outerHTML"
-                hx-confirm="Scan your entire Immich library for places you've been? This can take a while for a large library. Nothing is created automatically - you'll review and confirm each suggestion afterward.">
-            <i class="material-symbols-outlined">travel_explore</i>
-            Scan library for new locations
-        </button>
         <button type="button" class="btn btn--danger"
                 hx-post="{% url 'settings.immich.disconnect' %}"
                 hx-target="#immich-settings-body"
@@ -23,18 +20,12 @@
             Disconnect Immich
         </button>
     </div>
-    <p class="settings-help">
-        Scans your whole library for photo locations and suggests visits for pins you
-        already have, plus candidate new pins for places you don't. Nothing is created
-        until you review and accept each suggestion in
-        <a href="{% url 'memories.locations' %}">Memories &rsaquo; Locations</a>.
-    </p>
-    <div id="immich-scan-progress"></div>
     {% else %}
     <p class="settings-help">
         Connect a self-hosted <a href="{% url 'faq' %}#faq-immich-what" target="_blank" rel="noopener">Immich</a> server to search and import photos near your pins.
     </p>
-    <form hx-post="{% url 'settings.immich' %}" hx-target="#immich-settings-body" hx-swap="outerHTML" class="settings-form">
+    <form hx-post="{% url 'settings.immich' %}" hx-target="#immich-settings-body" hx-swap="outerHTML"
+          hx-indicator="#immich-connect-btn" hx-disabled-elt="#immich-connect-btn" class="settings-form">
         {% csrf_token %}
         {% if form.non_field_errors %}
         <p class="settings-error">{{ form.non_field_errors|join:", " }}</p>
@@ -54,11 +45,48 @@
             {% if form.api_key.errors %}<p class="settings-error">{{ form.api_key.errors|join:", " }}</p>{% endif %}
         </div>
         <div class="settings-actions">
-            <button type="submit" class="settings-save-btn">
+            <button type="submit" class="settings-save-btn" id="immich-connect-btn">
                 <i class="material-symbols-outlined">link</i>
-                Connect Immich
+                <span class="immich-connect-btn-label">Connect Immich</span>
+                <span class="immich-connect-btn-verifying">Verifying&hellip;</span>
             </button>
         </div>
     </form>
     {% endif %}
 </div>
+
+<style>
+.immich-status-icon {
+    font-size: 1.1rem;
+    vertical-align: middle;
+    margin-right: .3rem;
+}
+.immich-status-icon--connected {
+    color: #388E3C;
+}
+#immich-connect-btn .immich-connect-btn-verifying {
+    display: none;
+}
+#immich-connect-btn.htmx-request {
+    opacity: .8;
+    pointer-events: none;
+}
+#immich-connect-btn.htmx-request::after {
+    content: '';
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    margin-left: .4rem;
+    border: 2px solid rgba(255, 255, 255, .35);
+    border-top-color: var(--ul-grey-5);
+    border-radius: 50%;
+    vertical-align: middle;
+    animation: ul-spin .65s linear infinite;
+}
+#immich-connect-btn.htmx-request .immich-connect-btn-label {
+    display: none;
+}
+#immich-connect-btn.htmx-request .immich-connect-btn-verifying {
+    display: inline;
+}
+</style>

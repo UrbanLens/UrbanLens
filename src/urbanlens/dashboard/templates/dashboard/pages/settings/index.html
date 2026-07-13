@@ -2,11 +2,8 @@
 {% load static %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="settings" title="Settings" subtitle="Manage your account preferences" %}
 <div class="settings-page page-content">
-    <div class="settings-header">
-        <h1 class="settings-title">Settings</h1>
-        <p class="settings-subtitle">Manage your account preferences</p>
-    </div>
 
     <div class="settings-tabs" role="tablist" id="settings-tabs">
         <button type="button" class="settings-tab active" data-tab="privacy" role="tab" aria-selected="true">

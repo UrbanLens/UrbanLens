@@ -12,16 +12,10 @@
 {% block title %}Photos{% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'memories.photos.upload' %}"
      data-action-base="{% url 'memories.photos' %}">
-
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">photo_library</i> Photos</h1>
-            <p class="memories-subtitle">Every photo you've added, and a quick way to turn them into visits.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
         {% memories_tabs "photos" %}

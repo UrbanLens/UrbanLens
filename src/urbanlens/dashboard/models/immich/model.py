@@ -9,12 +9,62 @@ is stored encrypted at rest via ``EncryptedTextField``.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from cryptography.fernet import InvalidToken
+from django.db import connection
 from django.db.models import CASCADE, DateTimeField, OneToOneField, URLField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
+logger = logging.getLogger(__name__)
+
+
+class ImmichAccountManager(abstract.DashboardManager):
+    """Adds lookups that self-heal when a stored api_key can't be decrypted.
+
+    A field-encryption-key change (see ``models.fields.EncryptedTextField``)
+    leaves any previously-saved ``api_key`` permanently unreadable - every
+    plain ``.filter(...).first()``/``.get(...)`` on this model raises
+    ``InvalidToken`` the moment the row is materialized, which used to 500
+    every page and Celery task that touched the account. These methods treat
+    that exactly like "never connected" and remove the now-useless row so
+    the user can just reconnect.
+    """
+
+    def get_for_profile(self, profile: Profile) -> ImmichAccount | None:
+        """Return this profile's Immich account, or None if absent or undecryptable."""
+        try:
+            return self.filter(profile=profile).first()
+        except InvalidToken:
+            logger.warning("ImmichAccount for profile %s is undecryptable (stale field_encryption_key) - clearing it", profile.pk)
+            self._delete_undecryptable(profile.pk)
+            return None
+
+    def delete_for_profile(self, profile: Profile) -> None:
+        """Delete this profile's Immich account, tolerating an undecryptable stored key."""
+        try:
+            self.filter(profile=profile).delete()
+        except InvalidToken:
+            self._delete_undecryptable(profile.pk)
+
+    def _delete_undecryptable(self, profile_id: int) -> None:
+        """Hard-delete via raw SQL.
+
+        A normal queryset ``.delete()`` still instantiates matching rows to
+        dispatch delete signals, which re-triggers the same decrypt failure -
+        raw SQL (identifiers pulled from ``_meta``, not user input) sidesteps
+        that entirely.
+        """
+        table = self.model._meta.db_table  # noqa: SLF001 - _meta is public API despite the underscore
+        column = self.model._meta.get_field("profile").column  # noqa: SLF001
+        with connection.cursor() as cursor:
+            cursor.execute(f"DELETE FROM {table} WHERE {column} = %s", [profile_id])  # noqa: S608 - identifiers from Django _meta, not user input
 
 
 class ImmichAccount(abstract.DashboardModel):
@@ -34,6 +84,8 @@ class ImmichAccount(abstract.DashboardModel):
     api_key = EncryptedTextField()
     connected_at = DateTimeField(auto_now_add=True)
     last_verified = DateTimeField(null=True, blank=True, help_text="When the credentials were last confirmed to work.")
+
+    objects = ImmichAccountManager()
 
     if TYPE_CHECKING:
         profile_id: int

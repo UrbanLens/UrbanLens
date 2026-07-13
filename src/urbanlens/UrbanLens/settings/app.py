@@ -63,13 +63,22 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    secret_key: str = Field(default=get_random_secret_key(), description="The secret key")
+    # default_factory, not default=get_random_secret_key() - a plain `default=` value is
+    # computed once at class-definition time rather than per instantiation, which is
+    # the standard pydantic mutable/computed-default footgun even though it's harmless
+    # here specifically (AppSettingsMeta makes this class a process-wide singleton).
+    # NOTE: this field has no wired env var in any deployment (UL_SECRET_KEY is never
+    # set) - nothing outside this file should ever read it as if it were stable across
+    # processes. dashboard/models/fields.py used to and that was a real bug; see its
+    # comment for the fix (falls back to Django's actual SECRET_KEY instead).
+    secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
     field_encryption_key: str | None = Field(
         default=None,
         description=(
             "Base64 key used to encrypt sensitive database fields (e.g. Immich API keys) via Fernet. "
-            "When unset, a key is derived from secret_key so existing installs keep working without a new "
-            "required secret - set this explicitly in production so field encryption survives a SECRET_KEY rotation."
+            "When unset, a key is derived from Django's SECRET_KEY (DJANGO_SECRET_KEY) so existing installs "
+            "keep working without a new required secret - set this explicitly in production so field "
+            "encryption survives a SECRET_KEY rotation."
         ),
     )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")

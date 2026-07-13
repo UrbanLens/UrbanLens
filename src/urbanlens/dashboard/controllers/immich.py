@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -67,7 +67,7 @@ class ImmichSettingsView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        account = ImmichAccount.objects.filter(profile=profile).first()
+        account = ImmichAccount.objects.get_for_profile(profile)
         form = ImmichAccountForm(instance=account) if account is None else None
         return render(request, _SETTINGS_PARTIAL, {"account": account, "form": form})
 
@@ -97,7 +97,7 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        ImmichAccount.objects.filter(profile=profile).delete()
+        ImmichAccount.objects.delete_for_profile(profile)
         response = render(request, _SETTINGS_PARTIAL, {"account": None, "form": ImmichAccountForm()})
         return _with_toast(response, "Immich disconnected.")
 
@@ -158,7 +158,7 @@ class PinImmichSearchView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
-        account = ImmichAccount.objects.filter(profile=profile).first()
+        account = ImmichAccount.objects.get_for_profile(profile)
         mode = request.GET.get("mode", PhotoImportMode.NEARBY)
         if mode not in PhotoImportMode.values:
             mode = PhotoImportMode.NEARBY
@@ -216,7 +216,9 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, pin_slug: str, asset_id: str) -> HttpResponse:
         profile = _request_profile(request)
-        account = get_object_or_404(ImmichAccount, profile=profile)
+        account = ImmichAccount.objects.get_for_profile(profile)
+        if account is None:
+            raise Http404
         cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
         cached = cache.get(cache_key)
         if cached is not None:

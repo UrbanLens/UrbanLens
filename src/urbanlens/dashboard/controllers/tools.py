@@ -15,6 +15,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, PinSuggestionOrigin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.export import (
@@ -107,6 +108,7 @@ class ToolsIndexView(LoginRequiredMixin, View):
             {
                 "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
                 "profile_uuid": profile.uuid,
+                "immich_account": ImmichAccount.objects.get_for_profile(profile),
             },
         )
 

@@ -11,12 +11,15 @@
     gap: 1.25rem;
 }
 
-// Hero card - avatar + identity side by side
+// Hero card - avatar + identity side by side. Uses the same blue-to-green
+// gradient as the site's shared page-hero banner (partials/ui/_page_hero.html)
+// so the profile page reads as a page header too, just built around the
+// user's own identity instead of a generic title.
 .profile-hero {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(6, 182, 212, 0.12));
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+    box-shadow: 0 4px 20px rgba(31, 111, 235, .1);
     padding: 2rem;
     display: flex;
     gap: 2rem;
@@ -36,23 +39,29 @@
 
 .profile-avatar-wrap {
     position: relative;
-    width: 96px;
-    height: 96px;
-}
-
-.profile-avatar-img {
+    box-sizing: border-box;
     width: 96px;
     height: 96px;
     border-radius: 50%;
+    padding: 3px;
+    background: linear-gradient(135deg, $color-blue-500, $color-green-500);
+}
+
+.profile-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
     object-fit: cover;
-    border: 3px solid var(--ul-grey-1a);
+    border: 3px solid var(--ul-grey-0);
     display: block;
 }
 
 .profile-avatar-placeholder {
-    width: 96px;
-    height: 96px;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
+    border: 3px solid var(--ul-grey-0);
+    box-sizing: border-box;
     background: linear-gradient(135deg, $primary-color 0%, color.adjust($primary-color, $lightness: -15%) 100%);
     color: var(--ul-grey-7);
     display: flex;
@@ -356,23 +365,6 @@
 }
 
 // -- Settings page ------------------------------------------------------------
-
-
-.settings-header {
-    margin-bottom: 2rem;
-}
-
-.settings-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--ul-grey-9);
-    margin: 0 0 0.25rem;
-}
-
-.settings-subtitle {
-    color: var(--ul-grey-6);
-    margin: 0;
-}
 
 .settings-section {
     border-radius: $radius-md;
@@ -1453,6 +1445,14 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 .profile-annotation-title {
     font-size: 0.85rem;
     font-weight: 600;
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-radius: 8px 0 8px 0;
+    padding: 1rem;
+    color: var(--ul-grey-0);
+    font-weight: bold;
+    box-shadow: 5px 5px 10px rgba(0,0,0,0.2);
 }
 
 .profile-annotation-label {
@@ -1526,7 +1526,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     padding: 4px 10px;
     border-radius: 999px;
     border: 1px dashed var(--ul-grey-1a);
-    background: none;
+    background: var(--ul-grey-0);
     color: $text-muted;
     font-size: .8rem;
     cursor: pointer;
@@ -1702,7 +1702,7 @@ body div.container .profile-annotation-notes {
     justify-content: space-between;
     padding: .4rem .65rem;
     border-bottom: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-4);
+    background: var(--ul-grey-1);
 }
 
 .pan-note-date {
@@ -1718,11 +1718,12 @@ body div.container .profile-annotation-notes {
 
 .pan-note-body {
     padding: .55rem .7rem;
+    background: var(--ul-grey-0);
 }
 
 .pan-note-content {
     font-size: .875rem;
-    color: $text-primary;
+    color: var(--ul-grey-7);
     margin: 0;
     white-space: pre-wrap;
     line-height: 1.55;
@@ -1747,7 +1748,7 @@ body div.container .profile-annotation-notes {
     background: var(--ul-grey-0);
     color: var(--ul-grey-8);
     font-size: 0.875rem;
-    padding: 0.55rem 0.7rem;
+    padding: 1rem 2rem;
     box-sizing: border-box;
     font-family: inherit;
     line-height: 1.5;

@@ -25,6 +25,10 @@ class SiteFeature(TextChoices):
     AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
+    # Deliberately separate from the VIP canonical set: video files are far
+    # larger than photos, so admins grant this tier explicitly to manage
+    # storage cost rather than bundling it into every VIP subscription.
+    VIDEO_UPLOADS = "video_uploads", "Video uploads"
 
 
 class SubscriptionRole(abstract.DashboardModel):

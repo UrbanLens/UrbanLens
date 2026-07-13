@@ -1,0 +1,9 @@
+{% comment %}
+Hero body for site_admin_home.html. Expects request.user, unhealthy_services,
+total_services, and git_has_newer_commits in context.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <i class="material-symbols-outlined">admin_panel_settings</i>
+    Admin Dashboard
+</h1>
+<p class="ul-page-hero__subtitle">Welcome back, {{ request.user.first_name|default:request.user.username }}.</p>

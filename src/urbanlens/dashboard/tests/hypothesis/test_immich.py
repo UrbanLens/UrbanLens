@@ -90,6 +90,29 @@ class EncryptedTextFieldTests(TestCase):
         account.refresh_from_db()
         self.assertEqual(account.api_key, "s3cret-key")
 
+    def test_key_is_derived_from_djangos_stable_secret_key_not_appsettings(self) -> None:
+        """Regression test: the Fernet key must come from Django's SECRET_KEY.
+
+        AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY)
+        has no wired env var in any deployment of this app and silently falls
+        back to a fresh random value in every process - using it here meant
+        every gunicorn worker/Celery worker/manage.py run derived a *different*
+        key, so anything encrypted by one process was undecryptable by any
+        other (see the ImmichAccountManagerTests below for the user-facing
+        fallout). Django's SECRET_KEY (DJANGO_SECRET_KEY) is the one secret
+        every deployment actually configures consistently.
+        """
+        import base64
+        import hashlib
+
+        from cryptography.fernet import Fernet
+        from django.conf import settings as django_settings
+
+        token = EncryptedTextField().get_prep_value("probe-value")
+        derived = hashlib.sha256(django_settings.SECRET_KEY.encode()).digest()
+        direct_fernet = Fernet(base64.urlsafe_b64encode(derived))
+        self.assertEqual(direct_fernet.decrypt(token.encode()).decode(), "probe-value")
+
 
 # -- ImmichGateway ----------------------------------------------------------------
 
@@ -242,6 +265,62 @@ class ImmichSettingsViewTests(TestCase):
         self.assertFalse(ImmichAccount.objects.filter(profile=self.user.profile).exists())
 
 
+def _corrupt_api_key(account: ImmichAccount) -> None:
+    """Overwrite a stored api_key with ciphertext that will never decrypt.
+
+    Simulates the real-world failure mode (a field-encryption-key change)
+    without needing to actually swap keys process-wide.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(f"UPDATE {ImmichAccount._meta.db_table} SET api_key = %s WHERE id = %s", ["not-a-valid-fernet-token", account.pk])  # noqa: S608 - table name from Django _meta, not user input
+
+
+class ImmichAccountManagerTests(TestCase):
+    """get_for_profile/delete_for_profile self-heal instead of raising InvalidToken."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        _corrupt_api_key(self.account)
+
+    def test_get_for_profile_returns_none_instead_of_raising(self) -> None:
+        self.assertIsNone(ImmichAccount.objects.get_for_profile(self.profile))
+
+    def test_get_for_profile_clears_the_undecryptable_row(self) -> None:
+        ImmichAccount.objects.get_for_profile(self.profile)
+        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+
+    def test_get_for_profile_is_a_noop_for_a_healthy_account(self) -> None:
+        healthy = ImmichAccount.objects.create(profile=baker.make(User).profile, server_url="https://photos.example.com", api_key="fine")
+        result = ImmichAccount.objects.get_for_profile(healthy.profile)
+        self.assertEqual(result, healthy)
+
+    def test_delete_for_profile_does_not_raise(self) -> None:
+        ImmichAccount.objects.delete_for_profile(self.profile)
+        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+
+    def test_settings_page_does_not_500_with_a_corrupted_account(self) -> None:
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("settings.immich"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+
+    def test_pin_search_does_not_500_with_a_corrupted_account(self) -> None:
+        self.client.force_login(self.user)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        response = self.client.get(reverse("pin.immich.search", args=[pin.slug]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_thumbnail_view_404s_instead_of_500ing(self) -> None:
+        self.client.force_login(self.user)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        response = self.client.get(reverse("pin.immich.thumbnail", args=[pin.slug, "asset-1"]))
+        self.assertEqual(response.status_code, 404)
+
+
 class ImmichLibraryScanStartViewTests(TestCase):
     """The scan trigger requires a connected account and enqueues the sweep task."""
 
@@ -384,6 +463,13 @@ class ImportImmichPhotosTaskTests(TestCase):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
+    def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
+        """Regression test for the InvalidToken crash seen in production (see tasks.py)."""
+        _corrupt_api_key(self.account)
+        with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+            counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
+        self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+
 
 # -- Celery task: sweep_immich_library_locations ------------------------------------
 
@@ -447,6 +533,19 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
 
     def test_missing_account_is_a_noop(self) -> None:
         self.account.delete()
+        with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+            result = tasks.sweep_immich_library_locations(self.profile.pk)
+        self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
+
+    def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
+        """Regression test for the InvalidToken crash seen in production (see tasks.py).
+
+        This is the exact traceback reported: sweep_immich_library_locations
+        raised cryptography.fernet.InvalidToken instead of failing gracefully,
+        because the account had been connected under a since-invalidated
+        per-process encryption key (see EncryptedTextField / _fernet()).
+        """
+        _corrupt_api_key(self.account)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             result = tasks.sweep_immich_library_locations(self.profile.pk)
         self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})

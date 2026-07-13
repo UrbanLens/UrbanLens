@@ -5,13 +5,8 @@
 {% block title %}Journal{% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_stories" title="Journal" subtitle="Your visit notes, ratings, and comments, all in one place." %}
 <div id="memories-journal-page" class="memories-tab-page">
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">auto_stories</i> Journal</h1>
-            <p class="memories-subtitle">Your visit notes, ratings, and comments, all in one place.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
         {% memories_tabs "journal" %}
