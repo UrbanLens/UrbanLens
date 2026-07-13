@@ -1,12 +1,13 @@
 """Lightweight natural-language parsing for global-search queries.
 
 Turns free text like ``"photos from last summer"``, ``"pins in Cincinnati"``,
-``"pins near me"``, or ``"messages from Alice"`` into a structured
-:class:`ParsedQuery`: requested result types, an absolute date range, an
-optional place name, near-me intent, and a person name (messages only), plus
-the remaining free-text terms. Parsing is deliberately heuristic - anything it
-does not recognize stays in the free-text portion, and the engine falls back
-to a plain-text search when a structured interpretation yields nothing.
+``"pins near me"``, ``"messages from Alice"``, or ``"pin from John"`` into a
+structured :class:`ParsedQuery`: requested result types, an absolute date
+range, an optional place name, near-me intent, and a person name (messages
+and pins only, e.g. "who shared this pin with me"), plus the remaining
+free-text terms. Parsing is deliberately heuristic - anything it does not
+recognize stays in the free-text portion, and the engine falls back to a
+plain-text search when a structured interpretation yields nothing.
 """
 
 from __future__ import annotations
@@ -89,11 +90,16 @@ class ParsedQuery:
         date_phrase: The date words as typed, for echoing back in the UI.
         near_me: Whether the query asked for results near the searching user
             ("near me", "nearby", "close to me", ...).
+        near_phrase: The near-me words exactly as typed (e.g. "near me"). Kept
+            as literal text (not just a boolean) so a query with no other
+            terms still finds a result literally named "near me" - see the
+            no-free-text-terms branch of ``SearchProvider.apply_text``.
         near_lat: The searching user's latitude, filled in by the engine (which
             has access to the profile) when ``near_me`` is set.
         near_lng: The searching user's longitude, filled in the same way.
         person: A person name parsed from "from <person>" (only recognized
-            alongside the ``messages`` type, e.g. "messages from Alice").
+            alongside the ``messages`` or ``pins`` type, e.g. "messages from
+            Alice" or "pin from John" for pins John shared with the user).
     """
 
     raw: str
@@ -105,6 +111,7 @@ class ParsedQuery:
     place: str | None = None
     date_phrase: str | None = None
     near_me: bool = False
+    near_phrase: str | None = None
     near_lat: float | None = None
     near_lng: float | None = None
     person: str | None = None
@@ -259,29 +266,31 @@ _NEAR_ME_PATTERN = re.compile(r"\b(?:near|nearby|close to|around)\s+me\b")
 _NEARBY_PATTERN = re.compile(r"\bnearby\b")
 
 
-def _extract_near_me(text: str) -> tuple[str, bool]:
-    """Strip a "near me"/"nearby"/"close to me"/"around me"/"by me" phrase.
+def _extract_near_me(text: str) -> tuple[str, str | None]:
+    """Strip a "near me"/"nearby"/"close to me"/"around me" phrase.
 
     Args:
         text: Lowercased query text with dates/types already removed.
 
     Returns:
-        (remaining text, whether a near-me phrase was found).
+        (remaining text, the matched phrase verbatim, or None if not found).
+        The phrase is kept (not just a boolean) so it can still be matched as
+        literal text - see :class:`ParsedQuery.near_phrase`.
     """
     for pattern in (_NEAR_ME_PATTERN, _NEARBY_PATTERN):
         match = pattern.search(text)
         if match:
             remaining = (text[: match.start()] + " " + text[match.end() :]).strip()
-            return remaining, True
-    return text, False
+            return remaining, match.group(0)
+    return text, None
 
 
 def _extract_person(text: str) -> tuple[str, str | None]:
     """Strip a trailing "from <person>" clause from ``text``.
 
-    Only recognized when the query already named the ``messages`` type (see
-    call site), so "photos from paris" keeps "paris" as free text/place
-    instead of being misread as a person's name.
+    Only recognized when the query already named the ``messages`` or ``pins``
+    type (see call site), so "photos from paris" keeps "paris" as free
+    text/place instead of being misread as a person's name.
 
     Args:
         text: Query text with dates/types/near-me already removed.
@@ -357,9 +366,13 @@ def parse_query(raw: str) -> ParsedQuery:
             kept_tokens.append(token)
     working = " ".join(kept_tokens)
 
-    working, parsed.near_me = _extract_near_me(working)
+    working, parsed.near_phrase = _extract_near_me(working)
+    parsed.near_me = parsed.near_phrase is not None
 
-    if "messages" in parsed.types:
+    # "from <person>" only means a person for types that actually have a
+    # sender/sharer concept - messages (from/to) and pins (shared with me by).
+    # Otherwise "photos from paris" would misread "paris" as a person's name.
+    if parsed.types & {"messages", "pins"}:
         working, parsed.person = _extract_person(working)
 
     working, parsed.place = _extract_place(working)

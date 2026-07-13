@@ -21,7 +21,7 @@
     <div class="trip-map-wrap" id="trip-map-wrap">
         <div id="trip-map"></div>
         {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
-        {% map_toolbar "screenshot" panel_id="trip-map-buttons" %}
+        {% map_toolbar "screenshot" panel_id="trip-map-buttons" screenshot_trip_name=trip.name %}
         {# Shared layers panel - same component and engine as the main map. #}
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
         <div class="trip-map-overlay">

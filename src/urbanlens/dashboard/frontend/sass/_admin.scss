@@ -8,8 +8,7 @@
     grid-template-columns: minmax(280px, .9fr) 1.4fr;
     grid-template-areas:
         "grant    quotas"
-        "grants   emails"
-        "features features";
+        "grants   emails";
     align-items: start;
     gap: 1rem;
 
@@ -17,7 +16,6 @@
     .subscription-active-grants-card { grid-area: grants; }
     .subscription-quota-card { grid-area: quotas; }
     .subscription-email-limits-card { grid-area: emails; }
-    .subscription-features-card { grid-area: features; }
 
     @media (max-width: 900px) {
         grid-template-columns: 1fr;
@@ -25,8 +23,7 @@
             "grant"
             "grants"
             "quotas"
-            "emails"
-            "features";
+            "emails";
     }
 }
 
@@ -72,6 +69,13 @@
         background: var(--ul-grey-0);
         border: 1px solid var(--ul-grey-1a);
         border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
+        transition: border-color .15s, box-shadow .15s;
+
+        &:hover {
+            border-color: $color-blue-300;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
+        }
     }
 
     &__heading {
@@ -79,23 +83,11 @@
         align-items: center;
         flex-wrap: wrap;
         gap: .6rem;
-        margin-bottom: .5rem;
+        margin-bottom: .65rem;
     }
 
     &__description {
         font-size: .85rem;
-        color: var(--ul-grey-6);
-    }
-
-    &__features {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .4rem;
-    }
-
-    &__no-features {
-        font-size: .82rem;
-        font-style: italic;
         color: var(--ul-grey-6);
     }
 }
@@ -256,10 +248,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     &--features {
         align-items: flex-start;
     }
-}
-
-.subscription-list__item--features {
-    grid-template-columns: 1fr;
 }
 
 .feature-toggle-grid {

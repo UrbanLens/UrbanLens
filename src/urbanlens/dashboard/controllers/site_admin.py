@@ -26,7 +26,6 @@ from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
@@ -627,14 +626,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             valid_features = set(SiteFeature.values)
             selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
             SubscriptionRole.objects.filter(pk=role.pk).update(features=",".join(selected))
-            role.features = ",".join(selected)
             if is_htmx:
-                chips_html = render_to_string(
-                    "dashboard/partials/site_admin/_role_feature_chips.html",
-                    {"chip_id": role.slug, "feature_labels": role.feature_labels, "oob": True},
-                    request=request,
-                )
-                response = HttpResponse(chips_html, status=200)
+                response = HttpResponse(status=204)
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_features", "role": role.slug}})
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "features saved"}))
@@ -646,14 +639,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             valid_features = set(SiteFeature.values)
             selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
             SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=",".join(selected))
-            settings_obj.default_features = ",".join(selected)
             if is_htmx:
-                chips_html = render_to_string(
-                    "dashboard/partials/site_admin/_role_feature_chips.html",
-                    {"chip_id": "__default__", "feature_labels": settings_obj.feature_labels, "oob": True},
-                    request=request,
-                )
-                response = HttpResponse(chips_html, status=200)
+                response = HttpResponse(status=204)
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "default_features", "role": "__default__"}})
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "default features saved"}))

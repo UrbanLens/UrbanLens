@@ -59,17 +59,17 @@ class RoleFeaturesActionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("error", response.headers["Location"])
 
-    def test_htmx_request_returns_oob_chip_fragment(self) -> None:
+    def test_htmx_request_saves_and_returns_no_content(self) -> None:
         role = baker.make(SubscriptionRole, slug="explorer", features="")
         response = self.client.post(
             _SUBSCRIPTIONS_URL,
             {"action": "role_features", "role_slug": role.slug, "features": [SiteFeature.PLACES]},
             HTTP_HX_REQUEST="true",
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(f"role-feature-chips-{role.slug}", response.content.decode())
-        self.assertIn("Places layer", response.content.decode())
+        self.assertEqual(response.status_code, 204)
         self.assertIn("roleSettingsSaved", response.headers.get("HX-Trigger", ""))
+        role.refresh_from_db()
+        self.assertEqual(role.feature_set, {SiteFeature.PLACES})
 
     def test_non_admin_is_forbidden(self) -> None:
         role = baker.make(SubscriptionRole, slug="explorer", features="")
@@ -110,16 +110,15 @@ class DefaultFeaturesActionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.AI})
 
-    def test_htmx_request_returns_oob_chip_fragment(self) -> None:
+    def test_htmx_request_saves_and_returns_no_content(self) -> None:
         response = self.client.post(
             _SUBSCRIPTIONS_URL,
             {"action": "default_features", "features": [SiteFeature.PLACES]},
             HTTP_HX_REQUEST="true",
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("role-feature-chips-__default__", response.content.decode())
-        self.assertIn("Places layer", response.content.decode())
+        self.assertEqual(response.status_code, 204)
         self.assertIn("roleSettingsSaved", response.headers.get("HX-Trigger", ""))
+        self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.PLACES})
 
     def test_non_admin_is_forbidden(self) -> None:
         other: User = baker.make(User)

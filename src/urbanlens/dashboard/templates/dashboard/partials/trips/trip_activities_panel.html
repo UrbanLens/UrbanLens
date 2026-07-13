@@ -9,19 +9,19 @@
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
         <div class="card-header-actions">
-            <button type="button" class="btn btn--secondary view-toggle-btn" id="trip-show-completed-btn"
+            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon" id="trip-show-completed-btn"
                     data-view="completed"
                     title="Show completed activities"
                     onclick="window.tripToggleShowCompleted()">
                 <i class="material-symbols-outlined">check_circle</i>
             </button>
             <div class="view-toggle-group" role="group" aria-label="Activities view">
-                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active"
+                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active view-toggle-btn--icon"
                         data-view="list" title="List view"
                         onclick="tripSetView('list')">
                     <i class="material-symbols-outlined">view_list</i>
                 </button>
-                <button type="button" class="btn btn--secondary view-toggle-btn"
+                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon"
                         data-view="calendar" title="Calendar view"
                         onclick="tripSetView('calendar')">
                     <i class="material-symbols-outlined">date_range</i>

@@ -1,7 +1,0 @@
-<div id="role-feature-chips-{{ chip_id }}" class="subscription-types-list__features"{% if oob %} hx-swap-oob="true"{% endif %}>
-  {% for label in feature_labels %}
-  <span class="ul-chip"><i class="material-symbols-outlined">check</i> {{ label }}</span>
-  {% empty %}
-  <span class="subscription-types-list__no-features">No features included.</span>
-  {% endfor %}
-</div>

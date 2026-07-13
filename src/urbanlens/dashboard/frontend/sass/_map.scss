@@ -4534,4 +4534,11 @@ div.container .addr-search-bar {
         background: transparent;
         border: 0 none;
     }
+
+    .addr-search-bar {
+        @include input-selectors {
+            background-color: transparent;
+            border-color: transparent;
+        }
+    }
 }

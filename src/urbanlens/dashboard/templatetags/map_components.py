@@ -21,6 +21,7 @@ added with `register_map_layer`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from typing import Any
 
 from django import template
@@ -421,6 +422,7 @@ def map_toolbar(
     map_var: str = "window.map",
     screenshot_context: str = "null",
     screenshot_onclick: str = "",
+    screenshot_trip_name: str = "",
 ) -> dict[str, Any]:
     """Render the shared top-right map toolbar (tools only).
 
@@ -442,11 +444,18 @@ def map_toolbar(
             button, for pages that need bespoke logic (e.g. resolving
             context from a JS config object) instead of the generic
             ``_openMapToolbarScreenshot(map_var, context)`` call.
+        screenshot_trip_name: When set, overrides ``screenshot_context`` with
+            ``{tripName: ...}`` (JSON-encoded, so it round-trips safely
+            through the auto-escaped HTML attribute) so the composer can
+            suggest a title based on the trip instead of reverse-geocoding
+            the map view.
 
     Returns:
         Context for ``partials/map/_map_toolbar.html``.
     """
     keys = [k.strip() for k in tools.split(",") if k.strip()]
+    if screenshot_trip_name:
+        screenshot_context = json.dumps({"tripName": screenshot_trip_name})
     buttons: list[dict[str, Any]] = []
     for key in keys:
         spec = MAP_TOOL_REGISTRY.get(key)

@@ -18,7 +18,8 @@ import math
 from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import BooleanField, Case, Q, Value, When
+from django.db.models import BooleanField, Case, Exists, F, OuterRef, Q, Value, When
+from django.db.models.functions import Concat
 from django.urls import reverse
 
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
@@ -141,26 +142,44 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
     )
 
 
-def person_filter(profile: Profile, person: str) -> Q:
-    """Build a predicate matching direct messages to/from a named person.
+def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[str, Concat | Exists], Q]:
+    """Build the annotation and predicate to match a person by name.
 
-    The counterparty is whichever side of ``sender``/``recipient`` isn't
-    ``profile``, so this must be combined with a queryset already scoped to
-    conversations ``profile`` participates in.
+    At a minimum, matches on username, first name, last name, full name (the
+    concatenation of first and last - not derivable from a single field
+    lookup, hence the annotation), and any private nickname ``viewer`` has
+    assigned that profile. Used for any "from <person>" clause (DM
+    counterparty, pin-share sender, ...).
 
     Args:
-        profile: The searching user's profile ("me" in the conversation).
-        person: The name fragment parsed from "messages from <person>".
+        other_path: ORM path prefix to the Profile being matched (e.g.
+            ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
+        person: The name fragment parsed from a "from <person>" clause.
+        viewer: The searching profile - only nicknames *they* privately
+            assigned count, never one assigned by/to someone else.
 
     Returns:
-        Q matching messages where the other participant's username/first/last
-        name contains ``person``.
+        (annotation dict to merge into ``queryset.annotate(**...)``, Q to
+        filter with) - both keyed/scoped to ``other_path`` so multiple calls
+        for different paths can be combined without colliding.
     """
+    from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 
-    def _name_matches(other_path: str) -> Q:
-        return Q(**{f"{other_path}__user__username__icontains": person}) | Q(**{f"{other_path}__user__first_name__icontains": person}) | Q(**{f"{other_path}__user__last_name__icontains": person})
-
-    return (Q(sender=profile) & _name_matches("recipient")) | (Q(recipient=profile) & _name_matches("sender"))
+    key = other_path.replace("__", "_")
+    full_name_field = f"_person_match_full_name_{key}"
+    nickname_field = f"_person_match_nickname_{key}"
+    annotation: dict[str, Concat | Exists] = {
+        full_name_field: Concat(F(f"{other_path}__user__first_name"), Value(" "), F(f"{other_path}__user__last_name")),
+        nickname_field: Exists(ProfileNickname.objects.filter(author=viewer, subject=OuterRef(other_path), nickname__icontains=person)),
+    }
+    query = (
+        Q(**{f"{other_path}__user__username__icontains": person})
+        | Q(**{f"{other_path}__user__first_name__icontains": person})
+        | Q(**{f"{other_path}__user__last_name__icontains": person})
+        | Q(**{f"{full_name_field}__icontains": person})
+        | Q(**{nickname_field: True})
+    )
+    return annotation, query
 
 
 class SearchProvider(ABC):
@@ -195,16 +214,20 @@ class SearchProvider(ABC):
 
         With no free-text terms (a purely structured query like "photos from
         last summer") the queryset is left unfiltered, ordered newest-first by
-        ``created`` - except that a "near me" query with nothing else to go on
-        *does* hard-filter to the near-me box, since otherwise it would do
-        nothing.
+        ``created`` - except that a "near me" query with nothing else to go
+        on filters to rows that are *either* in the near-me box *or* whose
+        text literally contains the near-me phrase (e.g. "Belnear Medical
+        Center" matches "near me" as a literal substring), since otherwise a
+        result literally named after the phrase could be silently dropped.
 
         With free-text terms present alongside "near me" (e.g. "church near
         me"), distance is deliberately *not* a filter: a pin literally named
         "Church Near Me" must still be found even if it is not actually
         nearby. Instead, near-me hits are annotated and boosted to the top via
         :meth:`score_of`, so proximity affects ranking rather than silently
-        dropping results.
+        dropping results. The near-me phrase itself is not folded into this
+        branch's matching - once there's a real term, only that term (and
+        proximity, for ranking) governs inclusion.
 
         Args:
             queryset: The access-scoped queryset.
@@ -218,14 +241,16 @@ class SearchProvider(ABC):
             applicable, ordered most relevant first.
         """
         has_near = location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None
+        geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
 
         if not parsed.terms:
-            if has_near and location_path is not None:
-                queryset = queryset.filter(distance_filter(location_path, parsed))
+            if has_near:
+                phrase_q = term_filter([parsed.near_phrase], fields) if parsed.near_phrase else Q()
+                queryset = queryset.filter(geo_q | phrase_q)
             return queryset.order_by("-created")
 
-        if has_near and location_path is not None:
-            queryset = queryset.annotate(near_hit=Case(When(distance_filter(location_path, parsed), then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
+        if has_near:
+            queryset = queryset.annotate(near_hit=Case(When(geo_q, then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
 
         text_q = term_filter(parsed.terms, fields)
         order = (["-near_hit"] if has_near else []) + ["-created"]
@@ -261,10 +286,19 @@ class PinSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.pin import Pin
+        from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 
         queryset = Pin.objects.filter(profile=profile).select_related("location__wiki", "cover_photo")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
+        if parsed.person:
+            # Matched via an Exists subquery on PinShare (keyed by location,
+            # not Pin.source_share) so this also finds shares the recipient
+            # already had pinned - accepting those never sets source_share,
+            # since no new Pin was created (see PinShare.resulting_pin).
+            sharer_ann, sharer_q = person_match("from_profile", parsed.person, profile)
+            shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, pin__location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
+            queryset = queryset.filter(Exists(shared_with_me))
         queryset = queryset.filter(date_range_filter("created", parsed))
         queryset = self.apply_text(
             queryset,
@@ -517,7 +551,9 @@ class DirectMessageSearchProvider(SearchProvider):
             .filter(date_range_filter("created", parsed))
         )
         if parsed.person:
-            queryset = queryset.filter(person_filter(profile, parsed.person))
+            recipient_ann, recipient_q = person_match("recipient", parsed.person, profile)
+            sender_ann, sender_q = person_match("sender", parsed.person, profile)
+            queryset = queryset.annotate(**recipient_ann, **sender_ann).filter((Q(sender=profile) & recipient_q) | (Q(recipient=profile) & sender_q))
         queryset = self.apply_text(queryset, parsed, ["body"])
 
         results = []

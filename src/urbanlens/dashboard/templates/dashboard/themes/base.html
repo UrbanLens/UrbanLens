@@ -800,8 +800,52 @@
         // the main map / pin detail / wiki pages): Save persists a brand-new,
         // standalone MarkupMap directly instead of writing to a hidden form field.
         var _standaloneMode = false;
-        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | null
+        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | { tripName } | null
         var _standaloneOnSaved = null;    // optional callback(uuid)
+        var _titleSuggestToken = 0;       // invalidates stale reverse-geocode responses on dialog reopen/move
+
+        // Best-effort place name for a lat/lng, sized to the given Leaflet zoom
+        // level (street when zoomed way in, country/state when zoomed way out).
+        // Nominatim's reverse endpoint is free/unauthenticated - same direct-fetch
+        // pattern the address search bar already uses (location-search-engine.ts).
+        function _reverseGeocodeTitle(lat, lng, zoom) {
+            var nomZoom = Math.max(3, Math.min(18, Math.round(zoom || 12)));
+            var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng +
+                '&format=json&zoom=' + nomZoom + '&addressdetails=1';
+            return fetch(url, { headers: { Accept: 'application/json', 'Accept-Language': 'en' } })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    var addr = (data && data.address) || {};
+                    var city = addr.city || addr.town || addr.village || addr.municipality || addr.county || '';
+                    if (zoom >= 16) return addr.road || addr.pedestrian || addr.neighbourhood || addr.suburb || city || addr.state || addr.country || '';
+                    if (zoom <= 5) return addr.country || addr.state || city || '';
+                    return city || addr.state || addr.country || '';
+                })
+                .catch(function () { return ''; });
+        }
+
+        // Prefill the (standalone-only) title field with a best-effort suggestion
+        // so users aren't left staring at a blank input: the host trip's name when
+        // launched from a trip map, otherwise a reverse-geocoded place name sized
+        // to the current zoom. This is only ever a suggestion - the user can edit
+        // or clear it, and the backend still defaults an empty title on its own,
+        // so a slow/failed lookup just leaves the field blank as before.
+        function _suggestTitle() {
+            if (!_standaloneMode) return;
+            var token = ++_titleSuggestToken;
+            if (_standaloneContext && _standaloneContext.tripName) {
+                _titleInput.value = _standaloneContext.tripName;
+                return;
+            }
+            if (!_composerMap) return;
+            var center = _composerMap.getCenter();
+            var zoom = _composerMap.getZoom();
+            _reverseGeocodeTitle(center.lat, center.lng, zoom).then(function (name) {
+                if (token !== _titleSuggestToken) return;  // dialog reopened/moved on
+                if (_titleInput.value.trim()) return;       // user already typed something
+                if (name) _titleInput.value = name;
+            });
+        }
 
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
@@ -955,6 +999,7 @@
             // and re-request any tiles needed for the current view.
             _composerMap.invalidateSize();
 
+            _suggestTitle();
             _redrawMarkup();
             if (_composerSession) _composerSession.deactivate();
         };

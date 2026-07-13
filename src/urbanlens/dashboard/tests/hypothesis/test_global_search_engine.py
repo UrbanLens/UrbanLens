@@ -147,7 +147,7 @@ class PinSearchTests(TestCase):
         baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="old factory Near Mellissa")
         # Contains "Messages"
         far_location2 = baker.make("dashboard.Location", latitude="53.50", longitude="-0.12")
-        baker.make("dashboard.Pin", profile=self.profile, location=far_location2, name="messages from Sarah")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location2, name="Shared in messages from Sarah")
         # Contains nothing relevant
         far_location3 = baker.make("dashboard.Location", latitude="54.50", longitude="-0.13")
         baker.make("dashboard.Pin", profile=self.profile, location=far_location3, name="church far away")
@@ -157,17 +157,17 @@ class PinSearchTests(TestCase):
         
         # term, (expected titles), (unexpected titles)
         terms = [
-            ("factory near me", 
-                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"), 
-                ("Another pin I saw", "Belnear Medical Center", "church far away", "messages from Sarah")), 
-            ("old factory", 
-                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"), 
-                ("Another pin I saw", "Belnear Medical Center", "church far away", "messages from Sarah")), 
+            ("factory near me",
+                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"),
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah")),
+            ("old factory",
+                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"),
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah")),
             ("pin near me",
-                ("Another pin I saw", "Belnear Medical Center", "old factory Near Mellissa"), 
-                ("Old factory in PA", "old factory that's Near Me", "church far away", "messages from Sarah")),
+                ("Another pin I saw", "Belnear Medical Center", "old factory Near Mellissa", "Old factory in PA", "old factory that's Near Me"),
+                ("church far away", "Shared in messages from Sarah")),
             ("messages from Sarah",
-                ("messages from Sarah"), 
+                ("Shared in messages from Sarah",),
                 ("Old factory in PA", "old factory that's Near Me", "church far away", "Belnear Medical Center", "old factory Near Mellissa"))
         ]
         for term, expected_titles, unexpected_titles in terms:
@@ -212,6 +212,89 @@ class PhotoSearchTests(TestCase):
         self.assertEqual(self._photo_titles(response), [])
 
 
+class PinShareSearchTests(TestCase):
+    """'pin from <person>': pins shared with the searching profile."""
+
+    def setUp(self):
+        from urbanlens.dashboard.models.pin_share import PinShareStatus
+
+        self.status = PinShareStatus
+        self.viewer = baker.make("auth.User", username="viewer").profile
+        self.sharer = baker.make("auth.User", username="johnsmith", first_name="John", last_name="Smith").profile
+        self.stranger = baker.make("auth.User", username="stranger").profile
+
+    def _pin_titles(self, response):
+        for group in response.groups:
+            if group.meta.slug == "pins":
+                return [result.title for result in group.results]
+        return []
+
+    def test_finds_pin_materialized_from_an_accepted_share(self):
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Warehouse")
+        share = baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, source_share=share, name="Cool Warehouse")
+        response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
+        self.assertIn("Cool Warehouse", self._pin_titles(response))
+
+    def test_finds_pin_from_dedup_case_with_no_source_share_link(self):
+        # Accepting a share for a place the recipient already had pinned never
+        # sets source_share (see PinShare.resulting_pin) - matching must still
+        # find it by location, not just via the source_share/inferred FKs.
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Copy")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="My Old Factory")
+        response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
+        self.assertIn("My Old Factory", self._pin_titles(response))
+
+    def test_matches_sharer_by_first_name(self):
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
+        response = GlobalSearchEngine().search(self.viewer, "pin from John")
+        self.assertIn("Given Warehouse", self._pin_titles(response))
+
+    def test_matches_sharer_by_full_name(self):
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
+        response = GlobalSearchEngine().search(self.viewer, "pin from John Smith")
+        self.assertIn("Given Warehouse", self._pin_titles(response))
+
+    def test_matches_sharer_by_viewers_own_nickname(self):
+        baker.make("dashboard.ProfileNickname", author=self.viewer, subject=self.sharer, nickname="Johnny")
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
+        response = GlobalSearchEngine().search(self.viewer, "pin from Johnny")
+        self.assertIn("Given Warehouse", self._pin_titles(response))
+
+    def test_does_not_match_unshared_own_pin(self):
+        baker.make("dashboard.Pin", profile=self.viewer, name="My Own Discovery")
+        response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
+        self.assertNotIn("My Own Discovery", self._pin_titles(response))
+
+    def test_pending_share_does_not_count(self):
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.PENDING)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Not Yet Accepted")
+        response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
+        self.assertNotIn("Not Yet Accepted", self._pin_titles(response))
+
+    def test_does_not_match_unrelated_sharer(self):
+        location = baker.make("dashboard.Location")
+        sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
+        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
+        response = GlobalSearchEngine().search(self.viewer, "pin from stranger")
+        self.assertNotIn("Given Warehouse", self._pin_titles(response))
+
+
 class DirectMessageSearchTests(TestCase):
     """Messages: participant scoping and encrypted bodies staying unsearchable."""
 
@@ -252,6 +335,31 @@ class DirectMessageSearchTests(TestCase):
         response = GlobalSearchEngine().search(self.bob, f"messages from {self.alice.username}")
         results = self._message_results(response)
         self.assertTrue(all(self.alice.username in result.title for result in results))
+
+    def test_messages_from_person_matches_first_name(self):
+        self.alice.user.first_name = "Alicia"
+        self.alice.user.save()
+        response = GlobalSearchEngine().search(self.bob, "messages from Alicia")
+        self.assertEqual(len(self._message_results(response)), 1)
+
+    def test_messages_from_person_matches_full_name(self):
+        self.alice.user.first_name = "Alice"
+        self.alice.user.last_name = "Winters"
+        self.alice.user.save()
+        response = GlobalSearchEngine().search(self.bob, "messages from Alice Winters")
+        self.assertEqual(len(self._message_results(response)), 1)
+
+    def test_messages_from_person_matches_viewers_own_nickname(self):
+        baker.make("dashboard.ProfileNickname", author=self.bob, subject=self.alice, nickname="Ally")
+        response = GlobalSearchEngine().search(self.bob, "messages from Ally")
+        self.assertEqual(len(self._message_results(response)), 1)
+
+    def test_messages_from_person_ignores_someone_elses_nickname_for_them(self):
+        # A nickname the searching profile did not assign must not match -
+        # only the viewer's own private nicknames count.
+        baker.make("dashboard.ProfileNickname", author=self.eve, subject=self.alice, nickname="Ally")
+        response = GlobalSearchEngine().search(self.bob, "messages from Ally")
+        self.assertEqual(self._message_results(response), [])
 
 
 class _ExplodingProvider(SearchProvider):

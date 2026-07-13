@@ -135,6 +135,17 @@ class ParseQueryStructureTests(TestCase):
         self.assertIsNone(parsed.person)
         self.assertIn("paris", parsed.terms)
 
+    def test_pin_from_person(self):
+        parsed = parse_query("pin from John")
+        self.assertEqual(parsed.types, {"pins"})
+        self.assertEqual(parsed.person, "john")
+        self.assertEqual(parsed.terms, [])
+
+    def test_pins_from_person_synonym(self):
+        parsed = parse_query("pins from john")
+        self.assertEqual(parsed.types, {"pins"})
+        self.assertEqual(parsed.person, "john")
+
     def test_describe_filters_mentions_near_me_and_person(self):
         self.assertIn("near you", parse_query("pins near me").describe_filters())
         self.assertIn("from Alice", parse_query("messages from alice").describe_filters())
