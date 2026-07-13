@@ -18,7 +18,7 @@ import math
 from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import Q
+from django.db.models import BooleanField, Case, Q, Value, When
 from django.urls import reverse
 
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
@@ -38,6 +38,13 @@ FUZZY_THRESHOLD = 0.25
 #: lat/lng decimals (no PostGIS point field), so this is an approximate square
 #: rather than an exact circle - adequate for "nearby" intent.
 NEAR_ME_RADIUS_KM = 50.0
+
+#: Score bonus for a "near me" hit, well above the 0-1 range of text/fuzzy
+#: scores so nearby results always sort above distant ones with the same
+#: relevance - but a strong text match is never *excluded* for being far away
+#: (a pin literally named "Church Near Me" must still be found even if it
+#: isn't actually nearby).
+NEAR_ME_SCORE_BOOST = 10.0
 
 #: Location sub-fields checked when the query names a place ("in Cincinnati").
 _PLACE_FIELDS = (
@@ -183,38 +190,67 @@ class SearchProvider(ABC):
         """
         raise NotImplementedError
 
-    def apply_text(self, queryset: QuerySet, parsed: ParsedQuery, fields: list[str]) -> QuerySet:
+    def apply_text(self, queryset: QuerySet, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None) -> QuerySet:
         """Apply term matching plus fuzzy title matching and relevance ordering.
 
         With no free-text terms (a purely structured query like "photos from
         last summer") the queryset is left unfiltered, ordered newest-first by
-        ``created``.
+        ``created`` - except that a "near me" query with nothing else to go on
+        *does* hard-filter to the near-me box, since otherwise it would do
+        nothing.
+
+        With free-text terms present alongside "near me" (e.g. "church near
+        me"), distance is deliberately *not* a filter: a pin literally named
+        "Church Near Me" must still be found even if it is not actually
+        nearby. Instead, near-me hits are annotated and boosted to the top via
+        :meth:`score_of`, so proximity affects ranking rather than silently
+        dropping results.
 
         Args:
             queryset: The access-scoped queryset.
             parsed: The structured query.
             fields: ORM field paths for exact (icontains) term matching.
+            location_path: ORM path to this row's Location relation, enabling
+                near-me handling; omit for models with no location.
 
         Returns:
-            Filtered queryset annotated with ``search_sim`` when fuzzy
-            matching applies, ordered most relevant first.
+            Filtered queryset annotated with ``search_sim``/``near_hit`` where
+            applicable, ordered most relevant first.
         """
+        has_near = location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None
+
         if not parsed.terms:
+            if has_near and location_path is not None:
+                queryset = queryset.filter(distance_filter(location_path, parsed))
             return queryset.order_by("-created")
+
+        if has_near and location_path is not None:
+            queryset = queryset.annotate(near_hit=Case(When(distance_filter(location_path, parsed), then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
+
         text_q = term_filter(parsed.terms, fields)
+        order = (["-near_hit"] if has_near else []) + ["-created"]
         if self.fuzzy_field:
             queryset = queryset.annotate(search_sim=TrigramSimilarity(self.fuzzy_field, parsed.text))
-            return queryset.filter(text_q | Q(search_sim__gt=FUZZY_THRESHOLD)).order_by("-search_sim", "-created")
-        return queryset.filter(text_q).order_by("-created")
+            order = (["-near_hit"] if has_near else []) + ["-search_sim", "-created"]
+            return queryset.filter(text_q | Q(search_sim__gt=FUZZY_THRESHOLD)).order_by(*order)
+        return queryset.filter(text_q).order_by(*order)
 
     @staticmethod
     def score_of(obj: object) -> float:
-        """Relevance score for an ORM row (its trigram annotation when present)."""
+        """Relevance score for an ORM row: fuzzy similarity plus a near-me bonus.
+
+        The near-me bonus dominates the 0-1 fuzzy range so a proximity match
+        always outranks a distant one at equal text relevance, without ever
+        excluding the distant one outright.
+        """
         value = getattr(obj, "search_sim", None)
         try:
-            return float(value) if value is not None else 0.5
+            score = float(value) if value is not None else 0.5
         except (TypeError, ValueError):
-            return 0.5
+            score = 0.5
+        if getattr(obj, "near_hit", False):
+            score += NEAR_ME_SCORE_BOOST
+        return score
 
 
 class PinSearchProvider(SearchProvider):
@@ -229,7 +265,6 @@ class PinSearchProvider(SearchProvider):
         queryset = Pin.objects.filter(profile=profile).select_related("location__wiki", "cover_photo")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
-        queryset = queryset.filter(distance_filter("location", parsed))
         queryset = queryset.filter(date_range_filter("created", parsed))
         queryset = self.apply_text(
             queryset,
@@ -244,6 +279,7 @@ class PinSearchProvider(SearchProvider):
                 "location__wiki__name",
                 "location__wiki__aliases__name",
             ],
+            location_path="location",
         ).distinct()
 
         results = []
@@ -292,7 +328,6 @@ class PhotoSearchProvider(SearchProvider):
         )
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
-        queryset = queryset.filter(distance_filter("location", parsed))
         if parsed.date_start and parsed.date_end:
             # taken_at (EXIF capture time) when known, else upload time.
             queryset = queryset.filter(
@@ -310,6 +345,7 @@ class PhotoSearchProvider(SearchProvider):
                 "location__wiki__name",
                 "location__locality",
             ],
+            location_path="location",
         ).distinct()
 
         results = []
@@ -356,9 +392,8 @@ class WikiSearchProvider(SearchProvider):
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
-        queryset = queryset.filter(distance_filter("location", parsed))
         queryset = queryset.filter(date_range_filter("updated", parsed))
-        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"]).distinct()
+        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location").distinct()
 
         results = []
         for wiki in queryset[:limit]:
@@ -433,12 +468,12 @@ class VisitSearchProvider(SearchProvider):
         queryset = PinVisit.objects.filter(pin__profile=profile).select_related("pin__location")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place))
-        queryset = queryset.filter(distance_filter("pin__location", parsed))
         queryset = queryset.filter(date_range_filter("visited_at", parsed))
         queryset = self.apply_text(
             queryset,
             parsed,
             ["notes", "pin__name", "pin__location__official_name", "pin__location__wiki__name"],
+            location_path="pin__location",
         ).distinct()
 
         results = []

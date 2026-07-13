@@ -103,6 +103,61 @@ class PinSearchTests(TestCase):
         response = GlobalSearchEngine().search(stranger, "pins near me")
         self.assertEqual(response.errors, [])
 
+    def test_near_me_with_terms_does_not_drop_distant_text_match(self):
+        # A pin literally named "Church Near Me" must be found even though
+        # it isn't actually close to the profile - once there's a term to
+        # match on its own, distance is a ranking signal, not a filter.
+        self.profile.map_custom_latitude = "39.10"
+        self.profile.map_custom_longitude = "-84.51"
+        self.profile.save()
+        far_location = baker.make("dashboard.Location", latitude="51.50", longitude="-0.12")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="Church Near Me")
+        response = GlobalSearchEngine().search(self.profile, "church near me")
+        self.assertIn("Church Near Me", self._titles(response))
+
+    def test_near_me_with_terms_ranks_nearby_match_first(self):
+        self.profile.map_custom_latitude = "39.10"
+        self.profile.map_custom_longitude = "-84.51"
+        self.profile.save()
+        nearby_location = baker.make("dashboard.Location", latitude="39.11", longitude="-84.50")
+        baker.make("dashboard.Pin", profile=self.profile, location=nearby_location, name="Old Church")
+        far_location = baker.make("dashboard.Location", latitude="51.50", longitude="-0.12")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="Church Near Me")
+        response = GlobalSearchEngine().search(self.profile, "church near me")
+        titles = self._titles(response)
+        self.assertIn("Old Church", titles)
+        self.assertIn("Church Near Me", titles)
+        self.assertLess(titles.index("Old Church"), titles.index("Church Near Me"))
+        
+    def test_multiple_suggestions_all_returned(self):
+        self.profile.map_custom_latitude = "39.10"
+        self.profile.map_custom_longitude = "-84.51"
+        self.profile.save()
+        nearby_location = baker.make("dashboard.Location", latitude="39.11", longitude="-84.50")
+        baker.make("dashboard.Pin", profile=self.profile, location=nearby_location, name="Old factory in PA")
+        far_location = baker.make("dashboard.Location", latitude="51.50", longitude="-0.11")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="old factory that's Near Me")
+        far_location2 = baker.make("dashboard.Location", latitude="52.50", longitude="-0.12")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location2, name="messages from Sarah")
+        far_location3 = baker.make("dashboard.Location", latitude="53.50", longitude="-0.12")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location3, name="church far away")
+        
+        terms = ["factory near me", "old factory"]
+        for term in terms:
+            response = GlobalSearchEngine().search(self.profile, term)
+            titles = self._titles(response)
+            self.assertIn("Old factory in PA", titles)
+            self.assertIn("old factory that's Near Me", titles)
+            self.assertNotIn("messages from Sarah", titles)
+            self.assertNotIn("church far away", titles)
+            
+        response = GlobalSearchEngine().search(self.profile, "messages from Sarah")
+        titles = self._titles(response)
+        self.assertIn("messages from Sarah", titles)
+        self.assertNotIn("old factory in PA", titles)
+        self.assertNotIn("old factory that's Near Me", titles)
+        self.assertNotIn("church far away", titles)
+
 
 class PhotoSearchTests(TestCase):
     """Photos: caption/keyword matching and uploader scoping."""

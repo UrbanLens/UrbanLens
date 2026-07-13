@@ -11,9 +11,11 @@ logger = logging.getLogger(__name__)
 class PinSerializer(serializers.ModelSerializer):
     """Serializer for Pin - exposes user-specific fields only.
 
-    Canonical coordinates are read from the related Location (``pin.location``).
-    ``latitude`` and ``longitude`` are accepted on write for API compatibility
-    (e.g. duplicate-pin checks) but are not stored on Pin itself.
+    Canonical coordinates are read from the related Location (``pin.location``);
+    ``latitude``/``longitude`` are read-only here. A coordinate move (map pin
+    dragging) is handled separately by ``PinViewSet.partial_update``, which
+    repoints ``pin.location`` directly rather than writing through this
+    serializer - Location has no per-pin writable representation here.
 
     Address and place name are not included here; nest a LocationSerializer or add
     read-only ``source="location.*"`` fields if API consumers need place-level data.
@@ -40,8 +42,8 @@ class PinSerializer(serializers.ModelSerializer):
         decimal_places=6,
         read_only=True,
     )
-    # Owner is always set server-side (see PinViewSet.perform_create/perform_update) -
-    # never accepted from the client, or a PATCH could reassign a pin to an
+    # Owner is always set server-side (see PinViewSet.perform_update) - never
+    # accepted from the client, or a PATCH could reassign a pin to an
     # arbitrary profile id.
     profile = serializers.PrimaryKeyRelatedField(read_only=True)
     categories = BadgeSerializer(many=True, read_only=True)
