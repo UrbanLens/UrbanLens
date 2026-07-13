@@ -380,13 +380,13 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
         copy_list_pins_to_trip(pin_list, trip, profile)
 
-        return JsonResponse({"ok": True, "redirect": reverse("trips.detail", kwargs={"trip_uuid": trip.uuid})})
+        return JsonResponse({"ok": True, "redirect": reverse("trips.detail", kwargs={"trip_slug": trip.slug})})
 
 
 class PinListAddToTripView(LoginRequiredMixin, View):
     """Add a list's pins onto an existing trip (one-time copy, appended).
 
-    POST /lists/<uuid>/add-to-trip/  body: ``{"trip_uuid": ...}``
+    POST /lists/<uuid>/add-to-trip/  body: ``{"trip_slug": ...}``
     """
 
     def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
@@ -396,16 +396,16 @@ class PinListAddToTripView(LoginRequiredMixin, View):
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
         body = _parse_body(request)
 
-        trip_uuid = body.get("trip_uuid")
-        if not trip_uuid:
+        trip_slug = body.get("trip_slug")
+        if not trip_slug:
             return HttpResponse("A trip is required.", status=400)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
 
         count = copy_list_pins_to_trip(pin_list, trip, profile)
-        return JsonResponse({"ok": True, "added": count, "redirect": reverse("trips.detail", kwargs={"trip_uuid": trip.uuid})})
+        return JsonResponse({"ok": True, "added": count, "redirect": reverse("trips.detail", kwargs={"trip_slug": trip.slug})})
 
 
 class PinListMarkupMapView(LoginRequiredMixin, View):

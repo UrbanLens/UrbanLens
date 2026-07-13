@@ -277,13 +277,13 @@ class CommentReactionView(LoginRequiredMixin, View):
 
 
 class TripCommentReactionView(LoginRequiredMixin, View):
-    """POST /trips/<uuid>/comments/<int>/react/  - toggle reaction on a TripComment."""
+    """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
-    def post(self, request, trip_uuid, comment_id):
+    def post(self, request, trip_slug, comment_id):
         from urbanlens.dashboard.models.trips.model import Trip, TripComment
 
         profile = _profile(request)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
@@ -324,7 +324,7 @@ def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpRespons
             "reactions": reactions,
             "profile": profile,
             "react_url_name": "trips.comment.react",
-            "trip_uuid": comment.trip.uuid,
+            "trip_slug": comment.trip.slug,
             "allowed_emojis": _ALLOWED_EMOJIS,
         },
     )
@@ -375,7 +375,7 @@ def _comment_url(comment) -> str:
     anchor = f"#comment-{comment.id}"
     try:
         if hasattr(comment, "trip_id") and comment.trip_id:
-            return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
+            return reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}) + anchor
         if hasattr(comment, "pin_id") and comment.pin_id:
             return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
         if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:

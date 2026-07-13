@@ -8,7 +8,7 @@ Context:
 {% endcomment %}
 {% load dashboard_tags %}
 <li class="trip-mini-row">
-    <a href="{% url 'trips.detail' t.uuid %}" class="trip-mini-row-link">
+    <a href="{% url 'trips.detail' t.slug %}" class="trip-mini-row-link">
         <span class="trip-mini-row-status trip-mini-row-status--{{ t.timeline_status }}" aria-hidden="true"></span>
         <span class="trip-mini-row-body">
             <span class="trip-mini-row-name">{{ t.name }}</span>

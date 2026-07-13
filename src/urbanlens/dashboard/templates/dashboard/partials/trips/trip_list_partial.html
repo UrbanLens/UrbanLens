@@ -1,10 +1,9 @@
 {% load dashboard_tags %}
 {% if trips %}
-<div class="trips-view trips-view--list" data-trips-view="list">
 <ul class="trip-card-list">
     {% for t in trips %}
     <li class="trip-card trip-card--{{ t.timeline_status }}" id="trip-card-{{ t.uuid }}">
-        <a href="{% url 'trips.detail' t.uuid %}" class="trip-card-link">
+        <a href="{% url 'trips.detail' t.slug %}" class="trip-card-link">
             <div class="trip-card-accent" aria-hidden="true"></div>
 
             <div class="trip-card-top">
@@ -95,11 +94,6 @@
     </li>
     {% endfor %}
 </ul>
-</div>
-
-<div class="trips-view trips-view--calendar" data-trips-view="calendar" hidden>
-    {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
-</div>
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">

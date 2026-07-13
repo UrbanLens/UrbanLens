@@ -13,7 +13,6 @@
                {% if row.field.field_type == 'number' %}step="any"{% endif %}
                name="value"
                value="{{ row.value.input_value|default:'' }}"
-               placeholder="{% if row.field.field_type == 'date' %}{% else %}Not set{% endif %}"
                aria-label="{{ row.field.name }}"
                hx-post="{% url url_name target_arg %}"
                hx-vals='{"field_id": "{{ row.field.id }}"}'

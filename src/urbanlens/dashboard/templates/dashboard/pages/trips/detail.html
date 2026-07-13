@@ -8,6 +8,19 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 {% endblock %}
 
+{% block hero %}
+{% url 'trips.overview' as trips_overview_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="trip-hero" body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_overview_url back_label="Plan" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/trips/_trips_subnav.html" with active="list" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="trip-detail-page page-content">
     <div id="trip-onboarding" class="page-onboarding" aria-live="polite"></div>
@@ -45,7 +58,7 @@
             </div>
             <section class="trip-detail-section trip-detail-activities">
                 <div id="trip-activities-panel"
-                     hx-get="{% url 'trips.activities' trip.uuid %}"
+                     hx-get="{% url 'trips.activities' trip.slug %}"
                      hx-trigger="load"
                      hx-swap="outerHTML">
                     <div class="trip-panel-loading">
@@ -62,7 +75,7 @@
                 <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-members-panel"
-                 hx-get="{% url 'trips.members' trip.uuid %}"
+                 hx-get="{% url 'trips.members' trip.slug %}"
                  hx-trigger="load"
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
@@ -78,7 +91,7 @@
                 <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-comments-panel"
-                 hx-get="{% url 'trips.comments' trip.uuid %}"
+                 hx-get="{% url 'trips.comments' trip.slug %}"
                  hx-trigger="load"
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
@@ -94,7 +107,7 @@
                 <i class="material-symbols-outlined">drag_indicator</i>
             </div>
             <div id="trip-weather-panel"
-                 hx-get="{% url 'trips.weather' trip.uuid %}"
+                 hx-get="{% url 'trips.weather' trip.slug %}"
                  hx-trigger="load, activityChanged from:body"
                  hx-swap="outerHTML">
                 <div class="trip-panel-loading">
@@ -111,7 +124,7 @@
 {# -- Edit trip dialog ----------------------------------------------------- #}
 <dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Trip" %}
-    <form hx-post="{% url 'trips.edit' trip.uuid %}"
+    <form hx-post="{% url 'trips.edit' trip.slug %}"
           hx-target="#trip-header"
           hx-swap="innerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
@@ -160,7 +173,7 @@
 <dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Activity" %}
     <form id="add-activity-form"
-          hx-post="{% url 'trips.activities' trip.uuid %}"
+          hx-post="{% url 'trips.activities' trip.slug %}"
           hx-target="#trip-activities-panel"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
@@ -431,7 +444,7 @@
 {# -- Add member dialog ---------------------------------------------------- #}
 <dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
-    <form hx-post="{% url 'trips.members' trip.uuid %}"
+    <form hx-post="{% url 'trips.members' trip.slug %}"
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
@@ -669,7 +682,7 @@
     }
 
     function _loadPoints() {
-        var url = '{% url "trips.map_data" trip.uuid %}';
+        var url = '{% url "trips.map_data" trip.slug %}';
         if (window._tripShowCompleted) url += '?include_past=1';
         fetch(url, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
@@ -725,7 +738,7 @@
                         (function (aId, m, savedLat, savedLng) {
                             var dragUnlocked = false;
                             var PIN_DRAG_CONFIRM_ZOOM = 14;
-                            var posUrl = '{% url "trips.activity.position" trip.uuid 0 %}'.replace('/0/', '/' + aId + '/');
+                            var posUrl = '{% url "trips.activity.position" trip.slug 0 %}'.replace('/0/', '/' + aId + '/');
 
                             m.on('dragstart', function () {
                                 if (_map.getZoom() >= PIN_DRAG_CONFIRM_ZOOM && !dragUnlocked) {
@@ -1050,7 +1063,7 @@ function _getActivityDataFromPanel() {
                 title:  li.dataset.actTitle || (li.querySelector('.trip-activity-name') ? li.querySelector('.trip-activity-name').textContent.trim() : 'Activity'),
                 index:  numEl ? numEl.textContent.trim() : null,
                 status: li.dataset.actStatus || 'proposed',
-                moveUrl: '{% url "trips.activity.move" trip.uuid 0 %}'.replace('/0/', '/' + li.dataset.actId + '/'),
+                moveUrl: '{% url "trips.activity.move" trip.slug 0 %}'.replace('/0/', '/' + li.dataset.actId + '/'),
             });
         }
     });
@@ -1391,7 +1404,7 @@ function _clearEditLocation() {
                 return;
             }
             debounce = setTimeout(function () {
-                fetch('{% url "trips.child_trip_search" trip.uuid %}?q=' + encodeURIComponent(q), {
+                fetch('{% url "trips.child_trip_search" trip.slug %}?q=' + encodeURIComponent(q), {
                     headers: {'X-Requested-With': 'XMLHttpRequest'}
                 })
                 .then(function (r) { return r.json(); })

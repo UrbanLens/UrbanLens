@@ -18,7 +18,7 @@ from django.db.models import (
     Max,
     UUIDField,
 )
-from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, SlugField, TextField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -37,12 +37,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Trip(abstract.FrontendDashboardModel):
+class Trip(abstract.PublicDashboardModel):
     """A planned trip shared among one or more users.
 
     The creator is the user who created the trip. Members includes the creator
     plus any additional users added. Only members can view and edit the trip.
+
+    URLs identify a trip by ``slug`` rather than ``uuid`` or a sequential id -
+    trips are private, and a predictable/sequential identifier (e.g.
+    "detroit-5") would hint at how many other trips exist. The slug is derived
+    from the trip name with a random (not sequential) numeric suffix on
+    collision - see ``PublicDashboardModel._generate_slug``.
     """
+
+    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
+    # natural per-user namespace - it's shared among all its members.
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True, max_length=MAX_TRIP_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_DESCRIPTION_LENGTH)])
@@ -154,7 +164,10 @@ class Trip(abstract.FrontendDashboardModel):
             return (end - start).days + 1
         return None
 
-    class Meta(abstract.DashboardModel.Meta):
+    def _slugify_base(self) -> str:
+        return self.name or str(self.uuid)
+
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [

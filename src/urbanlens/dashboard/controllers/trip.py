@@ -103,7 +103,7 @@ def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
             "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
             "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
             "status": t.timeline_status,
-            "url": reverse("trips.detail", args=[t.uuid]),
+            "url": reverse("trips.detail", args=[t.slug]),
         }
         for t in trips
     ]
@@ -212,13 +212,13 @@ class _CommentData(TypedDict):
     replies: list[_ReplyData]
 
 
-def _trip_or_403(request: HttpRequest, trip_uuid: str, profile: Profile) -> Trip | HttpResponse:
+def _trip_or_403(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
     """Return the Trip if the profile is creator or member.
 
     Renders the same styled "not found" page for both missing trips and
-    unauthorised access so users cannot enumerate private trip UUIDs.
+    unauthorised access so users cannot enumerate private trip slugs.
     """
-    trip = Trip.objects.filter(uuid=trip_uuid).first()
+    trip = Trip.objects.filter(slug=trip_slug).first()
     if trip is None:
         return render(request, "dashboard/pages/trips/not_found.html", status=404)
     if trip.creator == profile or TripMembership.objects.filter(trip=trip, profile=profile).exists():
@@ -466,7 +466,7 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
         notification_type=NotificationType.ADDED_TO_TRIP,
         title="Trip invitation",
         message=f'{inviter.username} invited you to join "{trip.name}".',
-        url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+        url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
     )
 
 
@@ -553,15 +553,42 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
     )
 
 
+def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
+    """Render the page hero as an out-of-band HTMX swap.
+
+    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``,
+    as a sibling of ``{% block subnav %}``) so it renders in the correct spot
+    above the page container, but its name/description/date-range display
+    still needs to stay in sync after an edit or an activity date change - see
+    ``TripEditView`` and ``_render_activities_panel``.
+    """
+    from django.urls import reverse
+
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/ui/_page_hero.html",
+        context={
+            "trip": trip,
+            "id": "trip-hero",
+            "oob": True,
+            "body_template": "dashboard/partials/trips/_trip_detail_hero_body.html",
+            "back_url": reverse("trips.overview"),
+            "back_label": "Plan",
+            "modifier": "top",
+        },
+    )
+
+
 def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the activities panel as the primary HTMX response.
 
-    Bundles two out-of-band refreshes so sibling panels don't go stale after an
+    Bundles out-of-band refreshes so sibling elements don't go stale after an
     activity add/edit/delete/complete:
 
-    - ``#trip-header``: an activity add/edit/delete/complete can change the
-      trip's persisted date range (see ``_expand_trip_dates``) - keep the
-      header's date display in sync instead of leaving it stale until reload.
+    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can
+      change the trip's persisted date range (see ``_expand_trip_dates``) - keep
+      the header and hero's date display in sync instead of leaving them stale
+      until reload.
     - the weather panel can't be refreshed the same cheap way (it's a live
       external API call), so it's told to re-fetch itself via HX-Trigger,
       same as its own initial ``hx-trigger="load"``.
@@ -579,7 +606,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
             "viewer_has_joined": trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED),
         },
     )
-    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>')
+    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip))
     response["HX-Trigger"] = "activityChanged"
     return response
 
@@ -634,13 +661,32 @@ class TripListView(LoginRequiredMixin, View):
             "dashboard/pages/trips/index.html",
             {
                 "trips": trips,
-                "trips_calendar_data": _trips_calendar_data(trips),
                 "profile": profile,
                 "page_name": "trips",
                 "friends": friends,
                 "calendar_account": calendar_account,
                 "sort": sort,
                 "dir": direction,
+            },
+        )
+
+
+class TripCalendarView(LoginRequiredMixin, View):
+    """Trips calendar page: a month view of all the viewer's trips.
+
+    GET /trips/calendar/  → calendar page
+    """
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        return render(
+            request,
+            "dashboard/pages/trips/calendar.html",
+            {
+                "profile": profile,
+                "page_name": "trips",
+                "trips_calendar_data": _trips_calendar_data(trips),
             },
         )
 
@@ -700,7 +746,6 @@ class TripCreateView(LoginRequiredMixin, View):
             "dashboard/partials/trips/trip_list_partial.html",
             {
                 "trips": trips,
-                "trips_calendar_data": _trips_calendar_data(trips),
                 "profile": profile,
                 "sort": sort,
                 "dir": direction,
@@ -711,14 +756,14 @@ class TripCreateView(LoginRequiredMixin, View):
 class TripDetailView(LoginRequiredMixin, View):
     """Trip detail page.
 
-    GET /trips/<uuid>/
+    GET /trips/<slug>/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         from urbanlens.dashboard.controllers.calendar_sync import calendar_context
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -744,12 +789,12 @@ class TripDetailView(LoginRequiredMixin, View):
 class TripEditView(LoginRequiredMixin, View):
     """Edit trip metadata.
 
-    POST /trips/<uuid>/edit/  → returns updated trip header partial
+    POST /trips/<slug>/edit/  → returns updated trip header partial
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -776,10 +821,10 @@ class TripEditView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.controllers.calendar_sync import calendar_context
 
-        return render(
-            request,
-            "dashboard/partials/trips/trip_header_partial.html",
-            {
+        header_html = render_to_string(
+            request=request,
+            template_name="dashboard/partials/trips/trip_header_partial.html",
+            context={
                 "trip": trip,
                 "profile": profile,
                 "viewer_is_organizer": _is_organizer(profile, trip),
@@ -788,17 +833,18 @@ class TripEditView(LoginRequiredMixin, View):
                 **calendar_context(profile, trip),
             },
         )
+        return HttpResponse(header_html + _trip_hero_oob(request, trip))
 
 
 class TripDeleteView(LoginRequiredMixin, View):
     """Delete a trip (creator only).
 
-    DELETE /trips/<uuid>/delete/
+    DELETE /trips/<slug>/delete/
     """
 
-    def delete(self, request, trip_uuid):
+    def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can delete it.", status=403)
         stash_for_undo("trip", [trip], profile)
@@ -811,20 +857,20 @@ class TripDeleteView(LoginRequiredMixin, View):
 class TripActivitiesView(LoginRequiredMixin, View):
     """Activities panel for a trip.
 
-    GET  /trips/<uuid>/activities/  → render panel
-    POST /trips/<uuid>/activities/  → add activity, re-render panel
+    GET  /trips/<slug>/activities/  → render panel
+    POST /trips/<slug>/activities/  → add activity, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_activities_panel(request, result, profile)
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -876,12 +922,12 @@ class TripActivitiesView(LoginRequiredMixin, View):
 class TripActivityEditView(LoginRequiredMixin, View):
     """Edit a trip activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/edit/  → re-render panel
+    POST /trips/<slug>/activities/<int:activity_id>/edit/  → re-render panel
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -930,12 +976,12 @@ class TripActivityEditView(LoginRequiredMixin, View):
 class TripActivityDeleteView(LoginRequiredMixin, View):
     """Delete a single activity and re-render the activities panel.
 
-    DELETE /trips/<uuid>/activities/<int:activity_id>/delete/
+    DELETE /trips/<slug>/activities/<int:activity_id>/delete/
     """
 
-    def delete(self, request, trip_uuid, activity_id):
+    def delete(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -951,12 +997,12 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
 class TripActivityCompleteView(LoginRequiredMixin, View):
     """Mark an activity as completed, snapping its date to today if it was in the future.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/complete/
+    POST /trips/<slug>/activities/<int:activity_id>/complete/
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -993,16 +1039,16 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
 class TripActivityVoteView(LoginRequiredMixin, View):
     """Cast, update, or clear a member's vote on a proposed activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/vote/
+    POST /trips/<slug>/activities/<int:activity_id>/vote/
     Form body: vote=up | vote=down | vote= (empty to clear)
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         """Handle a vote submission and re-render the activities panel.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
             activity_id: The activity ID.
 
         Returns:
@@ -1011,7 +1057,7 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.trips.model import TripActivityVote
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1111,22 +1157,22 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
 class TripCommentsView(LoginRequiredMixin, View):
     """Comments panel for a trip.
 
-    GET  /trips/<uuid>/comments/  → render panel
-    POST /trips/<uuid>/comments/  → add comment, re-render panel
+    GET  /trips/<slug>/comments/  → render panel
+    POST /trips/<slug>/comments/  → add comment, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_trip_comments(request, result, profile)
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         from urbanlens.dashboard.controllers.comments import _notify_reply
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1165,12 +1211,12 @@ class TripCommentsView(LoginRequiredMixin, View):
 class TripCommentDeleteView(LoginRequiredMixin, View):
     """Delete a comment (author or trip creator only).
 
-    DELETE /trips/<uuid>/comments/<int:comment_id>/delete/
+    DELETE /trips/<slug>/comments/<int:comment_id>/delete/
     """
 
-    def delete(self, request, trip_uuid, comment_id):
+    def delete(self, request, trip_slug, comment_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
@@ -1186,20 +1232,20 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
 class TripMembersView(LoginRequiredMixin, View):
     """Members panel for a trip.
 
-    GET  /trips/<uuid>/members/  → render panel
-    POST /trips/<uuid>/members/  → add member by username, re-render panel
+    GET  /trips/<slug>/members/  → render panel
+    POST /trips/<slug>/members/  → add member by username, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_members_panel(request, result, profile)
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1242,13 +1288,13 @@ class TripMembersView(LoginRequiredMixin, View):
 class TripMemberRemoveView(LoginRequiredMixin, View):
     """Remove a member from a trip.
 
-    DELETE /trips/<uuid>/members/<int:profile_id>/remove/
+    DELETE /trips/<slug>/members/<int:profile_id>/remove/
     Only the trip creator may remove members (members can remove themselves).
     """
 
-    def delete(self, request, trip_uuid, profile_id):
+    def delete(self, request, trip_slug, profile_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         target = get_object_or_404(Profile, pk=profile_id)
@@ -1264,12 +1310,12 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
 class TripMemberOrganizerView(LoginRequiredMixin, View):
     """Toggle organizer status for a trip member (creator only).
 
-    POST /trips/<uuid>/members/<int:profile_id>/organizer/
+    POST /trips/<slug>/members/<int:profile_id>/organizer/
     """
 
-    def post(self, request, trip_uuid, profile_id):
+    def post(self, request, trip_slug, profile_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1298,21 +1344,21 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
 class TripMapDataView(LoginRequiredMixin, View):
     """Return GeoJSON-style activity data for the trip map.
 
-    GET /trips/<uuid>/map-data/
+    GET /trips/<slug>/map-data/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return activity locations with coordinates as JSON.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             JsonResponse with a list of activity points.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1382,13 +1428,13 @@ class TripMapDataView(LoginRequiredMixin, View):
 class TripActivityStatusView(LoginRequiredMixin, View):
     """Toggle or set activity status (proposed/confirmed).
 
-    POST /trips/<uuid>/activities/<int:activity_id>/status/
+    POST /trips/<slug>/activities/<int:activity_id>/status/
     Body: {status: "proposed"|"confirmed"}
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1420,13 +1466,13 @@ class TripActivityStatusView(LoginRequiredMixin, View):
 class TripActivityMoveView(LoginRequiredMixin, View):
     """Update the date of an activity (calendar drag-and-drop).
 
-    POST /trips/<uuid>/activities/<int:activity_id>/move/
+    POST /trips/<slug>/activities/<int:activity_id>/move/
     Body: {date: "YYYY-MM-DD"}
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1464,7 +1510,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 class TripMembershipJoinView(LoginRequiredMixin, View):
     """Accept a trip invitation.
 
-    POST /trips/<uuid>/join/
+    POST /trips/<slug>/join/
 
     Unlocks contribution rights (add/edit activities, comment, vote, add
     members) for an invited member - separate from RSVP, which only says
@@ -1473,9 +1519,9 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
     contributions to lose by leaving.
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1494,13 +1540,13 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 class TripMemberRSVPView(LoginRequiredMixin, View):
     """Set RSVP status for the current user on a trip.
 
-    POST /trips/<uuid>/rsvp/
+    POST /trips/<slug>/rsvp/
     Body: {rsvp: "yes"|"no"|"maybe"|""}
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1524,16 +1570,16 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
 class TripLeaveView(LoginRequiredMixin, View):
     """Leave a trip (non-creator members only).
 
-    DELETE /trips/<uuid>/leave/
+    DELETE /trips/<slug>/leave/
 
     Also doubles as "decline invitation" for a member who was invited but
     never joined (see `TripMembershipJoinView`) - either way the membership
     row is simply removed.
     """
 
-    def delete(self, request, trip_uuid):
+    def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1553,21 +1599,21 @@ class TripLeaveView(LoginRequiredMixin, View):
 class TripSettingsView(LoginRequiredMixin, View):
     """Save trip settings (creator only).
 
-    POST /trips/<uuid>/settings/
+    POST /trips/<slug>/settings/
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         """Handle POST to update trip permission settings.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             Rendered settings partial on success, or an error HttpResponse.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1609,25 +1655,25 @@ class TripSettingsView(LoginRequiredMixin, View):
 class TripActivityPositionView(LoginRequiredMixin, View):
     """Save a map-drag position override for a trip activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/position/
+    POST /trips/<slug>/activities/<int:activity_id>/position/
     Body: {lat: float, lng: float}
     This updates lat_override/lng_override on the TripActivity only - the
     underlying Pin and Location coordinates are never modified.
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         """Handle POST to update map position override.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
             activity_id: The TripActivity primary key.
 
         Returns:
             JsonResponse confirming saved coordinates, or an error HttpResponse.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1657,15 +1703,15 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
 
     Only trips the user is a member of (excluding the current trip) are returned.
 
-    GET /trips/<uuid>/child-trip-search/?q=<query>
+    GET /trips/<slug>/child-trip-search/?q=<query>
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return JSON list of matching trips.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The parent trip UUID (to exclude it from results).
+            trip_slug: The parent trip's URL slug (to exclude it from results).
 
         Returns:
             JsonResponse with a list of matching trip objects.
@@ -1675,7 +1721,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(uuid=trip_uuid).order_by("name")[:8]
+        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).order_by("name")[:8]
         results = [
             {
                 "uuid": str(t.uuid),
@@ -1748,15 +1794,15 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
 class TripWeatherView(LoginRequiredMixin, View):
     """Render the weather forecast panel for a trip.
 
-    GET /trips/<uuid>/weather/
+    GET /trips/<slug>/weather/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return weather HTML partial for the trip.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             Rendered weather partial or an error response.
@@ -1769,7 +1815,7 @@ class TripWeatherView(LoginRequiredMixin, View):
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1800,7 +1846,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                     keys = dated + ([None] if None in day_map else [])
                     grouped = [(d, day_map[d]) for d in keys]
                 except (requests.RequestException, KeyError, TypeError):
-                    logger.warning("Weather fetch failed for trip %s", trip_uuid)
+                    logger.warning("Weather fetch failed for trip %s", trip_slug)
                     error = "Weather data could not be loaded."
 
         return render(

@@ -2416,22 +2416,6 @@
         }
       }
     });
-    let addDetailOpen = false;
-    function toggleAddDetailMenu() {
-      addDetailOpen = !addDetailOpen;
-      document.getElementById("add-detail-menu").style.display = addDetailOpen ? "" : "none";
-      document.querySelector(".add-detail-chevron")?.classList.toggle("open", addDetailOpen);
-    }
-    function closeAddDetailMenu() {
-      addDetailOpen = false;
-      document.getElementById("add-detail-menu").style.display = "none";
-      document.querySelector(".add-detail-chevron")?.classList.remove("open");
-    }
-    document.addEventListener("click", (e) => {
-      if (addDetailOpen && !document.getElementById("add-detail-wrap")?.contains(e.target)) {
-        closeAddDetailMenu();
-      }
-    });
     const MARKUP_TOOL_TITLES = {
       line: "Draw Line",
       arrow: "Draw Arrow",
@@ -2528,7 +2512,6 @@
       }
     }
     function startMarkupDraw(type) {
-      closeAddDetailMenu();
       configureMarkupPanelForTool(type);
       drawSession.startTool(type);
     }
@@ -2547,7 +2530,6 @@
       });
     }
     function startShapeDraw(type) {
-      closeAddDetailMenu();
       const tool = type === "square" ? "rect" : type;
       configureMarkupPanelForTool(tool);
       drawSession.startTool(tool);
@@ -2711,7 +2693,6 @@
       });
     });
     function startTextPlacement() {
-      closeAddDetailMenu();
       configureMarkupPanelForTool("text");
       drawSession.startTool("text");
     }
@@ -2723,7 +2704,6 @@
       startMarkupDraw,
       startShapeDraw,
       startTextPlacement,
-      toggleAddDetailMenu,
       closeMarkupPanel,
       closeOrFinishDraw,
       deleteMarkupEdit,

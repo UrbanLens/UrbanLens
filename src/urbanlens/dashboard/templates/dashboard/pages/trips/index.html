@@ -27,12 +27,6 @@
             Google Calendar
             <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
         </button>
-        {% else %}
-        <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
-           title="Connect your own Google Calendar to import events as trips and export trips as events">
-            <i class="material-symbols-outlined">calendar_month</i>
-            Connect Google Calendar
-        </a>
         {% endif %}
         <button type="button" class="btn btn--primary"
                 onclick="document.getElementById('create-trip-dialog').showModal()">
@@ -41,21 +35,8 @@
         </button>
     </div>
 
-    {# -- View toggle + sort controls ---------------------------------------- #}
+    {# -- Sort control --------------------------------------------------------- #}
     <div class="trips-toolbar">
-        <div class="view-toggle-group trips-view-toggle" role="group" aria-label="Choose how trips are displayed">
-            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active view-toggle-btn--icon" data-view="list"
-                    onclick="tripsSetView('list')" title="Show trips as a list">
-                <i class="material-symbols-outlined" aria-hidden="true">view_list</i>
-                List
-            </button>
-            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon" data-view="calendar"
-                    onclick="tripsSetView('calendar')" title="Show trips on a calendar">
-                <i class="material-symbols-outlined" aria-hidden="true">calendar_month</i>
-                Calendar
-            </button>
-        </div>
-
         <div class="trip-sort-control" id="trips-sort-control">
             <label for="trip-sort-select" class="trip-sort-label">
                 <i class="material-symbols-outlined" aria-hidden="true">sort</i>
@@ -147,27 +128,8 @@
 {% endblock %}
 
 {% block scripts %}
-{% include "dashboard/partials/trips/_mini_calendar_script.html" %}
 <script>
     (function () {
-        var VIEW_STORAGE_KEY = 'trips_list_view';
-
-        function getStoredView() {
-            return localStorage.getItem(VIEW_STORAGE_KEY) === 'calendar' ? 'calendar' : 'list';
-        }
-
-        function applyView(view) {
-            document.querySelectorAll('.trips-view').forEach(function (el) {
-                el.hidden = el.dataset.tripsView !== view;
-            });
-            document.querySelectorAll('.trips-view-toggle .view-toggle-btn').forEach(function (btn) {
-                btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
-            });
-            var sortControl = document.getElementById('trips-sort-control');
-            if (sortControl) { sortControl.hidden = (view !== 'list'); }
-            if (view === 'calendar') { window.tripsCalRender(); }
-        }
-
         // -- Trip dates: hidden until "Add dates" is clicked -------------------
         window._tripRevealDates = function (prefix) {
             var row = document.getElementById(prefix + '-dates-row');
@@ -184,15 +146,6 @@
             if (toggle) { toggle.hidden = false; }
         };
 
-        window.tripsSetView = function (view) {
-            localStorage.setItem(VIEW_STORAGE_KEY, view);
-            applyView(view);
-        };
-
-        window.tripsApplyStoredView = function () {
-            applyView(getStoredView());
-        };
-
         window.tripsApplySort = function (value) {
             var parts = value.split(':');
             var url = new URL(window.location.href);
@@ -200,11 +153,6 @@
             url.searchParams.set('dir', parts[1]);
             window.location.href = url.toString();
         };
-
-        document.addEventListener('DOMContentLoaded', window.tripsApplyStoredView);
-        document.body.addEventListener('htmx:afterSwap', function (e) {
-            if (e.target && e.target.id === 'trip-list') { window.tripsApplyStoredView(); }
-        });
     })();
 </script>
 {% endblock %}

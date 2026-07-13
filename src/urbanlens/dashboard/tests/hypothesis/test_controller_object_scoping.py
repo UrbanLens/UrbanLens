@@ -174,7 +174,7 @@ class TripCommentReactionMembershipTests(TestCase):
 
     def _react(self):
         return self.client.post(
-            reverse("trips.comment.react", args=[self.trip.uuid, self.comment.id]),
+            reverse("trips.comment.react", args=[self.trip.slug, self.comment.id]),
             data={"emoji": "👍"},
         )
 

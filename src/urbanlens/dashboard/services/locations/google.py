@@ -9,7 +9,7 @@ from typing import Protocol
 
 import requests
 
-from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.geocoding import LOCALITY_PLACE_TYPES, GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
@@ -44,6 +44,12 @@ class GooglePlacesNameResolver:
             logger.debug("Google Places name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None
         for result in results:
+            types = set(result.get("types") or [])
+            if types and not (types - LOCALITY_PLACE_TYPES):
+                # Every type on this result is an administrative/regional one
+                # (e.g. a bare "locality" hit for a rural pin with no closer
+                # POI) - skip it rather than naming the pin after its city.
+                continue
             name = (result.get("name") or "").strip()
             if name:
                 return name

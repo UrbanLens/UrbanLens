@@ -456,7 +456,7 @@
                 {% for comment in profile_recent_comments %}
                 {% if comment.pin %}<a class="profile-mini-card" href="{% url 'pin.details' comment.pin.slug %}#comments">
                 {% elif comment.wiki %}<a class="profile-mini-card" href="{% url 'location.wiki' comment.wiki.location.slug %}#comments">
-                {% elif comment.trip %}<a class="profile-mini-card" href="{% url 'trips.detail' comment.trip.uuid %}#trip-comments">
+                {% elif comment.trip %}<a class="profile-mini-card" href="{% url 'trips.detail' comment.trip.slug %}#trip-comments">
                 {% else %}<article class="profile-mini-card">{% endif %}
                     <i class="material-symbols-outlined">chat_bubble</i>
                     <strong>{% if comment.pin %}{{ comment.pin.display_label|default:comment.pin.name }}{% elif comment.wiki %}{{ comment.wiki.name }}{% elif comment.trip %}{{ comment.trip.name }}{% else %}Comment{% endif %}</strong>
@@ -503,7 +503,7 @@
             </div>
             <div class="profile-card-strip">
                 {% for trip in profile_recent_trips %}
-                <a class="profile-mini-card" href="{% url 'trips.detail' trip.uuid %}">
+                <a class="profile-mini-card" href="{% url 'trips.detail' trip.slug %}">
                     <i class="material-symbols-outlined">map</i>
                     <strong>{{ trip.name }}</strong>
                     <span>{{ trip.timeline_status|title }}{% if trip.effective_start_date %} · {{ trip.effective_start_date|date:"M j" }}{% endif %}</span>
@@ -521,7 +521,7 @@
             </div>
             <div class="profile-card-strip">
                 {% for trip in profile_upcoming_trips %}
-                <a class="profile-mini-card" href="{% url 'trips.detail' trip.uuid %}">
+                <a class="profile-mini-card" href="{% url 'trips.detail' trip.slug %}">
                     <i class="material-symbols-outlined">calendar_month</i>
                     <strong>{{ trip.name }}</strong>
                     <span>{% if trip.effective_start_date %}Starts {{ trip.effective_start_date|date:"M j, Y" }}{% else %}Planning{% endif %}</span>

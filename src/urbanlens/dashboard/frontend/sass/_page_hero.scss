@@ -138,16 +138,7 @@
     border-bottom: 1px solid var(--ul-grey-1a);
 
     &__inner {
-        width: 90%;
-        max-width: $breakpoint-lg;
-
-        @include up($breakpoint-sm) {
-            width: 85%;
-        }
-
-        @include up($breakpoint-md) {
-            width: 70%;
-        }
+        width: 100%;
     }
 }
 
@@ -194,7 +185,6 @@
     background: none;
     cursor: pointer;
     border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
     transition: color .15s ease, border-color .15s ease;
 
     // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.

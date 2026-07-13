@@ -68,9 +68,9 @@
                 data-act-status="{{ act.status }}"
                 data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
-                data-edit-url="{% url 'trips.activity.edit' trip.uuid act.id %}"
-                data-delete-url="{% url 'trips.activity.delete' trip.uuid act.id %}"
-                data-status-url="{% url 'trips.activity.status' trip.uuid act.id %}"
+                data-edit-url="{% url 'trips.activity.edit' trip.slug act.id %}"
+                data-delete-url="{% url 'trips.activity.delete' trip.slug act.id %}"
+                data-status-url="{% url 'trips.activity.status' trip.slug act.id %}"
                 {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
                 onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
 
@@ -138,7 +138,7 @@
                         <button type="button"
                                 class="activity-vote-btn{% if item.user_vote == 'up' %} activity-vote-btn--active activity-vote-btn--up{% endif %}"
                                 title="Vote up"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": "up"}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -148,7 +148,7 @@
                         <button type="button"
                                 class="activity-vote-btn{% if item.user_vote == 'down' %} activity-vote-btn--active activity-vote-btn--down{% endif %}"
                                 title="Vote down"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": "down"}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -159,7 +159,7 @@
                         <button type="button"
                                 class="activity-vote-btn activity-vote-btn--clear"
                                 title="Clear my vote"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": ""}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -175,13 +175,13 @@
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
+                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.slug act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
                         <i class="material-symbols-outlined">check</i>
                     </button>
                     <button type="button"
                             class="detail-pin-action-btn trip-status-btn {% if act.status == 'confirmed' %}trip-status-btn--confirmed{% else %}trip-status-btn--proposed{% endif %}"
                             title="{% if act.status == 'confirmed' %}Mark as proposed{% else %}Mark as confirmed{% endif %}"
-                            hx-post="{% url 'trips.activity.status' trip.uuid act.id %}"
+                            hx-post="{% url 'trips.activity.status' trip.slug act.id %}"
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML">
                         <i class="material-icons">{% if act.status == 'confirmed' %}check_circle{% else %}radio_button_unchecked{% endif %}</i>
@@ -194,7 +194,7 @@
                     </button>
                     <button type="button" class="detail-pin-action-btn"
                             title="Remove activity"
-                            hx-delete="{% url 'trips.activity.delete' trip.uuid act.id %}"
+                            hx-delete="{% url 'trips.activity.delete' trip.slug act.id %}"
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML"
                             hx-confirm="Remove this activity?"

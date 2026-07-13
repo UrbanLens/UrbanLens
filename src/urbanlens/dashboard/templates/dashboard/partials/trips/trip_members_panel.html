@@ -55,13 +55,13 @@
                 </button>
                 <div class="rsvp-popup" id="rsvp-popup-{{ member.id }}" hidden>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--yes"
-                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Yes</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Yes</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--no"
-                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>No</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>No</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--maybe"
-                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "maybe"}'>Maybe</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "maybe"}'>Maybe</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--clear"
-                            hx-post="{% url 'trips.rsvp' trip.uuid %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": ""}'>Clear</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": ""}'>Clear</button>
                 </div>
             </div>
             {% else %}
@@ -79,14 +79,14 @@
                 <button type="button"
                         class="detail-pin-action-btn trip-organizer-btn{% if membership.is_organizer %} trip-organizer-btn--active{% endif %}"
                         title="{% if membership.is_organizer %}Remove organizer role{% else %}Make organizer{% endif %}"
-                        hx-post="{% url 'trips.member.organizer' trip.uuid member.id %}"
+                        hx-post="{% url 'trips.member.organizer' trip.slug member.id %}"
                         hx-target="#trip-members-panel"
                         hx-swap="outerHTML">
                     <i class="material-icons">{% if membership.is_organizer %}manage_accounts{% else %}workspace_premium{% endif %}</i>
                 </button>
                 <button type="button" class="detail-pin-action-btn"
                         title="Remove member"
-                        hx-delete="{% url 'trips.member.remove' trip.uuid member.id %}"
+                        hx-delete="{% url 'trips.member.remove' trip.slug member.id %}"
                         hx-target="#trip-members-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Remove {{ member.user.username }} from this trip?"
@@ -96,7 +96,7 @@
                 {% elif membership.profile == profile and profile != trip.creator %}
                 <button type="button" class="detail-pin-action-btn"
                         title="Leave trip"
-                        hx-delete="{% url 'trips.leave' trip.uuid %}"
+                        hx-delete="{% url 'trips.leave' trip.slug %}"
                         hx-confirm="Leave this trip? You can be re-added by the creator.">
                     <i class="material-symbols-outlined">exit_to_app</i>
                 </button>

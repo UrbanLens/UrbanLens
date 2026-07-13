@@ -22,6 +22,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Google place/geocoding "types" that identify an administrative area or other
+# coarse region rather than a specific point of interest. A geocoding result
+# carrying only these types names the *surroundings* (a city, neighborhood,
+# postal code, ...), not the pinned place, so it must not be handed back as a
+# usable place name (see ``get_place_name`` below and its sibling filter on
+# ``GooglePlacesNameResolver`` in ``services.locations.google``).
+LOCALITY_PLACE_TYPES: frozenset[str] = frozenset(
+    {
+        "locality",
+        "sublocality",
+        "sublocality_level_1",
+        "sublocality_level_2",
+        "sublocality_level_3",
+        "sublocality_level_4",
+        "sublocality_level_5",
+        "neighborhood",
+        "postal_town",
+        "colloquial_area",
+        "administrative_area_level_1",
+        "administrative_area_level_2",
+        "administrative_area_level_3",
+        "administrative_area_level_4",
+        "administrative_area_level_5",
+        "administrative_area_level_6",
+        "administrative_area_level_7",
+        "country",
+        "postal_code",
+        "political",
+        "plus_code",
+    },
+)
+
 
 def parse_address_components(address_components: list[dict[str, Any]]) -> dict[str, str]:
     """Flatten a geocoding result's ``address_components`` into a type -> value map.
@@ -186,6 +218,23 @@ class GoogleGeocodingGateway(Gateway):
         return body
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
+        """Return the formatted address of the most relevant non-administrative geocoding result.
+
+        Results whose ``types`` are entirely administrative/regional (a bare
+        "locality" hit for a rural pin with no closer address, an
+        "administrative_area_level_*", a "postal_code", ...) name the
+        surrounding area rather than the pinned place, so they are skipped in
+        favor of the first result with at least one finer-grained type (e.g.
+        "street_address", "premise", "establishment").
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            The winning result's formatted address, or None when geocoding
+            failed or every result was purely administrative.
+        """
         if latitude is None or longitude is None:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
@@ -200,9 +249,13 @@ class GoogleGeocodingGateway(Gateway):
 
             results = body.get("results", [])
             place_name: str | None = None
-            if results:
-                # Typically, the first result is the most relevant
-                place_name = results[0].get("formatted_address")
+            for result in results:
+                types = set(result.get("types") or [])
+                if types and not (types - LOCALITY_PLACE_TYPES):
+                    continue
+                place_name = result.get("formatted_address")
+                if place_name:
+                    break
         except KeyError:
             logger.exception(
                 "Error getting place name for latitude: %s, longitude: %s",

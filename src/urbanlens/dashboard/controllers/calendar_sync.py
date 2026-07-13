@@ -44,6 +44,14 @@ logger = logging.getLogger(__name__)
 
 _STATE_SALT = "google-calendar-connect"
 _STATE_MAX_AGE_SECONDS = 600
+#: Named views the connect flow may return to via ``?next=`` - never redirect
+#: to an arbitrary value from user input, only one of these known routes.
+_ALLOWED_NEXT_VIEW_NAMES = {"trips.list", "settings.view"}
+
+
+def _resolve_next_view_name(name: str | None) -> str:
+    """Return `name` if it's an allowed post-connect redirect target, else the default."""
+    return name if name in _ALLOWED_NEXT_VIEW_NAMES else "trips.list"
 
 
 def _callback_uri(request: HttpRequest) -> str:
@@ -79,17 +87,18 @@ def calendar_context(profile: Profile, trip=None) -> dict:
 class GoogleCalendarConnectView(LoginRequiredMixin, View):
     """Start the OAuth consent flow for the user's own Google Calendar.
 
-    GET /trips/calendar/connect/
+    GET /trips/calendar/connect/?next=<view name>
     """
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        state = signing.dumps({"pid": profile.id}, salt=_STATE_SALT)
+        next_name = _resolve_next_view_name(request.GET.get("next"))
+        state = signing.dumps({"pid": profile.id, "next": next_name}, salt=_STATE_SALT)
         try:
             url = build_authorization_url(_callback_uri(request), state)
         except CalendarNotConfiguredError:
             messages.error(request, "Google Calendar integration is not configured on this server.")
-            return redirect("trips.list")
+            return redirect(next_name)
         return redirect(url)
 
 
@@ -102,27 +111,28 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        if request.GET.get("error"):
-            messages.error(request, "Google Calendar access was not granted.")
-            return redirect("trips.list")
-
         state = request.GET.get("state") or ""
-        code = request.GET.get("code") or ""
         try:
             payload = signing.loads(state, salt=_STATE_SALT, max_age=_STATE_MAX_AGE_SECONDS)
         except signing.BadSignature:
-            messages.error(request, "The calendar connection request was invalid or expired. Please try again.")
-            return redirect("trips.list")
+            payload = {}
+        next_name = _resolve_next_view_name(payload.get("next"))
+
+        if request.GET.get("error"):
+            messages.error(request, "Google Calendar access was not granted.")
+            return redirect(next_name)
+
+        code = request.GET.get("code") or ""
         if payload.get("pid") != profile.id or not code:
             messages.error(request, "The calendar connection request was invalid or expired. Please try again.")
-            return redirect("trips.list")
+            return redirect(next_name)
 
         try:
             tokens = exchange_code_for_tokens(code, _callback_uri(request))
         except (CalendarNotConfiguredError, GatewayRequestError):
             logger.exception("Google Calendar token exchange failed for profile %s", profile.id)
             messages.error(request, "Connecting to Google Calendar failed. Please try again.")
-            return redirect("trips.list")
+            return redirect(next_name)
 
         expires_in = int(tokens.get("expires_in") or 3600)
         account, _created = GoogleCalendarAccount.objects.update_or_create(
@@ -141,7 +151,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             account.save(update_fields=["refresh_token", "updated"])
 
         messages.success(request, "Google Calendar connected. You can now import events and export trips.")
-        return redirect("trips.list")
+        return redirect(next_name)
 
 
 class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
@@ -159,6 +169,37 @@ class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
         messages.info(request, "Google Calendar disconnected.")
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = reverse("trips.list")
+        return response
+
+
+_SETTINGS_PARTIAL = "dashboard/partials/settings/_google_calendar_account.html"
+
+
+class GoogleCalendarSettingsSectionView(LoginRequiredMixin, View):
+    """GET /settings/google-calendar/ - HTMX subsection showing the current connection state."""
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(request, _SETTINGS_PARTIAL, {"calendar_account": get_calendar_account(profile)})
+
+
+class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
+    """POST /settings/google-calendar/disconnect/ - disconnect and re-render the settings subsection.
+
+    Separate from ``GoogleCalendarDisconnectView`` because that view always
+    issues an ``HX-Redirect`` to the trips list (matching where its only other
+    caller - the calendar import dialog - lives); redirecting away would be a
+    jarring way to leave the Settings page after clicking "Disconnect" here.
+    """
+
+    def post(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        account = get_calendar_account(profile)
+        if account is not None:
+            revoke_token(account.refresh_token or account.access_token)
+            account.delete()
+        response = render(request, _SETTINGS_PARTIAL, {"calendar_account": None})
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "info", "message": "Google Calendar disconnected."}})
         return response
 
 
@@ -274,8 +315,8 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 class TripCalendarExportView(LoginRequiredMixin, View):
     """Export a trip to (or remove it from) the user's own Google Calendar.
 
-    POST   /trips/<uuid>/calendar/export/  → create/update the event
-    DELETE /trips/<uuid>/calendar/export/  → delete the event
+    POST   /trips/<slug>/calendar/export/  → create/update the event
+    DELETE /trips/<slug>/calendar/export/  → delete the event
     Both re-render the trip's calendar-button partial.
     """
 
@@ -298,9 +339,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             response["HX-Trigger"] = json.dumps({"showToast": {"level": toast[0], "message": toast[1]}})
         return response
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -309,7 +350,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."), status=200)
 
-        trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}))
+        trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_slug": trip.slug}))
         try:
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
@@ -327,9 +368,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             message = "Trip added to your Google Calendar."
         return self._render_button(request, trip, profile, toast=("success", message))
 
-    def delete(self, request, trip_uuid):
+    def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -350,14 +391,14 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 class TripCalendarAutoSyncView(LoginRequiredMixin, View):
     """Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
 
-    POST /trips/<uuid>/calendar/auto-sync/  → flip TripCalendarLink.auto_sync for the
+    POST /trips/<slug>/calendar/auto-sync/  → flip TripCalendarLink.auto_sync for the
     viewing profile's export link. Does not touch the calendar itself - it only
     changes whether *later* saves trigger a push. Re-renders the calendar button.
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result

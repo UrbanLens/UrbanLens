@@ -414,6 +414,89 @@ register_map_tool(
     )
 )
 
+# -- Markup drawing tools (pin detail, Location wiki, safety check-in maps) ----
+# Formerly a dropdown ("Add Detail") docked in .map-bottom-controls; now plain
+# icon buttons in the top-right toolbar like every other map tool. Onclick
+# handlers are the same window globals createMarkupToolbar() exposes (see
+# ts/shared/markup-toolbar.ts and _markup_panel_dialog.html).
+register_map_tool(
+    MapToolSpec(
+        key="markup_pin",
+        icon="place",
+        aria_label="Add a detail pin",
+        tooltip="Add a detail pin",
+        tooltip_pos="below",
+        button_id="markup-pin-button",
+        onclick="openAddPinDialog()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_line",
+        icon="show_chart",
+        aria_label="Draw a line",
+        tooltip="Draw a line",
+        tooltip_pos="below",
+        button_id="markup-line-button",
+        onclick="startMarkupDraw('line')",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_arrow",
+        icon="arrow_forward",
+        aria_label="Draw an arrow",
+        tooltip="Draw an arrow",
+        tooltip_pos="below",
+        button_id="markup-arrow-button",
+        onclick="startMarkupDraw('arrow')",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_text",
+        icon="title",
+        aria_label="Add a text label",
+        tooltip="Add a text label",
+        tooltip_pos="below",
+        button_id="markup-text-button",
+        onclick="startTextPlacement()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_square",
+        icon="crop_square",
+        aria_label="Draw a square",
+        tooltip="Draw a square",
+        tooltip_pos="below",
+        button_id="markup-square-button",
+        onclick="startShapeDraw('square')",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_circle",
+        icon="circle",
+        aria_label="Draw a circle",
+        tooltip="Draw a circle",
+        tooltip_pos="below",
+        button_id="markup-circle-button",
+        onclick="startShapeDraw('circle')",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="markup_polygon",
+        icon="format_shapes",
+        aria_label="Draw a polygon",
+        tooltip="Draw a polygon",
+        tooltip_pos="below",
+        button_id="markup-polygon-button",
+        onclick="startShapeDraw('polygon')",
+    )
+)
+
 
 @register.inclusion_tag("dashboard/partials/map/_map_toolbar.html")
 def map_toolbar(

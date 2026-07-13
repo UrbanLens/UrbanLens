@@ -9,7 +9,7 @@
     {% elif calendar_link %}
     <button type="button" class="btn-icon{% if calendar_link.auto_sync %} btn-icon--active{% endif %}"
             title="{% if calendar_link.auto_sync %}Auto-sync is on - future changes to this trip update the calendar event automatically. Click to turn off.{% else %}Turn on auto-sync to push future trip changes to this calendar event automatically.{% endif %}"
-            hx-post="{% url 'trips.calendar.autosync' trip.uuid %}"
+            hx-post="{% url 'trips.calendar.autosync' trip.slug %}"
             hx-vals='{"auto_sync": "{% if calendar_link.auto_sync %}0{% else %}1{% endif %}"}'
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML">
@@ -17,7 +17,7 @@
     </button>
     <button type="button" class="btn-icon"
             title="Remove this trip from your Google Calendar"
-            hx-delete="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-delete="{% url 'trips.calendar.export' trip.slug %}"
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML"
             hx-confirm="Remove this trip from your Google Calendar?">
@@ -30,7 +30,7 @@
     </label>
     <button type="button" class="btn-icon"
             title="Add this trip to your Google Calendar (creates an event for the trip and each scheduled activity)"
-            hx-post="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-post="{% url 'trips.calendar.export' trip.slug %}"
             hx-include="#calendar-autosync-{{ trip.uuid }}"
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML">

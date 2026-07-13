@@ -1,8 +1,8 @@
 {% comment %}
-Overview | Trips tab strip for the trips section.
+Overview | Trips | Calendar tab strip for the trips section.
 
 Context:
-  active - "overview" or "list" (which tab is current)
+  active - "overview", "list", or "calendar" (which tab is current)
 {% endcomment %}
 <nav class="ul-subnav-tabs" aria-label="Trips views">
     <a href="{% url 'trips.overview' %}"
@@ -16,5 +16,11 @@ Context:
        {% if active == 'list' %}aria-current="page"{% endif %}>
         <i class="material-symbols-outlined">luggage</i>
         <span>Trips</span>
+    </a>
+    <a href="{% url 'trips.calendar' %}"
+       class="ul-subnav-tab {% if active == 'calendar' %}is-active{% endif %}"
+       {% if active == 'calendar' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">calendar_month</i>
+        <span>Calendar</span>
     </a>
 </nav>

@@ -566,7 +566,7 @@ class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
         gateway = self._patch_gateway()
         gateway.create_event.return_value = {"id": "view-evt"}
 
-        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_uuid": self.trip.uuid}), {"auto_sync": "1"})
+        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -576,7 +576,7 @@ class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
         gateway = self._patch_gateway()
         gateway.create_event.return_value = {"id": "view-evt2"}
 
-        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_uuid": self.trip.uuid}), {})
+        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {})
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -584,7 +584,7 @@ class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
 
 
 class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
-    """POST /trips/<uuid>/calendar/auto-sync/ flips auto_sync on an existing export link."""
+    """POST /trips/<slug>/calendar/auto-sync/ flips auto_sync on an existing export link."""
 
     def setUp(self):
         super().setUp()
@@ -594,7 +594,7 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
         self.trip = Trip.objects.create(name="Toggle me", creator=self.profile)
 
     def test_requires_existing_export_link(self):
-        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_uuid": self.trip.uuid}), {"auto_sync": "1"})
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
         self.assertEqual(response.status_code, 400)
 
     def test_turns_auto_sync_on(self):
@@ -602,7 +602,7 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
             trip=self.trip, profile=self.profile, google_event_id="evt-toggle", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
         )
 
-        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_uuid": self.trip.uuid}), {"auto_sync": "1"})
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -613,7 +613,7 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
             trip=self.trip, profile=self.profile, google_event_id="evt-toggle2", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
         )
 
-        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_uuid": self.trip.uuid}), {})
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {})
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -626,7 +626,7 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
             trip=self.trip, profile=self.profile, google_event_id="evt-toggle3", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
         )
 
-        self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_uuid": self.trip.uuid}), {"auto_sync": "1"})
+        self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
 
         gateway.update_event.assert_not_called()
         gateway.create_event.assert_not_called()

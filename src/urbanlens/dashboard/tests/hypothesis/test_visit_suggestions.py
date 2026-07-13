@@ -530,7 +530,7 @@ class TripActivityCompletionTests(TestCase):
         self.client.force_login(self.completer.user)
 
     def _complete_url(self) -> str:
-        return reverse("trips.activity.complete", kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": self.activity.id})
+        return reverse("trips.activity.complete", kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id})
 
     def test_completer_gets_an_immediate_visit(self) -> None:
         self.client.post(self._complete_url(), data={"completed_date": "2026-06-01"})

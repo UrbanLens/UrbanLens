@@ -110,7 +110,7 @@ class TripDetailViewLastViewedTests(TestCase):
         membership = TripMembership.objects.get(trip=self.trip, profile=self.member)
         self.assertIsNone(membership.last_viewed_at)
 
-        client.get(reverse("trips.detail", kwargs={"trip_uuid": str(self.trip.uuid)}))
+        client.get(reverse("trips.detail", kwargs={"trip_slug": self.trip.slug}))
 
         membership.refresh_from_db()
         self.assertIsNotNone(membership.last_viewed_at)
@@ -119,7 +119,7 @@ class TripDetailViewLastViewedTests(TestCase):
         client = Client()
         client.force_login(self.member_user)
 
-        client.get(reverse("trips.detail", kwargs={"trip_uuid": str(self.trip.uuid)}))
+        client.get(reverse("trips.detail", kwargs={"trip_slug": self.trip.slug}))
 
         creator_membership = TripMembership.objects.get(trip=self.trip, profile=self.creator)
         self.assertIsNone(creator_membership.last_viewed_at)

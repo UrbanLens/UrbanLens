@@ -610,14 +610,13 @@ function init() {
     document.querySelectorAll(".detail-pin-list-item").forEach((li) => li.classList.remove("is-highlighted"));
   }
   function refreshPanelHeader() {
-    const panel = document.getElementById("detail-pin-list-panel");
+    const handle = document.getElementById("detail-pin-list-handle");
     const countLabel = document.getElementById("detail-pin-count-label");
     const total = detailPins.length + toolbar.getMarkupItems().length + photoPanelItems.length;
-    if (!panel)
-      return;
-    panel.style.display = total ? "" : "none";
     if (countLabel)
       countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
+    if (handle)
+      handle.style.display = total ? "" : "none";
   }
   function buildDetailList() {
     const ul = document.getElementById("detail-pin-list-ul");
@@ -694,22 +693,21 @@ function init() {
       ul.appendChild(li);
     });
   }
-  document.getElementById("detail-pin-list-toggle")?.addEventListener("click", () => {
-    const drawer = document.getElementById("detail-pin-list-drawer");
-    const chevron = document.getElementById("detail-pin-list-chevron");
-    const open = drawer.style.display !== "none";
-    if (!open) {
-      const wrapper = document.querySelector(".map-wrapper");
-      const bottomControls = document.querySelector(".map-bottom-controls");
-      const panel = document.getElementById("detail-pin-list-panel");
-      if (wrapper && bottomControls && panel) {
-        const available = wrapper.getBoundingClientRect().bottom - bottomControls.getBoundingClientRect().height - panel.getBoundingClientRect().top - 24;
-        drawer.style.maxHeight = `${Math.max(120, Math.min(320, available))}px`;
-      }
+  function toggleDetailPinListPanel() {
+    const panel = document.getElementById("detail-pin-list-panel");
+    const handle = document.getElementById("detail-pin-list-handle");
+    if (!panel)
+      return;
+    const isOpen = panel.classList.toggle("open");
+    if (handle) {
+      handle.classList.toggle("open", isOpen);
+      handle.setAttribute("aria-expanded", String(isOpen));
+      const icon = handle.querySelector(".material-symbols-outlined, .material-icons");
+      if (icon)
+        icon.textContent = isOpen ? "chevron_left" : "chevron_right";
     }
-    drawer.style.display = open ? "none" : "";
-    chevron?.classList.toggle("open", !open);
-  });
+  }
+  window._toggleDetailPinListPanel = toggleDetailPinListPanel;
   function detailPinPopupContent(entry) {
     const el = document.createElement("div");
     el.className = "pin-popup child-pin-popup";
@@ -812,7 +810,6 @@ function init() {
   window.startMarkupDraw = toolbar.startMarkupDraw;
   window.startShapeDraw = toolbar.startShapeDraw;
   window.startTextPlacement = toolbar.startTextPlacement;
-  window.toggleAddDetailMenu = toolbar.toggleAddDetailMenu;
   window.closeMarkupPanel = toolbar.closeMarkupPanel;
   window._closeMarkupDraw = toolbar.closeOrFinishDraw;
   window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
@@ -1128,10 +1125,7 @@ function init() {
     }, 100);
   }
   function setBoundaryEditButtonsVisible(visible) {
-    const addDetail = document.getElementById("add-detail-wrap");
     const controls = document.getElementById("boundary-save-controls");
-    if (addDetail)
-      addDetail.style.display = visible ? "" : "none";
     if (controls)
       controls.style.display = visible ? "none" : "";
   }
@@ -1139,7 +1133,6 @@ function init() {
     if (boundaryDrawControl || !boundaryGroups[type])
       return;
     editingBoundaryType = type;
-    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     closeDetailPinPanel();
     map.getPane("boundaryPane").style.zIndex = "560";
@@ -1413,7 +1406,6 @@ function init() {
     buildCircleSwatches("dp-border-swatches", "dp-border-color", "", updateDpMarkerIcon);
   }
   function openAddPinDialog() {
-    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     dpMode = "add";
     editingDp = null;
@@ -1428,13 +1420,7 @@ function init() {
     document.getElementById("detail-pin-panel").style.display = "";
     map.on("click", onMainMapClickForDp);
   }
-  function closeAddDetailMenuIfOpen() {
-    const menu = document.getElementById("add-detail-menu");
-    if (menu && menu.style.display !== "none")
-      toolbar.toggleAddDetailMenu();
-  }
   function openDetailPinEditDialog(dp) {
-    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     dpMode = "edit";
     editingDp = dp;

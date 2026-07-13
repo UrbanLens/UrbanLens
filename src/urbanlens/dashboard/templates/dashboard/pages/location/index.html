@@ -707,12 +707,12 @@
         const sessionKey = prefix + '_later';
         const cards = [
             {
-                id: 'personal-detail-map', icon: 'add_location_alt', target: '#add-detail-btn',
+                id: 'personal-detail-map', icon: 'add_location_alt', target: '#markup-pin-button',
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
-                body: 'Add Detail lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
-                button: 'Add a detail', watchSelector: '#add-detail-btn',
-                action: function () { document.getElementById('add-detail-btn')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('add-detail-btn')?.click(), 100 ); },
-                ready: function () { return !!document.getElementById('add-detail-btn'); },
+                body: 'The map toolbar lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
+                button: 'Add a detail', watchSelector: '#markup-pin-button',
+                action: function () { document.getElementById('markup-pin-button')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('markup-pin-button')?.click(), 100 ); },
+                ready: function () { return !!document.getElementById('markup-pin-button'); },
             },
             {
                 id: 'photos', icon: 'add_photo_alternate', target: '#pin-gallery-panel, #photo-gallery .gallery-upload-compact-btn',

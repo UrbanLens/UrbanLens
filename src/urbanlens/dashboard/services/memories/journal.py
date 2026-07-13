@@ -102,7 +102,7 @@ def _comment_entries(profile: Profile) -> Iterator[JournalEntry]:
             trip = comment.trip
             title = trip.name
             subtitle = "Trip comment"
-            url = reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}) + "#trip-comments"
+            url = reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments"
 
         yield JournalEntry(
             kind="comment",

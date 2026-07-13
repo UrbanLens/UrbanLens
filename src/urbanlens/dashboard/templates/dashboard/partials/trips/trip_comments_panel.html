@@ -25,7 +25,7 @@
           <span class="comment-date">{{ c.created|human_timesince }}</span>
           {% if c.author == profile or trip.creator == profile %}
           <button type="button" class="comment-delete-btn" title="Delete"
-                  hx-delete="{% url 'trips.comment.delete' trip.uuid c.id %}"
+                  hx-delete="{% url 'trips.comment.delete' trip.slug c.id %}"
                   hx-target="#trip-comments-panel"
                   hx-swap="outerHTML"
                   hx-confirm="Delete this comment?"
@@ -50,7 +50,7 @@
           {% for emoji, data in item.reactions.items %}
           <button type="button"
                   class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
-                  hx-post="{% url 'trips.comment.react' trip.uuid c.id %}"
+                  hx-post="{% url 'trips.comment.react' trip.slug c.id %}"
                   hx-target="#comment-reactions-{{ c.id }}"
                   hx-swap="outerHTML"
                   hx-vals='{"emoji": "{{ emoji }}"}'
@@ -67,7 +67,7 @@
               {% for emoji in allowed_emojis %}
               <button type="button" class="reaction-picker-emoji"
                       data-emoji="{{ emoji }}"
-                      hx-post="{% url 'trips.comment.react' trip.uuid c.id %}"
+                      hx-post="{% url 'trips.comment.react' trip.slug c.id %}"
                       hx-target="#comment-reactions-{{ c.id }}"
                       hx-swap="outerHTML"
                       hx-vals='{"emoji": "{{ emoji }}"}'
@@ -90,7 +90,7 @@
         {# Reply form #}
         <div id="reply-form-{{ c.id }}" class="comment-reply-form" hidden>
           <form class="comment-compose comment-compose--reply"
-                hx-post="{% url 'trips.comments' trip.uuid %}"
+                hx-post="{% url 'trips.comments' trip.slug %}"
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
@@ -103,7 +103,7 @@
                 <textarea name="text" rows="2" placeholder="Write a reply..."
                           class="comment-input mention-input"
                           data-context-type="trip"
-                          data-trip-uuid="{{ trip.uuid }}"
+                          data-trip-slug="{{ trip.slug }}"
                           required></textarea>
                 <div class="mention-dropdown" hidden></div>
               </div>
@@ -149,7 +149,7 @@
                 <span class="comment-date">{{ r.created|human_timesince }}</span>
                 {% if r.author == profile or trip.creator == profile %}
                 <button type="button" class="comment-delete-btn" title="Delete"
-                        hx-delete="{% url 'trips.comment.delete' trip.uuid r.id %}"
+                        hx-delete="{% url 'trips.comment.delete' trip.slug r.id %}"
                         hx-target="#trip-comments-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Delete this reply?"
@@ -172,7 +172,7 @@
                 {% for emoji, data in reply_item.reactions.items %}
                 <button type="button"
                         class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
-                        hx-post="{% url 'trips.comment.react' trip.uuid r.id %}"
+                        hx-post="{% url 'trips.comment.react' trip.slug r.id %}"
                         hx-target="#comment-reactions-{{ r.id }}"
                         hx-swap="outerHTML"
                         hx-vals='{"emoji": "{{ emoji }}"}'
@@ -188,7 +188,7 @@
                     {% for emoji in allowed_emojis %}
                     <button type="button" class="reaction-picker-emoji"
                             data-emoji="{{ emoji }}"
-                            hx-post="{% url 'trips.comment.react' trip.uuid r.id %}"
+                            hx-post="{% url 'trips.comment.react' trip.slug r.id %}"
                             hx-target="#comment-reactions-{{ r.id }}"
                             hx-swap="outerHTML"
                             hx-vals='{"emoji": "{{ emoji }}"}'
@@ -225,7 +225,7 @@
   <p class="trip-panel-empty">Join this trip to leave a comment.</p>
   {% else %}
   <form class="comment-compose"
-        hx-post="{% url 'trips.comments' trip.uuid %}"
+        hx-post="{% url 'trips.comments' trip.slug %}"
         hx-target="#trip-comments-panel"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
@@ -244,7 +244,7 @@
         <textarea name="text" rows="2" placeholder="Add a comment..."
                   class="comment-input mention-input"
                   data-context-type="trip"
-                  data-trip-uuid="{{ trip.uuid }}"
+                  data-trip-slug="{{ trip.slug }}"
                   required></textarea>
         <div class="mention-dropdown" hidden></div>
       </div>

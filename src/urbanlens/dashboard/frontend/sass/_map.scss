@@ -257,20 +257,6 @@ img.leaflet-marker-icon.is-selected {
         color: $color-red-600;
     }
 
-    &--add-pin {
-        color: $color-blue-600;
-    }
-
-    // Boundary-type edit buttons match their layer colors: property boundaries
-    // draw red, building footprints draw blue.
-    &--boundary {
-        color: $color-red-600;
-    }
-
-    &--building {
-        color: $color-blue-600;
-    }
-
     &-group {
         display: flex;
         gap: .3rem;
@@ -298,10 +284,6 @@ img.leaflet-marker-icon.is-selected {
         width: 220px;
         overflow: hidden;
     }
-    &--details {
-        top: 1.5rem;
-        left: 4rem;
-    }
 
     // One consistent create/edit panel (markup annotations, detail pins): docked
     // to the right edge so it never competes with the left-side details drawer
@@ -328,53 +310,97 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-// -- Detail pin list panel (top-left map overlay) ---------------------------
-.detail-pin-list-toggle {
+// -- Detail pin list panel (left-docked sidebar) -----------------------------
+// Same collapsible-sidebar UX as the main map's #pin-list-panel/.pin-list-handle
+// above, scoped to this page's smaller embedded map instead of the full
+// viewport: collapses to an edge handle button, expands into a full-height
+// dark sidebar that always sits above the map regardless of site theme.
+.detail-pin-list-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    max-width: calc(100% - 20px);
+    background: rgba(14, 16, 22, 0.93);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 1001;
     display: flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .4rem .65rem;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: .8rem;
-    font-weight: 500;
-    color: var(--ul-grey-7);
-    border-radius: 8px;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(.4, 0, .2, 1);
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.7);
 
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-        color: var(--ul-grey-6);
-    }
-
-    .detail-pin-list-chevron {
-        margin-left: auto;
-        transition: transform .2s;
-        font-size: .85rem;
-
-        &.open {
-            transform: rotate(180deg);
-        }
-    }
-
-    &:hover {
-        background: rgba(0, 0, 0, .04);
+    &.open {
+        transform: translateX(0);
     }
 }
 
-.detail-pin-list-drawer {
-    border-top: 1px solid var(--ul-grey-1a);
-    max-height: 320px; // JS overrides this on open with the room actually available
-    overflow-y: auto;
+.detail-pin-list-header {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: .4rem;
+    padding: .65rem .8rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
 
-    // Fallback cap for very short viewports if JS hasn't run yet (e.g. no-JS render).
-    @media (max-height: 500px) {
-        max-height: 160px;
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.45);
     }
+}
+
+// Always-visible edge handle - identical mechanic and look to the main map's
+// .pin-list-handle, just docked to this page's own (smaller) map wrapper.
+.detail-pin-list-handle {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    z-index: 1002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 56px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    padding: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-grey-1);
+        color: var(--ul-grey-9);
+    }
+
+    &.open {
+        left: 300px;
+    }
+}
+
+// Shifts the bottom-left layers panel + boundary controls out of the way
+// while the sidebar is open, mirroring #map.pin-list-open on the main map.
+.map-wrapper:has(> .detail-pin-list-panel.open) .map-bottom-controls {
+    left: calc(300px + 20px);
+    transition: left 0.22s cubic-bezier(.4, 0, .2, 1);
 }
 
 .detail-pin-list-ul {
@@ -386,28 +412,28 @@ img.leaflet-marker-icon.is-selected {
 .detail-pin-list-item {
     display: flex;
     align-items: center;
-    gap: .4rem;
-    padding: .3rem .5rem;
+    gap: .5rem;
+    padding: .5rem .8rem;
     cursor: pointer;
-    font-size: .78rem;
-    color: var(--ul-grey-7);
-    transition: background .1s;
+    font-size: .82rem;
+    color: rgba(255, 255, 255, 0.75);
+    transition: background .12s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: rgba(255, 255, 255, 0.06);
     }
 
     &.is-highlighted {
-        background: var(--ul-grey-0a);
+        background: rgba(37, 99, 235, 0.22);
 
         .detail-pin-list-item-name {
-            color: $color-blue-700;
+            color: #fff;
             font-weight: 600;
         }
     }
 
     .detail-pin-list-item-icon {
-        font-size: 1rem;
+        font-size: 1.05rem;
         flex-shrink: 0;
     }
 
@@ -416,11 +442,17 @@ img.leaflet-marker-icon.is-selected {
         @include truncate;
     }
 
+    .detail-pin-list-item-meta {
+        flex-shrink: 0;
+        font-size: .68rem;
+        color: rgba(255, 255, 255, 0.4);
+    }
+
     .detail-pin-list-item-delete {
         border: none;
         background: none;
         cursor: pointer;
-        color: var(--ul-grey-4);
+        color: rgba(255, 255, 255, 0.35);
         padding: .1rem;
         border-radius: 3px;
         display: flex;
@@ -430,13 +462,13 @@ img.leaflet-marker-icon.is-selected {
 
         .material-symbols-outlined,
         .material-icons {
-            font-size: .85rem;
+            font-size: .9rem;
         }
 
         &:hover,
         &:focus {
-            color: $color-red-600;
-            background: var(--ul-grey-0a);
+            color: $color-red-500;
+            background: rgba(255, 255, 255, 0.08);
             outline: none;
         }
     }
@@ -445,7 +477,7 @@ img.leaflet-marker-icon.is-selected {
 // -- Map sidebar panel tabs (Details / Photos) -----------------------------
 .map-panel-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
 }
 
@@ -455,10 +487,10 @@ img.leaflet-marker-icon.is-selected {
     align-items: center;
     justify-content: center;
     gap: .3rem;
-    padding: .35rem .4rem;
-    font-size: .72rem;
-    font-weight: 500;
-    color: var(--ul-grey-6);
+    padding: .5rem .4rem;
+    font-size: .74rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.45);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
@@ -468,18 +500,18 @@ img.leaflet-marker-icon.is-selected {
 
     .material-symbols-outlined,
     .material-icons {
-        font-size: .9rem;
+        font-size: .95rem;
     }
 
     &:hover {
-        color: var(--ul-grey-7);
-        background: var(--ul-grey-0);
+        color: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.04);
     }
 
     &.is-active {
-        color: $color-blue-600;
-        border-bottom-color: $color-blue-600;
-        background: var(--ul-grey-0);
+        color: #fff;
+        border-bottom-color: $color-blue-500;
+        background: rgba(255, 255, 255, 0.04);
     }
 }
 
@@ -488,7 +520,7 @@ img.leaflet-marker-icon.is-selected {
     top: 2px;
     right: 4px;
     background: $color-blue-600;
-    color: var(--ul-grey-4);
+    color: #fff;
     border-radius: 8px;
     font-size: .6rem;
     font-weight: 700;
@@ -502,6 +534,8 @@ img.leaflet-marker-icon.is-selected {
     overflow-y: auto;
     flex: 1;
     padding: .25rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
 // -- Photo panel items -----------------------------------------------------
@@ -520,7 +554,7 @@ img.leaflet-marker-icon.is-selected {
     border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
-    background: var(--ul-grey-0);
+    background: rgba(255, 255, 255, 0.06);
     border: 2px solid transparent;
     transition: border-color .12s, box-shadow .12s, transform .12s;
 
@@ -585,7 +619,7 @@ img.leaflet-marker-icon.is-selected {
     justify-content: center;
     gap: .3rem;
     padding: 1.2rem .5rem;
-    color: var(--ul-grey-4);
+    color: rgba(255, 255, 255, 0.4);
     font-size: .75rem;
 
     .material-symbols-outlined,
@@ -611,74 +645,6 @@ img.leaflet-marker-icon.is-selected {
     font-weight: 600;
     color: $color-blue-700;
     pointer-events: none;
-}
-
-// -- "Add Detail" dropdown button ------------------------------------------
-
-.map-add-detail-wrap {
-    position: relative;
-}
-
-.add-detail-menu {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    background: rgba(255, 255, 255, 0.97);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
-    backdrop-filter: blur(4px);
-    min-width: 130px;
-    overflow: hidden;
-    z-index: 1100;
-}
-
-// Separator between the markup tools and the boundary tools in the menu.
-.add-detail-menu-sep {
-    height: 1px;
-    margin: 2px 0;
-    background: var(--ul-grey-2, rgba(0, 0, 0, .12));
-}
-
-.add-detail-item {
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    padding: .4rem .7rem;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: .8rem;
-    color: var(--ul-grey-0);
-    text-align: left;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: .95rem;
-        color: var(--ul-grey-3);
-    }
-
-    &:hover {
-        background: var(--ul-grey-0);
-        color: var(--ul-grey-9);
-        .material-symbols-outlined,
-        .material-icons {
-            color: var(--ul-grey-6);
-        }
-    }
-
-    &+& {
-        border-top: 1px solid var(--ul-grey-1);
-    }
-}
-
-.add-detail-chevron {
-    font-size: .75rem !important;
-    transition: transform .2s;
-
-    &.open {
-        transform: rotate(180deg);
-    }
 }
 
 // -- Markup mini-form panel (line/arrow/text placement) ---------------------
@@ -3901,6 +3867,10 @@ div.container .addr-search-bar {
         padding: 6px 4px 5px;
         min-width: 0;
         font-size: clamp(.55rem, 3cqmin, .67rem);
+        // Room for the (now-visible) thumb plus its label below - the base
+        // max-height above is sized for the icon+label row layout only and
+        // is too short once the thumb (up to 54px here) takes its place.
+        max-height: clamp(58px, 26cqmin, 96px);
 
         .map-layers-toggle-thumb {
             display: block;
@@ -3909,6 +3879,11 @@ div.container .addr-search-bar {
         .map-layers-toggle-icon {
             display: none;
         }
+    }
+
+    @include up($breakpoint-md) {
+        // Matches .map-layer-thumb's own md+ ceiling (4rem) plus padding/gap/label.
+        max-height: clamp(70px, 28cqmin, 104px);
     }
 
     &:hover, &.active, &:focus, &:active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
@@ -4009,6 +3984,13 @@ div.container .addr-search-bar {
         max-width: clamp(44px, 18cqmin, 62px);
     }
 
+    @include up($breakpoint-md) {
+        // Matches .map-layer-thumb's own md+ ceiling (4rem) plus padding/gap/label -
+        // otherwise the thumb outgrows this button's max-height and clips the label.
+        max-width: clamp(52px, 20cqmin, 76px);
+        max-height: clamp(70px, 24cqmin, 112px);
+    }
+
     &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
 
     &.active {
@@ -4039,8 +4021,10 @@ div.container .addr-search-bar {
 
 
     @include up($breakpoint-md) {
-        width: clamp(40px, 16cqmin, 5rem);
-        height: clamp(40px, 16cqmin, 5rem);
+        // Ceiling deliberately stays well under the toggle/btn buttons' own
+        // max-height (below) so the label under the thumb never gets clipped.
+        width: clamp(40px, 16cqmin, 4rem);
+        height: clamp(40px, 16cqmin, 4rem);
         border-radius: 7px;
     }
 

@@ -106,6 +106,63 @@ class PlaceNameResolverChainTests(TestCase):
             gateway.return_value.get_place_name.side_effect = RateLimitExceededError("google_geocoding")
             self.assertIsNone(GoogleGeocodingNameResolver().resolve(40.0, -74.0))
 
+    def test_google_places_resolver_skips_locality_only_result_for_next_poi(self) -> None:
+        """A bare city hit (e.g. a rural pin with no closer POI) must not become the pin's name.
+
+        Regression test: a golf course with no other nearby Places result used to be
+        named "Poughkeepsie" (its enclosing city) because Nearby Search can return a
+        locality as its only "establishment" match. The resolver must skip results
+        whose types are exclusively administrative/regional ones.
+        """
+        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
+
+        with (
+            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
+            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+        ):
+            gateway.return_value.get_data.return_value = [
+                {"name": "Poughkeepsie", "types": ["locality", "political"]},
+                {"name": "College Hill Golf Course", "types": ["golf_course", "point_of_interest", "establishment"]},
+            ]
+            self.assertEqual(GooglePlacesNameResolver().resolve(40.0, -74.0), "College Hill Golf Course")
+
+    def test_google_places_resolver_returns_none_when_every_result_is_locality_only(self) -> None:
+        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
+
+        with (
+            mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
+            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+        ):
+            gateway.return_value.get_data.return_value = [{"name": "Poughkeepsie", "types": ["locality", "political"]}]
+            self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
+
+    def test_google_geocoding_get_place_name_skips_locality_only_result(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+
+        gateway = GoogleGeocodingGateway(api_key="key")
+        with mock.patch.object(
+            GoogleGeocodingGateway,
+            "geocode_coordinates",
+            return_value={
+                "results": [
+                    {"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]},
+                    {"formatted_address": "123 Fairway Dr, Poughkeepsie, NY 12603, USA", "types": ["street_address"]},
+                ],
+            },
+        ):
+            self.assertEqual(gateway.get_place_name(40.0, -74.0), "123 Fairway Dr, Poughkeepsie, NY 12603, USA")
+
+    def test_google_geocoding_get_place_name_returns_none_when_only_locality_available(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+
+        gateway = GoogleGeocodingGateway(api_key="key")
+        with mock.patch.object(
+            GoogleGeocodingGateway,
+            "geocode_coordinates",
+            return_value={"results": [{"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]}]},
+        ):
+            self.assertIsNone(gateway.get_place_name(40.0, -74.0))
+
 
 
 class BoundaryProviderChainTests(TestCase):

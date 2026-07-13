@@ -46,11 +46,11 @@ page since RSVP needs more UI than fits in a chat card.
   {% elif share.kind == "trip" and share.trip %}
   <div class="dm-share-card__row">
     <i class="material-symbols-outlined">luggage</i>
-    <a class="dm-share-card__label" href="{% url 'trips.detail' share.trip.uuid %}">{{ share.trip.name }}</a>
+    <a class="dm-share-card__label" href="{% url 'trips.detail' share.trip.slug %}">{{ share.trip.name }}</a>
   </div>
   {% if share.trip_membership and share.trip_membership.rsvp is None %}
   <p class="dm-share-card__status">
-    <a href="{% url 'trips.detail' share.trip.uuid %}" class="btn btn--primary btn--sm">View invite &amp; RSVP</a>
+    <a href="{% url 'trips.detail' share.trip.slug %}" class="btn btn--primary btn--sm">View invite &amp; RSVP</a>
   </p>
   {% elif share.trip_membership %}
   <p class="dm-share-card__status">RSVP: {{ share.trip_membership.get_rsvp_display|default:"No response" }}</p>

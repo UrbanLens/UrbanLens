@@ -18,21 +18,10 @@
 .trips-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: .75rem;
     margin-bottom: 1.25rem;
-}
-
-.trips-view-toggle .view-toggle-btn {
-    width: auto;
-    height: 34px;
-    padding: 0 .8rem;
-    gap: .35rem;
-    font-size: .85rem;
-    font-weight: 600;
-
-    .material-symbols-outlined { font-size: 1.15rem; }
 }
 
 .trips-view {

@@ -57,7 +57,7 @@
             {% if context_type == "pin" or context_type == "wiki" %}
             hx-post="{% url 'comment.react' comment.id %}"
             {% else %}
-            hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+            hx-post="{% url 'trips.comment.react' trip.slug comment.id %}"
             {% endif %}
             hx-target="#comment-reactions-{{ comment.id }}"
             hx-swap="outerHTML"
@@ -78,7 +78,7 @@
                 {% if context_type == "pin" or context_type == "wiki" %}
                 hx-post="{% url 'comment.react' comment.id %}"
                 {% else %}
-                hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+                hx-post="{% url 'trips.comment.react' trip.slug comment.id %}"
                 {% endif %}
                 hx-target="#comment-reactions-{{ comment.id }}"
                 hx-swap="outerHTML"
@@ -102,7 +102,7 @@
 
   {# Reply form #}
   <div id="reply-form-{{ comment.id }}" class="comment-reply-form" hidden>
-    {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile parent_id=comment.id is_reply=True %}
+    {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip profile=profile parent_id=comment.id is_reply=True %}
   </div>
 
   {# Existing replies #}
@@ -111,7 +111,7 @@
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
     </li>
     {% endwith %}
     {% endfor %}

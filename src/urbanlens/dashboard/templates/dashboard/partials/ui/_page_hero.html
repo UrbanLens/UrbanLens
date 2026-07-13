@@ -25,6 +25,12 @@ Optional:
                           "top" when rendered in base.html's block hero (outside
                           .container, right below the header) - see the
                           .ul-page-subnav notes in _page_hero.scss
+  id                    - id attribute on the outer <section>, so a page whose
+                          hero content can change after load (e.g. an edit
+                          dialog) can target it for an out-of-band HTMX swap
+  oob                   - when True (with id set), adds hx-swap-oob="true" so
+                          this render can be concatenated onto another view's
+                          response as an out-of-band update
 
 Usage:
   {% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" subtitle="..." %}
@@ -39,7 +45,7 @@ Usage:
     <div class="ul-page-subnav"><div class="ul-page-subnav__inner">...tabs...</div></div>
     {% endblock %}
 {% endcomment %}
-<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}">
+<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
     <div class="ul-page-hero__inner">
         {% if back_url %}
         <a href="{{ back_url }}" class="ul-page-hero__back">

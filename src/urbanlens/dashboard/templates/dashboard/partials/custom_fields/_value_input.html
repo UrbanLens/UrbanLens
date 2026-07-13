@@ -6,7 +6,6 @@
        {% if field.field_type == 'number' %}step="any"{% endif %}
        name="value"
        value="{{ value.input_value|default:'' }}"
-       placeholder="{% if field.field_type == 'date' %}{% else %}Not set{% endif %}"
        aria-label="{{ field.name }}"
        hx-post="{{ post_url }}"
        hx-trigger="change"

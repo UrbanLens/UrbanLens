@@ -205,7 +205,7 @@
         <ul class="pin-list-add-results" id="add-to-trip-results">
             {% for trip in trips %}
             <li data-search="{{ trip.name|lower }}">
-                <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.uuid }}')">
+                <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.slug }}')">
                     <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
                 </button>
             </li>
@@ -479,8 +479,8 @@
         _postJson(CREATE_TRIP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
-    window.pinListAddToTrip = function (tripUuid) {
-        _postJson(ADD_TO_TRIP_URL, { trip_uuid: tripUuid }).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
+    window.pinListAddToTrip = function (tripSlug) {
+        _postJson(ADD_TO_TRIP_URL, { trip_slug: tripSlug }).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
     window.pinListFilterTrips = function (query) {

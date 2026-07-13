@@ -290,12 +290,13 @@ function init(): void {
     }
 
     function refreshPanelHeader(): void {
-        const panel = document.getElementById("detail-pin-list-panel");
+        const handle = document.getElementById("detail-pin-list-handle");
         const countLabel = document.getElementById("detail-pin-count-label");
         const total = detailPins.length + toolbar.getMarkupItems().length + photoPanelItems.length;
-        if (!panel) return;
-        panel.style.display = total ? "" : "none";
         if (countLabel) countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
+        // Nothing to show yet (brand-new pin: no detail pins, markup, or photos) -
+        // hide the edge handle entirely rather than exposing an empty sidebar.
+        if (handle) handle.style.display = total ? "" : "none";
     }
 
     function buildDetailList(): void {
@@ -377,26 +378,21 @@ function init(): void {
         });
     }
 
-    // Detail pin list toggle.
-    document.getElementById("detail-pin-list-toggle")?.addEventListener("click", () => {
-        const drawer = document.getElementById("detail-pin-list-drawer") as HTMLElement;
-        const chevron = document.getElementById("detail-pin-list-chevron");
-        const open = drawer.style.display !== "none";
-        if (!open) {
-            // Cap the drawer to whatever room is actually free above the bottom-left
-            // controls, instead of a static max-height that can overlap them on short
-            // viewports - recomputed on every open since the map can resize.
-            const wrapper = document.querySelector(".map-wrapper");
-            const bottomControls = document.querySelector(".map-bottom-controls");
-            const panel = document.getElementById("detail-pin-list-panel");
-            if (wrapper && bottomControls && panel) {
-                const available = wrapper.getBoundingClientRect().bottom - bottomControls.getBoundingClientRect().height - panel.getBoundingClientRect().top - 24;
-                drawer.style.maxHeight = `${Math.max(120, Math.min(320, available))}px`;
-            }
+    // Detail pin list sidebar toggle - same collapse/expand mechanic as the
+    // main map's #pin-list-panel/.pin-list-handle (window._togglePinListPanel).
+    function toggleDetailPinListPanel(): void {
+        const panel = document.getElementById("detail-pin-list-panel");
+        const handle = document.getElementById("detail-pin-list-handle");
+        if (!panel) return;
+        const isOpen = panel.classList.toggle("open");
+        if (handle) {
+            handle.classList.toggle("open", isOpen);
+            handle.setAttribute("aria-expanded", String(isOpen));
+            const icon = handle.querySelector(".material-symbols-outlined, .material-icons");
+            if (icon) icon.textContent = isOpen ? "chevron_left" : "chevron_right";
         }
-        drawer.style.display = open ? "none" : "";
-        chevron?.classList.toggle("open", !open);
-    });
+    }
+    window._toggleDetailPinListPanel = toggleDetailPinListPanel;
 
     // Popup shown when a child pin's marker is clicked: name, which sub pin it
     // belongs to (for nested entries), and a link to that pin's own detail
@@ -514,7 +510,6 @@ function init(): void {
     window.startMarkupDraw = toolbar.startMarkupDraw;
     window.startShapeDraw = toolbar.startShapeDraw;
     window.startTextPlacement = toolbar.startTextPlacement;
-    window.toggleAddDetailMenu = toolbar.toggleAddDetailMenu;
     window.closeMarkupPanel = toolbar.closeMarkupPanel;
     window._closeMarkupDraw = toolbar.closeOrFinishDraw;
     window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
@@ -877,13 +872,12 @@ function init(): void {
         }, 100);
     }
 
+    // `visible` names the normal (not-editing) state - true hides the boundary
+    // save controls, false shows them. A boundary edit session is started from
+    // the boundary's own right-click context menu (see openBoundaryCtxMenu),
+    // since boundaries have no dedicated toolbar button.
     function setBoundaryEditButtonsVisible(visible: boolean): void {
-        // The boundary tools live inside the "Add Detail" dropdown; while a
-        // boundary edit session is active, swap that button cluster out for
-        // the Clear/Cancel/Done save controls.
-        const addDetail = document.getElementById("add-detail-wrap");
         const controls = document.getElementById("boundary-save-controls");
-        if (addDetail) addDetail.style.display = visible ? "" : "none";
         if (controls) controls.style.display = visible ? "none" : "";
     }
 
@@ -891,9 +885,7 @@ function init(): void {
         if (boundaryDrawControl || !boundaryGroups[type]) return;
         editingBoundaryType = type;
         // Editing a boundary is its own exclusive map-interaction mode - close
-        // the Add Detail dropdown this was launched from and whichever side
-        // panel happens to be open (autosave makes this safe).
-        closeAddDetailMenuIfOpen();
+        // whichever side panel happens to be open (autosave makes this safe).
         toolbar.closeMarkupPanel();
         closeDetailPinPanel();
         // While actively editing, boundary polygons need to catch clicks/drags
@@ -1210,7 +1202,6 @@ function init(): void {
     }
 
     function openAddPinDialog(): void {
-        closeAddDetailMenuIfOpen();
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
 
@@ -1229,15 +1220,7 @@ function init(): void {
         map.on("click", onMainMapClickForDp);
     }
 
-    function closeAddDetailMenuIfOpen(): void {
-        // The "Add Detail" dropdown is owned by the markup toolbar module; ask
-        // it to close if open (matches the original's shared _closeAddDetailMenu).
-        const menu = document.getElementById("add-detail-menu");
-        if (menu && menu.style.display !== "none") toolbar.toggleAddDetailMenu();
-    }
-
     function openDetailPinEditDialog(dp: DetailPinEntry): void {
-        closeAddDetailMenuIfOpen();
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
 
@@ -1489,12 +1472,11 @@ declare global {
         _commentMapDefaultLng: number;
         map: L.Map;
 
-        // Markup toolbar functions, exposed for _markup_toolbar_panel.html /
-        // _markup_panel_dialog.html's inline onclick= attributes.
+        // Markup toolbar functions, exposed for the top-right toolbar's
+        // markup_* buttons / _markup_panel_dialog.html's inline onclick= attributes.
         startMarkupDraw: (type: string) => void;
         startShapeDraw: (type: string) => void;
         startTextPlacement: () => void;
-        toggleAddDetailMenu: () => void;
         closeMarkupPanel: () => void;
         _closeMarkupDraw: () => void;
         deleteMarkupEdit: () => Promise<void>;
@@ -1506,6 +1488,7 @@ declare global {
         _openMapScreenshot: () => void;
 
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
+        _toggleDetailPinListPanel: () => void;
         openAddPinDialog: () => void;
         startEditBoundary: (type: "property" | "building") => void;
         saveBoundary: (options?: { type?: "property" | "building"; exitEdit?: boolean; quiet?: boolean }) => void;

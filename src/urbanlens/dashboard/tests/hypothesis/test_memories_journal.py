@@ -102,7 +102,7 @@ class GetJournalEntriesTests(TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Fall Roadtrip")
-        self.assertEqual(entries[0].url, reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}) + "#trip-comments")
+        self.assertEqual(entries[0].url, reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments")
 
     def test_only_returns_owning_profiles_entries(self) -> None:
         mine = _make_pin(self.profile, name="Mine")

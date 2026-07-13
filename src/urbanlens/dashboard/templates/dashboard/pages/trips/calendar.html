@@ -1,0 +1,30 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="flight_takeoff" title="Plan" subtitle="Your trips, routes, and shared plans in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/trips/_trips_subnav.html" with active="calendar" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="trips-page page-content">
+    <div class="trips-view trips-view--calendar">
+        {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "dashboard/partials/trips/_mini_calendar_script.html" %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.tripsCalRender) { window.tripsCalRender(); }
+    });
+</script>
+{% endblock %}

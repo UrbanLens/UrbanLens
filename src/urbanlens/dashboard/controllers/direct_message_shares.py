@@ -212,7 +212,7 @@ class MessageShareTripView(LoginRequiredMixin, View):
         """Create the trip invite + chat message and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``trip_uuid`` and ``body``.
+            request: The incoming request. Reads ``trip_slug`` and ``body``.
             profile_slug: Slug of the conversation partner.
 
         Returns:
@@ -220,7 +220,7 @@ class MessageShareTripView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        trip = get_object_or_404(Trip, uuid=request.POST.get("trip_uuid"))
+        trip = get_object_or_404(Trip, slug=request.POST.get("trip_slug"))
         body = request.POST.get("body", "").strip() or f'I invited you to "{trip.name}"!'
 
         try:

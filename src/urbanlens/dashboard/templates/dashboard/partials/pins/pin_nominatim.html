@@ -10,67 +10,106 @@
     {% endif %}
     <div class="card-header">
         <i class="material-symbols-outlined">map</i>
-        <h3>
-            OpenStreetMap
-        </h3>
-    </div>
-    <div class="card__body nominatim-body">
-        {% if place.name %}
-        <p class="nominatim-place-name">{{ place.name }}</p>
-        {% endif %}
-        
+        <h3>OpenStreetMap</h3>
         {% if place.osm_url %}
-        <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+        <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer"
+           class="card-header-link" title="Open on OpenStreetMap">
+            <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="card__body nominatim-body">
+        {% if place.image %}
+        <div class="nominatim-image-wrap">
+            <img class="nominatim-image" src="{{ place.image }}" alt="{{ place.name }}" loading="lazy"
+                 onerror="this.closest('.nominatim-image-wrap').style.display='none'">
+        </div>
         {% endif %}
 
-        <dl class="nominatim-meta">
-            {% if place.amenity %}
-            <dt>Type</dt>
-            <dd>{{ place.amenity|title }}</dd>
-            {% elif place.building %}
-            <dt>Building</dt>
-            <dd>{{ place.building|title }}</dd>
-            {% elif place.tourism %}
-            <dt>Tourism</dt>
-            <dd>{{ place.tourism|title }}</dd>
-            {% elif place.historic %}
-            <dt>Historic</dt>
-            <dd>{{ place.historic|title }}</dd>
+        <div class="nominatim-heading">
+            {% if place.name %}
+            <p class="nominatim-place-name">{{ place.name }}</p>
             {% endif %}
-
-            {% if place.operator %}
-            <dt>Operator</dt>
-            <dd>{{ place.operator }}</dd>
+            {% if place.kind_label %}
+            <span class="nominatim-kind-chip">{{ place.kind_label }}</span>
             {% endif %}
+        </div>
 
+        {% if place.website or place.phone or place.opening_hours or place.operator or place.email %}
+        <div class="nominatim-quick-facts">
             {% if place.website %}
-            <dt>Website</dt>
-            <dd><a href="{{ place.website }}" target="_blank" rel="noopener noreferrer">{{ place.website|truncatechars:50 }}</a></dd>
+            <a class="nominatim-fact" href="{{ place.website }}" target="_blank" rel="noopener noreferrer">
+                <i class="material-symbols-outlined">language</i>
+                <span>{{ place.website|truncatechars:40 }}</span>
+            </a>
             {% endif %}
-
             {% if place.phone %}
-            <dt>Phone</dt>
-            <dd><a href="tel:{{ place.phone }}">{{ place.phone }}</a></dd>
+            <a class="nominatim-fact" href="tel:{{ place.phone }}">
+                <i class="material-symbols-outlined">call</i>
+                <span>{{ place.phone }}</span>
+            </a>
             {% endif %}
-
+            {% if place.email %}
+            <a class="nominatim-fact" href="mailto:{{ place.email }}">
+                <i class="material-symbols-outlined">mail</i>
+                <span>{{ place.email }}</span>
+            </a>
+            {% endif %}
             {% if place.opening_hours %}
-            <dt>Hours</dt>
-            <dd class="nominatim-hours">{{ place.opening_hours }}</dd>
+            <span class="nominatim-fact">
+                <i class="material-symbols-outlined">schedule</i>
+                <span>{{ place.opening_hours }}</span>
+            </span>
             {% endif %}
+            {% if place.operator %}
+            <span class="nominatim-fact">
+                <i class="material-symbols-outlined">apartment</i>
+                <span>{{ place.operator }}</span>
+            </span>
+            {% endif %}
+        </div>
+        {% endif %}
 
-            {% if place.wikipedia %}
-            <dt>Wikipedia</dt>
-            <dd>
-                {% with wp=place.wikipedia %}
-                {% if ":" in wp %}
-                <a href="https://{{ wp|slice:":2" }}.wikipedia.org/wiki/{{ wp|slice:"3:" }}" target="_blank" rel="noopener noreferrer">{{ wp|slice:"3:" }}</a>
-                {% else %}
-                <a href="https://en.wikipedia.org/wiki/{{ wp }}" target="_blank" rel="noopener noreferrer">{{ wp }}</a>
-                {% endif %}
-                {% endwith %}
-            </dd>
-            {% endif %}
+        {% if place.extra_details %}
+        <dl class="nominatim-meta">
+            {% for detail in place.extra_details %}
+            <div class="nominatim-meta-item">
+                <dt>{{ detail.label }}</dt>
+                <dd>{{ detail.value }}</dd>
+            </div>
+            {% endfor %}
         </dl>
+        {% endif %}
 
+        {% if place.wikipedia or place.wikidata %}
+        <div class="nominatim-links">
+            {% if place.wikipedia %}
+            {% with wp=place.wikipedia %}
+            {% if ":" in wp %}
+            <a href="https://{{ wp|slice:':2' }}.wikipedia.org/wiki/{{ wp|slice:'3:' }}" target="_blank" rel="noopener noreferrer" class="nominatim-link-chip">
+                <i class="material-symbols-outlined">menu_book</i> Wikipedia
+            </a>
+            {% else %}
+            <a href="https://en.wikipedia.org/wiki/{{ wp }}" target="_blank" rel="noopener noreferrer" class="nominatim-link-chip">
+                <i class="material-symbols-outlined">menu_book</i> Wikipedia
+            </a>
+            {% endif %}
+            {% endwith %}
+            {% endif %}
+            {% if place.wikidata %}
+            <a href="https://www.wikidata.org/wiki/{{ place.wikidata }}" target="_blank" rel="noopener noreferrer" class="nominatim-link-chip">
+                <i class="material-symbols-outlined">database</i> Wikidata
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if place.osm_url %}
+        <a href="{{ place.osm_url }}" target="_blank" rel="noopener noreferrer" class="nominatim-view-link">
+            View on OpenStreetMap
+            <i class="material-symbols-outlined">arrow_forward</i>
+        </a>
+        {% endif %}
     </div>
 </div>

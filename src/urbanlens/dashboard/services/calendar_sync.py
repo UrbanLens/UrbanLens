@@ -449,7 +449,7 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
                 notification_type=NotificationType.ADDED_TO_TRIP,
                 title="Added to a trip",
                 message=f'{importer.username} added you to the trip "{trip.name}".',
-                url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+                url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
             )
             invited += 1
     return invited

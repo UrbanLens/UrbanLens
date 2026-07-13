@@ -6,19 +6,17 @@
     </div>
     <div class="trip-invite-banner-actions">
         <button type="button" class="btn btn--primary btn--sm"
-                hx-post="{% url 'trips.join' trip.uuid %}">
+                hx-post="{% url 'trips.join' trip.slug %}">
             <i class="material-symbols-outlined">check</i> Join trip
         </button>
         <button type="button" class="btn btn--ghost btn--sm"
-                hx-delete="{% url 'trips.leave' trip.uuid %}"
+                hx-delete="{% url 'trips.leave' trip.slug %}"
                 hx-confirm="Decline this trip invitation?">
             Decline
         </button>
     </div>
 </div>
 {% endif %}
-{% url 'trips.overview' as trips_overview_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_overview_url back_label="Plan" %}
 <div class="trip-detail-header-right">
     {% include "dashboard/partials/trips/_trip_calendar_button.html" %}
     {% if viewer_is_organizer %}
@@ -38,7 +36,7 @@
     {% if trip.creator == profile %}
     <button type="button" class="btn-icon"
             title="Delete trip"
-            hx-delete="{% url 'trips.delete' trip.uuid %}"
+            hx-delete="{% url 'trips.delete' trip.slug %}"
             hx-confirm="Permanently delete this trip and all its activities?"
             hx-on::after-request="if(event.detail.successful){window.location='{% url 'trips.list' %}'}">
         <i class="material-symbols-outlined">delete_outline</i>

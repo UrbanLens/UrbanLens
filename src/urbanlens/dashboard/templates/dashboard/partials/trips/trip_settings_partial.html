@@ -4,7 +4,7 @@
 		<i class="material-symbols-outlined">check_circle</i> Settings saved.
 	</div>
 	{% endif %}
-	<form hx-post="{% url 'trips.settings' trip.uuid %}"
+	<form hx-post="{% url 'trips.settings' trip.slug %}"
 	      hx-target="#trip-settings-content"
 	      hx-swap="innerHTML"
 	      class="trip-create-form">

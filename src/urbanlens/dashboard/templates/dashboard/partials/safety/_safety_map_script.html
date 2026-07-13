@@ -4,9 +4,11 @@ shared "jump to" search bar ({% templatetag openblock %} map_search_bar {% templ
 including local pins, addresses, coordinates, and Google Places), the shared
 layers panel ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %} + window.MapLayers - the exact same
 component as the main map), and - when markup endpoints are configured and
-the map isn't readonly - the exact same "Add Detail" markup toolbar/side-panel
-as the pin detail and Location wiki maps (_markup_toolbar_panel.html +
-window.createMarkupToolbar, see ts/shared/markup-toolbar.ts).
+the map isn't readonly - the same markup drawing tools (line/arrow/text/
+shapes) as the pin detail and Location wiki maps, rendered as top-right
+toolbar icons and backed by the shared draw/edit side-panel
+(_markup_panel_dialog.html + window.createMarkupToolbar, see
+ts/shared/markup-toolbar.ts).
 
 The route drawing is backed by a standalone MarkupMap:
   - The check-in detail page passes markup_map_uuid + the resolved
@@ -39,13 +41,17 @@ so it's always available by the time this script runs - no typeof guard needed.
     {% map_search_bar prefix="safety-map" %}
     {% endif %}
     <div id="safety-map"></div>
-    {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+    {# -- Map toolbar (tools only; shared component - same as the main map). The #}
+    {# markup drawing tools (formerly a separate "Add Detail" dropdown docked in #}
+    {# .map-bottom-controls) live here as plain icon buttons, same as on the pin #}
+    {# detail / Location wiki maps - only rendered when markup is enabled.       #}
+    {% if not readonly and markup_json_url or not readonly and markup_map_create_url %}
+    {% map_toolbar "markup_line,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,screenshot" panel_id="safety-map-buttons" %}
+    {% else %}
     {% map_toolbar "screenshot" panel_id="safety-map-buttons" %}
+    {% endif %}
     <div class="map-bottom-controls">
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="safety-map-layers" extra_class="map-layers-panel--inline" %}
-        {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
-        {% include "dashboard/partials/layout/_markup_toolbar_panel.html" %}
-        {% endif %}{% endif %}
     </div>
 </div>
 {% if not readonly %}{% if markup_json_url or markup_map_create_url %}
@@ -252,7 +258,6 @@ so it's always available by the time this script runs - no typeof guard needed.
     var startMarkupDraw = _markupToolbar.startMarkupDraw;
     var startShapeDraw = _markupToolbar.startShapeDraw;
     var startTextPlacement = _markupToolbar.startTextPlacement;
-    var toggleAddDetailMenu = _markupToolbar.toggleAddDetailMenu;
     var closeMarkupPanel = _markupToolbar.closeMarkupPanel;
     var _closeMarkupDraw = _markupToolbar.closeOrFinishDraw;
     var deleteMarkupEdit = _markupToolbar.deleteMarkupEdit;

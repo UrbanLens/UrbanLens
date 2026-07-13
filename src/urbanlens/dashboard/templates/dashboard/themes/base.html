@@ -358,11 +358,11 @@
             var q = _query(ta);
             if (!q || q.query.length < 1) { _hide(ta); return; }
             var ctx = ta.dataset.contextType || '';
-            var tripUuid = ta.dataset.tripUuid || '';
+            var tripSlug = ta.dataset.tripSlug || '';
             var isNum = /^\d+$/.test(q.query);
 
-            if (isNum && ctx === 'trip' && tripUuid) {
-                fetch('/dashboard/trips/' + encodeURIComponent(tripUuid) + '/map-data/', {
+            if (isNum && ctx === 'trip' && tripSlug) {
+                fetch('/dashboard/trips/' + encodeURIComponent(tripSlug) + '/map-data/', {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 })
                 .then(function (r) { return r.json(); })
@@ -587,8 +587,7 @@
         {# and needs its own identity for browsing later on Memories > Maps.   #}
         <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
           <label class="cmcc-label" for="cmc-title-input">Title</label>
-          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200"
-                 placeholder="Leave blank to use a default title">
+          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">

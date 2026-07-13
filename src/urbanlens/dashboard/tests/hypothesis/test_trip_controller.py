@@ -127,7 +127,7 @@ class TripCreateViewTests(TestCase):
 
 
 class TripDetailViewTests(TestCase):
-    """GET /trips/<uuid>/ - access control and page render."""
+    """GET /trips/<slug>/ - access control and page render."""
 
     def setUp(self):
         super().setUp()
@@ -143,7 +143,7 @@ class TripDetailViewTests(TestCase):
         self.outsider = self.outsider_user.profile
 
     def _url(self):
-        return reverse("trips.detail", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.detail", kwargs={"trip_slug": self.trip.slug})
 
     def test_creator_gets_200(self):
         client = Client()
@@ -164,16 +164,15 @@ class TripDetailViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_nonexistent_trip_returns_404(self):
-        import uuid
         client = Client()
         client.force_login(self.creator_user)
-        url = reverse("trips.detail", kwargs={"trip_uuid": str(uuid.uuid4())})
+        url = reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"})
         resp = client.get(url)
         self.assertEqual(resp.status_code, 404)
 
 
 class TripDeleteViewTests(TestCase):
-    """DELETE /trips/<uuid>/delete/ - only creator can delete."""
+    """DELETE /trips/<slug>/delete/ - only creator can delete."""
 
     def setUp(self):
         super().setUp()
@@ -186,7 +185,7 @@ class TripDeleteViewTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.member)
 
     def _url(self):
-        return reverse("trips.delete", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.delete", kwargs={"trip_slug": self.trip.slug})
 
     def test_creator_can_delete(self):
         client = Client()
@@ -204,7 +203,7 @@ class TripDeleteViewTests(TestCase):
 
 
 class TripActivitiesViewTests(TestCase):
-    """GET/POST /trips/<uuid>/activities/ - activity listing and creation."""
+    """GET/POST /trips/<slug>/activities/ - activity listing and creation."""
 
     def setUp(self):
         super().setUp()
@@ -220,7 +219,7 @@ class TripActivitiesViewTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.member)
 
     def _url(self):
-        return reverse("trips.activities", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.activities", kwargs={"trip_slug": self.trip.slug})
 
     def test_get_activities_panel_as_member(self):
         client = Client()
@@ -367,7 +366,7 @@ class TripActivityEffectiveTitleTests(TestCase):
 
 
 class TripActivityCompleteViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/complete/ - marks activity completed."""
+    """POST /trips/<slug>/activities/<id>/complete/ - marks activity completed."""
 
     def setUp(self):
         super().setUp()
@@ -386,7 +385,7 @@ class TripActivityCompleteViewTests(TestCase):
     def _url(self):
         return reverse(
             "trips.activity.complete",
-            kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": self.activity.id},
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
         )
 
     def test_marks_activity_completed(self):
@@ -413,7 +412,7 @@ class TripActivityCompleteViewTests(TestCase):
 
 
 class TripActivityVoteViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/vote/ - vote cast/update/clear."""
+    """POST /trips/<slug>/activities/<id>/vote/ - vote cast/update/clear."""
 
     def setUp(self):
         super().setUp()
@@ -432,7 +431,7 @@ class TripActivityVoteViewTests(TestCase):
     def _url(self):
         return reverse(
             "trips.activity.vote",
-            kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": self.activity.id},
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
         )
 
     def test_upvote_created(self):
@@ -481,7 +480,7 @@ class TripActivityVoteViewTests(TestCase):
 
 
 class TripMembersViewTests(TestCase):
-    """GET/POST /trips/<uuid>/members/ - member listing and invitation."""
+    """GET/POST /trips/<slug>/members/ - member listing and invitation."""
 
     def setUp(self):
         super().setUp()
@@ -492,7 +491,7 @@ class TripMembersViewTests(TestCase):
         self.client.force_login(self.creator_user)
 
     def _url(self):
-        return reverse("trips.members", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.members", kwargs={"trip_slug": self.trip.slug})
 
     def test_get_renders_members_panel(self):
         resp = self.client.get(self._url())
@@ -527,7 +526,7 @@ class TripMembersViewTests(TestCase):
 
 
 class TripMemberRSVPViewTests(TestCase):
-    """POST /trips/<uuid>/rsvp/ - update RSVP status."""
+    """POST /trips/<slug>/rsvp/ - update RSVP status."""
 
     def setUp(self):
         super().setUp()
@@ -538,7 +537,7 @@ class TripMemberRSVPViewTests(TestCase):
         self.client.force_login(self.user)
 
     def _url(self):
-        return reverse("trips.rsvp", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.rsvp", kwargs={"trip_slug": self.trip.slug})
 
     def test_set_rsvp_yes(self):
         self.client.post(self._url(), data=json.dumps({"rsvp": "yes"}), content_type="application/json")
@@ -571,7 +570,7 @@ class TripMemberRSVPViewTests(TestCase):
 
 
 class TripLeaveViewTests(TestCase):
-    """DELETE /trips/<uuid>/leave/ - member exits trip."""
+    """DELETE /trips/<slug>/leave/ - member exits trip."""
 
     def setUp(self):
         super().setUp()
@@ -584,7 +583,7 @@ class TripLeaveViewTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.member)
 
     def _url(self):
-        return reverse("trips.leave", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.leave", kwargs={"trip_slug": self.trip.slug})
 
     def test_member_can_leave(self):
         client = Client()
@@ -603,7 +602,7 @@ class TripLeaveViewTests(TestCase):
 
 
 class TripSettingsViewTests(TestCase):
-    """POST /trips/<uuid>/settings/ - only organizer may change settings."""
+    """POST /trips/<slug>/settings/ - only organizer may change settings."""
 
     def setUp(self):
         super().setUp()
@@ -616,7 +615,7 @@ class TripSettingsViewTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.member)
 
     def _url(self):
-        return reverse("trips.settings", kwargs={"trip_uuid": str(self.trip.uuid)})
+        return reverse("trips.settings", kwargs={"trip_slug": self.trip.slug})
 
     def test_organizer_can_save_settings(self):
         client = Client()
@@ -653,7 +652,7 @@ class TripSettingsViewTests(TestCase):
 
 
 class TripActivityPositionViewTests(TestCase):
-    """POST /trips/<uuid>/activities/<id>/position/ - saves lat/lng override."""
+    """POST /trips/<slug>/activities/<id>/position/ - saves lat/lng override."""
 
     def setUp(self):
         super().setUp()
@@ -671,7 +670,7 @@ class TripActivityPositionViewTests(TestCase):
     def _url(self):
         return reverse(
             "trips.activity.position",
-            kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": self.activity.id},
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
         )
 
     def test_saves_lat_lng(self):

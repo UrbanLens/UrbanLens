@@ -108,7 +108,7 @@ def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]
     if kind == "comment":
         return f"Comment on {host.wiki.name}", reverse("location.wiki", args=[host.wiki.location.slug])
     if kind == "trip_comment":
-        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.uuid])
+        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.slug])
     if kind == "visit":
         label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
         return label, reverse("pin.details", args=[host.pin.slug])

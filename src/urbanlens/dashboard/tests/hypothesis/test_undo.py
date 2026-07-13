@@ -246,7 +246,7 @@ class DeleteViewsStashUndoTests(TestCase):
 
     def test_trip_delete_view_stashes_undo(self) -> None:
         trip = baker.make(Trip, creator=self.profile, name="Doomed Trip")
-        self.client.delete(reverse("trips.delete", args=[trip.uuid]))
+        self.client.delete(reverse("trips.delete", args=[trip.slug]))
         self.assertTrue(UndoAction.objects.filter(profile=self.profile, model_label="trip").exists())
 
     def test_safety_checkin_delete_view_stashes_undo(self) -> None:

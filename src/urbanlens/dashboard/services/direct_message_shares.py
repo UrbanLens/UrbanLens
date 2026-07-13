@@ -106,7 +106,7 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
             notification_type=NotificationType.ADDED_TO_TRIP,
             title="Trip invitation",
             message=f'{sender.username} invited you to join "{trip.name}".',
-            url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+            url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
         )
     return message
 

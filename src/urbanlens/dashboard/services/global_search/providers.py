@@ -480,7 +480,7 @@ class TripSearchProvider(SearchProvider):
                 SearchResult(
                     type=self.slug,
                     title=trip.name,
-                    url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+                    url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
                     subtitle=subtitle,
                     snippet=excerpt(trip.description, parsed.terms),
                     date=trip.updated,
@@ -717,7 +717,7 @@ class CommentSearchProvider(SearchProvider):
                 SearchResult(
                     type=self.slug,
                     title=f"Comment on {comment.trip.name}",
-                    url=reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}),
+                    url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
                     subtitle=f"{comment.author.username} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
                     snippet=excerpt(comment.text, parsed.terms),
                     date=comment.created,

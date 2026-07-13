@@ -3,7 +3,7 @@
 one) to invite the conversation partner to. Picking one stages it as a
 composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
 {% endcomment %}
-<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_uuid">
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_slug">
   <div class="dialog-header">
     <span>Invite {{ partner.username }} to a trip</span>
     <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
@@ -21,7 +21,7 @@ composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
       </li>
       {% for trip in trips %}
       <li class="dm-share-list-item" data-search="{{ trip.name|lower }}">
-        <button type="button" class="dm-share-pick-btn" data-value="{{ trip.uuid }}" data-label="{{ trip.name }}" onclick="window.dmSharePick(this)">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ trip.slug }}" data-label="{{ trip.name }}" onclick="window.dmSharePick(this)">
           <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
         </button>
       </li>

@@ -4,7 +4,7 @@
       {% elif context_type == "wiki" %}
       hx-post="{% url 'location.wiki.comments' location.slug %}"
       {% else %}
-      hx-post="{% url 'trips.comments' trip.uuid %}"
+      hx-post="{% url 'trips.comments' trip.slug %}"
       {% endif %}
       hx-target="#comment-panel"
       hx-swap="outerHTML"
@@ -31,7 +31,7 @@
                   placeholder="{% if is_reply %}Write a reply...{% else %}Add a comment...{% endif %}"
                   class="comment-input mention-input"
                   data-context-type="{{ context_type }}"
-                  {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}></textarea>
+                  {% if trip %}data-trip-slug="{{ trip.slug }}"{% endif %}></textarea>
         {# @ mention autocomplete container #}
         <div class="mention-dropdown" hidden></div>
       </div>
