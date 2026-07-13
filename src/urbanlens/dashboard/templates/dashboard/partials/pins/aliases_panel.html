@@ -1,11 +1,18 @@
-<div id="location-aliases-panel" class="aliases-panel card"
-     data-collapse-scope="wiki" data-collapse-section="aliases">
+{# Shared aliases panel for Pins and Wikis - configured entirely via context, no per-caller branching. #}
+<div id="{{ panel_id }}" class="aliases-panel card"
+     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="aliases">
     <div class="card-header">
         <i class="material-symbols-outlined">label_important</i>
         <span>Aliases</span>
+        {% if show_header_add_button %}
+        <button type="button" class="btn btn--icon-sm" title="Add alias"
+                onclick="this.closest('.aliases-panel').querySelector('.alias-add-input').focus()">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+        {% endif %}
     </div>
-    <div class="card__body aliases-body">
-    <p class="aliases-description">Every name this location is known by.</p>
+    {% if wrap_body %}<div class="card__body aliases-body">{% endif %}
+    <p class="aliases-description">{{ description_text }}</p>
 
     {% if aliases %}
     <div class="alias-chips-row">
@@ -18,8 +25,8 @@
             <button type="button"
                     class="alias-chip-nickname-toggle{% if alias.is_nickname %} is-active{% endif %}"
                     title="{% if alias.is_nickname %}Nickname - not used in external searches. Click to allow.{% else %}Click to exclude from web searches.{% endif %}"
-                    hx-post="{% url 'location.wiki.alias.toggle_nickname' location.slug alias.id %}"
-                    hx-target="#location-aliases-panel"
+                    hx-post="{% url url_toggle_nickname obj_slug alias.id %}"
+                    hx-target="#{{ panel_id }}"
                     hx-swap="outerHTML">
                 <i class="material-symbols-outlined">person</i>
             </button>
@@ -29,16 +36,16 @@
             <button type="button"
                     class="alias-chip-use"
                     title="Use this name"
-                    hx-post="{% url 'location.wiki.alias.use' location.slug alias.id %}"
-                    hx-target="#location-aliases-panel"
+                    hx-post="{% url url_use obj_slug alias.id %}"
+                    hx-target="#{{ panel_id }}"
                     hx-swap="outerHTML">
                 <i class="material-symbols-outlined">check</i>
             </button>
             <button type="button"
                     class="alias-chip-remove"
                     title="Remove alias"
-                    hx-delete="{% url 'location.wiki.alias.delete' location.slug alias.id %}"
-                    hx-target="#location-aliases-panel"
+                    hx-delete="{% url url_delete obj_slug alias.id %}"
+                    hx-target="#{{ panel_id }}"
                     hx-swap="outerHTML"
                     hx-confirm="Remove alias &ldquo;{{ alias.name }}&rdquo;?">
                 <i class="material-symbols-outlined">close</i>
@@ -48,16 +55,16 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="aliases-empty">No aliases yet. Add alternate names for this location.</p>
+    <p class="aliases-empty">{{ empty_text }}</p>
     {% endif %}
 
     <form class="alias-add-form"
-          hx-post="{% url 'location.wiki.aliases' location.slug %}"
-          hx-target="#location-aliases-panel"
+          hx-post="{% url url_add obj_slug %}"
+          hx-target="#{{ panel_id }}"
           hx-swap="outerHTML">
         {% csrf_token %}
         <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
-        <label class="alias-nickname-check" title="Nickname-only aliases help the community find this location, but are never sent to external APIs (Google, Wikipedia, etc).">
+        <label class="alias-nickname-check" title="{{ nickname_help_text }}">
             <input type="checkbox" name="is_nickname" value="1">
             <span class="alias-nickname-check-text">Don't use in web searches</span>
         </label>
@@ -76,5 +83,5 @@
             <p>Check <strong>Don't use in web searches</strong> to make an alias a nickname. Nicknames are unofficial names that won't improve search results. Like "The Lounge", "The Office with a Bad Smell", "Rooftop Hangout", or "John's Place". They will still be used when you search for your own pins on the site, but they won't ever leave the site for external searches.</p>
         </div>
     </details>
-    </div>
+    {% if wrap_body %}</div>{% endif %}
 </div>

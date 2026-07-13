@@ -67,8 +67,23 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
     aliases = _annotated(pin.aliases.order_by("name"), pin.effective_name)
     return render(
         request,
-        "dashboard/partials/pins/pin_aliases_panel.html",
-        {"pin": pin, "aliases": aliases},
+        "dashboard/partials/pins/aliases_panel.html",
+        {
+            "pin": pin,
+            "aliases": aliases,
+            "panel_id": "pin-aliases-panel",
+            "collapse_scope": "pin",
+            "wrap_body": False,
+            "show_header_add_button": True,
+            "description_text": "Every name this pin is known by.",
+            "empty_text": "No aliases yet.",
+            "nickname_help_text": "Nickname-only aliases help you find your own pins, but are never sent to external APIs (Google, Wikipedia, etc).",
+            "obj_slug": pin.slug,
+            "url_toggle_nickname": "pin.alias.toggle_nickname",
+            "url_use": "pin.alias.use",
+            "url_delete": "pin.alias.delete",
+            "url_add": "pin.aliases",
+        },
     )
 
 
@@ -77,8 +92,24 @@ def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpRespo
     aliases = _annotated(wiki.aliases.order_by("name"), wiki.name)
     return render(
         request,
-        "dashboard/partials/pins/location_aliases_panel.html",
-        {"location": location, "wiki": wiki, "aliases": aliases},
+        "dashboard/partials/pins/aliases_panel.html",
+        {
+            "location": location,
+            "wiki": wiki,
+            "aliases": aliases,
+            "panel_id": "location-aliases-panel",
+            "collapse_scope": "wiki",
+            "wrap_body": True,
+            "show_header_add_button": False,
+            "description_text": "Every name this location is known by.",
+            "empty_text": "No aliases yet. Add alternate names for this location.",
+            "nickname_help_text": "Nickname-only aliases help the community find this location, but are never sent to external APIs (Google, Wikipedia, etc).",
+            "obj_slug": location.slug,
+            "url_toggle_nickname": "location.wiki.alias.toggle_nickname",
+            "url_use": "location.wiki.alias.use",
+            "url_delete": "location.wiki.alias.delete",
+            "url_add": "location.wiki.aliases",
+        },
     )
 
 
