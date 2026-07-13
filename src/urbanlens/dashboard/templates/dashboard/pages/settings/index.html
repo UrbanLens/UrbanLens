@@ -27,6 +27,9 @@
             <button type="button" class="settings-tab ul-subnav-tab" data-tab="account" role="tab" aria-selected="false">
                 <i class="material-symbols-outlined">manage_accounts</i> Account
             </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="advanced" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">tune</i> Advanced
+            </button>
         </div>
     </div>
 </div>
@@ -343,6 +346,75 @@
         </div>
         </div>
     </section>
+
+    {# -- AI Features ----------------------------------------------------------- #}
+    {% if can_use_ai_features %}
+    <section class="settings-section ul-section" id="ai-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">auto_awesome</i>
+            <div>
+                <h2 class="settings-section-title">AI Features</h2>
+                <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="ai-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="ai">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ ai_form.ai_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ ai_form.ai_enabled.label }}</strong>
+                        <span class="settings-help">{{ ai_form.ai_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if ai_form.ai_enabled.errors %}
+                <p class="settings-error">{{ ai_form.ai_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-ai-sub-options" id="ai-sub-options">
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these badge types:</p>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_categories }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_categories.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_categories.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_tags }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_tags.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_tags.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ ai_form.ai_badge_statuses }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ ai_form.ai_badge_statuses.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_badge_statuses.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
     </div> {# /tab-panel-connections #}
 
     {# ======================================================================= #}
@@ -1021,95 +1093,6 @@
     {# ======================================================================= #}
     <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
 
-    {# -- AI Features --------------------------------------------------------- #}
-    {% if can_use_ai_features %}
-    {# -- Customize (custom fields) ------------------------------------------- #}
-    <section class="settings-section ul-section" id="customize-settings-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">tune</i>
-            <div>
-                <h2 class="settings-section-title">Custom Fields</h2>
-                <p class="settings-section-desc">Define your own fields for pins, photos, people, and maps. Only you can see them.</p>
-            </div>
-        </div>
-
-        <div class="settings-section-body">
-            <div id="custom-fields-settings"
-                 hx-get="{% url 'custom_fields.settings' %}"
-                 hx-trigger="load"
-                 hx-swap="innerHTML">
-                <p class="settings-help">Loading...</p>
-            </div>
-        </div>
-    </section>
-
-    <section class="settings-section ul-section" id="ai-settings-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">auto_awesome</i>
-            <div>
-                <h2 class="settings-section-title">AI Features</h2>
-                <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="ai-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="ai">
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ ai_form.ai_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ ai_form.ai_enabled.label }}</strong>
-                        <span class="settings-help">{{ ai_form.ai_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if ai_form.ai_enabled.errors %}
-                <p class="settings-error">{{ ai_form.ai_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-ai-sub-options" id="ai-sub-options">
-                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these badge types:</p>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_categories }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_categories.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_categories.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_tags }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_tags.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_tags.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_statuses }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_statuses.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_statuses.help_text }}</span>
-                        </span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-    {% endif %}
-
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">
         <div class="settings-section-header">
@@ -1260,6 +1243,32 @@
         </div>
     </section>
     </div> {# /tab-panel-account #}
+
+    {# ======================================================================= #}
+    {# Advanced tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="advanced" id="tab-panel-advanced">
+
+    {# -- Customize (custom fields) ------------------------------------------- #}
+    <section class="settings-section ul-section" id="customize-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">tune</i>
+            <div>
+                <h2 class="settings-section-title">Custom Fields</h2>
+                <p class="settings-section-desc">Define your own fields for pins, photos, people, and maps. Only you can see them.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div id="custom-fields-settings"
+                 hx-get="{% url 'custom_fields.settings' %}"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+                <p class="settings-help">Loading...</p>
+            </div>
+        </div>
+    </section>
+    </div> {# /tab-panel-advanced #}
 </div>
 
 {% include "dashboard/partials/account/_delete_account_dialog.html" %}

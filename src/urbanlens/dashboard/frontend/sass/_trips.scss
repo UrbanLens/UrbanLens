@@ -403,6 +403,158 @@
     transition: color .15s, transform .15s;
 }
 
+// -- Trips overview page -----------------------------------------------------
+
+.trips-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.trips-stat-tile {
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: .75rem;
+    padding: 1rem 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+
+    .trips-stat-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: rgba($color-blue-500, .12);
+
+        .material-symbols-outlined {
+            font-size: 1.4rem;
+            color: $color-blue-500;
+        }
+    }
+
+    .trips-stat-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--ul-grey-8);
+    }
+
+    .trips-stat-label {
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.trips-overview-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+
+    @media (min-width: 900px) {
+        grid-template-columns: 1.1fr 1fr;
+        align-items: start;
+    }
+}
+
+.trips-overview-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.trip-mini-row-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.trip-mini-row {
+    border-bottom: 1px solid var(--ul-grey-4);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.trip-mini-row-link {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .65rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background .12s;
+
+    &:hover {
+        background: var(--ul-grey-0);
+
+        .trip-mini-row-name {
+            color: $color-blue-600;
+        }
+    }
+}
+
+.trip-mini-row-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--ul-grey-5);
+
+    &--upcoming { background: $color-blue-500; }
+    &--active { background: $color-green-500; }
+    &--past { background: var(--ul-grey-5); }
+    &--planning { background: $color-amber-500; }
+}
+
+.trip-mini-row-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.trip-mini-row-name {
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--ul-grey-8);
+    @include truncate;
+}
+
+.trip-mini-row-dates {
+    font-size: .76rem;
+    color: var(--ul-grey-6);
+}
+
+.trip-mini-row-timestamp {
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.trips-overview-cal {
+    .cal-header,
+    .cal-grid {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .cal-header {
+        padding-top: .9rem;
+    }
+
+    .cal-grid {
+        padding-bottom: 1rem;
+    }
+}
+
 // -- Trip detail page ------------------------------------------------------
 
 .trip-detail-page {

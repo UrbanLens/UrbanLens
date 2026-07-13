@@ -1,0 +1,139 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="flight_takeoff" title="Plan" subtitle="Your trips, routes, and shared plans in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/trips/_trips_subnav.html" with active="overview" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="trips-overview-page page-content">
+
+    <div class="trips-header-right trips-actions-row">
+        {% if calendar_account %}
+        <a href="{% url 'trips.list' %}" class="btn btn--secondary"
+           title="Import events from your Google Calendar as trips">
+            <i class="material-symbols-outlined">calendar_month</i>
+            Google Calendar
+        </a>
+        {% else %}
+        <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
+           title="Connect your own Google Calendar to import events as trips and export trips as events">
+            <i class="material-symbols-outlined">calendar_month</i>
+            Connect Google Calendar
+        </a>
+        {% endif %}
+        <a href="{% url 'trips.list' %}" class="btn btn--primary">
+            <i class="material-symbols-outlined">add</i>
+            New Trip
+        </a>
+    </div>
+
+    {# -- Stat tiles ---------------------------------------------------------- #}
+    <div class="trips-stat-grid">
+        <div class="trips-stat-tile">
+            <div class="trips-stat-icon"><i class="material-symbols-outlined">luggage</i></div>
+            <div>
+                <div class="trips-stat-value">{{ stats.total }}</div>
+                <div class="trips-stat-label">Total trips</div>
+            </div>
+        </div>
+        <div class="trips-stat-tile">
+            <div class="trips-stat-icon"><i class="material-symbols-outlined">flight_takeoff</i></div>
+            <div>
+                <div class="trips-stat-value">{{ stats.upcoming }}</div>
+                <div class="trips-stat-label">Upcoming</div>
+            </div>
+        </div>
+        <div class="trips-stat-tile">
+            <div class="trips-stat-icon"><i class="material-symbols-outlined">directions_walk</i></div>
+            <div>
+                <div class="trips-stat-value">{{ stats.active }}</div>
+                <div class="trips-stat-label">In progress</div>
+            </div>
+        </div>
+        <div class="trips-stat-tile">
+            <div class="trips-stat-icon"><i class="material-symbols-outlined">edit_calendar</i></div>
+            <div>
+                <div class="trips-stat-value">{{ stats.planning }}</div>
+                <div class="trips-stat-label">Planning</div>
+            </div>
+        </div>
+        <div class="trips-stat-tile">
+            <div class="trips-stat-icon"><i class="material-symbols-outlined">history</i></div>
+            <div>
+                <div class="trips-stat-value">{{ stats.past }}</div>
+                <div class="trips-stat-label">Completed</div>
+            </div>
+        </div>
+    </div>
+
+    {% if stats.total %}
+    <div class="trips-overview-grid">
+        {# -- This month --------------------------------------------------------- #}
+        <div class="trips-overview-cal card">
+            <div class="card-header">This month</div>
+            {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
+        </div>
+
+        <div class="trips-overview-lists">
+            {# -- Recently updated ------------------------------------------------ #}
+            <div class="trips-overview-list card">
+                <div class="card-header">Recently updated</div>
+                {% if recently_updated_trips %}
+                <ul class="trip-mini-row-list">
+                    {% for t in recently_updated_trips %}
+                    {% include "dashboard/partials/trips/_trip_mini_row.html" with t=t timestamp=t.updated timestamp_label="Updated" %}
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="trip-panel-empty">No trips yet.</p>
+                {% endif %}
+            </div>
+
+            {# -- Recently viewed -------------------------------------------------- #}
+            <div class="trips-overview-list card">
+                <div class="card-header">Recently viewed</div>
+                {% if recently_viewed_trips %}
+                <ul class="trip-mini-row-list">
+                    {% for t in recently_viewed_trips %}
+                    {% include "dashboard/partials/trips/_trip_mini_row.html" with t=t timestamp=t.viewer_last_viewed_at timestamp_label="Viewed" %}
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="trip-panel-empty">Open a trip to see it here.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="trips-empty">
+        <div class="trips-empty-icon-wrap">
+            <i class="material-icons trips-empty-icon">flight_takeoff</i>
+        </div>
+        <h2 class="trips-empty-title">No trips yet</h2>
+        <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
+        <a href="{% url 'trips.list' %}" class="btn btn--primary">
+            <i class="material-symbols-outlined">add</i>
+            New Trip
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "dashboard/partials/trips/_mini_calendar_script.html" %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.tripsCalRender) { window.tripsCalRender(); }
+    });
+</script>
+{% endblock %}

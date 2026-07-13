@@ -306,6 +306,11 @@ class TripMembership(abstract.DashboardModel):
         default=False,
         help_text="Organizers have the same trip-management rights as the creator.",
     )
+    last_viewed_at = DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this member last opened the trip detail page. Powers the 'recently viewed' list on the trips overview page.",
+    )
 
     trip = ForeignKey(Trip, on_delete=CASCADE, related_name="memberships")
     profile = ForeignKey(

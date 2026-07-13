@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-_LIST_URL = "/dashboard/trips/"
+_LIST_URL = "/dashboard/trips/list/"
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:

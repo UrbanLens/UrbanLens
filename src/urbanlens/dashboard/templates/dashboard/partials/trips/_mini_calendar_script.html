@@ -1,0 +1,79 @@
+{% comment %}
+Shared renderer for the single-month trip calendar grid rendered by
+_mini_calendar.html (trips-cal-grid/trips-cal-month-label/trips-cal-data ids).
+Exposes window.tripsCalRender()/window.tripsCalNav() - included once per page
+by both the trips list page and the trips overview page (never both at once).
+{% endcomment %}
+<script>
+    (function () {
+        var _tripsCalMonthOffset = 0;
+
+        function escapeHtml(value) {
+            var div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+        window.tripsCalNav = function (delta) {
+            _tripsCalMonthOffset += delta;
+            window.tripsCalRender();
+        };
+
+        window.tripsCalRender = function () {
+            var dataEl = document.getElementById('trips-cal-data');
+            var gridEl = document.getElementById('trips-cal-grid');
+            var labelEl = document.getElementById('trips-cal-month-label');
+            if (!dataEl || !gridEl || !labelEl) { return; }
+
+            var trips;
+            try { trips = JSON.parse(dataEl.textContent); } catch (e) { trips = []; }
+
+            var today = new Date();
+            var base = new Date(today.getFullYear(), today.getMonth() + _tripsCalMonthOffset, 1);
+            var year = base.getFullYear();
+            var month = base.getMonth();
+            labelEl.textContent = base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+            function toDate(iso) {
+                if (!iso) { return null; }
+                var parts = iso.split('-').map(Number);
+                return new Date(parts[0], parts[1] - 1, parts[2]);
+            }
+
+            var startWeekday = new Date(year, month, 1).getDay();
+            var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            var html = '';
+            ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(function (d) {
+                html += '<div class="cal-cell cal-cell--header">' + d + '</div>';
+            });
+            for (var i = 0; i < startWeekday; i++) {
+                html += '<div class="cal-cell cal-cell--empty"></div>';
+            }
+            for (var day = 1; day <= daysInMonth; day++) {
+                var cellDate = new Date(year, month, day);
+                var dayTrips = trips.filter(function (t) {
+                    var s = toDate(t.start);
+                    if (!s) { return false; }
+                    var e = toDate(t.end) || s;
+                    return cellDate >= s && cellDate <= e;
+                });
+                var isToday = cellDate.toDateString() === today.toDateString();
+                html += '<div class="cal-cell' + (dayTrips.length ? ' cal-cell--has-events' : '') + (isToday ? ' cal-cell--today' : '') + '">';
+                html += '<span class="cal-day-num">' + day + '</span>';
+                if (dayTrips.length) {
+                    html += '<div class="cal-events">';
+                    dayTrips.slice(0, 3).forEach(function (t) {
+                        html += '<a class="cal-event cal-event--' + escapeHtml(t.status) + '" href="' + escapeHtml(t.url) + '" title="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</a>';
+                    });
+                    if (dayTrips.length > 3) {
+                        html += '<span class="cal-event-more">+' + (dayTrips.length - 3) + ' more</span>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            gridEl.innerHTML = html;
+        };
+    })();
+</script>

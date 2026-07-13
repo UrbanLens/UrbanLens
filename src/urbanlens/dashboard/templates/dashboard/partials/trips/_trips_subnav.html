@@ -1,0 +1,20 @@
+{% comment %}
+Overview | Trips tab strip for the trips section.
+
+Context:
+  active - "overview" or "list" (which tab is current)
+{% endcomment %}
+<nav class="ul-subnav-tabs" aria-label="Trips views">
+    <a href="{% url 'trips.overview' %}"
+       class="ul-subnav-tab {% if active == 'overview' %}is-active{% endif %}"
+       {% if active == 'overview' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">dashboard</i>
+        <span>Overview</span>
+    </a>
+    <a href="{% url 'trips.list' %}"
+       class="ul-subnav-tab {% if active == 'list' %}is-active{% endif %}"
+       {% if active == 'list' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">luggage</i>
+        <span>Trips</span>
+    </a>
+</nav>

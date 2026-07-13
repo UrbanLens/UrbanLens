@@ -935,7 +935,8 @@ urlpatterns = [
         "trips/",
         include(
             [
-                path("", trip.TripListView.as_view(), name="trips.list"),
+                path("", trip.TripOverviewView.as_view(), name="trips.overview"),
+                path("list/", trip.TripListView.as_view(), name="trips.list"),
                 path("create/", trip.TripCreateView.as_view(), name="trips.create"),
                 path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),

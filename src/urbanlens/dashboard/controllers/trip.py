@@ -13,6 +13,7 @@ from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 import requests
@@ -106,6 +107,23 @@ def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
         }
         for t in trips
     ]
+
+
+def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
+    """Compute trip counts by timeline status for the overview page's stat tiles.
+
+    Args:
+        trips: The viewer's trips.
+
+    Returns:
+        Dict with `total` and one key per `Trip.timeline_status` value
+        (`planning`, `upcoming`, `active`, `past`).
+    """
+    stats = {"total": 0, "planning": 0, "upcoming": 0, "active": 0, "past": 0}
+    for t in trips:
+        stats["total"] += 1
+        stats[t.timeline_status] += 1
+    return stats
 
 
 def _apply_trip_visibility_filter(
@@ -566,10 +584,39 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
     return response
 
 
-class TripListView(LoginRequiredMixin, View):
-    """Trips index page and trip creation.
+class TripOverviewView(LoginRequiredMixin, View):
+    """Trips section landing page: stats, a small calendar, and recent trips.
 
-    GET  /trips/        → list page
+    GET /trips/  → overview page
+    """
+
+    #: Max trips shown in each of the overview's "recently updated"/"recently viewed" lists.
+    RECENT_TRIPS_LIMIT = 5
+
+    def get(self, request):
+        from urbanlens.dashboard.models.calendar_sync.model import get_calendar_account
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        return render(
+            request,
+            "dashboard/pages/trips/overview.html",
+            {
+                "profile": profile,
+                "page_name": "trips",
+                "stats": _trip_overview_stats(all_trips),
+                "trips_calendar_data": _trips_calendar_data(all_trips),
+                "recently_updated_trips": Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT),
+                "recently_viewed_trips": Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT),
+                "calendar_account": get_calendar_account(profile),
+            },
+        )
+
+
+class TripListView(LoginRequiredMixin, View):
+    """Trips list page and trip creation.
+
+    GET  /trips/list/   → list page
     POST /trips/create/ → create a new trip, return updated list partial
     """
 
@@ -676,6 +723,7 @@ class TripDetailView(LoginRequiredMixin, View):
             return result
         trip = result
         viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.filter(trip=trip, profile=profile).first()
+        TripMembership.objects.filter(trip=trip, profile=profile).update(last_viewed_at=timezone.now())
         return render(
             request,
             "dashboard/pages/trips/detail.html",

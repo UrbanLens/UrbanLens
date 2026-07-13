@@ -17,8 +17,8 @@
     </div>
 </div>
 {% endif %}
-{% url 'trips.list' as trips_list_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_list_url back_label="Plan" %}
+{% url 'trips.overview' as trips_overview_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_overview_url back_label="Plan" %}
 <div class="trip-detail-header-right">
     {% include "dashboard/partials/trips/_trip_calendar_button.html" %}
     {% if viewer_is_organizer %}

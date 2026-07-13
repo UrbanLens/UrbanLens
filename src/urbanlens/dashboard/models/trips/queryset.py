@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import Count, F, Prefetch
+from django.db.models import Count, F, Max, Prefetch, Q
 
 # Django Imports
 # App Imports
@@ -66,6 +66,37 @@ class TripQuerySet(abstract.DashboardQuerySet):
                 ),
             )
             .order_by(order)
+        )
+
+    def recently_updated(self, profile: Profile, limit: int = 5) -> TripQuerySet:
+        """Return the viewer's trips ordered by most recently updated, for the overview page.
+
+        Args:
+            profile: The viewer's profile; only their trips are included.
+            limit: Maximum number of trips to return.
+
+        Returns:
+            Trips ordered by `updated` descending, limited to `limit`.
+        """
+        return self.filter(profiles=profile).select_related("creator__user").order_by("-updated")[:limit]
+
+    def recently_viewed(self, profile: Profile, limit: int = 5) -> TripQuerySet:
+        """Return the viewer's trips ordered by when they personally last viewed each one.
+
+        Args:
+            profile: The viewer's profile; only trips they've opened before are included.
+            limit: Maximum number of trips to return.
+
+        Returns:
+            Trips ordered by the viewer's own `TripMembership.last_viewed_at` descending,
+            excluding trips they belong to but have never opened.
+        """
+        return (
+            self.filter(profiles=profile)
+            .annotate(viewer_last_viewed_at=Max("memberships__last_viewed_at", filter=Q(memberships__profile=profile)))
+            .filter(viewer_last_viewed_at__isnull=False)
+            .select_related("creator__user")
+            .order_by("-viewer_last_viewed_at")[:limit]
         )
 
 

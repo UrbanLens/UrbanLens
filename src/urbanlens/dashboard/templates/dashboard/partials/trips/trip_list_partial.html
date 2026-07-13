@@ -98,18 +98,8 @@
 </div>
 
 <div class="trips-view trips-view--calendar" data-trips-view="calendar" hidden>
-    <div class="cal-header">
-        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(-1)" aria-label="Show previous month">
-            <i class="material-icons">chevron_left</i>
-        </button>
-        <span class="cal-month-label" id="trips-cal-month-label"></span>
-        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(1)" aria-label="Show next month">
-            <i class="material-icons">chevron_right</i>
-        </button>
-    </div>
-    <div class="cal-grid" id="trips-cal-grid"></div>
+    {% include "dashboard/partials/trips/_mini_calendar.html" with calendar_data=trips_calendar_data %}
 </div>
-{{ trips_calendar_data|json_script:"trips-cal-data" }}
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">

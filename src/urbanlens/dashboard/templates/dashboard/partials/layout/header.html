@@ -12,7 +12,7 @@
             {% if user.is_authenticated %}
             <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
             <li{% if nav_section == 'organize' or nav_section == 'lists' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-            <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
+            <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.overview' %}" class="app-nav-link">Trips</a></li>
             <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
             <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
             {% else %}
@@ -171,7 +171,7 @@
         <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
         {% if user.is_authenticated %}
         <li{% if nav_section == 'organize' or nav_section == 'lists' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
-        <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.list' %}" class="app-nav-link">Trips</a></li>
+        <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.overview' %}" class="app-nav-link">Trips</a></li>
         <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
         <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
         {% endif %}

@@ -1,0 +1,21 @@
+{% comment %}
+Single-month trip calendar grid. Rendered by both the trips list page's
+Calendar view toggle and the trips overview page's "This month" widget - the
+two never appear on the same page, so both reuse the same element ids
+(trips-cal-*) and the shared tripsCalRender()/tripsCalNav() functions in
+_mini_calendar_script.html.
+
+Context:
+  calendar_data - list of trip dicts from _trips_calendar_data() (uuid, name, start, end, status, url)
+{% endcomment %}
+<div class="cal-header">
+    <button type="button" class="cal-nav-btn" onclick="tripsCalNav(-1)" aria-label="Show previous month">
+        <i class="material-icons">chevron_left</i>
+    </button>
+    <span class="cal-month-label" id="trips-cal-month-label"></span>
+    <button type="button" class="cal-nav-btn" onclick="tripsCalNav(1)" aria-label="Show next month">
+        <i class="material-icons">chevron_right</i>
+    </button>
+</div>
+<div class="cal-grid" id="trips-cal-grid"></div>
+{{ calendar_data|json_script:"trips-cal-data" }}
