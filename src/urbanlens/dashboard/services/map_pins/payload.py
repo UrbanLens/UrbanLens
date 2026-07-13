@@ -80,6 +80,14 @@ class MapPinPayloadService:
             "color": self._effective_color(pin, badges),
             "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in display_badges],
             "address": pin.effective_address,
+            # The pin's own icon/color overrides, distinct from "icon"/"color" above
+            # (which fall back to an inherited badge's icon/color for map display).
+            # The edit dialog must pre-fill from these, not the effective values -
+            # otherwise resaving a pin that merely *displays* a badge's icon bakes
+            # that icon onto the pin permanently, even though the user never touched it.
+            "own_icon": pin.icon,
+            "own_custom_icon_url": pin.custom_icon.url if pin.custom_icon else None,
+            "own_color": pin.color,
         }
 
     @staticmethod

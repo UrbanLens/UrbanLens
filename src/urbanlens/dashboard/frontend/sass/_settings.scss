@@ -7,7 +7,6 @@
 
 .settings-tabs {
     display: flex;
-    gap: 0.25rem;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     border-bottom: 1px solid var(--ul-grey-1a);
@@ -30,6 +29,14 @@
     border-bottom: 2px solid transparent;
     white-space: nowrap;
     transition: color 0.15s, border-color 0.15s;
+    border-radius: 5px 5px 0 0;
+    border-left-width: 0;
+    border: 1px solid var(--ul-grey-2);
+    background: var(--ul-grey-1a);
+
+    &:first-child {
+        border-left-width: 1px;
+    }
 
     .material-symbols-outlined {
         font-size: 1.15rem;
@@ -42,6 +49,7 @@
     &.active {
         color: var(--primary-color);
         border-bottom-color: var(--primary-color);
+        background: var(--ul-grey-1b);
     }
 }
 

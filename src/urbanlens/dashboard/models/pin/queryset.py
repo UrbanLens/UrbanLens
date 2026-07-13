@@ -169,7 +169,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 has_visits ('yes'|'no'|''), min_priority (int), max_priority (int),
                 min_danger (int), max_danger (int), min_vulnerability (int), max_vulnerability (int),
                 created_after (date), created_before (date),
-                visited_after (date), visited_before (date), overlapping_pins (bool).
+                visited_after (date), visited_before (date), overlapping_pins (bool),
+                include_regions (MultiPolygon | None), exclude_regions (MultiPolygon | None).
 
         Returns:
             Filtered QuerySet (distinct).
@@ -238,6 +239,10 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             qs = qs.filter(created__date__lte=created_before)
         if custom_fields := criteria.get("custom_fields"):
             qs = qs.filter_by_custom_fields(custom_fields)
+        if include_regions := criteria.get("include_regions"):
+            qs = qs.filter(location__point__within=include_regions)
+        if exclude_regions := criteria.get("exclude_regions"):
+            qs = qs.exclude(location__point__within=exclude_regions)
         if criteria.get("overlapping_pins"):
             qs = qs.overlapping()
         return qs.distinct()

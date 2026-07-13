@@ -448,6 +448,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
@@ -484,6 +486,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = query.filter_by_criteria(criteria)
 
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
@@ -619,6 +623,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 criteria["badge_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = query.filter_by_criteria(criteria)
 
         pins = []
@@ -727,6 +733,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.color = color or None
         if custom_icon:
             pin.custom_icon = custom_icon
+        elif request.POST.get("clear_custom_icon"):
+            pin.custom_icon = None
         pin.save()
 
         if badge_ids:
@@ -996,7 +1004,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if pin.get("tags"):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
-                    pin["tags_data"] = [{"name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
+                    pin["tags_data"] = [{"id": t.get("id"), "name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:
                     pin["tags_data"] = [{"name": t} for t in tags]

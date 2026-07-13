@@ -9,7 +9,7 @@
   border-radius: 6px;
   color: var(--ul-grey-8);
   font-size: .85rem;
-  padding: .35rem .55rem;
+  padding: .45rem .6rem;
   transition: border-color .15s, box-shadow .15s;
 
   &:focus {
@@ -21,11 +21,12 @@
 
 .cf-name-input {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 8rem;
 }
 
 .cf-type-select {
   flex: 0 0 auto;
+  width: 8.5rem;
   cursor: pointer;
 }
 
@@ -52,18 +53,18 @@
 
 .cf-settings-panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1.25rem;
 }
 
 .cf-group {
   background: var(--ul-grey-1);
   border: 1px solid var(--ul-border);
-  border-radius: 8px;
-  padding: .85rem;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: .6rem;
+  gap: .75rem;
 }
 
 .cf-group-header {
@@ -151,6 +152,20 @@
 
 .cf-delete-btn:hover {
   color: var(--ul-color-danger-accent, #e05555);
+}
+
+.cf-add-trigger {
+  align-self: flex-start;
+  color: var(--ul-grey-6);
+  gap: .35rem;
+  width: auto;
+  padding: .3rem .6rem;
+
+  span { font-size: .8rem; }
+
+  &:hover {
+    color: var(--ul-color-accent);
+  }
 }
 
 // -- Value rows (pin detail card + profile annotation block) --------------------

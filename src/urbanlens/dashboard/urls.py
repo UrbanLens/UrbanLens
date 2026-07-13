@@ -43,6 +43,7 @@ from urbanlens.dashboard.controllers import (
     pin_lists,
     pin_sharing,
     pin_suggestions,
+    region_search,
     safety,
     saved_filters,
     search,
@@ -239,11 +240,6 @@ urlpatterns = [
                                 name="pin.wiki.create",
                             ),
                             path(
-                                "<slug:pin_slug>/media/<str:source>/",
-                                pin.PinController.as_view({"get": "media_provider"}),
-                                name="pin.media",
-                            ),
-                            path(
                                 "<slug:pin_slug>/media/relevance/",
                                 pin.PinController.as_view({"post": "media_relevance"}),
                                 name="pin.media.relevance",
@@ -257,6 +253,14 @@ urlpatterns = [
                                 "media/sort/",
                                 pin.PinController.as_view({"post": "set_media_sort"}),
                                 name="pin.media.sort",
+                            ),
+                            # This catch-all must stay below the more specific media/ routes above -
+                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a
+                            # provider name and 405 on their POST-only methods.
+                            path(
+                                "<slug:pin_slug>/media/<str:source>/",
+                                pin.PinController.as_view({"get": "media_provider"}),
+                                name="pin.media",
                             ),
                             path(
                                 "<slug:pin_slug>/cover-photo/",
@@ -577,10 +581,13 @@ urlpatterns = [
         include(
             [
                 path("create/", saved_filters.SavedFilterCreateView.as_view(), name="saved_filters.create"),
+                path("new/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.new"),
+                path("<uuid:filter_uuid>/edit/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.edit"),
                 path("<uuid:filter_uuid>/delete/", saved_filters.SavedFilterDeleteView.as_view(), name="saved_filters.delete"),
             ],
         ),
     ),
+    path("region-search/", region_search.RegionBoundarySearchView.as_view(), name="region_search.search"),
     path(
         "lists/",
         include(

@@ -163,6 +163,12 @@
                 <div class="fp-accordion-body">
                     {# Badge query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
                     <input type="hidden" name="badge_groups" id="fp-badge-groups">
+                    {# Geographic include/exclude regions carried through from an applied saved filter
+                       (dashboard/pages/pin_lists/index.html's Filters tab is the only place these are
+                       authored - there's no drawing UI here, this is just a pass-through so results
+                       still narrow correctly when such a filter is applied). #}
+                    <input type="hidden" name="include_regions" id="fp-include-regions">
+                    <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
 
                     {# Selected badges area - two columns, shown only when something selected #}
                     <div class="fp-badge-selected" id="fp-badge-selected" style="display:none">
@@ -407,14 +413,14 @@
             </summary>
             <div class="apdlg-customize-body">
                 <p class="apdlg-customize-hint">
-                    Badges group and style pins on your map. Go to the Organize page to customize badges.
-                    Use icon and color here only when you want this pin to override what your badges would show.
+                    Override what your badges would show for this pin with a custom icon or color.
                 </p>
                 <div class="form-field">
                     <label class="form-label">Icon</label>
                     {% with picker_id='add-pin' current_icon='' field_name='_apdlg_icon_unused' show_upload=True %}
                     {% include 'dashboard/partials/ui/_icon_picker.html' %}
                     {% endwith %}
+                    <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-add-pin" value="">
                 </div>
                 <div class="form-field">
                     <label class="form-label">Color</label>
@@ -431,6 +437,11 @@
                         </button>
                     </div>
                 </div>
+                <button type="button" class="btn btn--ghost apdlg-customize-clear-btn" id="apdlg-customize-clear"
+                        onclick="_apdlgClearCustomizations()">
+                    <i class="material-symbols-outlined">restart_alt</i>
+                    Clear all customizations
+                </button>
             </div>
         </details>
 
@@ -857,6 +868,7 @@
     // cuts the stored payload by ~40%, keeping it under the 5 MB quota.
     const _CACHE_FIELDS = new Set([
         'uuid', 'id', 'name', 'icon', 'color',
+        'own_icon', 'own_custom_icon_url', 'own_color',
         'latitude', 'longitude',
         'description', 'status', 'last_visited', 'rating',
         'tags', 'tags_data', 'viewLocationUrl', 'address',
@@ -873,7 +885,7 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 6 || c.profileUuid !== _PROFILE_UUID) return null;
+            if (c.v !== 8 || c.profileUuid !== _PROFILE_UUID) return null;
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.
@@ -891,7 +903,7 @@
         const ts = Date.now();
         try {
             const payload = JSON.stringify({
-                v: 6, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+                v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
                 lastUpdated: _lastKnownUpdated,
                 tiles: [..._fetchedTiles],
                 pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -3199,6 +3211,11 @@
         if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
         // Reset badge selected area
         if (typeof _clearAllBadgeSelections === 'function') _clearAllBadgeSelections();
+        // Reset a saved filter's regions, if one had been applied
+        const includeRegions = document.getElementById('fp-include-regions');
+        const excludeRegions = document.getElementById('fp-exclude-regions');
+        if (includeRegions) includeRegions.value = '';
+        if (excludeRegions) excludeRegions.value = '';
         _exitFilterMode();
         _updateFilterBadge();
     }
@@ -3228,6 +3245,11 @@
         // Badge groups
         const badgeGroups = form.querySelector('input[name=badge_groups]');
         if ((badgeGroups?.value || '').trim()) n++;
+        // Geographic regions, carried through from an applied saved filter
+        for (const key of ['include_regions', 'exclude_regions']) {
+            const el = form.querySelector(`input[name=${key}]`);
+            if ((el?.value || '').trim()) n++;
+        }
         return n;
     }
 
@@ -3336,6 +3358,13 @@
                 if (afterInput && !(afterInput.value || '').trim() && cf.after) afterInput.value = cf.after;
                 if (beforeInput && !(beforeInput.value || '').trim() && cf.before) beforeInput.value = cf.before;
             }
+        }
+
+        // Geographic regions: current wins if empty, same rule as everything else here.
+        for (const key of ['include_regions', 'exclude_regions']) {
+            if (!criteria[key]) continue;
+            const hidden = document.getElementById(key === 'include_regions' ? 'fp-include-regions' : 'fp-exclude-regions');
+            if (hidden && !(hidden.value || '').trim()) hidden.value = JSON.stringify(criteria[key]);
         }
 
         // Trigger the sidebar's normal submission path.
@@ -4483,6 +4512,8 @@
         const uploadInput = document.getElementById('icon-upload-input-add-pin');
         if (uploadInput) uploadInput.value = '';
         window._addPinCustomIconFile = null;
+        const clearCustomIconFlag = document.getElementById('edit-clear-custom-add-pin');
+        if (clearCustomIconFlag) clearCustomIconFlag.value = '';
         document.querySelectorAll('#icon-grid-add-pin .icon-picker-item').forEach(i => i.classList.remove('selected'));
 
         // Reset color picker
@@ -4510,6 +4541,14 @@
 
         const detailsLink = document.getElementById('apdlg-view-details');
         if (detailsLink) { detailsLink.hidden = true; detailsLink.href = '#'; }
+    }
+
+    // Clears both the icon (standard or custom-uploaded) and color overrides
+    // for the pin currently open in the dialog, leaving badges untouched.
+    function _apdlgClearCustomizations() {
+        IconPicker.pick('add-pin', '', null);
+        const clearSwatch = document.querySelector('#apdlg-color-picker .color-swatch.color-clear');
+        pickColor('apdlg-color-picker', 'apdlg-color-value', '', clearSwatch);
     }
 
     async function _apdlgDeletePin() {
@@ -4592,32 +4631,48 @@
             _setAddPinLocation(lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
         }
 
-        // Pre-fill icon
-        if (pin.icon) {
+        // Pre-fill icon/color from the pin's OWN overrides only - never from
+        // pin.icon/pin.color, which are the *effective* (possibly badge-inherited)
+        // display values. Pre-filling from those would silently bake a badge's
+        // icon/color onto the pin the next time this form is saved, even if the
+        // user never opened the Customize section.
+        if (pin.own_custom_icon_url) {
+            const iconCurrent = document.getElementById('icon-current-add-pin');
+            if (iconCurrent) iconCurrent.innerHTML = `<img src="${_escapeHtml(pin.own_custom_icon_url)}" class="icon-picker-custom-preview" alt="">`;
+        } else if (pin.own_icon) {
             const iconValue = document.getElementById('icon-value-add-pin');
-            if (iconValue) iconValue.value = pin.icon;
+            if (iconValue) iconValue.value = pin.own_icon;
             const iconCurrent = document.getElementById('icon-current-add-pin');
             if (iconCurrent) {
-                if (/^[a-z_]+$/.test(pin.icon)) {
-                    iconCurrent.innerHTML = `<i class="material-icons icon-picker-current-mi">${_escapeHtml(pin.icon)}</i>`;
+                if (/^[a-z_]+$/.test(pin.own_icon)) {
+                    iconCurrent.innerHTML = `<i class="material-icons icon-picker-current-mi">${_escapeHtml(pin.own_icon)}</i>`;
                 } else {
-                    iconCurrent.innerHTML = `<span class="icon-picker-current-glyph">${_escapeHtml(pin.icon)}</span>`;
+                    iconCurrent.innerHTML = `<span class="icon-picker-current-glyph">${_escapeHtml(pin.own_icon)}</span>`;
                 }
             }
         }
 
         // Pre-fill color
-        if (pin.color) {
-            const swatch = document.querySelector(`#apdlg-color-picker .color-swatch[data-color="${pin.color}"]`);
-            pickColor('apdlg-color-picker', 'apdlg-color-value', pin.color, swatch);
+        if (pin.own_color) {
+            const swatch = document.querySelector(`#apdlg-color-picker .color-swatch[data-color="${pin.own_color}"]`);
+            pickColor('apdlg-color-picker', 'apdlg-color-value', pin.own_color, swatch);
         }
 
-        // Pre-fill badges from cached tags_data, matched by name against the available list
+        // Pre-fill badges from cached tags_data. Match by id (the reliable key -
+        // badge names aren't guaranteed unique across kinds/owners) and fall back
+        // to a name match only for stale cache entries from before ids were cached.
+        // If a badge can't be found in _apdlgAllBadges at all (e.g. it's no longer
+        // visible to this profile), keep it selected anyway using the cached data
+        // so saving the form doesn't silently drop it from the pin.
         const tagsData = pin.tags_data || [];
-        _apdlgSelectedBadges = tagsData.flatMap(tag => {
-            const found = _apdlgAllBadges.find(b => b.name.toLowerCase() === tag.name.toLowerCase());
-            return found ? [found] : [];
-        });
+        _apdlgSelectedBadges = tagsData.map(tag => {
+            const found = (tag.id != null)
+                ? _apdlgAllBadges.find(b => b.id === tag.id)
+                : _apdlgAllBadges.find(b => b.name.toLowerCase() === tag.name.toLowerCase());
+            if (found) return found;
+            if (tag.id == null) return null;
+            return { id: tag.id, name: tag.name, icon: tag.icon || '', color: tag.color || '', kind: tag.kind || '' };
+        }).filter(Boolean);
         _apdlgRenderSelectedChips();
 
         // Change submit button label
@@ -5010,7 +5065,12 @@
             if (lng) formData.append('longitude', lng);
             const iconVal = document.getElementById('icon-value-add-pin');
             formData.append('icon', (iconVal && iconVal.value) ? iconVal.value : '');
-            if (window._addPinCustomIconFile) formData.append('custom_icon', window._addPinCustomIconFile);
+            if (window._addPinCustomIconFile) {
+                formData.append('custom_icon', window._addPinCustomIconFile);
+            } else {
+                const clearCustomIconFlag = document.getElementById('edit-clear-custom-add-pin');
+                if (clearCustomIconFlag && clearCustomIconFlag.value) formData.append('clear_custom_icon', clearCustomIconFlag.value);
+            }
             const colorVal = document.getElementById('apdlg-color-value');
             formData.append('color', (colorVal && colorVal.value) ? colorVal.value : '');
             _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));

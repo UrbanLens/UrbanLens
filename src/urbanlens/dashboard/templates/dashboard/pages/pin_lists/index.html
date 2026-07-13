@@ -1,60 +1,102 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load humanize %}
 
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% endblock %}
+
 {% block page_title %}Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block content %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group pins into named collections - manual or \"smart\" ones that keep themselves up to date. Turn a list into a trip or a markup map in one click." %}
 <div class="pin-lists-page page-content">
-    <div class="pin-lists-toolbar">
-        <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
-               oninput="pinListsFilterCards(this.value)" autocomplete="off">
-        <div class="pin-lists-sort-control">
-            <label for="pin-lists-sort-select" class="pin-lists-sort-label">
-                <i class="material-symbols-outlined" aria-hidden="true">sort</i>
-                Order by
-            </label>
-            <select id="pin-lists-sort-select" onchange="window.location.search = '?sort=' + this.value">
-                <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently updated</option>
-                <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
-                <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
-            </select>
-        </div>
-        <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
-            <i class="material-symbols-outlined">add</i>
-            New List
+
+    {# -- Lists / Filters tab toggle ------------------------------------------ #}
+    <div class="view-toggle-group lists-view-toggle" role="group" aria-label="Choose Lists or Filters">
+        <button type="button" class="btn btn--secondary view-toggle-btn {% if active_tab == 'lists' %}view-toggle-btn--active{% endif %}"
+                data-tab="lists" onclick="listsSetTab('lists')">
+            <i class="material-symbols-outlined" aria-hidden="true">bookmarks</i> Lists
+        </button>
+        <button type="button" class="btn btn--secondary view-toggle-btn {% if active_tab == 'filters' %}view-toggle-btn--active{% endif %}"
+                data-tab="filters" onclick="listsSetTab('filters')">
+            <i class="material-symbols-outlined" aria-hidden="true">filter_alt</i> Filters
         </button>
     </div>
 
-    {% if pin_lists %}
-    <div class="pin-lists-grid" id="pin-lists-grid">
-        {% for pin_list in pin_lists %}
-        <a class="pin-list-card" href="{% url 'lists.detail' pin_list.uuid %}" data-search="{{ pin_list.name|lower }}">
-            <div class="pin-list-card-header">
-                <span class="pin-list-card-icon"><i class="material-symbols-outlined">bookmarks</i></span>
-                {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
+    {# -- Lists tab ------------------------------------------------------------ #}
+    <div class="lists-tab-panel" data-lists-tab="lists" {% if active_tab != 'lists' %}hidden{% endif %}>
+        <div class="pin-lists-toolbar">
+            <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
+                   oninput="pinListsFilterCards(this.value)" autocomplete="off">
+            <div class="pin-lists-sort-control">
+                <label for="pin-lists-sort-select" class="pin-lists-sort-label">
+                    <i class="material-symbols-outlined" aria-hidden="true">sort</i>
+                    Order by
+                </label>
+                <select id="pin-lists-sort-select" onchange="window.location.search = '?tab=lists&sort=' + this.value">
+                    <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently updated</option>
+                    <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+                    <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
+                </select>
             </div>
-            <h2 class="pin-list-card-title">{{ pin_list.name }}</h2>
-            {% if pin_list.description %}
-            <p class="pin-list-card-description">{{ pin_list.description|truncatechars:110 }}</p>
-            {% endif %}
-            <div class="pin-list-card-footer">
-                <span class="pin-list-card-count">
-                    <i class="material-symbols-outlined">location_on</i>
-                    {{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}
-                </span>
-                <span class="pin-list-card-updated">Updated {{ pin_list.updated|naturaltime }}</span>
-            </div>
-        </a>
-        {% endfor %}
+            <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
+                <i class="material-symbols-outlined">add</i>
+                New List
+            </button>
+        </div>
+
+        {% if pin_lists %}
+        <div class="pin-lists-grid" id="pin-lists-grid">
+            {% for pin_list in pin_lists %}
+            <a class="pin-list-card" href="{% url 'lists.detail' pin_list.uuid %}" data-search="{{ pin_list.name|lower }}">
+                <div class="pin-list-card-header">
+                    <span class="pin-list-card-icon"><i class="material-symbols-outlined">bookmarks</i></span>
+                    {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
+                </div>
+                <h2 class="pin-list-card-title">{{ pin_list.name }}</h2>
+                {% if pin_list.description %}
+                <p class="pin-list-card-description">{{ pin_list.description|truncatechars:110 }}</p>
+                {% endif %}
+                <div class="pin-list-card-footer">
+                    <span class="pin-list-card-count">
+                        <i class="material-symbols-outlined">location_on</i>
+                        {{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}
+                    </span>
+                    <span class="pin-list-card-updated">Updated {{ pin_list.updated|naturaltime }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="pin-lists-empty">
+            <i class="material-symbols-outlined">bookmarks</i>
+            <h2>No lists yet</h2>
+            <p>Create a list to start grouping pins for a trip, a project, or just to keep track of favorites.</p>
+        </div>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="pin-lists-empty">
-        <i class="material-symbols-outlined">bookmarks</i>
-        <h2>No lists yet</h2>
-        <p>Create a list to start grouping pins for a trip, a project, or just to keep track of favorites.</p>
+
+    {# -- Filters tab ------------------------------------------------------------ #}
+    <div class="lists-tab-panel" data-lists-tab="filters" {% if active_tab != 'filters' %}hidden{% endif %}>
+        <div class="pin-lists-toolbar">
+            <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..."
+                   oninput="savedFiltersFilterCards(this.value)" autocomplete="off">
+            <button type="button" class="btn btn--primary btn--lg"
+                    hx-get="{% url 'saved_filters.new' %}"
+                    hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
+                <i class="material-symbols-outlined">add</i>
+                New Filter
+            </button>
+        </div>
+        <div id="saved-filters-tab-body">
+            {% include "dashboard/partials/pin_lists/_filters_tab_grid.html" %}
+        </div>
     </div>
-    {% endif %}
 </div>
 
 <dialog id="create-list-dialog" class="ul-dialog">
@@ -78,10 +120,15 @@
         </form>
     </div>
 </dialog>
+
+{# -- Create/edit saved filter dialog - body is always HTMX-loaded (see New Filter / Edit buttons above and in _filters_tab_grid.html) #}
+<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
     function pinListsFilterCards(query) {
         const q = (query || '').trim().toLowerCase();
         document.querySelectorAll('#pin-lists-grid .pin-list-card').forEach((card) => {
@@ -89,5 +136,194 @@
             card.style.display = match ? '' : 'none';
         });
     }
+
+    function savedFiltersFilterCards(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#saved-filters-grid .saved-filter-card').forEach((card) => {
+            const match = !q || (card.dataset.search || '').includes(q);
+            card.style.display = match ? '' : 'none';
+        });
+    }
+
+    // -- Lists / Filters tab toggle -------------------------------------------
+    function listsSetTab(tab) {
+        document.querySelectorAll('.lists-tab-panel').forEach((el) => { el.hidden = el.dataset.listsTab !== tab; });
+        document.querySelectorAll('.lists-view-toggle .view-toggle-btn').forEach((btn) => {
+            btn.classList.toggle('view-toggle-btn--active', btn.dataset.tab === tab);
+        });
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        if (tab === 'lists') url.searchParams.delete('sort');
+        history.replaceState(null, '', url);
+    }
+
+    // -- Saved filter create/edit dialog --------------------------------------
+    window.savedFilterFormSubmit = function (event) {
+        event.preventDefault();
+        const form = event.target;
+        const action = form.dataset.action;
+        const body = new FormData(form);
+        fetch(action, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
+            .then((r) => r.text().then((text) => {
+                if (r.ok) return;
+                let message = text;
+                try {
+                    const data = text ? JSON.parse(text) : {};
+                    if (data.error) message = data.error;
+                } catch (e) { /* plain-text error body from the create endpoint */ }
+                return Promise.reject(message || 'Could not save this filter.');
+            }))
+            .then(() => { window.location.href = "{% url 'lists.list' %}?tab=filters"; })
+            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
+        return false;
+    };
+
+    const SAVED_FILTER_DELETE_URL_TEMPLATE = "{% url 'saved_filters.delete' '00000000-0000-0000-0000-000000000000' %}";
+    window.savedFilterDelete = function (uuid, name) {
+        if (!confirm('Delete the saved filter "' + name + '"?')) return;
+        const url = SAVED_FILTER_DELETE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', uuid);
+        fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then((r) => {
+                if (!r.ok) return Promise.reject('Could not delete this filter.');
+                window.location.href = "{% url 'lists.list' %}?tab=filters";
+            })
+            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
+    };
+
+    // -- Saved filter region map (include/exclude polygons) ------------------
+    let _sfRegionMap = null;
+    let _sfRegionLayers = null;
+    let _sfActiveRegionMode = 'include';
+    const REGION_SEARCH_URL = "{% url 'region_search.search' %}";
+
+    window.savedFilterSetRegionMode = function (mode) {
+        _sfActiveRegionMode = mode;
+        document.querySelectorAll('.saved-filter-region-mode-btn').forEach((btn) => {
+            btn.classList.toggle('saved-filter-region-mode-btn--active', btn.dataset.regionMode === mode);
+        });
+    };
+
+    function _sfRegionStyle(mode) {
+        return mode === 'exclude'
+            ? { color: '#c62828', fillColor: '#c62828', fillOpacity: 0.25, weight: 2 }
+            : { color: '#2e7d32', fillColor: '#2e7d32', fillOpacity: 0.25, weight: 2 };
+    }
+
+    function _sfSaveRegions() {
+        const includeCoords = [];
+        const excludeCoords = [];
+        _sfRegionLayers.eachLayer((layer) => {
+            const geojson = layer.toGeoJSON().geometry;
+            const target = layer.options.regionType === 'exclude' ? excludeCoords : includeCoords;
+            if (geojson.type === 'Polygon') target.push(geojson.coordinates);
+            else if (geojson.type === 'MultiPolygon') geojson.coordinates.forEach((c) => target.push(c));
+        });
+        const includeInput = document.getElementById('saved-filter-include-regions');
+        const excludeInput = document.getElementById('saved-filter-exclude-regions');
+        if (includeInput) includeInput.value = includeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: includeCoords }) : '';
+        if (excludeInput) excludeInput.value = excludeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: excludeCoords }) : '';
+    }
+
+    function _sfAddRegionLayer(geojson, mode) {
+        if (!_sfRegionLayers) return;
+        const layers = L.geoJSON(geojson).getLayers();
+        layers.forEach((layer) => {
+            layer.options.regionType = mode;
+            layer.setStyle(_sfRegionStyle(mode));
+            _sfRegionLayers.addLayer(layer);
+        });
+        if (layers.length && _sfRegionMap) _sfRegionMap.fitBounds(_sfRegionLayers.getBounds());
+    }
+
+    window.initSavedFilterRegionMap = function () {
+        const mapEl = document.getElementById('saved-filter-region-map');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        const centerLat = {{ map_center_lat|default:39.8283 }};
+        const centerLng = {{ map_center_lng|default:-98.5795 }};
+        const map = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
+        _sfRegionMap = map;
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        _sfRegionLayers = drawnItems;
+
+        const includeInput = document.getElementById('saved-filter-include-regions');
+        const excludeInput = document.getElementById('saved-filter-exclude-regions');
+        try { if (includeInput.value) _sfAddRegionLayer(JSON.parse(includeInput.value), 'include'); } catch (e) { /* malformed stored geometry - ignore */ }
+        try { if (excludeInput.value) _sfAddRegionLayer(JSON.parse(excludeInput.value), 'exclude'); } catch (e) { /* malformed stored geometry - ignore */ }
+
+        const drawControl = new L.Control.Draw({
+            draw: { polygon: { shapeOptions: _sfRegionStyle('include') }, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
+            edit: { featureGroup: drawnItems, remove: true },
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, (e) => {
+            e.layer.options.regionType = _sfActiveRegionMode;
+            e.layer.setStyle(_sfRegionStyle(_sfActiveRegionMode));
+            drawnItems.addLayer(e.layer);
+            _sfSaveRegions();
+        });
+        map.on(L.Draw.Event.EDITED, _sfSaveRegions);
+        map.on(L.Draw.Event.DELETED, _sfSaveRegions);
+
+        savedFilterSetRegionMode('include');
+        setTimeout(() => map.invalidateSize(), 0);
+    };
+
+    window.savedFilterSearchRegion = function () {
+        const input = document.getElementById('saved-filter-region-search-input');
+        const query = (input.value || '').trim();
+        const resultsEl = document.getElementById('saved-filter-region-search-results');
+        const messageEl = document.getElementById('saved-filter-region-search-message');
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = '';
+        messageEl.hidden = true;
+        if (!query) return;
+        fetch(REGION_SEARCH_URL + '?q=' + encodeURIComponent(query))
+            .then((r) => r.json())
+            .then((data) => {
+                const results = data.results || [];
+                if (!results.length) {
+                    messageEl.textContent = 'No area boundary found for that place - try a broader name, like a city or neighborhood, or draw the region manually.';
+                    messageEl.hidden = false;
+                    return;
+                }
+                if (results.length === 1) {
+                    _sfAddRegionLayer(results[0].geojson, _sfActiveRegionMode);
+                    _sfSaveRegions();
+                    return;
+                }
+                results.forEach((result) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'saved-filter-region-result';
+                    item.textContent = result.display_name;
+                    item.onclick = () => {
+                        _sfAddRegionLayer(result.geojson, _sfActiveRegionMode);
+                        _sfSaveRegions();
+                        resultsEl.hidden = true;
+                    };
+                    resultsEl.appendChild(item);
+                });
+                resultsEl.hidden = false;
+            })
+            .catch(() => {
+                messageEl.textContent = 'Could not search for that place right now.';
+                messageEl.hidden = false;
+            });
+    };
+
+    // The dialog's body (including the region map container) only exists after
+    // an HTMX swap - (re)initialize the map each time fresh content lands.
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail.target && e.detail.target.id === 'saved-filter-form-dialog') {
+            _sfRegionMap = null;
+            _sfRegionLayers = null;
+            window.initSavedFilterRegionMap();
+        }
+    });
 </script>
+{% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 {% endblock %}

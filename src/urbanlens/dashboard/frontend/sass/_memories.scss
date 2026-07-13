@@ -1213,6 +1213,10 @@ $memories-type-colors: (
 
 // -- Memories > Sharing: pins shared with friends + reshare chain counts -----
 
+.memories-sharing-toggle {
+    margin-top: 1rem;
+}
+
 .memories-sharing-list {
     display: flex;
     flex-direction: column;

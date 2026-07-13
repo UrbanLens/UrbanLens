@@ -9,6 +9,8 @@ from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 
 if TYPE_CHECKING:
+    from django.contrib.gis.geos import MultiPolygon
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 
@@ -63,6 +65,12 @@ class SearchForm(forms.Form):
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     overlapping_pins = forms.BooleanField(required=False)
+    # Raw GeoJSON MultiPolygon text (a SavedFilter's drawn/geocoded regions) - see
+    # parse_region_geojson(). Not rendered as a visible field on the map's filter
+    # sidebar; only carried through so applying a saved filter with regions still
+    # narrows map results correctly.
+    include_regions = forms.CharField(required=False)
+    exclude_regions = forms.CharField(required=False)
 
     def __init__(self, *args, profile: Profile | None = None, **kwargs) -> None:
         """Build the form, adding one filter field per custom pin field when a profile is given.
@@ -115,6 +123,31 @@ class SearchForm(forms.Form):
                 if text:
                     criteria.append({"field": cf, "contains": text})
         return criteria or None
+
+    def parse_region_geojson(self, key: str) -> MultiPolygon | None:
+        """Parse ``include_regions``/``exclude_regions`` raw GeoJSON text into a MultiPolygon.
+
+        Args:
+            key: "include_regions" or "exclude_regions".
+
+        Returns:
+            The parsed MultiPolygon, or None when absent or malformed. Never
+            raises - a corrupted region payload should drop that one
+            criterion, not fail the whole search.
+        """
+        raw = (self.cleaned_data.get(key) or "").strip()
+        if not raw:
+            return None
+        try:
+            geojson = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+
+        try:
+            return parse_multipolygon_geojson(geojson)
+        except (ValueError, TypeError):
+            return None
 
     def parse_badge_groups(self) -> list[dict] | None:
         """Parse the ``badge_groups`` JSON field into a list of group dicts.

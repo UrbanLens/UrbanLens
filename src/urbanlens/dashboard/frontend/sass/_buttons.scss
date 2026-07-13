@@ -145,7 +145,11 @@
 			font-size: 1.1rem;
 		}
 	}
-	
+
+	&--icon-sm {
+		@include icon-btn(28px);
+	}
+
     &--social {
         @extend .btn--primary;
         gap: .7rem;

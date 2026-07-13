@@ -167,6 +167,53 @@ def get_attr(obj: Any, attr: str) -> Any:
 
 
 @register.filter
+def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
+    """Return a short, human-readable summary of a SavedFilter's criteria dict.
+
+    Usage: {{ saved_filter.criteria|filter_criteria_summary }}
+
+    Walks the well-known criteria keys (the same ones SearchForm/filter_criteria
+    produce) and joins whichever are present into a compact "·"-separated
+    string for a Filters-tab card, e.g. "name contains 'diner' · 4★+ · 2 tags".
+    Region keys are summarized separately by the card (see the region badge),
+    not included here.
+    """
+    if not criteria:
+        return "No conditions set"
+    parts: list[str] = []
+    if name := criteria.get("name"):
+        parts.append(f'name contains "{name}"')
+    if min_rating := criteria.get("min_rating"):
+        parts.append(f"{min_rating}★+")
+    if max_rating := criteria.get("max_rating"):
+        parts.append(f"{max_rating}★ or less")
+    if criteria.get("badge_groups"):
+        parts.append(f"{len(criteria['badge_groups'])} badge rule(s)")
+    else:
+        if tags := criteria.get("tags"):
+            parts.append(f"{len(tags)} tag(s) included")
+        if exclude_tags := criteria.get("exclude_tags"):
+            parts.append(f"{len(exclude_tags)} tag(s) excluded")
+    if has_visits := criteria.get("has_visits"):
+        parts.append("visited" if has_visits == "yes" else "not visited")
+    if criteria.get("min_priority") is not None or criteria.get("max_priority") is not None:
+        parts.append("priority range")
+    if criteria.get("min_danger") or criteria.get("max_danger"):
+        parts.append("danger range")
+    if criteria.get("min_vulnerability") is not None or criteria.get("max_vulnerability") is not None:
+        parts.append("vulnerability range")
+    if criteria.get("visited_after") or criteria.get("visited_before"):
+        parts.append("visit date range")
+    if criteria.get("created_after") or criteria.get("created_before"):
+        parts.append("created date range")
+    if criteria.get("custom_fields"):
+        parts.append(f"{len(criteria['custom_fields'])} custom field(s)")
+    if criteria.get("overlapping_pins"):
+        parts.append("overlapping pins only")
+    return " · ".join(parts) if parts else "No conditions set"
+
+
+@register.filter
 def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
     """Return mapping.get(key), for looking up a dict value by a template variable key.
 

@@ -83,7 +83,7 @@ var IconPicker = {
     const grid = document.getElementById(`icon-grid-${id}`);
     if (grid) {
       grid.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
+      btn?.classList.add("selected");
     }
     const panel = document.getElementById(`icon-panel-${id}`);
     if (panel)

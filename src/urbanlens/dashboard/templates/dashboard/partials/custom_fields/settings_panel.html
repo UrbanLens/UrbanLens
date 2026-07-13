@@ -57,7 +57,13 @@
         <p class="cf-group-empty">No custom fields for {{ group.label|lower }} yet.</p>
         {% endif %}
 
-        <form class="cf-add-form"
+        <button type="button" class="btn btn--icon-sm cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}"
+                onclick="document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = false; document.getElementById('cf-add-form-{{ group.entity_type }}').querySelector('.cf-name-input').focus();">
+            <i class="material-symbols-outlined">add</i>
+            <span>Add field</span>
+        </button>
+
+        <form class="cf-add-form" id="cf-add-form-{{ group.entity_type }}" hidden
               hx-post="{% url 'custom_fields.settings' %}"
               hx-target="#custom-fields-settings"
               hx-swap="innerHTML">
@@ -70,7 +76,11 @@
                 {% endfor %}
             </select>
             <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
-                <i class="material-symbols-outlined">add</i>
+                <i class="material-symbols-outlined">check</i>
+            </button>
+            <button type="button" class="btn btn--icon-sm" title="Cancel"
+                    onclick="document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').reset(); document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = false;">
+                <i class="material-symbols-outlined">close</i>
             </button>
         </form>
     </div>

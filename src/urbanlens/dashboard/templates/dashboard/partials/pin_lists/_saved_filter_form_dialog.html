@@ -1,0 +1,126 @@
+{% load dashboard_tags %}
+{% include "dashboard/partials/ui/_dialog_header.html" with title=saved_filter|yesno:"Edit Filter,New Filter" %}
+<div class="ul-dialog-body saved-filter-form-body">
+    {% if has_badge_groups %}
+    <div class="saved-filter-form-warning">
+        <i class="material-symbols-outlined">warning</i>
+        This filter uses advanced badge rules created from the map's filter panel. Saving here will replace them with the simple include/exclude badges below.
+    </div>
+    {% endif %}
+    <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
+          data-action="{% if saved_filter %}{% url 'saved_filters.edit' saved_filter.uuid %}{% else %}{% url 'saved_filters.create' %}{% endif %}">
+        <div class="form-row">
+            <label for="saved-filter-name">Filter name <span class="required">*</span></label>
+            <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100"
+                   value="{{ saved_filter.name|default:'' }}" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
+        </div>
+        <div class="form-row">
+            <label for="saved-filter-name-contains">Pin name contains</label>
+            <input type="text" name="name" id="saved-filter-name-contains" maxlength="150" autocomplete="off"
+                   value="{{ criteria.name|default:'' }}">
+        </div>
+
+        <div class="saved-filter-score-grid">
+            <div class="fp-score-group">
+                <div class="fp-score-label">Rating</div>
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=1 max=5 min_value=criteria.min_rating max_value=criteria.max_rating min_field="min_rating" max_field="max_rating" format="stars" %}
+            </div>
+            <div class="fp-score-group">
+                <div class="fp-score-label">Danger</div>
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=1 max=5 min_value=criteria.min_danger max_value=criteria.max_danger min_field="min_danger" max_field="max_danger" format="stars" %}
+            </div>
+            <div class="fp-score-group">
+                <div class="fp-score-label">Priority</div>
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=criteria.min_priority max_value=criteria.max_priority min_field="min_priority" max_field="max_priority" %}
+            </div>
+            <div class="fp-score-group">
+                <div class="fp-score-label">Vulnerability</div>
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=criteria.min_vulnerability max_value=criteria.max_vulnerability min_field="min_vulnerability" max_field="max_vulnerability" %}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Visited?</label>
+            {{ form.has_visits }}
+        </div>
+
+        <div class="saved-filter-date-grid">
+            <div class="form-row">
+                <label for="id_visited_after">Visited after</label>
+                <input type="date" name="visited_after" id="id_visited_after" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_visited_before">Visited before</label>
+                <input type="date" name="visited_before" id="id_visited_before" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_created_after">Created after</label>
+                <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_created_before">Created before</label>
+                <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+
+        <div class="saved-filter-badge-grid">
+            <div class="form-row">
+                <label>Include badges</label>
+                <div class="saved-filter-badge-list">{{ form.tags }}</div>
+            </div>
+            <div class="form-row">
+                <label>Exclude badges</label>
+                <div class="saved-filter-badge-list">{{ form.exclude_tags }}</div>
+            </div>
+        </div>
+
+        {% if form.custom_fields %}
+        <div class="saved-filter-custom-fields">
+            {% for field in form.custom_fields %}
+            {% with cfval=custom_field_values|dict_get:field.pk %}
+            <div class="fp-custom-field" title="{{ field.get_field_type_display }} field">
+                <span class="fp-custom-field-label">
+                    <i class="material-symbols-outlined">{{ field.type_icon }}</i>
+                    {{ field.name }}
+                </span>
+                {% if field.field_type == 'number' %}
+                <div class="fp-custom-field-range">
+                    <input type="number" step="any" name="cf_{{ field.id }}_min" class="fp-cf-input" placeholder="Min" aria-label="{{ field.name }} minimum" value="{{ cfval.min|default:'' }}">
+                    <span class="fp-cf-range-sep">–</span>
+                    <input type="number" step="any" name="cf_{{ field.id }}_max" class="fp-cf-input" placeholder="Max" aria-label="{{ field.name }} maximum" value="{{ cfval.max|default:'' }}">
+                </div>
+                {% elif field.field_type == 'date' %}
+                <div class="fp-date-block">
+                    <div class="fp-date-row">
+                        <span class="fp-date-label">After</span>
+                        <input type="date" name="cf_{{ field.id }}_after" class="fp-date-input" aria-label="{{ field.name }} after" value="{{ cfval.after|date:'Y-m-d'|default:'' }}">
+                    </div>
+                    <div class="fp-date-row">
+                        <span class="fp-date-label">Before</span>
+                        <input type="date" name="cf_{{ field.id }}_before" class="fp-date-input" aria-label="{{ field.name }} before" value="{{ cfval.before|date:'Y-m-d'|default:'' }}">
+                    </div>
+                </div>
+                {% else %}
+                <input type="text" name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--text" placeholder="Contains..." autocomplete="off" aria-label="{{ field.name }}" value="{{ cfval.contains|default:'' }}">
+                {% endif %}
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="form-row saved-filter-toggle-row">
+            <label class="fp-toggle">
+                <input type="checkbox" name="overlapping_pins" {% if criteria.overlapping_pins %}checked{% endif %}>
+                <span>Overlapping pins only</span>
+            </label>
+        </div>
+
+        {% include "dashboard/partials/pin_lists/_region_map_field.html" %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg">Save Filter</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</div>

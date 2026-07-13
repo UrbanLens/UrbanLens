@@ -17,7 +17,7 @@ export function registerBulkStateUpdater(nsPrefix: string, updater: () => void):
 export const OrganizeIconPicker = {
     ...IconPicker,
 
-    pick(id: string, icon: string, btn: HTMLElement): void {
+    pick(id: string, icon: string, btn: HTMLElement | null): void {
         IconPicker.pick(id, icon, btn);
 
         // Picking anything from the grid (a real icon or "None") replaces

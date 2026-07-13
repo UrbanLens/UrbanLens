@@ -29,7 +29,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
+from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount, get_photos_account
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -97,7 +97,7 @@ class GooglePhotosSettingsView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        account = GooglePhotosAccount.objects.filter(profile=profile).first()
+        account = get_photos_account(profile)
         return render(request, _SETTINGS_PARTIAL, {"account": account})
 
 
@@ -174,8 +174,8 @@ class PinGooglePhotosStartView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
-        account = GooglePhotosAccount.objects.filter(profile=profile).first()
-        context = {"pin": pin, "account": account}
+        account = get_photos_account(profile)
+        context: dict[str, object] = {"pin": pin, "account": account}
         if account is not None and not profile.external_apis_enabled:
             context["error"] = "External lookups are turned off in your settings."
         return render(request, _START_PARTIAL, context)
@@ -187,7 +187,9 @@ class PinGooglePhotosSessionCreateView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
-        account = get_object_or_404(GooglePhotosAccount, profile=profile)
+        account = get_photos_account(profile)
+        if account is None:
+            raise Http404("Google Photos is not connected.")
 
         try:
             picker_session = GooglePhotosGateway(account=account).create_session()
@@ -209,7 +211,9 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug)
         profile = _request_profile(request)
         _require_session_owner(session_id, profile)
-        account = get_object_or_404(GooglePhotosAccount, profile=profile)
+        account = get_photos_account(profile)
+        if account is None:
+            raise Http404("Google Photos is not connected.")
         gateway = GooglePhotosGateway(account=account)
 
         try:
@@ -261,7 +265,9 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         if item is None:
             return HttpResponse(status=404)
 
-        account = get_object_or_404(GooglePhotosAccount, profile=profile)
+        account = get_photos_account(profile)
+        if account is None:
+            raise Http404("Google Photos is not connected.")
         try:
             content = GooglePhotosGateway(account=account).download_media_item(item["base_url"], original=False)
         except GatewayRequestError:

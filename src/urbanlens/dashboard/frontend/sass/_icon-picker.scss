@@ -98,6 +98,39 @@
     }
 }
 
+.icon-picker-clear-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+.icon-picker-clear-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: $radius-sm;
+    background: none;
+    border: 1px solid transparent;
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.12s, color 0.12s;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 0.9rem !important;
+    }
+
+    &:hover {
+        border-color: $color-red-300;
+        color: $color-red-600;
+    }
+}
+
 .icon-picker-custom-preview {
     width: 22px;
     height: 22px;

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timedelta
-import json
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -14,6 +13,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpRe
 from django.shortcuts import render
 from django.utils import timezone
 from rest_framework.decorators import action
+from rest_framework.exceptions import ParseError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.core.cache_keys import make_cache_key
@@ -383,7 +383,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 
     @action(detail=True, methods=["post"])
-    def media_relevance(self, request: HttpRequest, pin_slug: str):
+    def media_relevance(self, request: Request, pin_slug: str):
         """Set (or clear) the requesting user's relevance mark on one Media gallery item."""
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 
@@ -395,11 +395,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Pin has no location."}, status=400)
 
         try:
-            data = json.loads(request.body)
+            data = request.data
             source = str(data["source"])[:30]
             url = str(data["url"])
             is_relevant = data.get("is_relevant")
-        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+        except (KeyError, ValueError, TypeError, ParseError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         item_key = data.get("item_key") or media_item_key(url)
@@ -419,7 +419,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"is_relevant": bool(is_relevant)})
 
     @action(detail=True, methods=["post"])
-    def media_send_to_wiki(self, request: HttpRequest, pin_slug: str):
+    def media_send_to_wiki(self, request: Request, pin_slug: str):
         """Materialize selected Media gallery items and attach them to this location's wiki."""
         from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
@@ -436,9 +436,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
 
         try:
-            data = json.loads(request.body)
+            data = request.data
             items = data["items"]
-        except (KeyError, TypeError, json.JSONDecodeError):
+        except (KeyError, TypeError, ParseError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -465,12 +465,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"created": created, "errors": errors})
 
     @action(detail=False, methods=["post"])
-    def set_media_sort(self, request: HttpRequest):
+    def set_media_sort(self, request: Request):
         """Persist the requesting user's Media gallery sort-order preference."""
         try:
-            data = json.loads(request.body)
+            data = request.data
             sort = data.get("sort")
-        except json.JSONDecodeError:
+        except ParseError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
         if sort not in ("relevant", "recent"):
             return JsonResponse({"error": "Invalid sort value."}, status=400)

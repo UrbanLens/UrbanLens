@@ -40,15 +40,7 @@ page since RSVP needs more UI than fits in a chat card.
     <p class="dm-share-card__status">Declined.</p>
     {% endif %}
   {% else %}
-    {% if share.pin_share.status == "pending" %}
-    <p class="dm-share-card__status">Waiting on {{ share.message.recipient.username }}.</p>
-    {% elif share.pin_share.status == "already_pinned" %}
-    <p class="dm-share-card__status">{{ share.message.recipient.username }} already has this pinned.</p>
-    {% elif share.pin_share.status == "accepted" %}
-    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to their map.</p>
-    {% elif share.pin_share.status == "rejected" %}
-    <p class="dm-share-card__status">Declined.</p>
-    {% endif %}
+    <p class="dm-share-card__status">Pin shared.</p>
   {% endif %}
 
   {% elif share.kind == "trip" and share.trip %}

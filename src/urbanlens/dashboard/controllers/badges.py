@@ -397,9 +397,24 @@ def _apply_bulk_fields(badge: Badge, payload: dict) -> list[str]:
     return update_fields
 
 
+def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
+    """Return the submitted custom-icon file, if any.
+
+    ``_icon_picker.html`` names its file input ``custom_icon-<picker_id>`` (scoped
+    per widget instance) rather than a bare ``custom_icon``, so that two icon
+    pickers rendered on the same page can never collide on field name even if a
+    future change nests them in the same form. Each submitted form only ever
+    contains one such field, so the first match is unambiguous.
+    """
+    for field_name in request.FILES:
+        if field_name == "custom_icon" or field_name.startswith("custom_icon-"):
+            return request.FILES.get(field_name)
+    return None
+
+
 def _apply_custom_icon_from_post(badge: Badge, request: HttpRequest) -> None:
     """Update badge custom_icon from POST (upload or clear)."""
-    custom_icon = request.FILES.get("custom_icon")
+    custom_icon = _uploaded_custom_icon(request)
     if custom_icon:
         badge.custom_icon = _resize_custom_icon(custom_icon)
     elif request.POST.get("clear_custom_icon"):
@@ -483,7 +498,7 @@ class BadgeCreateView(_BadgeKindMixin, LoginRequiredMixin, View):
         if parent_order is not None:
             order = parent_order
 
-        custom_icon = request.FILES.get("custom_icon") or None
+        custom_icon = _uploaded_custom_icon(request)
         if custom_icon:
             custom_icon = _resize_custom_icon(custom_icon)
 

@@ -146,4 +146,8 @@ class NominatimGateway(Gateway):
             "lat": raw.get("lat"),
             "lon": raw.get("lon"),
             "boundingbox": raw.get("boundingbox") or [],
+            # Only present when the request passed polygon_geojson=1 (see
+            # RegionBoundarySearchView) - a GeoJSON Polygon/MultiPolygon for
+            # area-like results, or absent/None otherwise.
+            "geojson": raw.get("geojson"),
         }

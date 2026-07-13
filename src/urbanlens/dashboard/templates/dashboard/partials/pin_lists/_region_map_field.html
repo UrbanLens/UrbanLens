@@ -1,0 +1,35 @@
+{% comment %}
+Geographic include/exclude region field for the saved-filter form dialog.
+Requires leaflet + leaflet-draw to already be loaded (see
+pin_lists/index.html's {% block header %}) and initSavedFilterRegionMap()
+(defined in that same template) to be called after this markup lands in the
+DOM (handled via the htmx:afterSwap listener there).
+{% endcomment %}
+<div class="form-row saved-filter-region-field">
+    <div class="saved-filter-region-header">
+        <label>Geographic regions <span class="saved-filter-region-optional">(optional)</span></label>
+        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Restrict this filter to pins inside (include) or outside (exclude) the regions you draw. Overlapping regions of the same type merge into one automatically." %}
+    </div>
+    <div class="saved-filter-region-mode-toggle" role="group" aria-label="Choose region type to draw">
+        <button type="button" class="btn btn--secondary saved-filter-region-mode-btn saved-filter-region-mode-btn--active saved-filter-region-mode-btn--include"
+                data-region-mode="include" onclick="savedFilterSetRegionMode('include')">
+            <i class="material-symbols-outlined" aria-hidden="true">add_circle</i> Draw Include
+        </button>
+        <button type="button" class="btn btn--secondary saved-filter-region-mode-btn saved-filter-region-mode-btn--exclude"
+                data-region-mode="exclude" onclick="savedFilterSetRegionMode('exclude')">
+            <i class="material-symbols-outlined" aria-hidden="true">do_not_disturb_on</i> Draw Exclude
+        </button>
+    </div>
+    <div class="saved-filter-region-search">
+        <input type="text" id="saved-filter-region-search-input" placeholder="Type a place name, e.g. Albany, NY" autocomplete="off"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();savedFilterSearchRegion();}">
+        <button type="button" class="btn btn--secondary btn--sm" onclick="savedFilterSearchRegion()">Search</button>
+    </div>
+    <div class="saved-filter-region-search-results" id="saved-filter-region-search-results" hidden></div>
+    <p class="saved-filter-region-search-message" id="saved-filter-region-search-message" hidden></p>
+    <div id="saved-filter-region-map" class="saved-filter-region-map"></div>
+    <input type="hidden" name="include_regions" id="saved-filter-include-regions"
+           value="{% if criteria.include_regions %}{{ criteria.include_regions.geojson }}{% endif %}">
+    <input type="hidden" name="exclude_regions" id="saved-filter-exclude-regions"
+           value="{% if criteria.exclude_regions %}{{ criteria.exclude_regions.geojson }}{% endif %}">
+</div>

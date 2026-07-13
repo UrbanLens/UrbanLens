@@ -68,6 +68,25 @@ class _MapShareGroup(TypedDict):
     attachment_url: str | None
 
 
+class _IncomingShareGroup(TypedDict):
+    """One pin's entry in the Sharing page's ``incoming_share_groups`` list.
+
+    Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the
+    chain machinery is rooted at the *sender's* side, and the recipient only
+    ever sees their own inbound shares of a given pin.
+    """
+
+    pin: Pin
+    shares: list[PinShare]
+
+
+class _IncomingMapShareGroup(TypedDict):
+    """One map's entry in the Sharing page's ``incoming_map_share_groups`` list."""
+
+    map: MarkupMap
+    shares: list[MarkupMapShare]
+
+
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
     """Resolve a human label and link for whatever a markup map is attached to.
 
@@ -572,13 +591,19 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
 
 
 class MemoriesSharingView(LoginRequiredMixin, View):
-    """The "Sharing" subpage of Memories - every pin and map the user has shared.
+    """The "Sharing" subpage of Memories - every pin and map shared to/from the user.
 
     Groups the profile's sent :class:`PinShare` rows by pin, listing who each
     pin was shared with, and how far the share travelled: the chain count
     follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
     shares for A's pin). Sent :class:`MarkupMapShare` rows are grouped by map
     the same way, minus the reshare-chain machinery PinShare has.
+
+    Also lists the mirror image - pins and maps *received* from other
+    profiles - grouped the same way but without any chain/reshare counts
+    (those are rooted at the sender's side) and linking through the
+    recipient-scoped share-detail routes rather than the sender's own
+    pin/map pages, which the recipient has no access to.
 
     GET /memories/sharing/
     """
@@ -636,6 +661,24 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 },
             )
 
+        incoming_shares = PinShare.objects.filter(to_profile=profile).select_related("pin__location__wiki", "from_profile__user").order_by("-created")
+
+        incoming_shares_by_pin: dict[int, list[PinShare]] = {}
+        for share in incoming_shares:
+            incoming_shares_by_pin.setdefault(share.pin_id, []).append(share)
+
+        incoming_share_groups: list[_IncomingShareGroup] = [{"pin": pin_shares[0].pin, "shares": pin_shares} for pin_shares in incoming_shares_by_pin.values()]
+
+        incoming_map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user").order_by("-created")
+
+        incoming_map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
+        for map_share in incoming_map_shares:
+            incoming_map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
+
+        incoming_map_share_groups: list[_IncomingMapShareGroup] = [
+            {"map": map_shares_for_map[0].markup_map, "shares": map_shares_for_map} for map_shares_for_map in incoming_map_shares_by_map.values()
+        ]
+
         return render(
             request,
             "dashboard/pages/memories/sharing.html",
@@ -644,6 +687,10 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 "page_name": "memories",
                 "share_groups": share_groups,
                 "map_share_groups": map_share_groups,
+                "sent_count": len(shares) + len(map_shares),
+                "incoming_share_groups": incoming_share_groups,
+                "incoming_map_share_groups": incoming_map_share_groups,
+                "received_count": len(incoming_shares) + len(incoming_map_shares),
                 **_unlogged_band_context(profile),
             },
         )

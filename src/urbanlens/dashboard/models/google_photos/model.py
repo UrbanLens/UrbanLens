@@ -11,13 +11,20 @@ pairs per distinct scope grant, so conflating them into one row would make
 from __future__ import annotations
 
 import datetime
+import logging
 from typing import TYPE_CHECKING
 
+from cryptography.fernet import InvalidToken
 from django.db.models import CASCADE, CharField, DateTimeField, OneToOneField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
+logger = logging.getLogger(__name__)
 
 
 class GooglePhotosAccount(abstract.DashboardModel):
@@ -59,3 +66,31 @@ class GooglePhotosAccount(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_google_photos_accounts"
+
+
+def get_photos_account(profile: Profile) -> GooglePhotosAccount | None:
+    """Fetch the profile's Google Photos connection, healing it if undecryptable.
+
+    A row whose ``access_token``/``refresh_token`` can no longer be decrypted
+    (e.g. ``UL_FIELD_ENCRYPTION_KEY`` rotated without migrating old rows) is
+    permanently unusable - there is no way to recover the plaintext tokens.
+    Rather than raising and crashing every page that touches the user's
+    Google Photos connection, treat it as absent and delete the stale row so
+    the "Connect Google Photos" flow is offered again.
+
+    Args:
+        profile: The profile whose Google Photos connection to look up.
+
+    Returns:
+        The connected account, or None if there isn't one (or it was just
+        removed for being undecryptable).
+    """
+    try:
+        return GooglePhotosAccount.objects.filter(profile=profile).first()
+    except InvalidToken:
+        logger.exception(
+            "GooglePhotosAccount for profile %s has undecryptable tokens (field_encryption_key changed?) - removing it so the user can reconnect.",
+            profile.id,
+        )
+        GooglePhotosAccount.objects.filter(profile=profile).delete()
+        return None

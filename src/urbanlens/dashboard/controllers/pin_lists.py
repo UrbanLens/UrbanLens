@@ -68,9 +68,9 @@ def _parse_body(request: HttpRequest) -> dict[str, Any]:
 
 
 class PinListsIndexView(LoginRequiredMixin, View):
-    """Lists page.
+    """Lists page - has "Lists" and "Filters" tabs.
 
-    GET /lists/
+    GET /lists/?tab=lists|filters
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -83,7 +83,19 @@ class PinListsIndexView(LoginRequiredMixin, View):
             pin_lists = sorted(pin_lists, key=lambda pl: pl.pin_count, reverse=True)
         else:
             pin_lists = pin_lists.order_by("-updated")
-        return render(request, "dashboard/pages/pin_lists/index.html", {"pin_lists": pin_lists, "sort": sort})
+        active_tab = "filters" if request.GET.get("tab") == "filters" else "lists"
+        saved_filters = list(profile.saved_filters.all())
+        return render(
+            request,
+            "dashboard/pages/pin_lists/index.html",
+            {
+                "pin_lists": pin_lists,
+                "sort": sort,
+                "active_tab": active_tab,
+                "saved_filters": saved_filters,
+                **profile.get_map_center_template_context(),
+            },
+        )
 
 
 class PinListCreateView(LoginRequiredMixin, View):
@@ -277,6 +289,8 @@ class PinListAddPinsView(LoginRequiredMixin, View):
                 criteria["badge_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             pins = list(Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria))
 
         existing_pin_ids = set(pin_list.items.values_list("pin_id", flat=True))

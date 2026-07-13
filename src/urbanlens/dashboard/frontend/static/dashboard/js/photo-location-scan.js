@@ -1639,6 +1639,7 @@ var full_esm_default = tt;
 // src/urbanlens/dashboard/frontend/ts/shared/photo-location-cluster.ts
 var DEFAULT_CLUSTER_RADIUS_M = 50;
 var EXISTING_PIN_RADIUS_M = 100;
+var MAX_CLUSTER_PHOTOS_SHOWN = 6;
 function haversineMeters(a2, b2) {
   const R2 = 6371000;
   const toRad = (deg) => deg * Math.PI / 180;
@@ -1658,10 +1659,12 @@ function addHitToClusters(clusters, hit, radiusM = DEFAULT_CLUSTER_RADIUS_M) {
       cluster.count = n2;
       if (hit.date && !cluster.dates.includes(hit.date))
         cluster.dates.push(hit.date);
+      if (hit.file && cluster.photos.length < MAX_CLUSTER_PHOTOS_SHOWN)
+        cluster.photos.push(hit.file);
       return clusters;
     }
   }
-  clusters.push({ lat: hit.lat, lng: hit.lng, count: 1, dates: hit.date ? [hit.date] : [], label: hit.fileName });
+  clusters.push({ lat: hit.lat, lng: hit.lng, count: 1, dates: hit.date ? [hit.date] : [], photos: hit.file ? [hit.file] : [] });
   return clusters;
 }
 function clusterHits(hits, radiusM = DEFAULT_CLUSTER_RADIUS_M) {
@@ -1714,6 +1717,7 @@ function readCachedPinLocations(profileUuid) {
 }
 
 // src/urbanlens/dashboard/frontend/ts/entries/photo-location-scan.ts
+var MAX_SELECTABLE_PHOTOS = 3;
 var IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff"]);
 var VIDEO_EXTENSIONS = new Set(["mp4", "mov"]);
 function extensionOf(name) {
@@ -1740,7 +1744,7 @@ async function extractHit(file) {
       const meta = await full_esm_default.parse(file, ["DateTimeOriginal", "CreateDate"]);
       date = toIsoDate(meta?.DateTimeOriginal) ?? toIsoDate(meta?.CreateDate);
     } catch {}
-    return { lat: gps.latitude, lng: gps.longitude, date, fileName: file.name };
+    return { lat: gps.latitude, lng: gps.longitude, date, file };
   } catch {
     return null;
   }
@@ -1772,9 +1776,12 @@ class PhotoLocationScanApp {
   resultsList;
   emptyMsg;
   uploadUrl;
+  uploadPhotoUrl;
   profileUuid;
   clusters = [];
   allHits = [];
+  selectedFiles = new Set;
+  objectUrls = [];
   abortController = null;
   scanning = false;
   constructor(root) {
@@ -1789,6 +1796,7 @@ class PhotoLocationScanApp {
     this.resultsList = this.el("photo-scan-results");
     this.emptyMsg = this.el("photo-scan-empty");
     this.uploadUrl = root.dataset.uploadUrl ?? "";
+    this.uploadPhotoUrl = root.dataset.uploadPhotoUrl ?? "";
     this.profileUuid = root.dataset.profileUuid ?? "";
     this.fallbackInput = document.createElement("input");
     this.fallbackInput.type = "file";
@@ -1907,6 +1915,9 @@ class PhotoLocationScanApp {
   renderResults() {
     const cachedPins = readCachedPinLocations(this.profileUuid).map((p2) => ({ lat: p2.latitude, lng: p2.longitude }));
     const { fresh, existing } = partitionByCachedPins(this.clusters, cachedPins);
+    for (const url of this.objectUrls)
+      URL.revokeObjectURL(url);
+    this.objectUrls = [];
     this.resultsList.innerHTML = "";
     this.updateEmptyMessage();
     for (const cluster of fresh)
@@ -1939,24 +1950,73 @@ class PhotoLocationScanApp {
     badge.className = "photo-scan-result-badge";
     badge.textContent = alreadyHavePin ? "Already have a pin" : "New";
     item.append(main, badge);
+    if (cluster.photos.length > 0)
+      item.appendChild(this.renderPicker(cluster));
     return item;
+  }
+  renderPicker(cluster) {
+    const wrap = document.createElement("div");
+    wrap.className = "photo-scan-picker";
+    const caption = document.createElement("span");
+    caption.className = "photo-scan-picker-caption";
+    const thumbs = document.createElement("div");
+    thumbs.className = "photo-scan-thumbs";
+    const thumbEntries = [];
+    const refresh = () => {
+      const selectedCount = cluster.photos.filter((file) => this.selectedFiles.has(file)).length;
+      caption.textContent = `${selectedCount} of ${MAX_SELECTABLE_PHOTOS} photo${MAX_SELECTABLE_PHOTOS === 1 ? "" : "s"} selected for your review queue`;
+      for (const entry of thumbEntries) {
+        const isSelected = this.selectedFiles.has(entry.file);
+        entry.el.classList.toggle("photo-scan-thumb--selected", isSelected);
+        const disable = !isSelected && selectedCount >= MAX_SELECTABLE_PHOTOS;
+        entry.el.classList.toggle("photo-scan-thumb--disabled", disable);
+        entry.checkbox.disabled = disable;
+      }
+    };
+    for (const file of cluster.photos) {
+      const thumbEl = document.createElement("label");
+      thumbEl.className = "photo-scan-thumb";
+      const url = URL.createObjectURL(file);
+      this.objectUrls.push(url);
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked)
+          this.selectedFiles.add(file);
+        else
+          this.selectedFiles.delete(file);
+        refresh();
+      });
+      const thumbBadge = document.createElement("span");
+      thumbBadge.className = "photo-scan-thumb-badge";
+      thumbBadge.innerHTML = '<i class="material-symbols-outlined">check_circle</i>';
+      thumbEl.append(img, checkbox, thumbBadge);
+      thumbs.appendChild(thumbEl);
+      thumbEntries.push({ el: thumbEl, checkbox, file });
+    }
+    wrap.append(caption, thumbs);
+    refresh();
+    return wrap;
   }
   async upload() {
     if (this.allHits.length === 0 || !this.uploadUrl)
       return;
     this.uploadBtn.disabled = true;
     try {
-      const finalClusters = clusterHits(this.allHits);
+      const finalClusters = clusterHits(this.allHits).map((cluster) => ({ ...cluster, id: crypto.randomUUID() }));
       const response = await fetch(this.uploadUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({
           clusters: finalClusters.map((cluster) => ({
+            id: cluster.id,
             latitude: cluster.lat,
             longitude: cluster.lng,
             dates: cluster.dates,
-            count: cluster.count,
-            label: cluster.label
+            count: cluster.count
           }))
         })
       });
@@ -1968,13 +2028,41 @@ class PhotoLocationScanApp {
       }
       const total = (data.matched_suggestions ?? 0) + (data.new_pin_suggestions ?? 0);
       toast.success(`Uploaded - found ${total} suggestion(s). Review them in Memories.`);
+      await this.uploadSelectedPhotos(finalClusters, data.suggestion_ids ?? {});
       this.clusters = [];
       this.allHits = [];
+      this.selectedFiles.clear();
       this.renderResults();
       this.uploadBtn.hidden = true;
     } catch {
       toast.error("Could not upload results. Please check your connection and try again.");
       this.uploadBtn.disabled = false;
+    }
+  }
+  async uploadSelectedPhotos(finalClusters, suggestionIds) {
+    if (!this.uploadPhotoUrl)
+      return;
+    let failures = 0;
+    for (const cluster of finalClusters) {
+      const suggestionId = suggestionIds[cluster.id];
+      if (!suggestionId)
+        continue;
+      const selected = cluster.photos.filter((file) => this.selectedFiles.has(file));
+      for (const file of selected) {
+        try {
+          const body = new FormData;
+          body.append("suggestion_id", String(suggestionId));
+          body.append("image", file);
+          const res = await fetch(this.uploadPhotoUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
+          if (!res.ok)
+            failures += 1;
+        } catch {
+          failures += 1;
+        }
+      }
+    }
+    if (failures > 0) {
+      toast.error(`${failures} preview photo${failures === 1 ? "" : "s"} could not be uploaded, but your location results were saved.`);
     }
   }
 }

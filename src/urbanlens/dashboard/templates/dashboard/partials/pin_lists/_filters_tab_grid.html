@@ -1,0 +1,36 @@
+{% load dashboard_tags %}
+{% if saved_filters %}
+<div class="pin-lists-grid" id="saved-filters-grid">
+    {% for filter in saved_filters %}
+    <div class="pin-list-card saved-filter-card" data-search="{{ filter.name|lower }}">
+        <div class="pin-list-card-header">
+            <span class="pin-list-card-icon"><i class="material-symbols-outlined">filter_alt</i></span>
+            {% if filter.criteria.include_regions or filter.criteria.exclude_regions %}
+            <span class="pin-list-card-badge saved-filter-region-badge" title="This filter includes/excludes a geographic region">
+                <i class="material-symbols-outlined">draw</i> Region
+            </span>
+            {% endif %}
+        </div>
+        <h2 class="pin-list-card-title">{{ filter.name }}</h2>
+        <p class="pin-list-card-description">{{ filter.criteria|filter_criteria_summary }}</p>
+        <div class="pin-list-card-footer saved-filter-card-actions">
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-get="{% url 'saved_filters.edit' filter.uuid %}"
+                    hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
+                <i class="material-symbols-outlined">edit</i> Edit
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm saved-filter-delete-btn" onclick="savedFilterDelete('{{ filter.uuid }}', '{{ filter.name|escapejs }}')">
+                <i class="material-symbols-outlined">delete</i> Delete
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="pin-lists-empty">
+    <i class="material-symbols-outlined">filter_alt</i>
+    <h2>No saved filters yet</h2>
+    <p>Create a filter here, or save one from the map's filter panel - either way, it'll show up on this tab.</p>
+</div>
+{% endif %}
