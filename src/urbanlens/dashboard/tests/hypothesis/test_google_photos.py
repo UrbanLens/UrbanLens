@@ -41,8 +41,9 @@ def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, c
 
 
 def _account(**kwargs) -> GooglePhotosAccount:
-    from django.utils import timezone
     import datetime
+
+    from django.utils import timezone
 
     defaults = {"access_token": "access", "refresh_token": "refresh", "token_expiry": timezone.now() + datetime.timedelta(hours=1)}
     defaults.update(kwargs)
@@ -230,3 +231,49 @@ class ImportGooglePhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_google_photos(self.pin.pk, self.profile.pk, "sess1", ["item1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+
+
+# -- get_photos_account: self-heal on undecryptable tokens ---------------------
+
+
+class GetPhotosAccountTests(TestCase):
+    """get_photos_account heals accounts left with undecryptable tokens.
+
+    Regression test for a production 500: rotating field_encryption_key
+    without migrating old rows makes EncryptedTextField.from_db_value raise
+    InvalidToken, which crashed every page that touched the Google Photos
+    connection (e.g. GET /dashboard/settings/google-photos/).
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.account = GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
+
+    def _corrupt_stored_access_token(self) -> None:
+        """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE dashboard_google_photos_accounts SET access_token = %s WHERE id = %s",
+                ["not-a-valid-fernet-token", self.account.id],
+            )
+
+    def test_returns_account_when_decryptable(self) -> None:
+        from urbanlens.dashboard.models.google_photos.model import get_photos_account
+
+        self.assertEqual(get_photos_account(self.profile), self.account)
+
+    def test_undecryptable_account_is_healed_to_none(self) -> None:
+        from urbanlens.dashboard.models.google_photos.model import get_photos_account
+
+        self._corrupt_stored_access_token()
+        self.assertIsNone(get_photos_account(self.profile))
+        self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+
+    def test_settings_view_does_not_500_on_undecryptable_account(self) -> None:
+        self._corrupt_stored_access_token()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("settings.google_photos"))
+        self.assertEqual(response.status_code, 200)
