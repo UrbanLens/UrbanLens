@@ -29,7 +29,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
-from urbanlens.dashboard.services.wiki_access import location_visible_to
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
@@ -77,11 +77,15 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
 
     rendered = []
     for c in top_level:
+        if not profile.can_view_comments_from(c.profile):
+            continue
         html = render_comment_text(c.text, pinned)
         if html is None:
             continue
         replies_rendered = []
         for r in c.replies.all():
+            if not profile.can_view_comments_from(r.profile):
+                continue
             r_html = render_comment_text(r.text, pinned)
             if r_html is None:
                 continue
@@ -178,39 +182,16 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 # -- Wiki comments -------------------------------------------------------------
 
 
-def _resolve_wiki(location_slug):
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
-    def _get_wiki_and_profile(self, request, location_slug):
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        location, wiki = _resolve_wiki(location_slug)
-        profile = _profile(request)
-        # Must have this place pinned to comment on its wiki.
-        if not Pin.objects.filter(profile=profile, location=location).exists():
-            return None, None
-        return profile, wiki
-
     def get(self, request, location_slug):
-        profile, wiki = self._get_wiki_and_profile(request, location_slug)
-        if profile is None:
-            return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
-        profile, wiki = self._get_wiki_and_profile(request, location_slug)
-        if profile is None:
-            return HttpResponse("You must have this location pinned to leave a comment.", status=403)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
         map_data = _parse_map_data(request)
@@ -243,8 +224,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile = _profile(request)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
@@ -274,10 +254,15 @@ class CommentReactionView(LoginRequiredMixin, View):
         # reaction rows of) comments on private pins or wikis the requester
         # can't otherwise view.
         comment = get_object_or_404(
-            Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location"),
+            Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
         )
         if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
+            raise Http404
+        # Page-level visibility isn't enough on its own - the comment's own
+        # author may further restrict who can see (and react to) it via their
+        # comment_visibility privacy setting.
+        if not profile.can_view_comments_from(comment.profile):
             raise Http404
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
@@ -299,6 +284,8 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
         profile = _profile(request)
         trip = get_object_or_404(Trip, uuid=trip_uuid)
+        if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
+            return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:

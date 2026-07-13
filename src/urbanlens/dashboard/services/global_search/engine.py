@@ -82,6 +82,13 @@ class GlobalSearchEngine:
         if len(" ".join(raw_query.split())) < MIN_QUERY_LENGTH or parsed.is_empty:
             return SearchResponse(parsed=parsed)
 
+        if parsed.near_me:
+            # The parser has no profile/DB access, so "near me" is resolved to
+            # coordinates here, once we know who is searching.
+            point = profile.best_known_point()
+            if point is not None:
+                parsed.near_lat, parsed.near_lng = point
+
         response = self._run(profile, parsed)
         if response.total == 0 and parsed.has_structure and parsed.raw.strip():
             fallback = ParsedQuery(raw=parsed.raw)

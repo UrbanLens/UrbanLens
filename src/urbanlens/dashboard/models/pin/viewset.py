@@ -59,6 +59,9 @@ class PinViewSet(viewsets.ModelViewSet):
         logger.info("Pin with id %s updated", instance.id)
         return Response(serializer.data)
 
+    def perform_update(self, serializer):
+        serializer.save(profile=self.request.user.profile)
+
     def destroy(self, request, *args, **kwargs):
         """Delete a pin, asking the client what to do with its sub pins first.
 

@@ -40,6 +40,10 @@ class PinSerializer(serializers.ModelSerializer):
         decimal_places=6,
         read_only=True,
     )
+    # Owner is always set server-side (see PinViewSet.perform_create/perform_update) -
+    # never accepted from the client, or a PATCH could reassign a pin to an
+    # arbitrary profile id.
+    profile = serializers.PrimaryKeyRelatedField(read_only=True)
     categories = BadgeSerializer(many=True, read_only=True)
     tags = BadgeSerializer(many=True, read_only=True)
     statuses = BadgeSerializer(many=True, read_only=True)

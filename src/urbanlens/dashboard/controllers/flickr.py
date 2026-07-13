@@ -168,7 +168,7 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         account = FlickrAccount.objects.filter(profile=profile).first()
         mode = request.GET.get("mode", PhotoImportMode.NEARBY)
@@ -225,7 +225,7 @@ class PinFlickrImportView(LoginRequiredMixin, View):
     """POST pin/<slug>/flickr/import/ - enqueue import of the selected photos."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         photo_ids = request.POST.getlist("photo_ids")
         if not photo_ids:
@@ -245,7 +245,7 @@ class PinFlickrImportProgressView(LoginRequiredMixin, View):
     """GET pin/<slug>/flickr/import/<task_id>/progress/ - polled progress fragment."""
 
     def get(self, request: HttpRequest, pin_slug: str, task_id: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         progress = get_task_progress(task_id)
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)

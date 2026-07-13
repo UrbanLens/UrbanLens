@@ -156,7 +156,7 @@ class PinImmichSearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         account = ImmichAccount.objects.get_for_profile(profile)
         mode = request.GET.get("mode", PhotoImportMode.NEARBY)
@@ -237,7 +237,7 @@ class PinImmichImportView(LoginRequiredMixin, View):
     """POST pin/<slug>/immich/import/ - enqueue import of the selected assets."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         asset_ids = request.POST.getlist("asset_ids")
         if not asset_ids:
@@ -257,7 +257,7 @@ class PinImmichImportProgressView(LoginRequiredMixin, View):
     """GET pin/<slug>/immich/import/<task_id>/progress/ - polled progress fragment."""
 
     def get(self, request: HttpRequest, pin_slug: str, task_id: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         progress = get_task_progress(task_id)
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)

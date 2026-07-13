@@ -86,6 +86,23 @@ class PinSearchTests(TestCase):
         response = GlobalSearchEngine().search(self.profile, "w")
         self.assertEqual(response.total, 0)
 
+    def test_near_me_filters_to_pins_close_to_the_profile(self):
+        self.profile.map_custom_latitude = "39.10"
+        self.profile.map_custom_longitude = "-84.51"
+        self.profile.save()
+        far_location = baker.make("dashboard.Location", latitude="51.50", longitude="-0.12")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="London Fog Tower")
+        response = GlobalSearchEngine().search(self.profile, "pins near me")
+        titles = self._titles(response)
+        self.assertIn("Willow Grove Mill", titles)
+        self.assertNotIn("London Fog Tower", titles)
+
+    def test_near_me_without_known_location_does_not_error(self):
+        stranger = baker.make("auth.User").profile
+        baker.make("dashboard.Pin", profile=stranger, name="Somewhere Spot")
+        response = GlobalSearchEngine().search(stranger, "pins near me")
+        self.assertEqual(response.errors, [])
+
 
 class PhotoSearchTests(TestCase):
     """Photos: caption/keyword matching and uploader scoping."""
@@ -125,9 +142,9 @@ class DirectMessageSearchTests(TestCase):
     """Messages: participant scoping and encrypted bodies staying unsearchable."""
 
     def setUp(self):
-        self.alice = baker.make("auth.User").profile
-        self.bob = baker.make("auth.User").profile
-        self.eve = baker.make("auth.User").profile
+        self.alice = baker.make("auth.User", username="alice").profile
+        self.bob = baker.make("auth.User", username="bob").profile
+        self.eve = baker.make("auth.User", username="eve").profile
         baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="Meet at the old asylum gate")
         baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="", ciphertext="deadbeef", nonce="abc")
 
@@ -149,6 +166,18 @@ class DirectMessageSearchTests(TestCase):
     def test_encrypted_message_not_searchable(self):
         response = GlobalSearchEngine().search(self.alice, "deadbeef")
         self.assertEqual(self._message_results(response), [])
+
+    def test_messages_from_person_finds_conversation_without_text_terms(self):
+        response = GlobalSearchEngine().search(self.bob, f"messages from {self.alice.username}")
+        results = self._message_results(response)
+        self.assertEqual(len(results), 1)
+        self.assertIn(self.alice.username, results[0].title)
+
+    def test_messages_from_person_excludes_other_conversations(self):
+        baker.make("dashboard.DirectMessage", sender=self.eve, recipient=self.bob, body="Unrelated chat")
+        response = GlobalSearchEngine().search(self.bob, f"messages from {self.alice.username}")
+        results = self._message_results(response)
+        self.assertTrue(all(self.alice.username in result.title for result in results))
 
 
 class _ExplodingProvider(SearchProvider):

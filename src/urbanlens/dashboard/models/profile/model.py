@@ -404,12 +404,14 @@ class Profile(abstract.PublicDashboardModel):
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
 
-    def _best_known_point(self) -> tuple[float, float] | None:
+    def best_known_point(self) -> tuple[float, float] | None:
         """Return a representative (lat, lng) for this profile without extra computation.
 
         Uses already-persisted coordinates only - the explicit custom center, the
         cached pin centroid, or the last remembered map position - so it is cheap
         and side-effect free (it never triggers the O(n²) centroid computation).
+        This is the "where is this user" source for server-side "near me" filtering
+        (e.g. global search), since there is no live/persisted GPS position otherwise.
 
         Returns:
             A (latitude, longitude) tuple, or None if no coordinate is on record.
@@ -436,7 +438,7 @@ class Profile(abstract.PublicDashboardModel):
         """
         if self.distance_units:
             return self.distance_units
-        point = self._best_known_point()
+        point = self.best_known_point()
         if point is not None:
             return _units_for_point(*point)
         return DistanceUnit.KILOMETERS
@@ -729,6 +731,17 @@ class Profile(abstract.PublicDashboardModel):
             return False
         # This viewer's filter must allow the uploader.
         return self.visibility_permits(self.viewer_photo_filter, self, uploader)
+
+    def can_view_comments_from(self, author: Profile) -> bool:
+        """Return True if this profile is allowed to see comments written by ``author``.
+
+        Evaluated through ``author``'s ``comment_visibility`` setting - a
+        comment is community content, but its author may still restrict who
+        on that page can see (and react to) what they wrote.
+        """
+        if self == author:
+            return True
+        return self.visibility_permits(author.comment_visibility, author, self)
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.

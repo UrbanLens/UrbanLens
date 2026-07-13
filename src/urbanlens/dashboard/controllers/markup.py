@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.map_sharing import clone_markup_map
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -132,10 +133,9 @@ def _resolve_owner(
     personal markup under a pin's own map, shared/community markup on a wiki
     map, or a standalone MarkupMap (safety check-in routes, comment/visit
     maps). Pin-scoped and map-scoped markup both require the caller to own
-    the parent; Wiki-scoped markup is shared data any signed-in user may
-    edit, matching the existing community detail-pin permission model. The
-    community route is keyed by the Location slug and resolves
-    (get-or-creates) that Location's Wiki.
+    the parent; Wiki-scoped markup is shared data any profile with a pin at
+    that location may edit (see ``resolve_visible_wiki``), matching the
+    existing community detail-pin permission model.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -152,8 +152,9 @@ def _resolve_owner(
     if map_uuid is not None:
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
         return markup_map, PinMarkup.objects.for_map(markup_map)
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
+    if location_slug is None:
+        raise Http404
+    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
@@ -259,7 +260,10 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
     location_slug = body.get("location_slug")
     if location_slug:
         location = Location.objects.filter(slug=location_slug).first()
-        return Wiki.objects.filter(location=location).first() if location else None
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if location is None or not location_visible_to(location, profile):
+            return None
+        return Wiki.objects.filter(location=location).first()
     return None
 
 

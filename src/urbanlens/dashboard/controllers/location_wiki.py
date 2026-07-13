@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVot
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +93,6 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
     }
 
 
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class LocationWikiView(LoginRequiredMixin, View):
     """Main wiki page for a place.
 
@@ -106,8 +100,7 @@ class LocationWikiView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         # First view by someone other than the creator retires their
         # self-service delete eligibility (see Wiki.can_be_deleted_by).
@@ -214,8 +207,7 @@ class LocationWikiDeleteView(LoginRequiredMixin, View):
     """
 
     def delete(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         if not wiki.can_be_deleted_by(profile):
             return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
@@ -243,8 +235,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -376,7 +367,7 @@ class LocationWikiHistoryView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         return _render_history(request, location, wiki)
 
 
@@ -389,9 +380,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
@@ -427,9 +417,8 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
@@ -459,8 +448,7 @@ class WikiStatVoteView(LoginRequiredMixin, View):
     def post(self, request, location_slug, field):
         if field not in WikiStatField.values:
             raise Http404
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             value = int(request.POST.get("value") or 0)

@@ -144,6 +144,10 @@ class CommentReactionScopingTests(TestCase):
 
         pin = baker.make(Pin, profile=self.user.profile)
         wiki = baker.make(Wiki, location=pin.location)
+        # A real wiki comment author must themselves have had a pin at this
+        # location (see WikiCommentsView.post's resolve_visible_wiki gate),
+        # which also satisfies their default comment_visibility (common pin).
+        baker.make(Pin, profile=self.other.profile, location=pin.location)
         comment = baker.make(Comment, pin=None, wiki=wiki, profile=self.other.profile)
         self.assertEqual(self._react(comment.id).status_code, 200)
 

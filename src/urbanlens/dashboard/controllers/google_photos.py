@@ -172,7 +172,7 @@ class PinGooglePhotosStartView(LoginRequiredMixin, View):
     """GET pin/<slug>/google-photos/ - initial tab state (connect prompt or start-session button)."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         account = get_photos_account(profile)
         context: dict[str, object] = {"pin": pin, "account": account}
@@ -185,7 +185,7 @@ class PinGooglePhotosSessionCreateView(LoginRequiredMixin, View):
     """POST pin/<slug>/google-photos/session/ - create a picker session."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         account = get_photos_account(profile)
         if account is None:
@@ -208,7 +208,7 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
     """GET pin/<slug>/google-photos/session/<session_id>/status/ - polled session status."""
 
     def get(self, request: HttpRequest, pin_slug: str, session_id: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         _require_session_owner(session_id, profile)
         account = get_photos_account(profile)
@@ -281,7 +281,7 @@ class PinGooglePhotosImportView(LoginRequiredMixin, View):
     """POST pin/<slug>/google-photos/import/ - enqueue import of the selected items."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
         session_id = request.POST.get("session_id") or ""
         media_item_ids = request.POST.getlist("media_item_ids")
@@ -304,7 +304,7 @@ class PinGooglePhotosImportProgressView(LoginRequiredMixin, View):
     """GET pin/<slug>/google-photos/import/<task_id>/progress/ - polled progress fragment."""
 
     def get(self, request: HttpRequest, pin_slug: str, task_id: str) -> HttpResponse:
-        pin = get_object_or_404(Pin, slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         progress = get_task_progress(task_id)
         context = {"pin": pin, "task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _PROGRESS_PARTIAL, context)

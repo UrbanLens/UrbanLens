@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import logging
+import math
 from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.postgres.search import TrigramSimilarity
@@ -32,6 +33,11 @@ logger = logging.getLogger(__name__)
 
 #: Trigram similarity threshold; below this a fuzzy-only match is noise.
 FUZZY_THRESHOLD = 0.25
+
+#: Bounding-box radius used for "near me" filtering. Location only stores plain
+#: lat/lng decimals (no PostGIS point field), so this is an approximate square
+#: rather than an exact circle - adequate for "nearby" intent.
+NEAR_ME_RADIUS_KM = 50.0
 
 #: Location sub-fields checked when the query names a place ("in Cincinnati").
 _PLACE_FIELDS = (
@@ -95,6 +101,59 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
     if not (parsed.date_start and parsed.date_end):
         return Q()
     return Q(**{f"{field_path}__date__gte": parsed.date_start, f"{field_path}__date__lte": parsed.date_end})
+
+
+def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float = NEAR_ME_RADIUS_KM) -> Q:
+    """Build a bounding-box predicate for a "near me" query.
+
+    Approximates a circle of ``radius_km`` around the searching user's known
+    location with a lat/lng box, since Location stores plain decimals rather
+    than a PostGIS point field.
+
+    Args:
+        location_path: ORM path prefix to the Location relation.
+        parsed: The parsed query carrying ``near_lat``/``near_lng`` (filled in
+            by the engine from the profile's known location).
+        radius_km: Half-width of the box, in kilometres.
+
+    Returns:
+        Q constraining the location to the box; empty Q when the query has no
+        near-me coordinates.
+    """
+    if parsed.near_lat is None or parsed.near_lng is None:
+        return Q()
+    lat_delta = radius_km / 111.0
+    lng_delta = radius_km / (111.0 * max(math.cos(math.radians(parsed.near_lat)), 0.01))
+    return Q(
+        **{
+            f"{location_path}__latitude__gte": parsed.near_lat - lat_delta,
+            f"{location_path}__latitude__lte": parsed.near_lat + lat_delta,
+            f"{location_path}__longitude__gte": parsed.near_lng - lng_delta,
+            f"{location_path}__longitude__lte": parsed.near_lng + lng_delta,
+        },
+    )
+
+
+def person_filter(profile: Profile, person: str) -> Q:
+    """Build a predicate matching direct messages to/from a named person.
+
+    The counterparty is whichever side of ``sender``/``recipient`` isn't
+    ``profile``, so this must be combined with a queryset already scoped to
+    conversations ``profile`` participates in.
+
+    Args:
+        profile: The searching user's profile ("me" in the conversation).
+        person: The name fragment parsed from "messages from <person>".
+
+    Returns:
+        Q matching messages where the other participant's username/first/last
+        name contains ``person``.
+    """
+
+    def _name_matches(other_path: str) -> Q:
+        return Q(**{f"{other_path}__user__username__icontains": person}) | Q(**{f"{other_path}__user__first_name__icontains": person}) | Q(**{f"{other_path}__user__last_name__icontains": person})
+
+    return (Q(sender=profile) & _name_matches("recipient")) | (Q(recipient=profile) & _name_matches("sender"))
 
 
 class SearchProvider(ABC):
@@ -170,6 +229,7 @@ class PinSearchProvider(SearchProvider):
         queryset = Pin.objects.filter(profile=profile).select_related("location__wiki", "cover_photo")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
+        queryset = queryset.filter(distance_filter("location", parsed))
         queryset = queryset.filter(date_range_filter("created", parsed))
         queryset = self.apply_text(
             queryset,
@@ -232,6 +292,7 @@ class PhotoSearchProvider(SearchProvider):
         )
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
+        queryset = queryset.filter(distance_filter("location", parsed))
         if parsed.date_start and parsed.date_end:
             # taken_at (EXIF capture time) when known, else upload time.
             queryset = queryset.filter(
@@ -295,6 +356,7 @@ class WikiSearchProvider(SearchProvider):
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
+        queryset = queryset.filter(distance_filter("location", parsed))
         queryset = queryset.filter(date_range_filter("updated", parsed))
         queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"]).distinct()
 
@@ -371,6 +433,7 @@ class VisitSearchProvider(SearchProvider):
         queryset = PinVisit.objects.filter(pin__profile=profile).select_related("pin__location")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place))
+        queryset = queryset.filter(distance_filter("pin__location", parsed))
         queryset = queryset.filter(date_range_filter("visited_at", parsed))
         queryset = self.apply_text(
             queryset,
@@ -408,7 +471,7 @@ class DirectMessageSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.direct_messages import DirectMessage
 
-        if not parsed.terms:
+        if not parsed.terms and not parsed.person:
             return []
         queryset = (
             DirectMessage.objects.filter(
@@ -418,6 +481,8 @@ class DirectMessageSearchProvider(SearchProvider):
             .select_related("sender__user", "recipient__user")
             .filter(date_range_filter("created", parsed))
         )
+        if parsed.person:
+            queryset = queryset.filter(person_filter(profile, parsed.person))
         queryset = self.apply_text(queryset, parsed, ["body"])
 
         results = []

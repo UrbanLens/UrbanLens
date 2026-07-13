@@ -1250,7 +1250,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         # Get the pin
         try:
-            pin: Pin = Pin.objects.get(slug=pin_slug)
+            pin: Pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 

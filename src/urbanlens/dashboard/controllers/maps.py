@@ -11,7 +11,7 @@ from django.db import DatabaseError
 from django.db.models import Prefetch
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from geopy.geocoders import Nominatim
@@ -522,7 +522,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         image = request.FILES.get("image")
         if not image:
             return HttpResponse("No image provided.", status=400)
-        pin = Pin.objects.get(slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checksum = compute_checksum(image)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
@@ -538,7 +538,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
 
         category_id = request.POST.get("category")
-        pin = Pin.objects.get(slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         pin.change_category(category_id)
         return HttpResponseRedirect(reverse("view_map"))
 

@@ -7,7 +7,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -18,15 +18,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
 
 
 def _location_for_coords(latitude, longitude) -> Location:
@@ -212,6 +206,9 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         location = get_object_or_404(Location, slug=location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not location_visible_to(location, profile):
+            raise Http404
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
@@ -231,7 +228,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return render(
             request,
@@ -245,8 +242,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
 
     def post(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body)
@@ -300,9 +296,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
             body = json.loads(request.body)
@@ -353,9 +348,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         child_name = child_wiki.name
 

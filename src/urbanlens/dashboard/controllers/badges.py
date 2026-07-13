@@ -33,6 +33,7 @@ from urbanlens.dashboard.models.badges.model import (
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -1038,7 +1039,7 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
-        badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
+        badge = get_object_or_404(Badge.objects.visible_to(profile), id=badge_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             pin.badges.add(badge)
         elif action == "remove":
@@ -1062,17 +1063,10 @@ class BadgePinMembershipView(LoginRequiredMixin, View):
 class BadgeLocationMembershipView(LoginRequiredMixin, View):
     """Add or remove badges on a community wiki (HTMX panel on wiki page)."""
 
-    def _resolve_wiki(self, location_slug: str):
-        from urbanlens.dashboard.models.wiki.model import Wiki
-
-        location = get_object_or_404(Location, slug=location_slug)
-        return get_object_or_404(Wiki, location=location)
-
     def get(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        wiki = self._resolve_wiki(location_slug)
-        profile = _request_profile(request)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         return render(
             request,
             _MEMBERSHIP_PANEL,
@@ -1092,11 +1086,10 @@ class BadgeLocationMembershipView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
-        wiki = self._resolve_wiki(location_slug)
-        profile = _request_profile(request)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         badge_id = _membership_badge_id(request)
         action = request.POST.get("action")
-        badge = get_object_or_404(Badge, id=badge_id, kind__in=_ORGANIZE_KINDS)
+        badge = get_object_or_404(Badge.objects.visible_to(profile), id=badge_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             wiki.badges.add(badge)
         elif action == "remove":

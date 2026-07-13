@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.global_search.parser import parse_query
@@ -86,6 +85,59 @@ class ParseQueryStructureTests(TestCase):
     def test_empty_query(self):
         parsed = parse_query("   ")
         self.assertTrue(parsed.is_empty)
+
+    def test_near_me(self):
+        parsed = parse_query("pins near me")
+        self.assertEqual(parsed.types, {"pins"})
+        self.assertTrue(parsed.near_me)
+        self.assertEqual(parsed.terms, [])
+
+    def test_nearby_alone(self):
+        parsed = parse_query("abandoned asylums nearby")
+        self.assertTrue(parsed.near_me)
+        self.assertIn("abandoned", parsed.terms)
+        self.assertIn("asylums", parsed.terms)
+
+    def test_close_to_me(self):
+        parsed = parse_query("photos close to me")
+        self.assertEqual(parsed.types, {"photos"})
+        self.assertTrue(parsed.near_me)
+
+    def test_around_me(self):
+        parsed = parse_query("wikis around me")
+        self.assertEqual(parsed.types, {"wikis"})
+        self.assertTrue(parsed.near_me)
+
+    def test_near_a_place_is_not_near_me(self):
+        parsed = parse_query("pins near Cincinnati")
+        self.assertFalse(parsed.near_me)
+        self.assertEqual(parsed.place, "cincinnati")
+
+    def test_by_me_is_not_near_me(self):
+        # "by" alone is too ambiguous with authorship ("photos taken by me").
+        parsed = parse_query("photos taken by me")
+        self.assertFalse(parsed.near_me)
+
+    def test_messages_from_person(self):
+        parsed = parse_query("messages from alice")
+        self.assertEqual(parsed.types, {"messages"})
+        self.assertEqual(parsed.person, "alice")
+        self.assertEqual(parsed.terms, [])
+
+    def test_dms_from_person_synonym(self):
+        parsed = parse_query("dms from bob")
+        self.assertEqual(parsed.types, {"messages"})
+        self.assertEqual(parsed.person, "bob")
+
+    def test_from_person_ignored_without_messages_type(self):
+        # "from" is only treated as a person clause alongside the messages type.
+        parsed = parse_query("photos from paris")
+        self.assertIsNone(parsed.person)
+        self.assertIn("paris", parsed.terms)
+
+    def test_describe_filters_mentions_near_me_and_person(self):
+        self.assertIn("near you", parse_query("pins near me").describe_filters())
+        self.assertIn("from Alice", parse_query("messages from alice").describe_filters())
 
 
 class ParseQueryPropertyTests(TestCase):
